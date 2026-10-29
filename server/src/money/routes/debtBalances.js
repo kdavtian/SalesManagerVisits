@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { cashflowByCustomer, lastPayment } from "../cashflowCopy.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { erpSyncFreshness } from "../../erp/erpSyncFreshness.js";
@@ -149,12 +150,19 @@ export async function loadUnrecordedPayments(rows, user, db = pool) {
     params
   );
   if (!appRows.length) return result;
-  const { rows: erpRows } = await db.query(
-    `SELECT erp_customer_id, amount_amd, to_char(cashflow_date, 'YYYY-MM-DD') AS date
-       FROM erp_cashflow_lines
-      WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND cashflow_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date - ($2::int + $3::int)`,
-    [erpIds, UNRECORDED_DAYS, MATCH_DAYS]
-  );
+  // the Excel payments of the same weeks: from the server's copy of the cashflow lines (cashflowCopy.js), else from the table
+  const copy = await cashflowByCustomer(db);
+  const since = new Date(Date.parse(`${yerevanToday()}T00:00:00Z`) - (UNRECORDED_DAYS + MATCH_DAYS) * 86400000).toISOString().slice(0, 10);
+  const erpRows = copy
+    ? erpIds.flatMap((id) => (copy.get(id) ?? []).filter((l) => l.amount > 0 && l.date >= since).map((l) => ({ erp_customer_id: id, amount_amd: l.amount, date: l.date })))
+    : (
+        await db.query(
+          `SELECT erp_customer_id, amount_amd, to_char(cashflow_date, 'YYYY-MM-DD') AS date
+             FROM erp_cashflow_lines
+            WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND cashflow_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date - ($2::int + $3::int)`,
+          [erpIds, UNRECORDED_DAYS, MATCH_DAYS]
+        )
+      ).rows;
   const erpByCustomer = new Map();
   for (const l of erpRows) {
     if (!erpByCustomer.has(l.erp_customer_id)) erpByCustomer.set(l.erp_customer_id, []);
@@ -204,11 +212,16 @@ async function loadCustomerHistory(rows, today, asOf, db = pool) {
   if (!erpIds.length) return result;
   const bound = asOf ?? null;
   const [pay, ord, app] = await Promise.all([
-    db.query(
-      `SELECT DISTINCT ON (erp_customer_id) erp_customer_id, to_char(cashflow_date, 'YYYY-MM-DD') AS d, amount_amd
-         FROM erp_cashflow_lines WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND ($2::date IS NULL OR cashflow_date <= $2::date)
-        ORDER BY erp_customer_id, cashflow_date DESC, id DESC`,
-      [erpIds, bound]
+    // the last Excel payment: from the server's copy of the cashflow lines (cashflowCopy.js), else from the table
+    cashflowByCustomer(db).then((copy) =>
+      copy
+        ? { rows: erpIds.map((id) => ({ erp_customer_id: id, last: lastPayment(copy.get(id), bound) })).filter((r) => r.last).map((r) => ({ erp_customer_id: r.erp_customer_id, d: r.last.date, amount_amd: r.last.amount })) }
+        : db.query(
+            `SELECT DISTINCT ON (erp_customer_id) erp_customer_id, to_char(cashflow_date, 'YYYY-MM-DD') AS d, amount_amd
+               FROM erp_cashflow_lines WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND ($2::date IS NULL OR cashflow_date <= $2::date)
+              ORDER BY erp_customer_id, cashflow_date DESC, id DESC`,
+            [erpIds, bound]
+          )
     ),
     loadOrdersNewestFirst(db, erpIds, { asOf: bound }),
     db.query(
@@ -280,14 +293,34 @@ debtBalancesRouter.get("/", async (req, res) => {
 
   let balanceJoin = "";
   let balanceExpr = "ecd.debt_amd";
-  let lastPaymentExpr = `GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY}, ${LAST_ERP_PAYMENT_SUBQUERY})`;
+  // The last Excel payment of each customer comes from the server's copy of the cashflow lines (cashflowCopy.js) when it is there,
+  // joined in as two lists instead of a lookup per row; without it (migration 171 not run) the table is read as before.
+  const cashflow = await cashflowByCustomer(pool);
+  let cashflowJoin = "";
+  let lastErpPaymentSql = LAST_ERP_PAYMENT_SUBQUERY;
+  let lastErpPaymentAsOfSql = LAST_ERP_PAYMENT_ASOF_SUBQUERY;
+  if (cashflow) {
+    const ids = [];
+    const dates = [];
+    for (const [erpId, lines] of cashflow) {
+      const last = lastPayment(lines, asOfDate);
+      if (last) {
+        ids.push(erpId);
+        dates.push(last.date);
+      }
+    }
+    params.push(ids, dates);
+    cashflowJoin = `LEFT JOIN unnest($${params.length - 1}::text[], $${params.length}::date[]) AS cfl(erp_id, d) ON cfl.erp_id = c.erp_customer_id`;
+    lastErpPaymentSql = lastErpPaymentAsOfSql = "cfl.d";
+  }
+  let lastPaymentExpr = `GREATEST(ecd.last_payment_date, ${LAST_APP_PAYMENT_SUBQUERY}, ${lastErpPaymentSql})`;
   if (asOfDate) {
     params.push(asOfDate);
     const dateParam = `$${params.length}`;
     balanceJoin = asOfBalanceJoin.replaceAll("$__AS_OF_DATE__", dateParam);
     balanceExpr = asOfBalanceExpr;
     where += ` AND ${balanceExpr} <> 0`;
-    lastPaymentExpr = `GREATEST(${LAST_ERP_PAYMENT_ASOF_SUBQUERY}, ${LAST_APP_PAYMENT_ASOF_SUBQUERY})`.replaceAll(
+    lastPaymentExpr = `GREATEST(${lastErpPaymentAsOfSql}, ${LAST_APP_PAYMENT_ASOF_SUBQUERY})`.replaceAll(
       "$__AS_OF_DATE__",
       dateParam
     );
@@ -304,6 +337,7 @@ debtBalancesRouter.get("/", async (req, res) => {
             am.name AS assigned_manager_name
      ${fromClause}
      LEFT JOIN users am ON am.id = c.assigned_manager_id
+     ${cashflowJoin}
      ${balanceJoin}
      ${where}
      ORDER BY remaining_balance DESC`,

@@ -7,7 +7,7 @@ export const clientErrorsRouter = Router();
 
 clientErrorsRouter.use(requireAuth);
 
-const KINDS = new Set(["error", "unhandledrejection", "slow_load"]);
+const KINDS = new Set(["error", "unhandledrejection", "slow_load", "slow_screen"]); // slow_screen: a screen that did not open (shell/slowRoute.js)
 // Generous but bounded -- a stack trace or a long URL shouldn't be able to
 // bloat this table row by row.
 const MAX_TEXT_LEN = 4000;

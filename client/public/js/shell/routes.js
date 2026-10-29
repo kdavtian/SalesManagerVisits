@@ -17,16 +17,35 @@ import { flushQueue } from "../offlineQueue.js";
 import { refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshOrderBadge, refreshPaymentBadge, refreshPlanApprovalBadge, refreshUnrecordedBadge, refreshWarehouseBadge } from "../badges.js";
 
 const WAIT_LIMIT_MS = 4000;
+function updateReloadAllowed() {
+  try {
+    const last = Number(sessionStorage.getItem("fv_update_reload") || 0);
+    if (Date.now() - last < 60000) return false;
+    sessionStorage.setItem("fv_update_reload", String(Date.now()));
+  } catch {
+    // no sessionStorage: reload as before
+  }
+  return true;
+}
 const atMost = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
 
 export async function renderRoute(ctx) {
   // A screen whose code arrives after a newer render started (the session turned out to be expired while the remembered Home was
   // loading, a fast second tap) must not paint over the newer screen: it is dropped (render() ignores STALE_ROUTE).
   const mySeq = ctx.renderSeq;
-  const fresh = (loading) => loading.then((m) => {
-    if (mySeq !== ctx.renderSeq) throw ctx.STALE_ROUTE;
-    return m;
-  });
+  // the step this screen is on, for shell/slowRoute.js when it does not appear
+  const step = (name) => {
+    if (mySeq === ctx.renderSeq) ctx.routeStage = name;
+  };
+  const fresh = (loading, name = "code") => {
+    step(name);
+    return loading.then((m) => {
+      if (mySeq !== ctx.renderSeq) throw ctx.STALE_ROUTE;
+      step("drawing");
+      return m;
+    });
+  };
+  step("start");
   document.documentElement.lang = getLang();
   // Any open sheet/dialog overlay is appended straight to document.body,
   // outside the routed view container render() replaces below -- so
@@ -107,7 +126,8 @@ export async function renderRoute(ctx) {
   // A new version is waiting and the person chose "Later": the screens already loaded are the old ones, and a screen opened for the first
   // time now would come from the new files and clash with them ("This screen could not load", e.g. the customer card). Moving to another
   // screen is the safe moment to switch: reload straight onto it.
-  if (isUpdatePending() && ctx.lastRenderedHash && hash.split("?")[0] !== ctx.lastRenderedHash.split("?")[0]) {
+  // At most once a minute: a version that keeps announcing itself (two windows of the app on a computer) must not reload every screen.
+  if (isUpdatePending() && ctx.lastRenderedHash && hash.split("?")[0] !== ctx.lastRenderedHash.split("?")[0] && updateReloadAllowed()) {
     location.reload();
     return;
   }
@@ -115,12 +135,12 @@ export async function renderRoute(ctx) {
   // once loaded there is no wait at all).
   // Each wait has a time limit (owner, 2026-10-29: "Settings is not opening, just spinning"): a stylesheet or text file that never
   // answers (a stuck connection, a stale offline copy) must not hold a screen back for ever; it is drawn with what is in.
-  if (!stylesReadyFor(hash)) await fresh(atMost(loadStylesFor(hash), WAIT_LIMIT_MS));
+  if (!stylesReadyFor(hash)) await fresh(atMost(loadStylesFor(hash), WAIT_LIMIT_MS), "styles");
   // Texts in two parts (step 11): the first screen is drawn with `common` and its own areas; every screen after it waits until all areas
   // are in (normally they already are: they load in idle time right after the first screen). A text that arrives after a screen was drawn
   // can be swapped in only when it is plain, not when the screen put a value into it ("Payment term: {n} days").
   // (only then a wait: when everything is in, the route goes on at once, as before)
-  if (ctx.lastRenderedHash && !allTextsLoaded()) await fresh(atMost(loadAllTexts().catch(() => {}), WAIT_LIMIT_MS));
+  if (ctx.lastRenderedHash && !allTextsLoaded()) await fresh(atMost(loadAllTexts().catch(() => {}), WAIT_LIMIT_MS), "texts");
   if (ctx.HOME_TREE_ROUTES.has(hash.split("?")[0])) ctx.lastHomeHash = hash;
 
   // Restore from the back-cache -- only on a genuine back/forward

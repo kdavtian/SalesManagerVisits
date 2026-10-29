@@ -65,6 +65,13 @@ before(async () => {
        FROM generate_series(1, $3::int) g`,
       [TAG, CUSTOMERS, CUSTOMERS * ERP_LINES_PER_CUSTOMER]
     );
+    // the Excel cashflow (payments) history: 10 lines per customer, a year back, a few refunds
+    await client.query(
+      `INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd)
+       SELECT $1 || '-' || (1 + (g % $2::int)), CURRENT_DATE - (g % 365), CASE WHEN g % 23 = 0 THEN -5000 ELSE 10000 + (g % 40) * 2500 END
+       FROM generate_series(1, $3::int) g`,
+      [TAG, CUSTOMERS, CUSTOMERS * 10]
+    );
     const { rows: orders } = await client.query(
       `INSERT INTO orders (customer_id, user_id, status, total_amd, created_at)
        SELECT c.id, $2, (ARRAY['submitted','confirmed','delivered','delivered'])[1 + g % 4], 30000 + (g % 90) * 1000, now() - ((g % 180) || ' days')::interval
@@ -85,13 +92,14 @@ before(async () => {
   } finally {
     client.release();
   }
-  await pool.query("ANALYZE customers; ANALYZE erp_customer_data; ANALYZE erp_order_lines; ANALYZE orders; ANALYZE order_items");
+  await pool.query("ANALYZE customers; ANALYZE erp_customer_data; ANALYZE erp_order_lines; ANALYZE erp_cashflow_lines; ANALYZE orders; ANALYZE order_items");
 });
 
 after(async () => {
   console.log(`speed budget (ms, median of 3): ${JSON.stringify(measured)}`);
   await pool.query("DELETE FROM orders WHERE customer_id IN (SELECT id FROM customers WHERE erp_customer_id LIKE $1)", [`${TAG}-%`]);
   await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id LIKE $1", [`${TAG}-%`]);
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id LIKE $1", [`${TAG}-%`]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id LIKE $1", [`${TAG}-%`]);
   await pool.query("DELETE FROM customers WHERE erp_customer_id LIKE $1", [`${TAG}-%`]);
   await cleanupAll();
