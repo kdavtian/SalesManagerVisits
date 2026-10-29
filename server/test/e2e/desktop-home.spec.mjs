@@ -24,15 +24,16 @@ test("desktop Home: KPI row, Needs attention and Today side by side", async ({ p
   const tops = await kpis.locator(".home-kpi").evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
   expect(new Set(tops).size).toBe(1);
 
-  // Needs attention: four link rows; Today beside it
+  // Needs attention: four rows that open in place (owner, 2026-10-29); Today beside it, the same width
   const att = kpis.locator(".home-attention");
   await expect(att.locator(".home-att-row")).toHaveCount(4);
-  await expect(att.locator(".home-att-row").first()).toHaveAttribute("href", "#/orders");
+  await expect(att.locator(".home-att-row").first()).toHaveAttribute("aria-expanded", "false");
   const today = kpis.locator(".home-today");
   await expect(today).toBeVisible();
   const [a, b] = await Promise.all([att.boundingBox(), today.boundingBox()]);
   expect(Math.abs(a.y - b.y)).toBeLessThan(2);
   expect(b.x).toBeGreaterThan(a.x + a.width - 1);
+  expect(Math.abs(a.width - b.width)).toBeLessThan(2);
 
   // the rep who visited today, with 1 visit, and the visit on the map
   const repRow = today.locator(".home-rep-row", { hasText: `HomeRep${stamp}` });
@@ -41,8 +42,11 @@ test("desktop Home: KPI row, Needs attention and Today side by side", async ({ p
   await expect(today.locator(".home-today-map-canvas .leaflet-interactive").first()).toBeVisible({ timeout: 20000 });
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/desktop-home.png` });
 
-  // a row opens its page
-  await att.locator('.home-att-row[href="#/tasks"]').click();
+  // a row opens its list in place; "See all" under it opens the page
+  const tasksItem = att.locator('.home-att-item[data-att="tasks"]');
+  await tasksItem.locator(".home-att-row").click();
+  await expect(tasksItem.locator(".home-att-row")).toHaveAttribute("aria-expanded", "true");
+  await tasksItem.locator(".home-att-drop-all").click();
   await expect(page).toHaveURL(/#\/tasks$/);
 
   // back on Home the Today block is there again (kept across repaints), the map included

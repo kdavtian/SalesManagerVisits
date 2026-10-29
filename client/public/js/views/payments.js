@@ -122,7 +122,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   // (or "all", via status=all) if it needs to.
   const initialStatusFilter = initialQuery?.get("status") === "all"
     ? ""
-    : ["pending", "approved", "rejected"].includes(initialQuery?.get("status"))
+    : ["pending", "approved", "rejected", "excel_missing"].includes(initialQuery?.get("status"))
       ? initialQuery.get("status")
       : "pending";
   // "Not in Excel" is for people who see everybody's payments; a rep's own list has no use for it.

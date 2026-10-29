@@ -796,8 +796,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   const MARKER_SIZE = 38;
   const PIN_TIP_RATIO = 0.904;
   // The potential customer's crosshair fills its square, our customers' teardrop does not, so at one size the potential pins looked much
-  // bigger (owner, 2026-10-27): our customers (Bronze / Silver / Gold) a little larger, potential ones a little smaller.
-  const PIN_SIZE_BY_KIND = { customer: 44, potential: 32 };
+  // bigger (owner, 2026-10-27): our customers (Bronze / Silver / Gold) a little larger, potential ones a little smaller. 41 px makes the
+  // teardrop's round head exactly as wide as the crosshair's circle, with the same white outline (owner, 2026-10-29;
+  // scripts/make-pin-art.mjs).
+  const PIN_SIZE_BY_KIND = { customer: 41, potential: 32 };
   const pinSize = (kind) => PIN_SIZE_BY_KIND[kind] ?? MARKER_SIZE;
 
   // Marker shape+color say what kind of site this is (our customer /

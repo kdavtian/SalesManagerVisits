@@ -9736,6 +9736,8 @@ html.ios-statusbar-scroll { overflow-y: auto; }
 html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 
 /* Colour by Rep (owner, 2026-10-24): a ring around the pin in the rep's colour; the switch + rep list sit in the map's "i" panel; the colour is chosen in Team management. */
+/* the crosshair's ring is drawn on a box 0.5 px larger on every side, so it shows ~3.9 px beyond the white circle like our customers' ring */
+#leaflet-map .pin-tier-potential .pin-colour-ring { inset: -0.5px; }
 #leaflet-map .pin-rep-ring { position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--rep-color, #888); box-sizing: border-box; pointer-events: none; z-index: 1; }
 .map-color-by .chip { flex: 1 1 0; min-height: 34px; padding: 4px 8px; font-size: 0.85rem; justify-content: center; }
 .settings-view h1 { padding: 8px 16px 0; font-size: 2rem; letter-spacing: -0.03em; }

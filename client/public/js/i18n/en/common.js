@@ -60,6 +60,8 @@ export const enCommon = {
     home_att_tasks_sub: "{n} open in total",
     home_att_excel: "Payments not in Excel",
     home_att_clear: "Nothing needs attention now",
+    home_att_all: "See all",
+    home_att_failed: "Could not load the list",
     home_today: "Today",
     home_today_team: "{a} of {b} reps in the field · {v} visits",
     home_today_since: "since {t}",

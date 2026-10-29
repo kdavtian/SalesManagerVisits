@@ -60,6 +60,8 @@ export const hyCommon = {
     home_att_tasks_sub: "Ընդամենը {n} բաց",
     home_att_excel: "Excel-ում չերևացող վճարումներ",
     home_att_clear: "Այս պահին ուշադրության կարիք ունեցող բան չկա",
+    home_att_all: "Տեսնել բոլորը",
+    home_att_failed: "Ցանկը չհաջողվեց բեռնել",
     home_today: "Այսօր",
     home_today_team: "{b}-ից {a} վաճառող դաշտում է · {v} այց",
     home_today_since: "{t}-ից",

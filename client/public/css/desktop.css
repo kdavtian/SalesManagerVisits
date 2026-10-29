@@ -994,17 +994,33 @@
   .home-kpi-bar > span { display: block; height: 100%; background: var(--accent); }
   .home-kpi-value { overflow-wrap: anywhere; }
 
-  /* Step 7: numbers across the full width, then "Needs attention" | "Today" side by side; the rest of Home flows in two columns below */
+  /* Step 7: numbers across the full width, then "Needs attention" | "Today" side by side; the rest of Home flows in two columns below.
+     Both rows use the same two equal columns and the same gap as the flow below (.dashboard-grid: column-gap 24px), so every Home
+     section has the width of "Needs attention" (owner, 2026-10-29). */
   .dashboard-grid > .home-kpis { column-span: all; margin-bottom: 16px; }
-  .home-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; margin-top: 12px; align-items: start; }
+  .home-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin-top: 12px; align-items: start; }
   .home-col { padding: 14px 16px; margin: 0; min-width: 0; }
   .home-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .home-col-title { font-size: 1rem; font-weight: 700; margin: 0 0 8px; }
   .home-col-link { font-size: 0.85rem; white-space: nowrap; }
   .home-att-clear { margin: 0 0 8px; font-size: 0.85rem; }
   .home-att-list { display: flex; flex-direction: column; }
-  .home-att-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 16px; align-items: center; gap: 10px; min-height: 52px; padding: 6px 4px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; border-radius: 8px; }
-  .home-att-row:first-child { border-top: 0; }
+  .home-att-item { border-top: 1px solid var(--border); }
+  .home-att-item:first-child { border-top: 0; }
+  .home-att-row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 16px; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 6px 4px; border: 0; background: none; color: inherit; font: inherit; text-align: left; text-decoration: none; border-radius: 8px; cursor: pointer; }
+  .home-att-row[aria-expanded="true"] .home-att-chevron { transform: rotate(90deg); }
+  .home-att-chevron { transition: transform 0.15s ease; }
+  /* an opened row: its items, each one a link to the item itself, and a link to the whole page */
+  .home-att-drop { margin: 0 0 8px 66px; }
+  .home-att-drop-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 40px; padding: 4px 8px; color: inherit; text-decoration: none; border-radius: 8px; font-size: 0.86rem; }
+  .home-att-drop-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
+  .home-att-drop-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .home-att-drop-main { display: flex; flex-direction: column; min-width: 0; }
+  .home-att-drop-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-att-drop-sub { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-att-drop-end { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  .home-att-drop-all { display: inline-flex; align-items: center; min-height: 36px; padding: 0 8px; font-size: 0.85rem; }
+  .home-att-drop-note { margin: 4px 8px; font-size: 0.85rem; }
   .home-att-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
   .home-att-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
   .home-att-count { font-size: 1.35rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
@@ -1018,7 +1034,11 @@
   .home-today-team { margin: 0 0 6px; font-size: 0.85rem; }
   .home-today-reps { display: flex; flex-direction: column; max-height: 264px; overflow-y: auto; }
   .home-rep-row { display: grid; grid-template-columns: 10px minmax(0, 1.4fr) minmax(60px, 1fr) 64px 70px; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; color: inherit; text-decoration: none; border-radius: 8px; }
+  button.home-rep-row { width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
   .home-rep-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
+  /* a rep's plan for today, opened under the rep (it was the separate "Team today" list) */
+  .home-rep-plan { margin: 0 0 6px 24px; }
+  .home-rep-plan .today-plan-row { color: inherit; text-decoration: none; }
   .home-rep-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
   .home-rep-row.is-idle { opacity: 0.6; }
   .home-rep-dot { width: 10px; height: 10px; border-radius: 50%; }
