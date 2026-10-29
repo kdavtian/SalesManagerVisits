@@ -2,6 +2,7 @@
 // renderRoute takes app.js's shared state as `ctx` (the ctx object at the top of app.js); render() in app.js calls it.
 import { allTextsLoaded, getLang, loadAllTexts } from "../i18n.js";
 import { loadStylesFor, stylesReadyFor } from "../styles.js";
+import { dropTabTrails, noteScreen } from "./tabs.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
@@ -43,6 +44,7 @@ export async function renderRoute(ctx) {
     // that might belong to a different account entirely on a shared device.
     ctx.backStack.forEach(ctx.disposeBackEntry);
     ctx.backStack = [];
+    dropTabTrails(ctx);
     ctx.disposeParkedMap();
     ctx.lastRenderedHash = null;
     ctx.topBar.hidden = true;
@@ -94,6 +96,11 @@ export async function renderRoute(ctx) {
   preloadArmeniaTiles();
 
   const hash = location.hash || "#/dashboard";
+  noteScreen(ctx, hash);
+  // A tap in the app (navigate()) or Back / an edge swipe: read at once, before the waits for texts and styles below -- the flag
+  // clears itself after 0.8 s, and on a slow phone a first visit to an area can wait longer than that.
+  const isHistory = !ctx.programmaticNav;
+  ctx.programmaticNav = false;
   // A new version is waiting and the person chose "Later": the screens already loaded are the old ones, and a screen opened for the first
   // time now would come from the new files and clash with them ("This screen could not load", e.g. the customer card). Moving to another
   // screen is the safe moment to switch: reload straight onto it.
@@ -117,8 +124,6 @@ export async function renderRoute(ctx) {
   // every click listener, timer, and closure-held filter/sort/search state
   // is still exactly as it was) instead of asking the route's view module
   // to rebuild everything from scratch and lose all of it.
-  const isHistory = !ctx.programmaticNav;
-  ctx.programmaticNav = false;
   // Back to the Map tab while it sits parked: it is the entry to restore (a Map link with a customer, add or plan flag builds fresh).
   if (hash === "#/map" && ctx.parkedMap && !ctx.backStack.some((entry) => entry.hash === "#/map")) {
     ctx.backStack.push(ctx.parkedMap);
