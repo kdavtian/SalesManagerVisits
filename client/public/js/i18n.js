@@ -1,6 +1,6 @@
 const LANG_KEY = "fieldvisits_lang";
 
-// The texts live in two files, one per language (i18n-en.js, i18n-hy.js), and only the language this device uses is downloaded and parsed
+// The texts: one file per language (i18n-en.js, i18n-hy.js, each joining its area files in i18n/<lang>/), and only the language this device uses is downloaded and parsed
 // (together about 440 KB of source: the second one was dead weight on every first launch). index.html's head script (theme-init.js) already
 // asks the browser to start fetching the right file before this module even runs, so the import below is normally ready at once.
 // Top-level await: no other module sees `t` before the active language is in.
@@ -49,9 +49,13 @@ function refreshOnMiss(key) {
   refreshes += 1;
   lastRefreshAt = Date.now();
   const lang = getLang();
-  refresh = import(`./i18n-${lang}.js?fresh=${Date.now()}`)
-    .then((m) => {
-      dicts[lang] = { ...dicts[lang], ...m.default };
+  // The language file only joins its area files (i18n/<lang>/<area>.js, step 8b), and a module already loaded is not fetched again by its
+  // own address: so the joining file is fetched fresh for the current list of areas, then each area file, fresh.
+  const fresh = `?fresh=${Date.now()}`;
+  refresh = import(`./i18n-${lang}.js${fresh}`)
+    .then((index) => Promise.all((index.AREAS ?? []).map((area) => import(`./i18n/${lang}/${area}.js${fresh}`))))
+    .then((areas) => {
+      dicts[lang] = Object.assign({ ...dicts[lang] }, ...areas.flatMap((m) => Object.values(m)));
       replaceOnScreen(dicts[lang]);
     })
     .catch(() => {})

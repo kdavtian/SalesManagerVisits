@@ -303,8 +303,13 @@ areas goes to `shared/`.
   into the same `api` object in `api.js` so callers do not change (1.469.0). Done with the refactor tool: `extract-top` for the helpers, the
   new `split-object` command for the 444 methods (grouped by the server folder that serves each route); every method's text checked
   identical; architecture check 9 = one definition per name, nothing added to api.js itself.
-- 8b Texts: `i18n-en.js`/`i18n-hy.js` -> `i18n/<lang>/<area>.js` merged by the loader (same keys; `i18nParity.test.js` checks each area
-  file pair). Styles: per-screen CSS moved out of `styles.css` into `css/<area>.css`, loaded with the view (see step 9).
+- [x] 8b Texts: `i18n-en.js`/`i18n-hy.js` -> `i18n/<lang>/<area>.js` (1.472.0). Each of the 3,744 texts went to the area of the screens
+  that use it (several areas, the shell, Home or a name built in code -> `common`: 1,434); moved with `split-object`, both languages checked
+  identical to the old files; `i18n-<lang>.js` joins them and lists `AREAS`; the missing-text refresh after an update now fetches every
+  area file fresh (`texts.spec.mjs`, fails with the old code); `theme-init.js` preloads the area files; `i18nParity.test.js` checks each
+  area pair, AREAS and the preload list.
+- [ ] 8c Styles: per-screen CSS out of `styles.css` into `css/<area>.css`, loaded with the view (step 9 part 2). Kept as its own step:
+  moving rules changes their order in the cascade, so it needs before/after screenshots of every screen (the parity method of step 7).
 - Done when: a typical feature touches only its area's api, text and style files plus `version.js`/`sw.js`.
 
 ### Phase C - speed
@@ -399,4 +404,6 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, PR #512, 2026-10-29.
 - Step 8a api.js split by area (refactor tool `split-object`): 1.469.0, PR #513, 2026-10-29.
 - Step 9 part 1, one stylesheet request: 1.470.0, PR #514, 2026-10-29.
-- Safari's engine in the test setup (CI job `e2e (iphone webkit)`, `@iphone` tests) + offline start fix (owner idea 2): 1.471.0, 2026-10-29.
+- Safari's engine in the test setup (CI job `e2e (iphone webkit)`, `@iphone` tests) + offline start fix (owner idea 2): 1.471.0, PR #515, 2026-10-29.
+- Tasks stay when a person is deleted (owner decision): server only, PR #516, 2026-10-29.
+- Step 8b texts split by area: 1.472.0, 2026-10-29.
