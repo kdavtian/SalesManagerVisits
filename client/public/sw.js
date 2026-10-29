@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v485";
+const CACHE_VERSION = "field-visits-v486";
 // Map tiles are kept in IndexedDB (TILE_DB below), not in Cache Storage (1.468.0). On iPhone, Safari's Cache Storage costs every launch
 // time for EVERY entry stored in ANY of the app's caches, even when the launch only reads the start page from another cache: measured on
 // WebKit, 5,000 stored tiles delayed the start page by ~0.16 s on a fast computer (a phone is several times slower), before the white
@@ -32,17 +32,8 @@ const APP_SHELL = [
   // already network-first for it; going without an offline fallback here
   // is the safer failure direction for a file that's only actually read
   // at PWA-install time anyway.
-  "/css/styles.css",
-  "/css/activity-search-filters.css",
-  "/css/activity-date-picker.css",
-  "/css/orders-search-filters.css",
-  "/css/unified-search.css",
-  "/css/order-map-filter-enhancements.css",
-  "/css/field-visit-enhancements.css",
-  "/css/customer-social.css",
-  "/css/map-marker-system.css",
-  "/css/map-safe-enhancements.css",
-  "/css/desktop.css",
+  // The boot stylesheets come as ONE file: css/app.css, joined by the server (step 9). The single files are inside it.
+  "/css/app.css",
   "/js/bootGate.js",
   "/js/calculatorLock.js",
   "/js/api.js",

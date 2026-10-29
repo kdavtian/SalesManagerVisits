@@ -1,0 +1,15 @@
+/* The stylesheets every screen needs at start, in this order (docs/architecture-roadmap.md step 9). The server joins them into this ONE
+   response, minified (server/src/app.js, the /css route inlines these @imports), so the first paint waits for one stylesheet instead of
+   eleven; index.html links only this file and sw.js precaches only this file. A new stylesheet the whole app needs is added here; a
+   stylesheet only one screen needs is loaded by that screen. Without the server (a plain file server) the @imports still work. */
+@import url("styles.css");
+@import url("activity-search-filters.css");
+@import url("activity-date-picker.css");
+@import url("orders-search-filters.css");
+@import url("unified-search.css");
+@import url("order-map-filter-enhancements.css");
+@import url("field-visit-enhancements.css");
+@import url("customer-social.css");
+@import url("map-marker-system.css");
+@import url("map-safe-enhancements.css");
+@import url("desktop.css");

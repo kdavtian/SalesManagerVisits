@@ -90,7 +90,10 @@ test("every script and stylesheet is in sw.js APP_SHELL, and every APP_SHELL fil
   const files = [...walk(path.join(PUBLIC, "js")), ...walk(path.join(PUBLIC, "css"))]
     .filter((f) => /\.(js|css)$/.test(f))
     .map((f) => "/" + path.relative(PUBLIC, f).split(path.sep).join("/"));
-  assert.deepEqual(files.filter((f) => !shell.has(f)), [], "files missing from APP_SHELL (add them, and bump CACHE_VERSION)");
+  // the boot stylesheets travel inside css/app.css (the server joins its @imports, step 9): they are not precached one by one
+  const joined = [...fs.readFileSync(path.join(PUBLIC, "css/app.css"), "utf8").matchAll(/@import\s+url\(["']?([\w./-]+\.css)["']?\)/g)].map((m) => `/css/${m[1]}`);
+  assert.deepEqual(joined.filter((f) => !fs.existsSync(path.join(PUBLIC, f))), [], "css/app.css imports a file that does not exist");
+  assert.deepEqual(files.filter((f) => !shell.has(f) && !joined.includes(f)), [], "files missing from APP_SHELL (add them, and bump CACHE_VERSION)");
   const missing = [...shell].filter((u) => u !== "/" && !fs.existsSync(path.join(PUBLIC, u)));
   assert.deepEqual(missing, [], "APP_SHELL entries with no file");
 });

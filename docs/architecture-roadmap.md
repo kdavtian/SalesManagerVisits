@@ -322,8 +322,12 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
 
 
 #### Step 9. One stylesheet request - size 1
-- [ ] The server joins the 11 boot stylesheets (in today's order) into one response `/css/app.css`, minified with the existing
-      clean-css path and cached in memory in production; `index.html` links only that; `sw.js` precaches it.
+- [x] The server joins the 11 boot stylesheets (in today's order) into one response `/css/app.css`, minified with the existing
+      clean-css path and cached in memory in production; `index.html` links only that; `sw.js` precaches it (1.470.0). `css/app.css`
+      is a real file of `@import`s (works on a plain file server too); the /css route inlines local @imports. The joined response is
+      byte-identical to the 11 files fetched one by one (`stylesheetJoin.test.js`). Cold first start (1.6 Mbit/s, 150 ms, CPU 4x, no
+      worker, rep): stylesheet requests 14 -> 2-4 (the rest are the map's own), CSS bytes 90 -> 76 KB, first paint 3.30 -> 3.08 s,
+      Home 5.12 -> 4.93 s (median of 3).
 - [ ] Screen-only CSS (after step 8b) is loaded by the view on first open (`<link>` injected once, precached by the service worker).
 - Done when: cold start shows 1 blocking stylesheet; measure and record the new cold-start time.
 
@@ -393,4 +397,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 7b1 Map bar, pin halo, customer channel rule in api.js: 1.466.0, PR #510, 2026-10-29.
 - Step 7b2 last outside patchers gone, screens build their own parts: 1.467.0, PR #511, 2026-10-29.
 - Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, PR #512, 2026-10-29.
-- Step 8a api.js split by area (refactor tool `split-object`): 1.469.0, 2026-10-29.
+- Step 8a api.js split by area (refactor tool `split-object`): 1.469.0, PR #513, 2026-10-29.
+- Step 9 part 1, one stylesheet request: 1.470.0, 2026-10-29.
