@@ -1,7 +1,7 @@
 import { redrawOwnSignature } from "../signaturePad.js";
 import { api } from "../api.js";
 import { t, getLang, setLang } from "../i18n.js";
-import { readLaunchTimings } from "../launchTiming.js";
+import { fromLaunchStart, launchTotal, readLaunchTimings } from "../launchTiming.js";
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { setTextSize } from "../textSize.js";
@@ -47,20 +47,28 @@ const currentPageId = () => currentNav.page;
 // (instead of a separate detached hint icon floating below the whole
 // card) -- pairs with a hidden <p> (hintTextId) the caller places under the row;
 // the "!" wiring is generic (data-hint), see renderSettings.
-// Launch speed (launchTiming.js): the last launch on the row, the last eight in a popup.
+// Launch speed (launchTiming.js): the last launch's total on the row, the last eight with their stages in a popup.
 const seconds = (ms) => (ms == null ? "-" : `${(ms / 1000).toFixed(1)} ${t("unit_s")}`);
 export function launchSpeedValue() {
   const last = readLaunchTimings()[0];
-  return last ? seconds(last.ready) : "-";
+  return last ? seconds(launchTotal(last)) : "-";
 }
 function openLaunchSpeedPopup() {
   const list = readLaunchTimings();
   const rows = list
-    .map(
-      (e) => `<p><strong>${escapeHtml(formatDateTime(new Date(e.at).toISOString()))}</strong> &middot; v${escapeHtml(e.v)}
-        <br><span class="muted">${t("launch_white")} ${seconds(e.fp)} &middot; ${t("launch_ready")} ${seconds(e.ready)}
-        <br>${t("launch_sw")} ${e.sw ? seconds(e.swStart) : t("launch_sw_off")} &middot; ${t("launch_reply")} ${seconds(e.reply)}</span></p>`
-    )
+    .map((e) => {
+      const worker = !e.sw ? t("launch_sw_off") : e.woke === 1 ? t("launch_sw_woke") : e.woke === 0 ? t("launch_sw_running") : "-";
+      const stages = [
+        [t("launch_sw"), worker],
+        ...(e.found != null ? [[t("launch_reply"), seconds(e.found)]] : []),
+        [t("launch_white"), seconds(fromLaunchStart(e, e.fp))],
+        [t("launch_ready"), seconds(fromLaunchStart(e, e.ready))],
+        ...(e.screen != null ? [[t("launch_screen"), seconds(fromLaunchStart(e, e.screen))]] : []),
+      ];
+      return `<p><strong>${escapeHtml(formatDateTime(new Date(e.at).toISOString()))}</strong> &middot; v${escapeHtml(e.v)}${e.type === "reload" ? ` &middot; ${t("launch_reload")}` : ""}
+        <br>${t("launch_total")}: <strong>${seconds(launchTotal(e))}</strong>
+        <br><span class="muted">${stages.map(([label, value]) => `&bull; ${label}: ${value}`).join("<br>")}</span></p>`;
+    })
     .join("");
   openInfoPopup(`<h3>${t("launch_speed")}</h3>${rows || `<p>${t("launch_none")}</p>`}<p class="muted">${t("launch_hint")}</p>`);
 }

@@ -1,7 +1,18 @@
-const CACHE_VERSION = "field-visits-v483";
-// v5: drops tiles cached while requests went out without a Referer (OSM may have
-// answered those with placeholder images) -- see Referrer-Policy in server/src/app.js.
-const TILE_CACHE = "field-visits-tiles-v5";
+const CACHE_VERSION = "field-visits-v484";
+// Map tiles are kept in IndexedDB (TILE_DB below), not in Cache Storage (1.468.0). On iPhone, Safari's Cache Storage costs every launch
+// time for EVERY entry stored in ANY of the app's caches, even when the launch only reads the start page from another cache: measured on
+// WebKit, 5,000 stored tiles delayed the start page by ~0.16 s on a fast computer (a phone is several times slower), before the white
+// screen, and the tile cache had no limit. The same 5,000 tiles in IndexedDB cost nothing at launch. The old "field-visits-tiles-v5"
+// cache is deleted on activation like any cache not named here.
+const TILE_DB = "field-visits-tiles";
+const TILE_MAX_ENTRIES = 4000;
+// When this worker started and when it last answered the app's start page (launchTiming.js asks for them). On iPhone the page's own clock
+// starts only AFTER the worker has handed over the start page, so the wait before the white screen is only visible from here.
+const WORKER_STARTED_AT = Date.now();
+let lastLaunch = null;
+// Whether this worker has handled anything yet: a start-page request that is its very first event means the phone started the worker for
+// this launch (it was asleep), so the launch began when the worker did.
+let handledEvent = false;
 // Anything fetched at runtime that wasn't already in APP_SHELL gets cached
 // here, kept separate from CACHE_VERSION on purpose -- see trimCache below,
 // this is the one that gets capped/evicted, and it must never be able to
@@ -263,20 +274,29 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
+  handledEvent = true;
   event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
+  handledEvent = true;
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
-        keys.filter((key) => key !== CACHE_VERSION && key !== RUNTIME_CACHE && key !== TILE_CACHE).map((key) => caches.delete(key))
+        keys.filter((key) => key !== CACHE_VERSION && key !== RUNTIME_CACHE).map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
   );
 });
 
+// launchTiming.js: when this worker started and when it received / answered the last start-page request (epoch milliseconds).
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "launch-times" || !event.ports?.[0]) return;
+  event.ports[0].postMessage({ workerStartedAt: WORKER_STARTED_AT, launch: lastLaunch });
+});
+
 self.addEventListener("push", (event) => {
+  handledEvent = true;
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch {}
   const title = payload.title || "KAD Motors";
@@ -290,6 +310,7 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
+  handledEvent = true;
   event.notification.close();
   const url = event.notification.data?.url || "/";
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
@@ -314,6 +335,69 @@ self.addEventListener("notificationclick", (event) => {
 // oldest first" without pulling in a library for it. APP_SHELL itself
 // (written only at install time, in CACHE_VERSION) is never touched here.
 const RUNTIME_CACHE_MAX_ENTRIES = 150;
+// ---- Map tile store (IndexedDB): url -> { body: Blob, type, at } ----
+let tileDbOpening = null;
+function tileDb() {
+  if (!tileDbOpening) {
+    tileDbOpening = new Promise((resolve, reject) => {
+      const open = indexedDB.open(TILE_DB, 1);
+      open.onupgradeneeded = () => open.result.createObjectStore("tiles").createIndex("at", "at");
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    }).catch((err) => {
+      tileDbOpening = null;
+      throw err;
+    });
+  }
+  return tileDbOpening;
+}
+function idbDone(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+// A stored tile as a response, or null (not stored, or the store cannot be opened: then the network answers as before).
+async function readTile(url) {
+  try {
+    const db = await tileDb();
+    const rec = await idbDone(db.transaction("tiles").objectStore("tiles").get(url));
+    return rec ? new Response(rec.body, { headers: { "Content-Type": rec.type || "image/png" } }) : null;
+  } catch {
+    return null;
+  }
+}
+// The store is trimmed (oldest first) every 50 new tiles, not after each one.
+let tilesSinceTrim = 0;
+async function saveTile(url, res) {
+  try {
+    const body = await res.blob();
+    const db = await tileDb();
+    await idbDone(db.transaction("tiles", "readwrite").objectStore("tiles").put({ body, type: res.headers.get("Content-Type"), at: Date.now() }, url));
+    if (++tilesSinceTrim < 50) return;
+    tilesSinceTrim = 0;
+    // count + delete the oldest in ONE transaction, chained by callbacks (no await in between: older Safari closes a transaction
+    // across a promise step)
+    await new Promise((resolve) => {
+      const tx = db.transaction("tiles", "readwrite");
+      const store = tx.objectStore("tiles");
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+      store.count().onsuccess = (e) => {
+        let excess = e.target.result - TILE_MAX_ENTRIES;
+        if (excess <= 0) return;
+        store.index("at").openCursor().onsuccess = (ev) => {
+          const c = ev.target.result;
+          if (!c || excess-- <= 0) return;
+          c.delete();
+          c.continue();
+        };
+      };
+    });
+  } catch {
+    /* storage full or unavailable: the tile was still shown, just not kept */
+  }
+}
+
 async function trimCache(cache, maxEntries) {
   const keys = await cache.keys();
   const excess = keys.length - maxEntries;
@@ -323,6 +407,8 @@ async function trimCache(cache, maxEntries) {
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  const firstEvent = !handledEvent;
+  handledEvent = true;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return;
@@ -333,15 +419,18 @@ self.addEventListener("fetch", (event) => {
   // device that's fallen back needs the same cache-first coverage, not
   // just the primary provider. (CARTO used to be the primary here; it now
   // requires a paid API key for every request and is no longer used.)
+  // A stored tile is used as it is (map tiles hardly change; it is downloaded again once it drops out of the capped store). It used to be
+  // re-downloaded and re-written on every single view.
   if (url.hostname.endsWith("tile.openstreetmap.org") || url.hostname === "maps.wikimedia.org") {
-    event.respondWith(caches.open(TILE_CACHE).then(async (cache) => {
-      const cached = await cache.match(request);
-      const network = fetch(request).then((res) => {
-        if (res.ok) cache.put(request, res.clone());
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    }));
+    event.respondWith(
+      readTile(request.url).then((stored) => {
+        if (stored) return stored;
+        return fetch(request).then((res) => {
+          if (res.ok) event.waitUntil(saveTile(request.url, res.clone()));
+          return res;
+        });
+      })
+    );
     return;
   }
 
@@ -351,9 +440,14 @@ self.addEventListener("fetch", (event) => {
   // quickly, it just hangs, which is why this used to be network-first-with-fallback and was not instant. The start page (index.html: branding,
   // module preload list) is still re-fetched in the background on every launch to keep that one copy fresh; the other app files are not (see
   // below). The "Check for updates" banner (updateBanner.js) is what surfaces a newly deployed version, not a background fetch.
+  // Looked up in the app's own store only (caches.match() searches every store, in creation order; the tile store used to come first).
+  // `launch` records when the request came and when the page was found, for launchTiming.js.
   if (request.mode === "navigate") {
+    const launch = { at: Date.now(), woke: firstEvent };
+    lastLaunch = launch;
     event.respondWith(
-      caches.match("/index.html").then((cached) => {
+      caches.open(CACHE_VERSION).then((shell) => shell.match("/index.html")).then((cached) => {
+        launch.found = Date.now();
         const network = fetch(request)
           .then((res) => {
             if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put("/index.html", res.clone()));
@@ -380,7 +474,7 @@ self.addEventListener("fetch", (event) => {
 
 // Everything else from this origin (not in APP_SHELL): cache, then revalidate in the background.
 function runtimeFetch(request) {
-  return caches.match(request).then((cached) => {
+  return caches.open(RUNTIME_CACHE).then((runtime) => runtime.match(request)).then((cached) => {
     const network = fetch(request)
       .then((res) => {
         if (res.ok) {
