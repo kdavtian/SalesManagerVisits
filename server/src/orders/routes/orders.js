@@ -1,4 +1,5 @@
 import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
+import { customerIdsMatching } from "../../customers/customerSearch.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
@@ -529,10 +530,12 @@ ordersRouter.get("/", async (req, res) => {
     params.push(to);
     conditions.push(`(o.created_at AT TIME ZONE 'Asia/Yerevan')::date <= $${params.length}::date`);
   }
-  // Global search in the desktop top bar: order code, customer name or ERP customer ID (every word must match one of them).
+  // Search (the Orders screen, the desktop top bar): every word must match the order code or the customer -- the customer in both
+  // scripts with one typo allowed (customerSearch.js): "jrvej" finds the orders of "Ջրվեժ".
   for (const word of String(q ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 5)) {
     params.push(`%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
-    conditions.push(`(o.order_code ILIKE $${params.length} OR c.name ILIKE $${params.length} OR c.erp_customer_id ILIKE $${params.length})`);
+    params.push(await customerIdsMatching(word));
+    conditions.push(`(o.order_code ILIKE $${params.length - 1} OR o.customer_id = ANY($${params.length}::int[]))`);
   }
   if (status) {
     params.push(status);

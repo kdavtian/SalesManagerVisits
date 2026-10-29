@@ -18,6 +18,7 @@ import { state, canCreateTasks, sendsRequests } from "../state.js";
 import { seesAllTasks } from "../shared/roles.js";
 import { pickDate } from "../activityDatePicker.js";
 import { installClearButton } from "../searchBar.js";
+import { textMatches } from "../shared/searchKey.js";
 
 export { canCreateTasks };
 
@@ -168,7 +169,7 @@ export function renderTasks(root, navigate, openId) {
   const inScope = (r) => f.scope === "all" || (f.scope === "mine" ? r.assignee_id === state.user.id : r.creator_id === state.user.id);
   const matchesSearch = (r) => {
     const q = f.search.trim().toLowerCase();
-    return !q || [r.title, r.customer_name, r.assignee_name, r.creator_name].filter(Boolean).join(" ").toLowerCase().includes(q);
+    return !q || textMatches([r.title, r.customer_name, r.assignee_name, r.creator_name].filter(Boolean).join(" "), q);
   };
   // Desktop "Due" filter: overdue / today / this week / this month (calendar, Monday-start) against the deadline.
   const inDue = (r) => {

@@ -1,7 +1,7 @@
 // Parts of renderMapInner (map.js), moved out with the refactor tool (docs/architecture-roadmap.md, step 6). Each
 // function takes the screen's state as `ctx` (see the ctx object at the top of renderMapInner).
 import { MAP_DEFAULT_CHANNEL_FILTERS, NEARBY_RADIUS_METERS } from "../map.js";
-import { CATEGORY_LIST, TIER_OPTIONS, activateDialog, channelDisplayLabel, escapeHtml, getCurrentPosition, haversineMeters } from "../../util.js";
+import { CATEGORY_LIST, TIER_OPTIONS, activateDialog, customerMatchesSearch, channelDisplayLabel, escapeHtml, getCurrentPosition, haversineMeters } from "../../util.js";
 import { t } from "../../i18n.js";
 import { loadWithCache } from "../../listCache.js";
 import { api } from "../../api.js";
@@ -267,8 +267,8 @@ export function applyFilter(ctx, { refit = true } = {}) {
     if (ctx.plannedMode === "only" && !ctx.plannedTodayIdSet?.has(c.id)) continue;
     if (ctx.brandChipIds.size && !matchesSelectedChips(ctx.brandSummary.get(c.id), ctx.brandChipIds)) continue;
     if (ctx.searchQuery) {
-      const haystack = `${c.name} ${c.address ?? ""} ${c.category ?? ""} ${c.erp_customer_id ?? ""} ${brandSearchText(ctx.brandSummary.get(c.id))}`.toLowerCase();
-      if (!haystack.includes(ctx.searchQuery) && !ctx.phoneMatches(c, ctx.searchQuery)) continue;
+      // both scripts and one typo in a long word (util.js customerMatchesSearch): "jrvej" finds "Ջրվեժ"
+      if (!customerMatchesSearch(c, ctx.searchQuery, `${c.category ?? ""} ${brandSearchText(ctx.brandSummary.get(c.id))}`)) continue;
     }
     searchMatchCount += 1;
     if (ctx.activeFilter === "brands") {

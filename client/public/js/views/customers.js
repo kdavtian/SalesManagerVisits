@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
-import { customerMatchesSearch, escapeHtml, formatDateTime, formatDayMonth, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup, regionLabelHy, subregionLabelHy, showToast, parseDateOnly } from "../util.js";
+import { customerMatchesSearch, customerSearchKind, escapeHtml, formatDateTime, formatDayMonth, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup, regionLabelHy, subregionLabelHy, showToast, parseDateOnly } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesAllActivity, canReassignCustomers } from "../state.js";
@@ -582,7 +582,12 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   function visibleCustomers() {
     let customers = applyNonStatusFilters(allCustomers);
     if (FILTER_STATUSES[filter]) customers = customers.filter((c) => FILTER_STATUSES[filter].includes(visitStatus(c)));
-    return sortCustomers(customers);
+    const sorted = sortCustomers(customers);
+    // a search puts the names typed exactly first, then the other script, then one letter off (each group keeps the chosen sort)
+    const query = searchInput.value.trim();
+    if (!query) return sorted;
+    const kind = new Map(sorted.map((c) => [c, customerSearchKind(c, query, brandSearchText(brandSummary.get(c.id)))]));
+    return sorted.sort((a, b) => kind.get(b) - kind.get(a));
   }
 
   // Every filter EXCEPT the visited/overdue/not_visited tri-state, applied

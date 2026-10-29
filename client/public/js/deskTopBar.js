@@ -1,6 +1,7 @@
 // The desktop top bar (docs/desktop-roadmap.md, step 4): a global search (customers, orders, tasks) and quick actions
 // (New order, New task, New customer), with keyboard shortcuts -- "/" focuses the search, "n" then "o" / "t" / "c" start a new
 // order / task / customer. All of it is hidden on a phone (desktop.css) and the keys only work on a desktop window.
+import { matchKind, prepareSearchText } from "./shared/searchKey.js";
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
@@ -170,11 +171,12 @@ async function searchTasks(query) {
     const result = await api.listTasks({ scope: "all", status: "open" });
     tasksCache = { at: Date.now(), rows: result.rows ?? [] };
   }
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return tasksCache.rows.filter((r) => {
-    const text = [r.title, r.customer_name, r.assignee_name].filter(Boolean).join(" ").toLowerCase();
-    return words.every((w) => text.includes(w));
-  });
+  // both scripts, one typo in a long word (shared/searchKey.js), the exact matches first
+  return tasksCache.rows
+    .map((r) => ({ r, kind: matchKind(prepareSearchText([r.title, r.customer_name, r.assignee_name].filter(Boolean).join(" ")), query) }))
+    .filter((x) => x.kind > 0)
+    .sort((a, b) => b.kind - a.kind)
+    .map((x) => x.r);
 }
 
 /* ---------- Keyboard ---------- */

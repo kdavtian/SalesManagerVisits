@@ -8,6 +8,7 @@ import { canEditDirectly, canReassignCustomers, state } from "../../state.js";
 import { movesAnyPinAtOnce } from "../../shared/roles.js";
 import { placeNoticeText, wirePlaceInput } from "../../places.js";
 import { installInlineClearButton } from "../../searchBar.js";
+import { textMatches } from "../../shared/searchKey.js";
 
 export function onMapTouchEnd(ctx, e) {
   if (e.touches.length > 0 || e.changedTouches.length !== 1) {
@@ -625,7 +626,7 @@ export function openNewCustomerForm(ctx, latlng) {
     const q = query.trim().toLowerCase();
     const matches = q
       ? erpOptions.filter(
-          (r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q)
+          (r) => textMatches(`${r.customer_name || ""} ${r.erp_customer_id}`, q)
         )
       : erpOptions;
     if (!matches.length) {

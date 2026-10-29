@@ -17,6 +17,7 @@ import { loadFrequentIds } from "../productFrequent.js";
 import { openWishSheet } from "../wishSheet.js";
 import { NON_ENGINE_CATEGORIES, CATEGORY_LABEL_KEY, productCategory, isAvailable, priceDiffChipHtml } from "../productBrowse.js";
 import { installInlineClearButton } from "../searchBar.js";
+import { textMatches } from "../shared/searchKey.js";
 
 // Reps often open "Create order" several times a visit (once per checkin);
 // the catalog rarely changes minute to minute, so this reads from the
@@ -1102,7 +1103,7 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     function renderSuggestions(query) {
       const q = query.trim().toLowerCase();
       const matches = q
-        ? erpOptions.filter((r) => (r.customer_name || "").toLowerCase().includes(q) || r.erp_customer_id.includes(q))
+        ? erpOptions.filter((r) => textMatches(`${r.customer_name || ""} ${r.erp_customer_id}`, q))
         : erpOptions;
       if (!matches.length) {
         suggestList.hidden = true;

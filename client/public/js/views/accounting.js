@@ -10,6 +10,7 @@ import { state } from "../state.js";
 import { canRequestAccountingDocs } from "../shared/roles.js";
 import { STATUS_META, openOrderDetailSheet } from "../orderDetailSheet.js";
 import { ACCOUNTING_STATUS_BADGE, accountingDocShort, accountingStatusLabel } from "../accountingDocSheet.js";
+import { textMatches } from "../shared/searchKey.js";
 
 
 function formatDate(value) {
@@ -92,7 +93,7 @@ export async function renderAccounting(root, navigate) {
     const q = search.trim().toLowerCase();
     const shown = q
       ? rows.filter((o) =>
-          [o.customer_name, o.order_code, o.user_name, ...(o.accounting_documents || []).map((d) => d.hc_doc_number)].filter(Boolean).join(" ").toLowerCase().includes(q)
+          textMatches([o.customer_name, o.order_code, o.user_name, ...(o.accounting_documents || []).map((d) => d.hc_doc_number)].filter(Boolean).join(" "), q)
         )
       : rows;
     if (!shown.length) {

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { customerIdsMatching } from "../customerSearch.js";
 import { pool } from "../../db/pool.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
@@ -135,23 +136,14 @@ customersRouter.get("/", async (req, res) => {
     params.push(min_lng, max_lng);
     conditions.push(`c.lng BETWEEN $${params.length - 1} AND $${params.length}`);
   }
+  // Search in both scripts with one typo allowed in words of 5+ letters (shared/searchKey.js; owner, 2026-10-29): "jrvej" finds
+  // "Ջրվեժ". Every word must match the name, ERP id, TIN, legal name, address, region/district, social profiles, email or website, or
+  // the phone by its digits ("091 101370" finds "+37491101370"). The matching ids, best match first, then go through the other filters.
+  let searchOrder = null;
   if (search) {
-    // Every word must match name, ERP id, TIN, address, region/district,
-    // social profiles, email or website; phone matches on digits only so
-    // "091 101370" finds "+37491101370".
-    for (const word of String(search).trim().split(/\s+/).filter(Boolean).slice(0, 8)) {
-      params.push(`%${word.replace(/^@/, "")}%`);
-      const likeIdx = params.length;
-      const digits = word.replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
-      let phoneClause = "";
-      if (digits.length >= 3) {
-        params.push(`%${digits}%`);
-        phoneClause = ` OR regexp_replace(c.phone, '\\D', '', 'g') LIKE $${params.length}`;
-      }
-      conditions.push(
-        `(c.name ILIKE $${likeIdx} OR c.erp_customer_id ILIKE $${likeIdx} OR c.tin ILIKE $${likeIdx} OR c.legal_name ILIKE $${likeIdx} OR c.address ILIKE $${likeIdx} OR c.region ILIKE $${likeIdx} OR c.subregion ILIKE $${likeIdx} OR c.instagram_username ILIKE $${likeIdx} OR c.facebook_url ILIKE $${likeIdx} OR c.email ILIKE $${likeIdx} OR c.website ILIKE $${likeIdx}${phoneClause})`
-      );
-    }
+    searchOrder = await customerIdsMatching(String(search));
+    params.push(searchOrder);
+    conditions.push(`c.id = ANY($${params.length}::int[])`);
   }
   if (region) {
     params.push(region);
@@ -193,7 +185,7 @@ customersRouter.get("/", async (req, res) => {
      ${REORDER_JOIN}
      ${debtJoin}
      ${where}
-     ORDER BY c.name, c.id${page ? ` LIMIT ${page.limit} OFFSET ${page.offset}` : ""}`,
+     ORDER BY ${searchOrder && !page ? `array_position($${params.indexOf(searchOrder) + 1}::int[], c.id), ` : ""}c.name, c.id${page ? ` LIMIT ${page.limit} OFFSET ${page.offset}` : ""}`,
     params
   );
   // debt_amd is ERP commercial data -- a sales_manager only sees it for
