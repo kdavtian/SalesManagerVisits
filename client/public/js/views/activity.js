@@ -11,6 +11,7 @@ import { dockedKey } from "../dockSheet.js";
 import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
 import { installClearButton } from "../searchBar.js";
 import { enhanceDateRange } from "../activityDatePicker.js";
+import { textMatches } from "../shared/searchKey.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -284,7 +285,7 @@ export function renderActivity(root, navigate) {
     if (filters.outcome) list = list.filter((c) => checkinOutcomes(c).includes(filters.outcome));
     if (filters.search.trim()) {
       const q = filters.search.trim().toLowerCase();
-      list = list.filter((c) => c.customer_name.toLowerCase().includes(q));
+      list = list.filter((c) => textMatches(c.customer_name, q));
     }
 
     list = [...list].sort((a, b) => {

@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, activateDialog, REGION_LIST, YEREVAN_DISTRICTS, SALES_CHANNELS, regionLabelHy, subregionLabelHy, channelDisplayLabel } from "../util.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
+import { textMatches } from "../shared/searchKey.js";
 
 // Routes Distribution: which sales channel (and, through the channel, which
 // manager) a new customer in a region/subregion is suggested. A whole-region
@@ -84,8 +85,8 @@ export async function renderRouteDistribution(root, navigate) {
       .map((region) => {
         const subs = subsOf(region);
         const regionName = regionLabelHy(region);
-        const visibleSubs = q ? subs.filter((s) => `${subregionLabelHy(s)} ${s}`.toLowerCase().includes(q)) : subs;
-        const regionMatches = !q || `${regionName} ${region}`.toLowerCase().includes(q);
+        const visibleSubs = q ? subs.filter((s) => textMatches(`${subregionLabelHy(s)} ${s}`, q)) : subs;
+        const regionMatches = !q || textMatches(`${regionName} ${region}`, q);
         if (!regionMatches && !visibleSubs.length) return "";
         const shownSubs = regionMatches ? subs : visibleSubs;
         const open = q ? true : expanded.has(region);

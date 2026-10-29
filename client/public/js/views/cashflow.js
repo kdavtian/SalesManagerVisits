@@ -9,6 +9,7 @@ import { periodLabel, periodKey, periodAria, tapPeriod, periodDates } from "../p
 import { openTriStateTreeSheet } from "../regionTree.js";
 import { FILTER_ICONS } from "../filterIcons.js";
 import { icons } from "../icons.js";
+import { textMatches } from "../shared/searchKey.js";
 
 const BASES = ["today", "week", "month", "quarter", "year"];
 const KINDS = ["income", "expense", "owner", "internal"];
@@ -548,7 +549,7 @@ export async function renderCashflow(root, navigate) {
     const list = overlay.querySelector("#cf-cust-list");
     const suggest = () => {
       const q = el.erp_customer_id.value.trim().toLowerCase();
-      const matches = (q ? customers.filter((c) => c.erp_customer_id.includes(q) || (c.name || "").toLowerCase().includes(q)) : customers).slice(0, 30);
+      const matches = (q ? customers.filter((c) => textMatches(`${c.erp_customer_id} ${c.name || ""}`, q)) : customers).slice(0, 30);
       list.innerHTML = matches
         .map((c) => `<div class="erp-suggest-item" data-id="${escapeHtml(c.erp_customer_id)}"><span>${escapeHtml(c.name || "")}</span><span class="muted">#${escapeHtml(c.erp_customer_id)}</span></div>`)
         .join("");

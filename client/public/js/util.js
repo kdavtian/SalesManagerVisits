@@ -1,5 +1,6 @@
 import { getLang, t } from "./i18n.js";
 import { placeLabel, hasArmenianScript } from "./places.js";
+import { prepareSearchText, matchKind } from "./shared/searchKey.js";
 
 // Current value of a theme colour token for places that cannot use var()
 // (Leaflet draws SVG strokes via setAttribute).
@@ -1518,19 +1519,42 @@ function customerSearchText(c) {
   return text;
 }
 
-export function customerMatchesSearch(c, query, extraText = "") {
+// Search in both scripts with one typo allowed in words of 5+ letters (searchKey.js; owner, 2026-10-29): "jrvej" finds "Ջրվեժ",
+// "kastrol" finds "Castrol". customerSearchKind says how well a customer matches (3 as typed, 2 the other script, 1 one letter off,
+// 0 not at all) so a list can put the exact matches first; customerMatchesSearch is the yes/no.
+const preparedSearch = new WeakMap(); // customer -> { extra, prepared }
+function preparedFor(c, extraText) {
+  const hit = preparedSearch.get(c);
+  if (hit && hit.extra === extraText) return hit.prepared;
+  const prepared = prepareSearchText(extraText ? `${customerSearchText(c)} ${extraText}` : customerSearchText(c));
+  preparedSearch.set(c, { extra: extraText, prepared });
+  return prepared;
+}
+
+export function customerSearchKind(c, query, extraText = "") {
   const words = searchFold(query).split(/\s+/).filter(Boolean);
-  if (!words.length) return true;
+  if (!words.length) return 3;
   // extraText: already-folded searchable text from outside the customer row
   // (e.g. the brands check-ins recorded -- see brandChips.js).
-  const text = extraText ? `${customerSearchText(c)} ${extraText}` : customerSearchText(c);
+  const prepared = preparedFor(c, extraText);
   const phone = phoneTail(c.phone);
-  return words.every((w) => {
-    const cleaned = w.replace(/^@/, "");
-    if (text.includes(cleaned)) return true;
+  // a phone number typed with spaces ("091 007 019", "+374 91 007019") is one number, not three words
+  if (/^[\d\s+()-]+$/.test(query.trim()) && phoneTail(query).length >= 3 && phone.includes(phoneTail(query))) return 3;
+  let kind = 3;
+  for (const w of words) {
+    const k = matchKind(prepared, w.replace(/^@/, ""));
+    if (k) {
+      kind = Math.min(kind, k);
+      continue;
+    }
     const digits = phoneTail(w);
-    return digits.length >= 3 && phone.includes(digits);
-  });
+    if (!(digits.length >= 3 && phone.includes(digits))) return 0;
+  }
+  return kind;
+}
+
+export function customerMatchesSearch(c, query, extraText = "") {
+  return customerSearchKind(c, query, extraText) > 0;
 }
 
 // A small message that fades by itself (confirming an action that needs no dialog), optionally with one action

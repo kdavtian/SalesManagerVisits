@@ -4,6 +4,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, seesFinancialExports } from "../state.js";
 import { installInlineClearButton } from "../searchBar.js";
+import { textMatches } from "../shared/searchKey.js";
 
 // "15 Sep 2026" style, same short-date convention as sales.js's own
 // formatSalesDateCaption -- parseDateOnly rather than `new Date(value)`
@@ -102,7 +103,7 @@ export async function renderCashExpenses(root, navigate) {
     const query = searchInput.value.trim().toLowerCase();
     const date = dateInput.value;
     const filtered = allExpenses.filter((e) => {
-      if (query && !e.purpose.toLowerCase().includes(query)) return false;
+      if (query && !textMatches(e.purpose, query)) return false;
       if (date && e.created_at.slice(0, 10) !== date) return false;
       return true;
     });

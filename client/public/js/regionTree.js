@@ -9,6 +9,7 @@
 import { escapeHtml, activateDialog, regionLabelHy, subregionLabelHy, isNeverVisited, neverVisitedMarkHtml, isOverdueVisit, overdueMarkHtml } from "./util.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
+import { textMatches } from "./shared/searchKey.js";
 
 export const NO_GROUP_KEY = "__none__";
 
@@ -370,7 +371,7 @@ function applyTreeSearch(bodyEl, query) {
   const q = query.trim().toLowerCase();
   bodyEl.querySelectorAll(".route-plan-tree-row-leaf").forEach((row) => {
     const name = row.querySelector(".route-plan-tree-name")?.textContent.toLowerCase() || "";
-    row.hidden = q.length > 0 && !name.includes(q);
+    row.hidden = q.length > 0 && !textMatches(name, q);
   });
   [...bodyEl.querySelectorAll(".route-plan-tree-node")].reverse().forEach((nodeEl) => {
     if (!q) {
@@ -382,7 +383,7 @@ function applyTreeSearch(bodyEl, query) {
     const hasVisibleChild = Boolean(
       nodeEl.querySelector(".route-plan-tree-row-leaf:not([hidden]), .route-plan-tree-node:not([hidden])")
     );
-    nodeEl.hidden = !ownName.includes(q) && !hasVisibleChild;
+    nodeEl.hidden = !textMatches(ownName, q) && !hasVisibleChild;
     if (!nodeEl.hidden && hasVisibleChild) {
       headerRow?.setAttribute("aria-expanded", "true");
       nodeEl.querySelector(":scope > .route-plan-tree-children")?.classList.add("expanded");

@@ -15,6 +15,7 @@ test/integration/erpSync.test.js
 test/integration/erpSyncStatus.test.js
 test/integration/excelBalance.test.js
 test/integration/lockdownEngage.test.js
+test/integration/opsHome.test.js
 test/integration/routePlanScopes.test.js
 test/integration/routePlanSets.test.js
 test/integration/speedBudget.test.js
