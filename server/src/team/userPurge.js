@@ -6,6 +6,8 @@
 // expenses, performance plans, edit requests -- and the customers the user created WITHOUT an ERP id (test customers)
 // with all the orders/payments/visits on them. KEPT (handed over): customers with an ERP id the user created (they
 // move to the admin doing this), plans the user wrote for other reps, customers merely assigned to the user (unassigned).
+import { handOverTasks } from "./taskHandover.js";
+
 const TEST_NAME = /test|թեստ|тест/i;
 
 // By NAME only: an e-mail such as "contest@..." must not make a real account purgeable.
@@ -108,5 +110,6 @@ export async function purgeUser(client, userId, adminId) {
   await run("UPDATE customers SET created_by = $2 WHERE created_by = $1 AND erp_customer_id IS NOT NULL", [userId, adminId]);
   await run("UPDATE customers SET assigned_manager_id = NULL WHERE assigned_manager_id = $1 AND NOT (id = ANY($2))", [userId, customers]);
   await run("DELETE FROM customers WHERE id = ANY($1)", [customers]);
+  await handOverTasks(client, userId); // the tasks stay, with the next manager (taskHandover.js)
   await run("DELETE FROM users WHERE id = $1", [userId]);
 }
