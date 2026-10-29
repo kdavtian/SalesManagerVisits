@@ -50,8 +50,9 @@ WEBKIT_DIR="${WEBKIT_DIR:-$HOME/.cache/ms-playwright-webkit}"
 iphone() {
   PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npx playwright install webkit || return 77
   if [ ! -f "$WEBKIT_DIR/.deps-ok" ]; then npx playwright install-deps webkit && touch "$WEBKIT_DIR/.deps-ok" || return 77; fi
-  fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone
+  fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone -- --output=test-results-iphone
 }
+# (its own output folder: each Playwright run empties its folder at start, and the Chrome run beside it uses test-results/)
 
 jobs=(static); run static static &
 if [ "$QUICK" = 0 ]; then
