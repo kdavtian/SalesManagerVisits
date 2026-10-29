@@ -21,3 +21,4 @@ test/integration/routePlanSets.test.js
 test/integration/speedBudget.test.js
 test/integration/taskAutoComplete.test.js
 test/integration/vaghinak.test.js
+test/integration/vaghinakFullDigest.test.js

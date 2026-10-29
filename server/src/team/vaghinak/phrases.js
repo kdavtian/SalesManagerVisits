@@ -303,6 +303,16 @@ const BANK = {
       ],
     },
   },
+  // fullDigest.js: the whole day, every person, for the CEO and the admin only
+  full_digest: {
+    1: {
+      management: [
+        "{addr}, օրվա ամբողջական ամփոփումը ({date})․\n\n{body}",
+        "{addr}, ահա այսօրվա ամբողջական պատկերը ({date})․\n\n{body}",
+        "{addr}, օրվա արդյունքները՝ ըստ յուրաքանչյուր աշխատակցի ({date})․\n\n{body}",
+      ],
+    },
+  },
   mgmt_brief_quiet: {
     1: {
       management: [
