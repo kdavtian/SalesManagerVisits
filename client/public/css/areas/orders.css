@@ -216,3 +216,5 @@
   .sc-bar-hint { text-align: right; }
   .sc-month { grid-template-columns: minmax(320px, 2fr) 3fr; align-items: start; }
 }
+/* while counting, "Finish the day" owns the bottom: the "install the app" banner would cover it (iPhone Safari) */
+body:has(.sc-view.has-bar) .install-banner { display: none; }
