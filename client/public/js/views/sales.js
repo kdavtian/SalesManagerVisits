@@ -5,6 +5,7 @@
 // sales.js: no write-back, ERP/Excel stays the source of truth, same
 // contract as Debt Balances.
 import { api } from "../api.js";
+import { loadWithCache } from "../listCache.js";
 import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
 import { seesFinancialExports } from "../state.js";
@@ -191,7 +192,7 @@ async function renderSalesTab(root, navigate) {
     channelBarEl.querySelectorAll(".stat-pill").forEach((btn) => {
       btn.addEventListener("click", () => {
         channel = channel === btn.dataset.channel ? "" : btn.dataset.channel;
-        load();
+        showChannel();
       });
     });
   }
@@ -350,44 +351,74 @@ async function renderSalesTab(root, navigate) {
     });
   }
 
+  // The period's sales are fetched once, without a channel; a channel pill only filters them on the phone, so switching channels is
+  // instant (owner, 2026-10-29: "sales channel filter works too slow and doesn't cache"). The last answer for the same period and
+  // search opens at once and refreshes in the background (listCache). Only when the server had to cut the list short (more rows than
+  // it sends) does a channel ask the server for its own rows.
+  let allRows = [];
+  let allComplete = true;
+  let loadSeq = 0;
+  const ROW_LIMIT = () => (q ? 1000 : 10000); // routes/sales.js SEARCH_ROW_LIMIT / its plain limit
+  const baseParams = () => ({ from, to, ...(q ? { q } : {}) });
+  const baseKey = () => `sales:${from}:${to}:${q}`;
+
+  function paintPills() {
+    const counts = new Map();
+    for (const r of allRows) if (r.channel) counts.set(r.channel, (counts.get(r.channel) || 0) + 1);
+    channelPills = [
+      { value: "", label: t("all_statuses"), count: allRows.length },
+      ...[...counts.entries()].map(([code, count]) => ({ value: code, label: channelDisplayLabel(code), count })).sort((a, b) => b.count - a.count),
+    ];
+    // a channel that has no rows in this period any more stays visible (with 0) while it is the chosen one
+    if (channel && !counts.has(channel)) channelPills.push({ value: channel, label: channelDisplayLabel(channel), count: 0 });
+    renderChannelBar();
+  }
+
+  function showRows(rows) {
+    lastRows = rows;
+    render(rows);
+  }
+
+  function showChannel() {
+    renderChannelBar();
+    if (!channel) return showRows(allRows);
+    if (allComplete) return showRows(allRows.filter((r) => r.channel === channel));
+    const seq = loadSeq;
+    const chosen = channel;
+    loadWithCache(`${baseKey()}:${chosen}`, () => api.getSales({ ...baseParams(), channel: chosen }), ({ rows }) => {
+      if (seq === loadSeq && chosen === channel) showRows(rows);
+    }).catch((err) => showError(err));
+  }
+
+  function showError(err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
+    listEl.innerHTML = "";
+    subtotalEl.textContent = "";
+  }
+
   async function load() {
-    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const seq = ++loadSeq;
     errorEl.hidden = true;
+    let painted = false;
+    // the loading line only while nothing is there to show (a saved copy paints at once)
+    const spinner = setTimeout(() => {
+      if (!painted && seq === loadSeq) listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    }, 120);
     try {
-      const params = { from, to };
-      if (channel) params.channel = channel;
-      if (q) params.q = q;
-      const { rows, sync } = await api.getSales(params);
-      syncBadgeEl.innerHTML = syncBadgeHtml(sync);
-
-      // Pill counts are only ever refreshed from an unfiltered-by-channel
-      // fetch (this one, since `channel` is only added to params after a
-      // pill is tapped) -- filtering by channel server-side would otherwise
-      // collapse every other pill's count to 0. The bar itself is still
-      // re-rendered every load() below so its active state always reflects
-      // the current `channel`, even on a call that skips this recompute.
-      if (!channel) {
-        const counts = new Map();
-        for (const r of rows) {
-          if (!r.channel) continue;
-          counts.set(r.channel, (counts.get(r.channel) || 0) + 1);
-        }
-        channelPills = [
-          { value: "", label: t("all_statuses"), count: rows.length },
-          ...[...counts.entries()]
-            .map(([code, count]) => ({ value: code, label: channelDisplayLabel(code), count }))
-            .sort((a, b) => b.count - a.count),
-        ];
-      }
-      renderChannelBar();
-
-      lastRows = rows;
-      render(rows);
+      await loadWithCache(baseKey(), () => api.getSales(baseParams()), ({ rows, sync }) => {
+        if (seq !== loadSeq) return;
+        painted = true;
+        allRows = rows;
+        allComplete = rows.length < ROW_LIMIT();
+        syncBadgeEl.innerHTML = syncBadgeHtml(sync);
+        paintPills();
+        showChannel();
+      });
     } catch (err) {
-      errorEl.textContent = err.message;
-      errorEl.hidden = false;
-      listEl.innerHTML = "";
-      subtotalEl.textContent = "";
+      if (seq === loadSeq) showError(err);
+    } finally {
+      clearTimeout(spinner);
     }
   }
 
