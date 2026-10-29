@@ -3,7 +3,7 @@
 # Starts Postgres if it is down, gives every job its own fresh test database (like CI), runs the static checks, the test shards in
 # parallel and the isolated tests, and ends with ONE summary line. Full logs: /tmp/local-ci/*.log (override with LOCAL_CI_LOG).
 #   --quick     static checks only (version, ui, lint, audit): about 30 s
-#   --e2e       also the browser smoke tests
+#   --e2e       also the browser smoke tests (Chrome) and the iPhone tests (Safari's engine, WebKit, installed on first use)
 #   --no-audit  skip `npm audit` (no network)
 # Env: SHARDS (default 4), PGBASE (default: tries postgres://gmm:gmm@127.0.0.1:5432 then postgres://postgres:postgres@localhost:5432).
 set -uo pipefail
@@ -35,18 +35,29 @@ count() { grep -E "^# $1 " "$2" 2>/dev/null | tail -1 | awk '{print $3}'; }
 # run <name> <command...>  -> writes $LOG/<name>.log and $LOG/<name>.status ("ok"|"FAIL <detail>")
 run() {
   local name="$1"; shift; local t0=$SECONDS
-  if "$@" > "$LOG/$name.log" 2>&1; then echo "ok $((SECONDS - t0))s" > "$LOG/$name.status"; else echo "FAIL $((SECONDS - t0))s" > "$LOG/$name.status"; fi
+  local rc=0; "$@" > "$LOG/$name.log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ]; then echo "ok $((SECONDS - t0))s" > "$LOG/$name.status"
+  elif [ "$rc" = 77 ]; then echo "SKIP: WebKit could not be installed on this machine (CI still runs it)" > "$LOG/$name.status"
+  else echo "FAIL $((SECONDS - t0))s" > "$LOG/$name.status"; fi
 }
 static() { npm run check:version && npm run verify:ui && npm run lint && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
 shard()  { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-shard="$1/$SHARDS" $(tests); }
 isolated() { bash scripts/run-isolated.sh test/isolated-tests.txt; }
 e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" npm run test:e2e:smoke; }
+# The @iphone tests in Safari's engine (project iphone-webkit), on their own database and port next to the Chrome run. WebKit and its system
+# libraries are installed once into WEBKIT_DIR (the install is a no-op when that revision is already there); exit 77 = not installable here.
+WEBKIT_DIR="${WEBKIT_DIR:-$HOME/.cache/ms-playwright-webkit}"
+iphone() {
+  PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npx playwright install webkit || return 77
+  if [ ! -f "$WEBKIT_DIR/.deps-ok" ]; then npx playwright install-deps webkit && touch "$WEBKIT_DIR/.deps-ok" || return 77; fi
+  fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone
+}
 
 jobs=(static); run static static &
 if [ "$QUICK" = 0 ]; then
   for i in $(seq 1 "$SHARDS"); do jobs+=("shard$i"); run "shard$i" shard "$i" & done
   jobs+=(isolated); run isolated isolated &
-  [ "$E2E" = 1 ] && { jobs+=(e2e); run e2e e2e & }
+  [ "$E2E" = 1 ] && { jobs+=(e2e iphone); run e2e e2e & run iphone iphone & }
 fi
 wait
 

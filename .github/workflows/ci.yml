@@ -275,21 +275,87 @@ jobs:
           path: server/playwright-report/
           retention-days: 7
 
-  # The one check name the repository has always required for the browser tests: green when both shards passed
+  # Safari's engine (WebKit) on an iPhone screen: the tests tagged @iphone (owner 2026-10-29, "catch iPhone-only slowdowns before
+  # release"). The launch slowdown of 1.468.0 and the offline sign-out of 1.471.0 only showed in Safari / on a real reload; Chrome missed
+  # them. Its own runner and database, in parallel with the Chrome shards (about one more minute: WebKit and its libraries are installed).
+  iphone:
+    name: e2e (iphone webkit)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fieldvisits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
+      JWT_SECRET: ci-test-secret-not-used-anywhere-real
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - run: npm run migrate
+
+      - name: Playwright version (cache key)
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-webkit-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - run: npx playwright install --with-deps webkit
+
+      - run: npm run test:e2e:iphone
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-iphone-report
+          path: server/playwright-report/
+          retention-days: 7
+
+  # The one check name the repository has always required for the browser tests: green when both Chrome shards and the iPhone run passed
   # (or were skipped because only documentation changed).
   e2e-smoke:
     name: e2e-smoke
-    needs: [changes, e2e]
+    needs: [changes, e2e, iphone]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Both browser shards passed
+      - name: Both Chrome shards and the iPhone run passed
         env:
           CODE: ${{ needs.changes.outputs.code }}
           CHANGES: ${{ needs.changes.result }}
           E2E: ${{ needs.e2e.result }}
+          IPHONE: ${{ needs.iphone.result }}
         run: |
-          echo "changes: $CHANGES (code=$CODE), e2e: $E2E"
+          echo "changes: $CHANGES (code=$CODE), e2e: $E2E, iphone: $IPHONE"
           [ "$CHANGES" = "success" ] || exit 1
-          [ "$E2E" = "success" ] || { [ "$CODE" = "false" ] && [ "$E2E" = "skipped" ]; } || exit 1
+          for r in "$E2E" "$IPHONE"; do
+            [ "$r" = "success" ] || { [ "$CODE" = "false" ] && [ "$r" = "skipped" ]; } || exit 1
+          done

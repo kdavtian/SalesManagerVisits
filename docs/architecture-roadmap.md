@@ -398,4 +398,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 7b2 last outside patchers gone, screens build their own parts: 1.467.0, PR #511, 2026-10-29.
 - Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, PR #512, 2026-10-29.
 - Step 8a api.js split by area (refactor tool `split-object`): 1.469.0, PR #513, 2026-10-29.
-- Step 9 part 1, one stylesheet request: 1.470.0, 2026-10-29.
+- Step 9 part 1, one stylesheet request: 1.470.0, PR #514, 2026-10-29.
+- Safari's engine in the test setup (CI job `e2e (iphone webkit)`, `@iphone` tests) + offline start fix (owner idea 2): 1.471.0, 2026-10-29.

@@ -47,7 +47,7 @@ jobs:
 
       - run: npm run migrate
 
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit   # the full run includes the @iphone tests in Safari's engine
 
       - run: npm run test:e2e
 
