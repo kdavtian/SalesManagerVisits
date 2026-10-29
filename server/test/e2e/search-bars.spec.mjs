@@ -85,4 +85,26 @@ test.describe("Search bars", () => {
     await wrap.locator(".unified-search-clear").click();
     await expect(page.locator("#expenses-search")).toHaveValue("");
   });
+
+  test("Map: filters inside the search field, the selected pin's halo goes when its popup closes", async ({ page, fixtures }) => {
+    const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    await page.route(/\/\d+\/\d+\/\d+(@2x)?\.(png|jpe?g|webp)(\?.*)?$/, (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
+    const admin = await fixtures.createUser("admin");
+    await fixtures.createCustomer({ name: `SB Map ${Date.now()}`, created_by: admin.id, sales_channel: "SM YVN", erp_customer_id: `SB-${Date.now()}` }); // a channel the Map shows by default
+    await loginViaUi(page, admin.email);
+    await page.goto("/#/map");
+
+    const bar = page.locator(".map-search-row.map-search-combined");
+    await expect(bar).toBeVisible();
+    await expect(bar.locator(".map-search-actions .map-primary-filter-wrap .activity-search-filter-btn")).toBeVisible();
+    await expect(bar.locator(".map-search-actions #map-icon-filter-row.map-dimension-filter-inline")).toHaveCount(1);
+
+    const marker = page.locator("#leaflet-map .leaflet-marker-icon:has(.pin)").first();
+    await expect(marker).toBeVisible({ timeout: 10000 });
+    await marker.evaluate((el) => el.click());
+    await expect(marker).toHaveClass(/kad-marker-selected/);
+    await expect(page.locator("#leaflet-map .leaflet-popup")).toHaveCount(1);
+    await page.locator("#leaflet-map .leaflet-popup-close-button").evaluate((el) => el.click());
+    await expect(marker).not.toHaveClass(/kad-marker-selected/);
+  });
 });

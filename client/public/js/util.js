@@ -507,7 +507,7 @@ export function matchSubregion(guess, region) {
 // out of the requested 9-channel order.
 export const SALES_CHANNELS = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "OEM", "CVO", "PCO", "CAS", "KF", "SM CAS"];
 
-// customerPortfolioUi.js writes the literal uppercase "POTENTIAL"/
+// api.js (normalizeCustomer) writes the literal uppercase "POTENTIAL"/
 // "COMPETITORS" into a customer's sales_channel so it sorts and filters
 // like any other channel value -- but wherever that value is rendered as
 // text to a user it should read as a normal word, not shouting, same as

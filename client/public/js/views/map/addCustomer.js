@@ -7,6 +7,7 @@ import { api } from "../../api.js";
 import { canEditDirectly, canReassignCustomers, state } from "../../state.js";
 import { movesAnyPinAtOnce } from "../../shared/roles.js";
 import { placeNoticeText, wirePlaceInput } from "../../places.js";
+import { installInlineClearButton } from "../../searchBar.js";
 
 export function onMapTouchEnd(ctx, e) {
   if (e.touches.length > 0 || e.changedTouches.length !== 1) {
@@ -232,6 +233,7 @@ export function openAddressSearchSheet(ctx, onSelect) {
   overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
   const input = overlay.querySelector("#address-search-input");
+  installInlineClearButton(input);
   const resultsEl = overlay.querySelector("#address-search-results");
   let searchTimer;
   let searchToken = 0;
