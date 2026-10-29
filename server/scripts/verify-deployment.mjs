@@ -55,7 +55,8 @@ for (let attempt = 1; attempt <= attempts; attempt += 1) {
 
 const checks = [
   ["application shell", "/", /<main[^>]+id="app"/],
-  ["primary stylesheet", "/css/styles.css", /\.nav-bar\s*\{/],
+  // css/app.css is joined by the server from the boot stylesheets (step 9): no @import may be left in it
+  ["joined stylesheet", "/css/app.css", /^(?![\s\S]*@import)[\s\S]*\.nav-bar\s*\{/],
   ["application entry module", "/js/app.js", /renderNav|renderRoute/],
 ];
 

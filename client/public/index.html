@@ -30,17 +30,8 @@
          as the bottom-nav view modules) instead of unconditionally here --
          ~208KB of JS a session that never opens Map/Add-customer never
          needed to parse. -->
-    <link rel="stylesheet" href="css/styles.css" />
-    <link rel="stylesheet" href="css/activity-search-filters.css" />
-    <link rel="stylesheet" href="css/activity-date-picker.css" />
-    <link rel="stylesheet" href="css/orders-search-filters.css" />
-    <link rel="stylesheet" href="css/unified-search.css" />
-    <link rel="stylesheet" href="css/order-map-filter-enhancements.css" />
-    <link rel="stylesheet" href="css/field-visit-enhancements.css" />
-    <link rel="stylesheet" href="css/customer-social.css" />
-    <link rel="stylesheet" href="css/map-marker-system.css" />
-    <link rel="stylesheet" href="css/map-safe-enhancements.css" />
-    <link rel="stylesheet" href="css/desktop.css" />
+    <!-- One stylesheet request: css/app.css lists the boot stylesheets and the server joins them into one minified response (step 9). -->
+    <link rel="stylesheet" href="css/app.css" />
     <!-- First-paint spinner styles, inline so they cost no request. -->
     <style>
       .boot-splash { display: flex; align-items: center; justify-content: center; min-height: 70vh; }

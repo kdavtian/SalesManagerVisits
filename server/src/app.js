@@ -260,13 +260,29 @@ app.use("/api/table-export", express.json({ limit: "8mb" }), tableExportRouter);
 // not per request; skipped entirely outside production so editing a
 // stylesheet locally shows up on the next reload without a restart.
 const cssMinifyCache = new Map();
+// A local `@import url("x.css");` is replaced by that file's text (css/app.css joins the boot stylesheets this way, step 9: one request
+// instead of eleven before the first paint). Only plain relative names in the same folder tree; anything else stays an @import.
+async function inlineCssImports(filePath, seen = new Set()) {
+  seen.add(filePath);
+  const raw = await fs.promises.readFile(filePath, "utf8");
+  const parts = [];
+  let last = 0;
+  for (const m of raw.matchAll(/@import\s+url\(\s*["']?([\w./-]+\.css)["']?\s*\)\s*;/g)) {
+    const target = path.resolve(path.dirname(filePath), m[1]);
+    if (!target.startsWith(clientDir + path.sep) || seen.has(target)) continue;
+    parts.push(raw.slice(last, m.index), await inlineCssImports(target, seen));
+    last = m.index + m[0].length;
+  }
+  parts.push(raw.slice(last));
+  return parts.join("");
+}
 app.get(/^\/css\/.*\.css$/, async (req, res, next) => {
   const filePath = path.join(clientDir, req.path);
   try {
     let minified = cssMinifyCache.get(filePath);
     if (!minified) {
       const { default: CleanCSS } = await import("clean-css");
-      const raw = await fs.promises.readFile(filePath, "utf8");
+      const raw = await inlineCssImports(filePath);
       minified = new CleanCSS({}).minify(raw).styles;
       if (process.env.NODE_ENV === "production") cssMinifyCache.set(filePath, minified);
     }
