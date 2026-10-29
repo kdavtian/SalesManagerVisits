@@ -1,4 +1,5 @@
 import { wishReport } from "../../orders/productWishes.js";
+import { cashflowByCustomer, lastPayment } from "../../money/cashflowCopy.js";
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
@@ -704,9 +705,27 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
   const asOfParam = asOfDate ? `$${params.length}::date` : null;
   const cashflowBound = asOfParam ? ` AND cf.cashflow_date <= ${asOfParam}` : "";
   const appPaymentBound = asOfParam ? ` AND (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date <= ${asOfParam}` : "";
+  // the Excel side from the server's copy of the cashflow lines (money/cashflowCopy.js) when it is there: joined as two lists
+  const cashflow = await cashflowByCustomer(pool);
+  let cashflowJoin = "";
+  let lastErpSql = `(SELECT max(cf.cashflow_date) FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.amount_amd > 0${cashflowBound})`;
+  if (cashflow) {
+    const ids = [];
+    const dates = [];
+    for (const [erpId, lines] of cashflow) {
+      const last = lastPayment(lines, asOfDate);
+      if (last) {
+        ids.push(erpId);
+        dates.push(last.date);
+      }
+    }
+    params.push(ids, dates);
+    cashflowJoin = `LEFT JOIN unnest($${params.length - 1}::text[], $${params.length}::date[]) AS cfl(erp_id, d) ON cfl.erp_id = erp.erp_customer_id`;
+    lastErpSql = "cfl.d";
+  }
   const lastPaymentExpr = `GREATEST(
       ${asOfParam ? `CASE WHEN erp.last_payment_date <= ${asOfParam} THEN erp.last_payment_date END` : "erp.last_payment_date"},
-      (SELECT max(cf.cashflow_date) FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = erp.erp_customer_id AND cf.amount_amd > 0${cashflowBound}),
+      ${lastErpSql},
       (SELECT max((p.payment_date AT TIME ZONE 'Asia/Yerevan')::date) FROM payments p JOIN customers pc ON pc.id = p.customer_id WHERE pc.erp_customer_id = erp.erp_customer_id AND p.status = 'approved'${appPaymentBound})
     )`;
 
@@ -718,6 +737,7 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
             ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp
      ${debtJoin}
+     ${cashflowJoin}
      ${where}
      ORDER BY estimated_debt_amd DESC NULLS LAST`,
     params

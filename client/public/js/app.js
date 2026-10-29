@@ -2,6 +2,7 @@ import { api } from "./api.js";
 import { refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
 import { state, setUser, loadCachedUser } from "./state.js";
 import { t } from "./i18n.js";
+import { SLOW_MS, showSlowBar, hideSlowBar, cleanReload } from "./shell/slowRoute.js";
 
 // The module's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).
 const ctx = {
@@ -529,9 +530,11 @@ function showRenderFailure(err) {
           <button type="button" class="btn" id="render-failed-home">${t("nav_dashboard")}</button>
           <button type="button" class="btn btn-primary" id="render-failed-reload">${t("reload_app")}</button>
         </div>
+        <button type="button" class="btn-link" id="render-failed-clean">${t("slow_route_clean")}</button>
       </div>
     </div>`;
   app.querySelector("#render-failed-reload").addEventListener("click", () => location.reload());
+  app.querySelector("#render-failed-clean").addEventListener("click", cleanReload);
   app.querySelector("#render-failed-home").addEventListener("click", () => {
     location.hash = "#/dashboard";
     location.reload();
@@ -540,15 +543,24 @@ function showRenderFailure(err) {
 const STALE_ROUTE = new Error("stale route");
 async function render() {
   const seq = ++renderSeq;
+  // A screen that has not appeared after a few seconds: a bar with Reload / Clean reload, and the step it hung on is reported.
+  const opening = { hash: location.hash || "#/dashboard", startedAt: Date.now() };
+  const slowTimer = setTimeout(() => {
+    if (seq === renderSeq) showSlowBar({ ...opening, stage: ctx.routeStage || "start" });
+  }, SLOW_MS);
   try {
     await renderRoute();
     if (seq === renderSeq) {
+      hideSlowBar();
       markFirstScreenShown();
       loadOtherStylesSoon();
     }
   } catch (err) {
     if (err === STALE_ROUTE) return;
+    hideSlowBar();
     showRenderFailure(err);
+  } finally {
+    clearTimeout(slowTimer);
   }
   // Watchdog: a view that neither threw nor painted anything.
   setTimeout(() => {

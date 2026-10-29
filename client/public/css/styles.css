@@ -10007,3 +10007,8 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .home-order-btn svg { transform: rotate(-90deg); }
 .home-order-down svg { transform: rotate(90deg); }
 .home-order-btn:disabled { opacity: 0.3; }
+
+/* A screen that did not open within a few seconds (shell/slowRoute.js): a bar at the top with Reload / Clean reload */
+.slow-route-bar { position: fixed; z-index: 2000; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 24px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18); }
+.slow-route-text { flex: 1 1 180px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.slow-route-bar .btn { min-height: 44px; }
