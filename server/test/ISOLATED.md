@@ -10,6 +10,8 @@
   creator, which can be another file's temporary user; `tasks.creator_id` is ON DELETE CASCADE, so that file's clean-up deleted the task
   and the test found none; local CI 2026-10-29). `debtCollectionTasks.test.js` the same way: its tasks go to "the sales director" of the
   whole database, which can be another file's temporary user deleted mid-run (`tasks_creator_id_fkey` errors, CI on PR #519).
+- `speedBudget.test.js` (step 12): fills its database with 4,000 customers and 60,000 order lines to time the busiest endpoints; the
+  data would change other files' counts and slow them down.
 
 They never share a database with other files: `scripts/run-isolated.sh` gives EACH listed file a fresh database of its own (migrated, dropped
 again after a pass, kept after a failure) and runs five at a time, so they neither disturb nor wait for anybody; the time is that of the slowest

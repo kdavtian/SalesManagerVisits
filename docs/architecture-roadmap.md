@@ -365,12 +365,35 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
 - Done when: bytes before the first screen drop by about 40 KB gz (measure).
 
 #### Step 12. Speed budget in CI - size 1
-- [ ] The cold-start measurement above becomes `server/test/e2e/speed-budget.spec.mjs` (@smoke): fails if Home takes more than 3.5 s
-      (then lowered to the value reached after steps 9-11 + 20 %), or scripts exceed 700 KB gz, or more than 20 stylesheet/script
-      requests block the first screen.
-- [ ] `server/test/integration/speedBudget.test.js`: seeds 4,000 customers / 60,000 order lines, times the 10 busiest endpoints
-      (customers list, orders list, debt balances, map facts, dashboard, reports overview, ...) and fails above a stored budget.
-- Done when: both run in CI; the budgets are written in this file.
+- [x] `server/test/e2e/speed-budget.spec.mjs` (@smoke, Chrome, on the deploy build): a rep's first start with nothing cached, 1.6
+      Mbit/s + 150 ms latency, CPU 4x, Armenian; median of 3 starts.
+- [x] `server/test/integration/speedBudget.test.js` (isolated: own database): 4,000 customers, 60,000 Excel order lines, 3,000 app
+      orders (9,000 lines), a debt row per customer; the 10 busiest endpoints as the admin (largest answers), median of 3 after a warm-up.
+- Done in PR (step 12), 2026-10-29. Both run in CI on every PR. Budgets (raise one only with the reason written here):
+
+  | First start (budget / measured on a fast computer) | |
+  | --- | --- |
+  | Home drawn | 6.0 s / 3.9-4.2 s |
+  | End of the white screen (first paint) | 3.0 s / 2.1 s |
+  | Scripts downloaded before Home | 700 KB / 302 KB compressed |
+  | Scripts + stylesheets the first paint waited for | 20 / 12-15 (the source files: ~80) |
+
+  | Endpoint (budget / measured) | |
+  | --- | --- |
+  | `/api/customers` | 500 / 122 ms |
+  | `/api/orders` | 500 / 12 ms |
+  | `/api/debt-balances` | 2,000 / 503 ms |
+  | `/api/customers/debt-flags` | 500 / 17 ms |
+  | `/api/dashboard/summary` | 500 / 7 ms |
+  | `/api/dashboard/trends` | 500 / 5 ms |
+  | `/api/sales` | 1,200 / 260 ms |
+  | `/api/biz-reports/unpaid-invoices` | 1,200 / 295 ms |
+  | `/api/reports/customer-debt` | 1,200 / 320 ms |
+  | `/api/ops/legacy-balances` | 800 / 173 ms |
+
+- Seen while measuring (not changed, ideas for the owner): `common` is fetched from the first byte (theme-init.js), but Home's second
+  text file (`orders`) only after the shared chunk has run (~1.7 s on the slow phone): fetching the first screen's areas early too would
+  end the white screen ~0.3 s sooner. `/api/debt-balances` is the slowest list (0.5 s for 4,000 customers).
 
 ### KAD OS (repo kad-gmm) and the bot
 
@@ -424,4 +447,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Tasks stay when a person is deleted (owner decision): server only, PR #516, 2026-10-29.
 - Step 8b texts split by area: 1.472.0, PR #517, 2026-10-29.
 - Step 11 texts in two parts: 1.473.0, PR #518, 2026-10-29.
-- Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, 2026-10-29.
+- Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, PR #519, 2026-10-29.
