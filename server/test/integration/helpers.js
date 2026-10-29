@@ -57,6 +57,18 @@ export async function cleanupAll() {
   for (const table of CLEANUP_ORDER) {
     const ids = created.get(table);
     if (!ids.size) continue;
+    // A task another file's user was given keeps living when this file's user that "created" it is deleted (tasks.creator_id is ON DELETE
+    // CASCADE): the automatic debt / reorder tasks name the oldest sales director as creator, which can be this file's temporary one, and
+    // that file then found its task gone (debtCollectionTasks / taskAutoComplete, local CI 2026-10-29). The same rule as the app's own user
+    // delete (src/team/taskHandover.js); this file's own tasks still go with its users.
+    if (table === "users") {
+      await pool.query(
+        `UPDATE tasks SET creator_id = (SELECT id FROM users WHERE role IN ('sales_director', 'ceo', 'admin') AND NOT (id = ANY($1)) ORDER BY id LIMIT 1)
+         WHERE creator_id = ANY($1) AND NOT (assignee_id = ANY($1))
+           AND EXISTS (SELECT 1 FROM users WHERE role IN ('sales_director', 'ceo', 'admin') AND NOT (id = ANY($1)))`,
+        [[...ids]]
+      );
+    }
     await pool.query(`DELETE FROM ${table} WHERE id = ANY($1)`, [[...ids]]);
     ids.clear();
   }
