@@ -5908,38 +5908,38 @@ form select,
   position: fixed;
   inset: 0;
   z-index: 3000;
-  background: rgba(0, 0, 0, 0.92);
+  background: #000;
+}
+/* The photo fills the screen (zoomStage.js); the bars float over it and a tap hides them, as in Photos. */
+.photo-lightbox-stage {
+  position: absolute;
+  inset: 0;
+}
+.photo-lightbox-top {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  touch-action: pan-y;
+  justify-content: space-between;
+  gap: 8px;
+  padding: calc(8px + var(--safe-top)) 12px 8px 16px;
+  background: linear-gradient(rgba(0, 0, 0, 0.55), transparent);
+  transition: opacity 0.2s ease;
 }
-
-.photo-lightbox-img {
-  max-width: 92vw;
-  /* Leaves a clear strip top and bottom for the close button and counter: a tall phone
-     photo used to run underneath the X, and the image (painted later in the DOM) covered it. */
-  max-height: calc(100vh - 150px - var(--safe-top) - var(--safe-bottom));
-  max-height: calc(100dvh - 150px - var(--safe-top) - var(--safe-bottom));
-  object-fit: contain;
-  border-radius: 8px;
-  -webkit-user-select: none;
-  user-select: none;
-  /* The page-wide viewport meta disables native pinch/double-tap zoom
-     (see index.html), so this image implements its own scoped zoom in JS
-     (visitDetail.js's openPhotoLightbox) -- touch-action: none here hands
-     ALL touch gestures starting on the image to that JS instead of letting
-     the browser's default single-finger-scroll/pinch-refuse behavior
-     intercept them first. */
-  touch-action: none;
-  transform-origin: center center;
+.photo-lightbox-overlay.is-bare .photo-lightbox-top,
+.photo-lightbox-overlay.is-bare .photo-lightbox-nav,
+.file-viewer.is-bare .file-viewer-top,
+.file-viewer.is-bare .file-viewer-info,
+.file-viewer.is-bare .file-viewer-bar,
+.file-viewer.is-bare .photo-lightbox-nav {
+  opacity: 0;
+  pointer-events: none;
 }
-
 .photo-lightbox-close {
-  position: absolute;
-  top: calc(12px + var(--safe-top));
-  right: 16px;
-  z-index: 5;
+  margin-left: auto;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -5981,11 +5981,6 @@ form select,
 }
 
 .photo-lightbox-counter {
-  position: absolute;
-  z-index: 5;
-  bottom: calc(20px + var(--safe-bottom));
-  left: 50%;
-  transform: translateX(-50%);
   color: #ffffff;
   font-size: 0.85rem;
   background: rgba(255, 255, 255, 0.15);
@@ -10012,3 +10007,39 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .slow-route-bar { position: fixed; z-index: 2000; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 24px)); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--bg-card); border: 1px solid var(--border); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18); }
 .slow-route-text { flex: 1 1 180px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
 .slow-route-bar .btn { min-height: 44px; }
+
+/* The zoomable picture (zoomStage.js): the page never zooms, this element does -- pinch, double tap, drag, swipe. */
+.zoom-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: zoom-in;
+  background: rgba(0, 0, 0, var(--zoom-stage-fade, 0));
+}
+.zoom-stage.is-zoomed { cursor: grab; }
+.zoom-stage-img {
+  position: absolute;
+  transform-origin: 0 0;
+  will-change: transform;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  border-radius: 0;
+}
+.file-viewer-stage { position: relative; padding: 0; }
+.file-viewer-zoom { position: absolute; inset: 0; }
+.file-viewer-zoom[hidden] { display: none; }
+.file-viewer-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.file-viewer-msg[hidden] { display: none; }
+.file-viewer-top, .file-viewer-info, .file-viewer-bar { transition: opacity 0.2s ease; }
+/* A phone swipes between photos (as in Photos): the arrows are for a mouse */
+@media (hover: none) and (pointer: coarse) {
+  .photo-lightbox-overlay .photo-lightbox-nav,
+  .file-viewer .photo-lightbox-nav { display: none; }
+}

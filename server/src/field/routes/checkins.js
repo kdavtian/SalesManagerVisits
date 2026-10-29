@@ -5,7 +5,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
-import { thumbnailPathFor, removeThumbnail } from "../../utils/imageThumbs.js";
+import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } from "../../utils/imageThumbs.js";
 import { haversineMeters, creditedDistanceMeters } from "../../utils/geo.js";
 import { getCheckinRadiusMeters, getCheckinAllowanceEnabled } from "../../shared/settings.js";
 import { seesAllActivity } from "../../shared/roles.js";
@@ -330,6 +330,7 @@ checkinsRouter.post("/", (req, res, next) => {
         checkin.id,
         file.filename,
       ]);
+      warmUploadCopies(uploadDirPath, file.filename, file.mimetype || "image/jpeg");
     }
     // The signed order blank of a delivery: a customer document kept with the check-in, linked to the delivered orders (Files > Documents,
     // the order's Documents, the accountant's inbox). Only a visit marked "Products delivered" can carry one.
@@ -339,6 +340,7 @@ checkinsRouter.post("/", (req, res, next) => {
         [customerId, file.filename, file.mimetype, file.size, deliveredIds, checkin.id, req.user.id]
       );
       blankFileIds.push(inserted[0].id);
+      warmUploadCopies(uploadDirPath, file.filename, file.mimetype);
     }
 
     // In the same transaction as the check-in itself, not a fire-and-forget
@@ -377,6 +379,7 @@ checkinsRouter.post("/", (req, res, next) => {
             "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, payment_id, checkin_id, created_by) VALUES ($1, 'payment_slip', $2, $3, $4, $5, $6, $7)",
             [customerId, file.filename, file.mimetype, file.size, paymentId, checkin.id, req.user.id]
           );
+          warmUploadCopies(uploadDirPath, file.filename, file.mimetype);
         }
       }
     }
@@ -646,6 +649,7 @@ checkinsRouter.get("/photos/:photoId", async (req, res) => {
   const cacheHeaders = { "Cache-Control": "private, max-age=31536000, immutable" };
   let file = path.join(uploadDirPath, photo.photo_path);
   if (req.query.size === "thumb") file = (await thumbnailPathFor(uploadDirPath, photo.photo_path)) || file;
+  else if (req.query.size === "screen") file = (await screenPathFor(uploadDirPath, photo.photo_path)) || file; // what the viewer shows first
   res.sendFile(file, { headers: cacheHeaders }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "Photo not found" });
   });

@@ -1,15 +1,5 @@
 /* KAD Field Visits — focused polish for photo viewing and customer creation. */
 
-.photo-lightbox-img {
-  transition: transform 120ms ease;
-  transform-origin: center center;
-  will-change: transform;
-}
-
-.photo-lightbox-img-zoomed {
-  cursor: zoom-out;
-}
-
 .photo-zoom-controls {
   position: absolute;
   left: 50%;
@@ -60,5 +50,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .photo-lightbox-img { transition: none; }
+  .zoom-stage-img { transition: none !important; }
 }

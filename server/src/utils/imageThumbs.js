@@ -14,23 +14,23 @@ function loadSharp() {
 
 const inFlight = new Map();
 
-// Resolves to the path of the thumbnail, or null when none can be made.
-export async function thumbnailPathFor(uploadDir, storedName) {
+// A smaller JPEG copy of an uploaded photo under uploads/<sub>/<name>.jpg, made once (rotated upright); null when none can be made.
+async function sizedCopy(uploadDir, storedName, { sub, width, quality }) {
   const rel = path.basename(storedName);
-  const thumbDir = path.join(uploadDir, "thumbs");
-  const target = path.join(thumbDir, `${rel}.jpg`);
+  const dir = path.join(uploadDir, sub);
+  const target = path.join(dir, `${rel}.jpg`);
   if (fs.existsSync(target)) return target;
   if (inFlight.has(target)) return inFlight.get(target);
   const job = (async () => {
     const sharp = await loadSharp();
     if (!sharp) return null;
     try {
-      await fs.promises.mkdir(thumbDir, { recursive: true });
+      await fs.promises.mkdir(dir, { recursive: true });
       const tmp = `${target}.${process.pid}.tmp`;
       await sharp(path.join(uploadDir, rel), { failOn: "none" })
         .rotate()
-        .resize({ width: THUMB_WIDTH, height: THUMB_WIDTH, fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: 70, mozjpeg: false })
+        .resize({ width, height: width, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality, mozjpeg: false })
         .toFile(tmp);
       await fs.promises.rename(tmp, target);
       return target;
@@ -42,7 +42,34 @@ export async function thumbnailPathFor(uploadDir, storedName) {
   return job;
 }
 
+// Resolves to the path of the thumbnail (grids), or null when none can be made.
+export const thumbnailPathFor = (uploadDir, storedName) => sizedCopy(uploadDir, storedName, { sub: "thumbs", width: THUMB_WIDTH, quality: 70 });
+
+// The copy the viewer shows first (owner, 2026-10-30: "photos open too slowly"): sharp on any phone or computer screen at a fraction of
+// the original's size (a 2400 px photo of ~1 MB -> ~200 KB); the original is fetched only when the person zooms in.
+const SCREEN_WIDTH = 1600;
+export const screenPathFor = (uploadDir, storedName) => sizedCopy(uploadDir, storedName, { sub: "screens", width: SCREEN_WIDTH, quality: 80 });
+
 // Delete a photo's thumbnail together with the photo itself.
 export function removeThumbnail(uploadDir, storedName) {
   fs.unlink(path.join(uploadDir, "thumbs", `${path.basename(storedName)}.jpg`), () => {});
+  fs.unlink(path.join(uploadDir, "screens", `${path.basename(storedName)}.jpg`), () => {});
+}
+
+// Right after an upload (owner, 2026-10-30: "photos and PDFs open too slowly"): a photo's screen copy and thumbnail, or a PDF's picture,
+// are made in the background so the first open is instant instead of waiting for them. Never fails the upload.
+export function warmUploadCopies(uploadDir, storedName, mime) {
+  setImmediate(async () => {
+    try {
+      if (String(mime).startsWith("image/")) {
+        await screenPathFor(uploadDir, storedName);
+        await thumbnailPathFor(uploadDir, storedName);
+      } else if (mime === "application/pdf") {
+        const { warmPdfPreview } = await import("../shared/pdfPreview.js");
+        warmPdfPreview(path.join(uploadDir, path.basename(storedName)));
+      }
+    } catch {
+      // made on first request instead
+    }
+  });
 }

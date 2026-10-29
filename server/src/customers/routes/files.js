@@ -8,7 +8,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
-import { thumbnailPathFor, removeThumbnail } from "../../utils/imageThumbs.js";
+import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } from "../../utils/imageThumbs.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
 import { canAddCustomerFiles, seesAllCustomerFiles } from "../../shared/roles.js";
 import { scheduleAiCheck, checkFileWithAi, getAiCheckSettings, isAiConfigured } from "../aiBlankCheck.js";
@@ -93,8 +93,13 @@ filesRouter.get("/:id/content", async (req, res) => {
   const file = await loadFile(req, res);
   if (!file) return;
   let target = path.join(uploadDirPath, file.file_path);
-  if (req.query.size === "thumb" && file.mime.startsWith("image/")) target = (await thumbnailPathFor(uploadDirPath, file.file_path)) || target;
-  res.sendFile(target, { headers: { "Cache-Control": "private, max-age=31536000, immutable", "Content-Type": req.query.size === "thumb" && target.endsWith(".jpg") ? "image/jpeg" : file.mime } }, (err) => {
+  // ?size=thumb: the small copy for grids; ?size=screen: the copy the viewer shows first (the original only when zoomed in)
+  let sized = false;
+  if (file.mime.startsWith("image/") && (req.query.size === "thumb" || req.query.size === "screen")) {
+    const copy = await (req.query.size === "thumb" ? thumbnailPathFor : screenPathFor)(uploadDirPath, file.file_path);
+    if (copy) [target, sized] = [copy, true];
+  }
+  res.sendFile(target, { headers: { "Cache-Control": "private, max-age=31536000, immutable", "Content-Type": sized ? "image/jpeg" : file.mime } }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: "File not found" });
   });
 });
@@ -221,6 +226,7 @@ filesRouter.post("/customer/:customerId", (req, res, next) => {
     [customerId, kind, file.filename, file.mimetype, file.size, orderIds, String(req.body?.note ?? "").trim().slice(0, 500) || null, req.user.id]
   );
   res.status(201).json({ id: rows[0].id });
+  warmUploadCopies(uploadDirPath, file.filename, file.mimetype); // the first look at it is instant
   scheduleAiCheck(rows[0].id); // only an order-blank photo is read, and only while the AI check is switched on
 });
 
