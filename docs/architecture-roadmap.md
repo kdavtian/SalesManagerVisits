@@ -299,8 +299,10 @@ areas goes to `shared/`.
   optional polish.
 
 #### Step 8. Split the shared files - size 2
-- 8a `api.js` -> `api/index.js` (request, json, cache, CSRF) + one file per area (`api/orders.js`, ...), re-exported as the same `api`
-  object so callers do not change.
+- [x] 8a `api.js` -> `api/core.js` (request, json, cache, CSRF, customer rules) + one file per server area (`api/orders.js`, ...), joined
+  into the same `api` object in `api.js` so callers do not change (1.469.0). Done with the refactor tool: `extract-top` for the helpers, the
+  new `split-object` command for the 444 methods (grouped by the server folder that serves each route); every method's text checked
+  identical; architecture check 9 = one definition per name, nothing added to api.js itself.
 - 8b Texts: `i18n-en.js`/`i18n-hy.js` -> `i18n/<lang>/<area>.js` merged by the loader (same keys; `i18nParity.test.js` checks each area
   file pair). Styles: per-screen CSS moved out of `styles.css` into `css/<area>.css`, loaded with the view (see step 9).
 - Done when: a typical feature touches only its area's api, text and style files plus `version.js`/`sw.js`.
@@ -390,4 +392,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 7a search bars built by their screens: 1.465.0, PR #509, 2026-10-28.
 - Step 7b1 Map bar, pin halo, customer channel rule in api.js: 1.466.0, PR #510, 2026-10-29.
 - Step 7b2 last outside patchers gone, screens build their own parts: 1.467.0, PR #511, 2026-10-29.
-- Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, 2026-10-29.
+- Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, PR #512, 2026-10-29.
+- Step 8a api.js split by area (refactor tool `split-object`): 1.469.0, 2026-10-29.

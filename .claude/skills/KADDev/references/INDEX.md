@@ -3,7 +3,7 @@
 Read this, then open ONLY the sections the task needs: `Read file offset=<line> limit=<about 60>`. Line numbers shift when a file is edited:
 rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a reference.
 
-## app-architecture.md (22 KB, 105 lines)
+## app-architecture.md (23 KB, 105 lines)
 - L5 Stack and shape - Server server/src: Node 20+/22, Express 5, ES modules, plain pg (no ORM), plain SQL migrations server/migratio
 - L11 Domains and where they live (server route -> client view) - Customers: routes/customers.js (list is client-side filtered in views/customers.js applyNonStatusFilters; tier
 - L30 Roles (8) - admin (superset), ceo, operationsdirector (= CEO permissions), salesdirector (also has warehouse permissions +

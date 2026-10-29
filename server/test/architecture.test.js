@@ -206,3 +206,26 @@ test("no script watches the whole page to patch screens from outside", () => {
   }
   assert.deepEqual(offenders, [], "build the part in the screen that renders it (call it right after rendering) instead of observing the page");
 });
+
+// 9. The `api` object is joined from js/api/<area>.js with spreads (step 8a): a method defined in two area files would silently be the
+// later one, so every name is defined once; api.js itself only joins (no requests of its own, nothing else in the object).
+test("every api method is defined once, in its area file under js/api/", () => {
+  const seen = new Map();
+  const dupes = [];
+  for (const file of walk(path.join(PUBLIC, "js/api")).filter((f) => f.endsWith(".js") && !f.endsWith("core.js"))) {
+    const rel = path.relative(PUBLIC, file).split(path.sep).join("/");
+    for (const node of parse(file).body) {
+      const decl = node.type === "ExportNamedDeclaration" ? node.declaration?.declarations?.[0] : null;
+      if (decl?.init?.type !== "ObjectExpression") continue;
+      for (const p of decl.init.properties) {
+        const name = p.key?.name ?? p.key?.value;
+        if (seen.has(name)) dupes.push(`${name}: ${seen.get(name)} and ${rel}`);
+        else seen.set(name, rel);
+      }
+    }
+  }
+  assert.deepEqual(dupes, [], "one name per request: rename one of them");
+  assert.ok(seen.size > 400, `found only ${seen.size} api methods: did the area files move?`);
+  const joined = parse(path.join(PUBLIC, "js/api.js")).body.find((n) => n.declaration?.declarations?.[0]?.id.name === "api").declaration.declarations[0].init;
+  assert.deepEqual(joined.properties.filter((p) => p.type !== "SpreadElement").map((p) => p.key?.name), [], "a new request goes into its area file in js/api/, not into api.js");
+});
