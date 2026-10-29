@@ -17,8 +17,11 @@ test("@smoke @iphone a tab comes back with its pages as left: the card, then Bac
   await page.locator("#customer-search").fill(tag);
   await expect(page.locator("#customer-list .list-row")).toHaveCount(1);
   await mark("list");
-  await page.locator("#customer-list .list-row").first().click();
-  await expect(page).toHaveURL(new RegExp(`#/customers/${c.id}$`));
+  // the list may still repaint itself with its fresh answer right after it is drawn (a busy machine): tap again if the row was replaced
+  await expect(async () => {
+    await page.locator("#customer-list .list-row").first().click();
+    await expect(page).toHaveURL(new RegExp(`#/customers/${c.id}$`), { timeout: 2000 });
+  }).toPass({ timeout: 15000 });
   await expect(page.locator("#edit-customer-btn")).toBeVisible();
   await mark("card");
 

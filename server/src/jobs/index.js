@@ -15,6 +15,7 @@ import { sendWeeklyDebtDigest } from "../money/debtDigest.js";
 import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
 import { tick as vaghinakTick, wrapUp as vaghinakWrapUp } from "../team/vaghinak/engine.js";
 import { weeklyDigest as vaghinakWeeklyDigest } from "../team/vaghinak/digest.js";
+import { fullDigest as vaghinakFullDigest } from "../team/vaghinak/fullDigest.js";
 import { runAntiFraud } from "../money/antiFraud.js";
 import { runExpenseWatch } from "../money/expenseWatch.js";
 
@@ -26,6 +27,7 @@ export const JOBS = [
   { name: "vaghinak-tick", everyMs: MINUTE, run: (now) => vaghinakTick(now) },
   { name: "vaghinak-wrap-up", everyMs: MINUTE, run: (now) => vaghinakWrapUp(now) },
   { name: "vaghinak-weekly-digest", everyMs: MINUTE, run: (now) => vaghinakWeeklyDigest(now) },
+  { name: "vaghinak-full-digest", everyMs: MINUTE, run: (now) => vaghinakFullDigest(now) },
   { name: "task-deadline-reminders", everyMs: MINUTE, run: () => sendDeadlineReminders() },
   { name: "weekly-scorecard", everyMs: MINUTE, run: (now) => sendWeeklyScorecards(now) },
   { name: "weekly-debt-digest", everyMs: MINUTE, run: (now) => sendWeeklyDebtDigest(now) },

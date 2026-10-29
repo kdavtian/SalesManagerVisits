@@ -1038,6 +1038,7 @@ export const enCommon = {
     health_every_hours: "every {n} h",
     job_vaghinak_tick: "Vaghinak: reminders and questions",
     job_vaghinak_wrap_up: "Vaghinak: end of the day",
+    job_vaghinak_full_digest: "Vaghinak: full daily summary for the CEO and admin",
     job_vaghinak_weekly_digest: "Vaghinak: weekly digest",
     job_task_deadline_reminders: "Task deadline reminders",
     job_weekly_scorecard: "Weekly scorecard (Monday)",

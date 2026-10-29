@@ -1038,6 +1038,7 @@ export const hyCommon = {
     health_every_hours: "{n} ժամը մեկ",
     job_vaghinak_tick: "Վաղինակ՝ հիշեցումներ և հարցեր",
     job_vaghinak_wrap_up: "Վաղինակ՝ օրվա ամփոփում",
+    job_vaghinak_full_digest: "Վաղինակ՝ օրվա ամբողջական ամփոփում տնօրենի և ադմինի համար",
     job_vaghinak_weekly_digest: "Վաղինակ՝ շաբաթական ամփոփում",
     job_task_deadline_reminders: "Առաջադրանքների ժամկետի հիշեցումներ",
     job_weekly_scorecard: "Շաբաթական արդյունքներ (երկուշաբթի)",
