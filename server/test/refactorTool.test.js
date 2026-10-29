@@ -238,3 +238,88 @@ test("extract-top refuses a variable the source still assigns (an imported bindi
   execFileSync("node", [TOOL, "extract-top", file, path.join(dir, "part.js"), "region", "read", "pick"]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+const API = `import { request, json } from "./core.js";
+const LOCAL = 3;
+// The requests.
+export const api = {
+  login: (email) => json("/auth/login", "POST", { email }),
+  // orders of one customer
+  listOrders: (id) => request(\`/orders?customer=\${id}\`),
+
+  // ---- payments ----
+  // a payment
+  createPayment: async (data) => {
+    const res = await json("/payments", "POST", data);
+    return { ...res, extra: 1 };
+  },
+  me: () => request("/me"),
+  photoUrl: (id) => \`/api/orders/\${id}/photo\`
+};
+`;
+function apiDir() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "refactor-split-"));
+  fs.writeFileSync(path.join(dir, "package.json"), '{"type":"module"}');
+  fs.writeFileSync(path.join(dir, "core.js"), "export const request = async (p) => ['GET', p];\nexport const json = async (p, m, d) => [m, p, d];\n");
+  fs.writeFileSync(path.join(dir, "api.js"), API);
+  return dir;
+}
+async function callAll(dir) {
+  const { api } = await import(pathToFileURL(path.join(dir, "api.js")).href + `?${Math.random()}`);
+  return [Object.keys(api).sort(), await api.login("a"), await api.listOrders(7), await api.createPayment({ x: 1 }), await api.me(), api.photoUrl(5)];
+}
+const writePlan = (dir, plan) => {
+  const f = path.join(dir, "plan.json");
+  fs.writeFileSync(f, JSON.stringify(plan));
+  return f;
+};
+
+test("split-object moves properties into area files and joins them back: same keys, same results, comments travel", async () => {
+  const dir = apiDir();
+  const before = await callAll(dir);
+  const plan = writePlan(dir, {
+    [path.join(dir, "api/orders.js")]: { name: "ordersApi", keys: ["listOrders", "photoUrl"] },
+    [path.join(dir, "api/money.js")]: { name: "moneyApi", keys: ["createPayment"] },
+  });
+  execFileSync("node", [TOOL, "split-object", path.join(dir, "api.js"), "api", plan]);
+  const source = fs.readFileSync(path.join(dir, "api.js"), "utf8");
+  const orders = fs.readFileSync(path.join(dir, "api/orders.js"), "utf8");
+  const money = fs.readFileSync(path.join(dir, "api/money.js"), "utf8");
+  assert.match(source, /import \{ ordersApi \} from "\.\/api\/orders\.js";/);
+  assert.match(source, /export const api = \{\n {2}\.\.\.ordersApi,\n {2}\.\.\.moneyApi,\n {2}login:/);
+  assert.doesNotMatch(source, /listOrders|createPayment|payments ----/);
+  assert.match(orders, /import \{ request \} from "\.\.\/core\.js";/);
+  assert.match(orders, /export const ordersApi = \{\n {2}\/\/ orders of one customer\n {2}listOrders: \(id\) => request\(`\/orders\?customer=\$\{id\}`\),\n/);
+  assert.match(orders, /photoUrl: \(id\) => `\/api\/orders\/\$\{id\}\/photo`,\n\};/); // the last property gained its comma
+  assert.match(money, /import \{ json \} from "\.\.\/core\.js";/);
+  assert.match(money, /\/\/ ---- payments ----\n {2}\/\/ a payment\n {2}createPayment: async \(data\) => \{\n {4}const res = await json/);
+  assert.deepEqual(await callAll(dir), before);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("split-object refuses what it cannot move safely", () => {
+  const dir = apiDir();
+  const refused = (src, keys) => {
+    fs.writeFileSync(path.join(dir, "api.js"), src);
+    const plan = writePlan(dir, { [path.join(dir, "api/x.js")]: { name: "xApi", keys } });
+    let message = "";
+    try {
+      execFileSync("node", [TOOL, "split-object", path.join(dir, "api.js"), "api", plan], { stdio: "pipe" });
+    } catch (err) {
+      message = String(err.stderr);
+    }
+    assert.equal(fs.existsSync(path.join(dir, "api/x.js")), false, "nothing was written");
+    return message;
+  };
+  // a declaration of the source: target and source would import each other
+  assert.match(refused(API.replace('request("/me")', 'request("/me" + LOCAL)'), ["me"]), /LOCAL is declared in .*extract-top/);
+  // the object itself
+  assert.match(refused(API.replace('request("/me")', 'api.login("x")'), ["me"]), /uses api itself/);
+  // this
+  assert.match(refused(API.replace('me: () => request("/me")', 'me() { return this.login("x"); }'), ["me"]), /uses this/);
+  // a key that is not there
+  assert.match(refused(API, ["nope"]), /nope: not a plain property/);
+  // duplicated key
+  assert.match(refused(API.replace('me: () => request("/me"),', 'me: () => request("/me"),\n  me: () => 1,'), ["login"]), /me: defined twice/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

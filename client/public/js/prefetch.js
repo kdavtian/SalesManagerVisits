@@ -4,7 +4,7 @@
 // detail request is warmed, it is single-use and expires after a few seconds
 // (see api.js prefetchGet), and a scroll or drag that starts on the row is
 // cancelled by the browser (pointercancel) before the tap would count.
-import { prefetchGet } from "./api.js";
+import { prefetchGet } from "./api/core.js";
 import { warmCustomerCard } from "./customerCardLoader.js";
 
 // [selector, path builder] -- first match wins.

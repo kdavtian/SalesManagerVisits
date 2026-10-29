@@ -20,6 +20,14 @@
 //       <outerFunction> "-" does the same for top-level functions sharing the module's own variables (a module nothing may import,
 //       like app.js): the ctx object then sits before the module's first statement.
 //
+//   node server/scripts/refactor.mjs split-object <source.js> <objectName> <plan.json>
+//       Split one big top-level object literal (the `api` object of api.js, a text dictionary) into several files: plan.json is
+//       { "path/to/target.js": { "name": "ordersApi", "keys": ["listOrders", ...] }, ... }. Each target exports `const <name> = { ... }`
+//       with those properties (text and comments exactly as they were), and the source object takes them back with `...<name>`, so
+//       the object has the same properties and values. Refused when a moved property uses a top-level declaration of the source (move
+//       it out first with extract-top: target and source would import each other), uses the object itself or `this`, or when a key is
+//       duplicated, missing or not a plain property.
+//
 //   node server/scripts/refactor.mjs wrap <source.js> <outerFunction> <fromLine> <toLine> <name>
 //       Turn the statements of <outerFunction> on those lines into an inner function <name>, called where they were (awaited when they
 //       await), so extract-inner can move it; refused when that could change what the code does.
@@ -604,13 +612,105 @@ function wrap(sourceRel, outerName, from, to, name) {
   console.log(`wrapped lines ${first.loc.start.line}-${last.loc.end.line} of ${outerName} as ${usesAwait ? "async " : ""}${name}()`);
 }
 
+// ---- split-object ---------------------------------------------------------------------------------------------------------------------
+function splitObject(sourceRel, objectName, planFile) {
+  const sourceFile = path.resolve(REPO, sourceRel);
+  const plan = JSON.parse(read(path.resolve(REPO, planFile)));
+  const src = read(sourceFile);
+  const { ast, moduleScope } = analyze(src);
+  const top = ast.body.find((n) => {
+    const d = n.type === "ExportNamedDeclaration" ? n.declaration : n;
+    return d?.type === "VariableDeclaration" && d.declarations.length === 1 && d.declarations[0].id.name === objectName;
+  });
+  const obj = (top?.declaration ?? top)?.declarations[0].init;
+  if (obj?.type !== "ObjectExpression") throw new Error(`${objectName}: not a top-level object literal in ${sourceRel}`);
+  const keyOf = (p) => (p.type === "Property" && !p.computed ? (p.key.name ?? String(p.key.value)) : null);
+  const byKey = new Map();
+  for (const p of obj.properties) {
+    const k = keyOf(p);
+    if (k == null) continue;
+    if (byKey.has(k)) throw new Error(`${k}: defined twice in ${objectName} (line ${p.loc.start.line})`);
+    byKey.set(k, p);
+  }
+  const taken = new Map();
+  const targets = Object.entries(plan).map(([targetRel, { name, keys }]) => {
+    const targetFile = path.resolve(REPO, targetRel);
+    if (fs.existsSync(targetFile)) throw new Error(`${targetRel} already exists`);
+    if (moduleScope.set.has(name)) throw new Error(`${name}: already a name in ${sourceRel}`);
+    const props = keys.map((k) => {
+      const p = byKey.get(k);
+      if (!p) throw new Error(`${k}: not a plain property of ${objectName}`);
+      if (taken.has(k)) throw new Error(`${k}: planned for both ${taken.get(k)} and ${targetRel}`);
+      taken.set(k, targetRel);
+      return p;
+    });
+    return { targetRel, targetFile, name, props };
+  });
+  // one property per line, so whole lines (with their own comments) can move
+  const lineOf = (i) => src.slice(0, i).split("\n").length;
+  obj.properties.forEach((p, i) => {
+    const next = obj.properties[i + 1];
+    if (next && lineOf(next.range[0]) === lineOf(p.range[1])) throw new Error(`line ${lineOf(p.range[1])}: two properties on one line`);
+  });
+  const edits = [];
+  const importBack = [];
+  for (const t of targets) {
+    const inside = (r) => t.props.some((p) => r.identifier.range[0] >= p.range[0] && r.identifier.range[1] <= p.range[1]);
+    const uses = new Set();
+    for (const v of moduleScope.variables) if (v.references.some(inside)) uses.add(v.name);
+    if (uses.has(objectName)) throw new Error(`${t.targetRel}: a moved property uses ${objectName} itself`);
+    for (const name of uses) {
+      const def = moduleScope.set.get(name).defs[0];
+      if (def.type !== "ImportBinding") throw new Error(`${name} is declared in ${sourceRel} and used by a property planned for ${t.targetRel}: move it out first (extract-top)`);
+    }
+    for (const p of t.props) {
+      (function visit(n) {
+        if (!n || typeof n.type !== "string") return;
+        if (n.type === "FunctionExpression" || n.type === "FunctionDeclaration") return; // its own this
+        if (n.type === "ThisExpression" || n.type === "Super") throw new Error(`${keyOf(p)} uses this/super`);
+        for (const k in n) {
+          if (k === "loc" || k === "range") continue;
+          const v = n[k];
+          if (Array.isArray(v)) v.forEach(visit);
+          else if (v && typeof v.type === "string") visit(v);
+        }
+        // a method or plain function value: its own `this` is the object (api.me()), so look inside its body too
+      })(p.value.type === "FunctionExpression" ? p.value.body : p.value);
+    }
+    const importLines = importsFor(sourceFile, t.targetFile, ast, moduleScope, uses, new Set());
+    const pieces = t.props.map((p) => {
+      // everything between the previous property's line and this one (its comments, even after a blank line) moves with it
+      const i = obj.properties.indexOf(p);
+      const start = i > 0 ? lineEnd(src, obj.properties[i - 1].range[1]) : lineEnd(src, obj.range[0]);
+      const end = lineEnd(src, p.range[1]);
+      const fix = rebaseEdits(p.value, sourceFile, t.targetFile).map(([a, b, x]) => [a - start, b - start, x]);
+      // the last property may have no comma of its own
+      if (!/^\s*,/.test(src.slice(p.range[1]))) fix.push([p.range[1] - start, p.range[1] - start, ","]);
+      const text = applyEdits(src.slice(start, end), fix).replace(/^\n+/, "");
+      return { start, end, text: text.endsWith("\n") ? text : `${text}\n` };
+    });
+    for (const { start, end } of pieces) edits.push([start, end]);
+    const header = `// Part of the \`${objectName}\` object of ${path.relative(path.dirname(t.targetFile), sourceFile).split(path.sep).join("/")} (docs/architecture-roadmap.md, step 8): joined back there with ...${t.name}.`;
+    mergeTarget(t.targetFile, header, importLines, `export const ${t.name} = {\n${pieces.map((x) => x.text).join("")}};`);
+    importBack.push(`import { ${t.name} } from "${rel(sourceFile, t.targetFile)}";`);
+  }
+  const openBrace = obj.range[0] + 1;
+  const spreads = `\n${targets.map((t) => `  ...${t.name},`).join("\n")}`;
+  let out = applyEdits(src, [...removalEdits(src, edits), [openBrace, openBrace, spreads]]);
+  for (const line of importBack) out = addImportLine(out, line);
+  fs.writeFileSync(sourceFile, out);
+  pruneImports(sourceFile);
+  console.log(`split ${taken.size} properties of ${objectName} into ${targets.length} files`);
+}
+
 const [cmd, ...args] = process.argv.slice(2);
 if (cmd === "move") move(args[0]);
 else if (cmd === "extract-top") extractTop(args[0], args[1], args.slice(2));
 else if (cmd === "extract-inner") extractInner(args[0], args[1], args[2], args[3], args.slice(4));
 else if (cmd === "wrap") wrap(args[0], args[1], Number(args[2]), Number(args[3]), args[4]);
+else if (cmd === "split-object") splitObject(args[0], args[1], args[2]);
 else if (cmd === "prune-imports") args.forEach((f) => pruneImports(path.resolve(REPO, f)));
 else {
-  console.error("usage: refactor.mjs move <mapping.json> | extract-top <source> <target> <name...> | extract-inner <source> <outer|-> <target> <namespace> <name...> | wrap <source> <outer> <fromLine> <toLine> <name> | prune-imports <file...>");
+  console.error("usage: refactor.mjs move <mapping.json> | extract-top <source> <target> <name...> | extract-inner <source> <outer|-> <target> <namespace> <name...> | wrap <source> <outer> <fromLine> <toLine> <name> | split-object <source> <objectName> <plan.json> | prune-imports <file...>");
   process.exit(2);
 }
