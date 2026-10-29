@@ -1,6 +1,11 @@
 // Part of the `hy` object of ../../i18n-hy.js (docs/architecture-roadmap.md, step 8): joined back there with ...hySettings.
 
 export const hySettings = {
+    home_order_title: "Գլխավորի կոճակները",
+    home_order_hint: "Ամենաշատ օգտագործվող կոճակները դրեք վերևում։ Հերթականությունը պահվում է ձեր հաշվում՝ բոլոր սարքերում։",
+    home_order_reset: "Սկզբնական կարգ",
+    home_order_up: "Վեր",
+    home_order_down: "Վար",
     purge_link: "Ջնջել թեստ օգտատիրոջը բոլոր տվյալներով…",
     purge_title: "Ջնջել այս թեստ օգտատիրոջը և ԲՈԼՈՐ նրա տվյալները",
     purge_intro: "Միայն թեստ հաշիվների համար։ Ստորև թվարկված ամեն ինչ ընդմիշտ կջնջվի օգտատիրոջ հետ միասին։",

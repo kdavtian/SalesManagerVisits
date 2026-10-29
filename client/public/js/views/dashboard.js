@@ -7,7 +7,7 @@ import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyVaghinakBadge } from "../vaghinak.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
-import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
+import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds, orderHomeTiles } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
 import { renderHomeKpis, wantsKpis } from "./homeKpis.js";
 
@@ -92,7 +92,9 @@ function quickActionDomId(id) {
 }
 
 function quickActionsHtml(ids) {
-  return QUICK_ACTIONS.filter((a) => ids.includes(a.id))
+  const byId = new Map(QUICK_ACTIONS.map((a) => [a.id, a]));
+  return orderHomeTiles(QUICK_ACTIONS.filter((a) => ids.includes(a.id)).map((a) => a.id), state.user.home_tile_order)
+    .map((id) => byId.get(id))
     .map(
       (a) => `<button type="button" class="quick-action" id="${quickActionDomId(a.id)}">
         ${QUICK_ACTION_ICON[a.id]()}

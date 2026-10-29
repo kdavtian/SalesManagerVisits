@@ -8848,6 +8848,9 @@ form select,
 html[data-text-size="large"] { font-size: 115%; }
 html[data-text-size="xlarge"] { font-size: 130%; }
 .settings-textsize button {
+  min-width: 0;
+  padding: 4px 2px;
+  line-height: 1.15;
   min-height: 56px;
   border: 1.5px solid var(--accent);
   border-radius: 12px;
@@ -9992,3 +9995,15 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   flex: 1 1 100%;
   order: -1;
 }
+
+/* Settings > Home buttons (settings/sheets.js openHomeOrderSheet): one row per Home button, moved up or down with a tap */
+.home-order-hint { margin: 0 0 10px; font-size: 0.85rem; }
+.home-order-list { list-style: none; margin: 0; padding: 0; }
+.home-order-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 44px 44px; align-items: center; gap: 4px; min-height: 48px; border-bottom: 1px solid var(--border); }
+.home-order-row:last-child { border-bottom: 0; }
+.home-order-n { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.home-order-label { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.home-order-btn { width: 44px; height: 44px; }
+.home-order-btn svg { transform: rotate(-90deg); }
+.home-order-down svg { transform: rotate(90deg); }
+.home-order-btn:disabled { opacity: 0.3; }

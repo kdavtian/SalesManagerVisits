@@ -23,7 +23,7 @@ import * as settingsAdmin from "./settings/adminRows.js";
 import * as settingsMarkup from "./settings/markup.js";
 import { ICON, formatStorageMb } from "./settings/rows.js";
 import { loadNotificationPreferences } from "./settings/notifications.js";
-import { openGuideOverlay, openAdminSection, openChangePasswordSheet, loadSalesPerformance } from "./settings/sheets.js";
+import { openGuideOverlay, openAdminSection, openChangePasswordSheet, openHomeOrderSheet, loadSalesPerformance } from "./settings/sheets.js";
 
 // Who hands over delivery-acceptance acts and so has a signature on the profile (owner, 2026-10-26).
 
@@ -727,6 +727,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
 
   // --- Security ---
   root.querySelector("#row-change-password").addEventListener("click", openChangePasswordSheet);
+  root.querySelector("#row-home-order")?.addEventListener("click", openHomeOrderSheet);
   root.querySelector("#row-sessions").addEventListener("click", async () => {
     if (!confirm(t("confirm_log_out_other_sessions"))) return;
     await api.logoutOtherSessions();

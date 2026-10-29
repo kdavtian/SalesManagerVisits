@@ -47,7 +47,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until, status FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until, status, home_tile_order FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];
@@ -78,7 +78,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   issueSession(res, user);
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role });
+  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, home_tile_order: user.home_tile_order ?? null });
 });
 
 authRouter.post("/logout", (req, res) => {
@@ -90,7 +90,7 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at FROM users WHERE id = $1",
+    "SELECT id, email, name, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at, home_tile_order FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {
@@ -102,6 +102,19 @@ meRouter.get("/", requireAuth, async (req, res) => {
 // Self-service profile fields -- just phone for now, shown on the
 // personalized pricelist's "Prepared by" footer (see routes/products.js /
 // the pricelist export). Name/role/position stay admin-managed.
+// The order of this person's Home buttons (Settings > Home buttons): ids of Home tiles, first one first; null puts back the standard
+// order. Only an order -- which tiles a role sees stays the admin's setting, so an id here never adds a tile.
+const TILE_ID = /^qa_[a-z_]{1,40}$/;
+meRouter.put("/home-order", requireAuth, async (req, res) => {
+  const order = req.body?.order;
+  if (order !== null && (!Array.isArray(order) || order.length > 80 || !order.every((id) => typeof id === "string" && TILE_ID.test(id)))) {
+    return res.status(400).json({ error: "Send the buttons' order as a list" });
+  }
+  const value = order === null ? null : [...new Set(order)];
+  await pool.query("UPDATE users SET home_tile_order = $2 WHERE id = $1", [req.user.id, value]);
+  res.json({ home_tile_order: value });
+});
+
 meRouter.patch("/profile", requireAuth, async (req, res) => {
   const { phone } = req.body ?? {};
   if (phone !== undefined && phone !== null && String(phone).length > 40) {

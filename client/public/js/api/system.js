@@ -6,6 +6,7 @@ export const systemApi = {
   login: (email, password) => json("/auth/login", "POST", { email, password }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),
+  setHomeTileOrder: (order) => json("/me/home-order", "PUT", { order }),
   // Backs app.js's periodic (every-60s) badge poll -- one request for all
   // seven Home-tab/nav counts instead of seven separate ones. Event-driven
   // refreshes right after a specific action still use each badge's own
