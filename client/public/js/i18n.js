@@ -1,13 +1,30 @@
+import { TEXT_AREAS, firstTextAreas } from "./i18nAreas.js";
+
 const LANG_KEY = "fieldvisits_lang";
 
-// The texts: one file per language (i18n-en.js, i18n-hy.js, each joining its area files in i18n/<lang>/), and only the language this device uses is downloaded and parsed
-// (together about 440 KB of source: the second one was dead weight on every first launch). index.html's head script (theme-init.js) already
-// asks the browser to start fetching the right file before this module even runs, so the import below is normally ready at once.
-// Top-level await: no other module sees `t` before the active language is in.
-const dicts = {};
-const loadDict = async (lang) => {
-  if (!dicts[lang]) dicts[lang] = (await (lang === "hy" ? import("./i18n-hy.js") : import("./i18n-en.js"))).default;
-};
+// The texts live in i18n/<lang>/<area>.js, one file per area of the app (step 8b), and only the language this device uses is loaded.
+// Texts in two parts (docs/architecture-roadmap.md step 11): before the first screen only `common` (shell, login, Home, errors, texts
+// several areas use) and the areas the screen being opened needs (i18nAreas.js) are loaded -- for Home in Armenian about 36 KB instead of
+// 73 KB compressed (common + orders, the warehouse manager's Home) -- and the other areas follow right after, in the background. index.html's head script (theme-init.js) already starts
+// fetching `common` before this module runs. Top-level await: no other module sees `t` before the first part is in.
+const dicts = {}; // lang -> the texts of the areas loaded so far
+const loaded = {}; // lang -> Set of loaded areas
+async function loadAreas(lang, areas) {
+  const have = (loaded[lang] ||= new Set());
+  await Promise.all(
+    areas
+      .filter((area) => !have.has(area))
+      .map((area) =>
+        import(`./i18n/${lang}/${area}.js`).then((m) => {
+          dicts[lang] = Object.assign(dicts[lang] ?? {}, ...Object.values(m));
+          have.add(area);
+        })
+      )
+  );
+}
+const allLoaded = (lang) => TEXT_AREAS.every((area) => loaded[lang]?.has(area));
+// Which areas this page has loaded so far (the tests check the first part is in before a screen is drawn).
+export const loadedTextAreas = (lang = getLang()) => [...(loaded[lang] ?? [])];
 
 // Armenian by default -- the sales team's working language -- until a user
 // explicitly picks English via the Settings toggle, which stores "en" here
@@ -16,12 +33,24 @@ export function getLang() {
   return localStorage.getItem(LANG_KEY) === "en" ? "en" : "hy";
 }
 
-await loadDict(getLang());
+await loadAreas(getLang(), typeof location === "undefined" ? TEXT_AREAS : firstTextAreas(location.hash));
+
+// The other areas, once the first screen has had its turn. A text needed before they arrive loads them at once (see t below).
+let loadingRest = null;
+export function loadAllTexts(lang = getLang()) {
+  if (allLoaded(lang)) return Promise.resolve();
+  loadingRest ||= loadAreas(lang, TEXT_AREAS).finally(() => (loadingRest = null));
+  return loadingRest;
+}
+if (typeof window !== "undefined") {
+  const later = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 }) : (fn) => setTimeout(fn, 1200);
+  later(() => loadAllTexts().catch(() => {}));
+}
 
 // Resolves once the new language's texts are in, so the caller can re-render straight after `await setLang(...)`.
 export async function setLang(lang) {
   const next = lang === "hy" ? "hy" : "en";
-  await loadDict(next);
+  await loadAreas(next, TEXT_AREAS);
   localStorage.setItem(LANG_KEY, next);
 }
 
@@ -29,31 +58,42 @@ export function t(key) {
   // The language can be changed from another tab or window (localStorage is shared): until this page has loaded it, use what it has.
   const dict = dicts[getLang()] ?? Object.values(dicts)[0];
   if (dict[key] !== undefined) return dict[key];
-  if (typeof key === "string" && /^[a-z][a-z0-9_]*$/.test(key)) refreshOnMiss(key);
+  if (typeof key === "string" && /^[a-z][a-zA-Z0-9_]*$/.test(key)) needText(key);
   return key;
 }
 
-// A text the loaded language file does not have yet (owner, 2026-10-27: the Files sheet showed "add_document", "file_kind_order_blank").
-// It happens right after an update: this page still holds the language file it started with, while a screen opened for the first time now
-// comes from the new release with its new texts. The current file is fetched once more, past every cache, and the raw names already on
-// screen are replaced in place -- no reload, an open sheet stays open.
+// A text that is not in the loaded texts: first the areas not loaded yet (a sheet of another area opened before the background load
+// finished), then -- when every area is in and it is still missing -- a fresh fetch (below). Either way the raw name already on screen is
+// replaced in place once the text arrives: no reload, an open sheet stays open.
 const missing = new Set();
+function needText(key) {
+  missing.add(key);
+  const lang = getLang();
+  if (!allLoaded(lang)) {
+    loadAllTexts(lang)
+      .then(() => replaceOnScreen(dicts[lang]))
+      .catch(() => {});
+    return;
+  }
+  refreshOnMiss(lang);
+}
+
+// Still missing with every area loaded (owner, 2026-10-27: the Files sheet showed "add_document", "file_kind_order_blank"): right after an
+// update this page still holds the texts it started with, while a screen opened for the first time now comes from the new release with
+// its new texts. The area files are fetched once more, past every cache: the joining file for the current list of areas, then each area
+// file (a module already loaded is not fetched again by its own address).
 let refresh = null;
 let refreshes = 0;
 let lastRefreshAt = 0;
-function refreshOnMiss(key) {
-  missing.add(key);
+function refreshOnMiss(lang) {
   // At most 3 tries a session, 30 s apart: a failed (offline) try is retried later, and a text that is missing in the new file too
   // does not fetch it on every call.
   if (refresh || refreshes >= 3 || Date.now() - lastRefreshAt < 30_000) return;
   refreshes += 1;
   lastRefreshAt = Date.now();
-  const lang = getLang();
-  // The language file only joins its area files (i18n/<lang>/<area>.js, step 8b), and a module already loaded is not fetched again by its
-  // own address: so the joining file is fetched fresh for the current list of areas, then each area file, fresh.
   const fresh = `?fresh=${Date.now()}`;
   refresh = import(`./i18n-${lang}.js${fresh}`)
-    .then((index) => Promise.all((index.AREAS ?? []).map((area) => import(`./i18n/${lang}/${area}.js${fresh}`))))
+    .then((index) => Promise.all((index.AREAS ?? TEXT_AREAS).map((area) => import(`./i18n/${lang}/${area}.js${fresh}`))))
     .then((areas) => {
       dicts[lang] = Object.assign({ ...dicts[lang] }, ...areas.flatMap((m) => Object.values(m)));
       replaceOnScreen(dicts[lang]);

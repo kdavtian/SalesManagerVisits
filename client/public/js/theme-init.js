@@ -11,23 +11,17 @@ try {
   var ts = localStorage.getItem("fieldvisits_text_size");
   if (ts === "large" || ts === "xlarge") document.documentElement.dataset.textSize = ts;
 } catch (e) {}
-// Start fetching this device's language files now (i18n.js loads exactly one language) instead of only after i18n.js has arrived and run: one
+// Start fetching this device's common texts now (i18n.js loads exactly one language) instead of only after i18n.js has arrived and run: one
 // network round trip less on a first launch. Not in Calculator Mode, which promises nothing of the real app is fetched before the unlock code.
 try {
   var calcMeta = document.querySelector('meta[name="calc-mode"]');
   if (!(calcMeta && calcMeta.content === "true")) {
     var lang = localStorage.getItem("fieldvisits_lang") === "en" ? "en" : "hy";
-    // the language file and the area files it joins (i18n/<lang>/<area>.js, step 8b), all at once instead of one after the other;
-    // the same list as AREAS in i18n-en.js / i18n-hy.js (server/test/integration/i18nParity.test.js checks it)
-    var files = ["i18n-" + lang];
-    var areas = ["common", "customers", "orders", "field", "money", "products", "reports", "team", "settings"];
-    for (var i = 0; i < areas.length; i++) files.push("i18n/" + lang + "/" + areas[i]);
-    for (var j = 0; j < files.length; j++) {
-      var preload = document.createElement("link");
-      preload.rel = "modulepreload";
-      preload.href = "/js/" + files[j] + ".js";
-      document.head.appendChild(preload);
-    }
+    // the common texts (i18n/<lang>/common.js): every first screen needs them; the other areas follow after it (i18n.js, step 11)
+    var preload = document.createElement("link");
+    preload.rel = "modulepreload";
+    preload.href = "/js/i18n/" + lang + "/common.js";
+    document.head.appendChild(preload);
   }
 } catch (e) {}
 

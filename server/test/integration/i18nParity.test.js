@@ -23,8 +23,8 @@ test("English and Armenian texts have exactly the same keys, none empty", async 
 
 // Step 8b: the texts live in i18n/<lang>/<area>.js. The same area holds the same keys in both languages (a key in en/orders.js but
 // hy/common.js would pass the check above yet be in a different file once areas load separately), every area file is joined (AREAS in
-// i18n-<lang>.js lists them all), and theme-init.js starts loading exactly those files.
-test("each area file has the same keys in English and Armenian, and every area file is listed and preloaded", async () => {
+// i18n-<lang>.js and TEXT_AREAS in i18nAreas.js list them all), and theme-init.js starts loading the common texts.
+test("each area file has the same keys in English and Armenian, every area file is listed, the common texts are preloaded", async () => {
   const fs = await import("node:fs");
   const areaFiles = (lang) => fs.readdirSync(path.join(jsDir, "i18n", lang)).filter((f) => f.endsWith(".js")).map((f) => f.replace(/\.js$/, "")).sort();
   const en = areaFiles("en");
@@ -33,9 +33,10 @@ test("each area file has the same keys in English and Armenian, and every area f
     const { AREAS } = await import(pathToFileURL(path.join(jsDir, `i18n-${lang}.js`)).href);
     assert.deepEqual([...AREAS].sort(), en, `AREAS in i18n-${lang}.js lists every area file`);
   }
+  const { TEXT_AREAS } = await import(pathToFileURL(path.join(jsDir, "i18nAreas.js")).href);
+  assert.deepEqual([...TEXT_AREAS].sort(), en, "TEXT_AREAS in i18nAreas.js lists every area file");
   const themeInit = fs.readFileSync(path.join(jsDir, "theme-init.js"), "utf8");
-  const preloaded = JSON.parse(themeInit.match(/var areas = (\[[^\]]*\])/)[1]).sort();
-  assert.deepEqual(preloaded, en, "theme-init.js preloads every area file");
+  assert.match(themeInit, /"\/js\/i18n\/" \+ lang \+ "\/common\.js"/, "theme-init.js preloads the common texts (step 11)");
   for (const area of en) {
     const keys = async (lang) => Object.keys(Object.values(await import(pathToFileURL(path.join(jsDir, "i18n", lang, `${area}.js`)).href))[0]).sort();
     const [a, b] = [await keys("en"), await keys("hy")];

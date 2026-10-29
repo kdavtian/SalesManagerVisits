@@ -15,7 +15,8 @@ test("@smoke a text missing after an update is fetched fresh from its area file 
   await page.goto("/#/dashboard");
   await expect(page.locator("#top-bar")).toBeVisible();
   const before = await page.evaluate(async () => {
-    const { t } = await import("/js/i18n.js");
+    const { t, loadAllTexts } = await import("/js/i18n.js");
+    await loadAllTexts(); // every area is in (step 11 loads the others after the first screen): a text still missing means a newer release
     const probe = document.createElement("p");
     probe.id = "e2e-text-probe";
     probe.textContent = t("e2e_new_text"); // not in the loaded texts: the raw name, and a fresh fetch starts
@@ -26,4 +27,22 @@ test("@smoke a text missing after an update is fetched fresh from its area file 
   await expect(page.locator("#e2e-text-probe")).toHaveText("Fresh text from the new release");
   // the texts that were there stay (the fresh areas are merged in, nothing is lost)
   expect(await page.evaluate(async () => (await import("/js/i18n.js")).t("nav_dashboard"))).toBe("Home");
+});
+
+// Step 11: before a screen is drawn, `common` and the areas it needs are in (i18nAreas.js); the other areas follow in the background.
+test("@smoke a direct link loads its text areas before the screen is drawn, the others follow; no raw text names", async ({ page, fixtures }) => {
+  const admin = await fixtures.createUser("admin");
+  await loginViaUi(page, admin.email);
+  const loaded = () => page.evaluate(async () => (await import("/js/i18n.js")).loadedTextAreas());
+  await page.goto("/#/settings");
+  await expect(page.locator("#top-bar")).toBeVisible();
+  const atFirstScreen = await loaded();
+  for (const area of ["common", "customers", "settings"]) expect(atFirstScreen, area).toContain(area);
+  await expect.poll(async () => (await loaded()).length, { timeout: 10000 }).toBe(9);
+  const raw = await page.evaluate(() => document.body.innerText.match(/\b[a-z]+_[a-z0-9_]+\b/g) ?? []);
+  expect(raw).toEqual([]);
+  await page.goto("/#/dashboard");
+  await page.reload();
+  await expect(page.locator("#top-bar")).toBeVisible();
+  for (const area of ["common", "orders"]) expect(await loaded(), area).toContain(area);
 });

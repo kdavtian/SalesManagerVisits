@@ -344,8 +344,13 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
 - Done when: cold start about 10 script requests; record time and bytes. If decision 1 = B: skip this step.
 
 #### Step 11. Texts in two parts - size 1
-- [ ] Common texts (shell, login, Home, errors) load first; each area's texts load with its first screen (after step 8b this is the
-      area file). Missing-key fallback stays "show the key", never English on an Armenian device.
+- [x] Common texts (shell, login, Home, errors) load first; each area's texts load with its first screen (after step 8b this is the
+      area file). Missing-key fallback stays "show the key", never English on an Armenian device. Done in 1.473.0: `i18n.js` loads
+      `common` + the areas the opened screen needs (`i18nAreas.js` ROUTE_TEXT_AREAS; an address not listed loads every area), the rest
+      in idle time right after; a text from an area not loaded yet loads them all at once and replaces the raw name on screen. Texts
+      re-sorted so every text a start-up file uses is in `common`. `i18nRouteAreas.test.js` recomputes, from the code, the areas each
+      screen's files use and fails when a screen's list misses one (it caught the warehouse manager's Home at once). Armenian Home:
+      36 KB instead of 73 KB compressed; cold first start (1.6 Mbit/s, CPU 4x): first paint 3.31 -> 3.00 s, Home 5.02 -> 4.77 s.
 - Done when: bytes before the first screen drop by about 40 KB gz (measure).
 
 #### Step 12. Speed budget in CI - size 1
@@ -406,4 +411,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 9 part 1, one stylesheet request: 1.470.0, PR #514, 2026-10-29.
 - Safari's engine in the test setup (CI job `e2e (iphone webkit)`, `@iphone` tests) + offline start fix (owner idea 2): 1.471.0, PR #515, 2026-10-29.
 - Tasks stay when a person is deleted (owner decision): server only, PR #516, 2026-10-29.
-- Step 8b texts split by area: 1.472.0, 2026-10-29.
+- Step 8b texts split by area: 1.472.0, PR #517, 2026-10-29.
+- Step 11 texts in two parts: 1.473.0, 2026-10-29.

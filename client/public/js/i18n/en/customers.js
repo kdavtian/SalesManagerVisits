@@ -1,9 +1,6 @@
 // Part of the `en` object of ../../i18n-en.js (docs/architecture-roadmap.md, step 8): joined back there with ...enCustomers.
 
 export const enCustomers = {
-    place_saved_as: "Saved as: {value}.",
-    place_not_in_list: "\u201c{typed}\u201d is not in the list of Armenian places. Saved as typed and sent for review.",
-    place_other_region: "\u201c{typed}\u201d is in another marz ({region}). Saved as typed and sent for review.",
     place_to_review: "to review",
     card_partial_load: "Some of this page could not load.",
     zoom_in: "Zoom in",
@@ -254,10 +251,6 @@ export const enCustomers = {
     opening_balance_credit: "customer paid in advance",
     opening_balance_hint: "Debt carried over from before the electronic system (May 2025), from the Excel Balance0 column. Read-only. Negative = the customer paid more than they owed.",
     end_visit: "End visit",
-    customer_email: "Email",
-    customer_email_placeholder: "name@example.com",
-    customer_website: "Website",
-    customer_website_placeholder: "example.am",
     account_settings: "Account settings",
     payment_settings: "Payment settings",
     payment_method_label: "Payment method",
