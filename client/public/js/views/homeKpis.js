@@ -75,24 +75,82 @@ function html(k) {
     </div>`;
 }
 
-// "Needs attention" (Step 7): what is waiting for somebody, each row opening the page where it is dealt with. Rows with nothing waiting
-// stay (dimmed) so the list does not jump around from one day to the next.
-function attentionRow({ href, label, count, sub, warn }) {
-  return `<a class="home-att-row${count ? (warn ? " is-warn" : "") : " is-clear"}" href="${href}">
-    <span class="home-att-count">${fmt(count)}</span>
-    <span class="home-att-text"><span class="home-att-label">${escapeHtml(label)}</span>${sub ? `<span class="home-att-sub muted">${escapeHtml(sub)}</span>` : ""}</span>
-    <span class="home-att-chevron" aria-hidden="true">${icons.chevronRight}</span>
-  </a>`;
+// "Needs attention" (Step 7): what is waiting for somebody. A row opens in place and lists what is waiting -- each item a link to
+// that item -- with a link to the whole page under it (owner, 2026-10-29). Rows with nothing waiting stay (dimmed) so the list does
+// not jump around from one day to the next.
+const att = { open: new Set(), lists: new Map() }; // kinds opened; kind -> loaded items (or "error"), kept across Home's repaints
+const DROP_MAX = 10;
+const ORDER_WAITING = ["submitted", "confirmed", "packed_stock_out"];
+const dmy = (iso) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", timeZone: "Asia/Yerevan" }) : "");
+const ATT_LOADERS = {
+  orders: async () => {
+    const lists = await Promise.all(ORDER_WAITING.map((status) => api.listOrders({ status, limit: DROP_MAX }, { fresh: true }).then((r) => r.rows ?? [])));
+    return lists
+      .flat()
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .map((o) => ({ href: `#/orders?open=${o.id}`, title: o.customer_name || "", sub: [o.order_code || `#${o.id}`, t(`order_status_${o.status}`), dmy(o.created_at)].filter(Boolean).join(" · "), end: formatAmd(Number(o.total_amd)) }));
+  },
+  unconfirmed: async () => paymentItems(await api.listPayments({ status: "pending" })),
+  excel: async () => paymentItems(await api.listPayments({ excel: "missing" })),
+  tasks: async () => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Yerevan" });
+    const { rows = [] } = await api.listTasks({ scope: "all", status: "open" });
+    return rows
+      .filter((r) => r.due_date && String(r.due_date).slice(0, 10) < today)
+      .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))
+      .map((r) => ({ href: `#/tasks?open=${r.id}`, title: r.title || "", sub: [r.customer_name, r.assignee_name].filter(Boolean).join(" · "), end: dmy(r.due_date) }));
+  },
+};
+function paymentItems(res) {
+  return (res.rows ?? res ?? []).map((p) => ({
+    href: `#/payments/${p.id}`,
+    title: p.customer_name || p.customer_name_snapshot || "",
+    sub: [p.sales_manager_name || p.sales_manager_name_snapshot, dmy(p.payment_date)].filter(Boolean).join(" · "),
+    end: formatAmd(Number(p.amount_amd)),
+  }));
+}
+
+function dropHtml(kind, href) {
+  const items = att.lists.get(kind);
+  const body =
+    items === undefined
+      ? `<p class="muted home-att-drop-note" role="status">${escapeHtml(t("loading"))}</p>`
+      : items === "error"
+        ? `<p class="muted home-att-drop-note">${escapeHtml(t("home_att_failed"))}</p>`
+        : items.length
+          ? items
+              .slice(0, DROP_MAX)
+              .map(
+                (i) => `<a class="home-att-drop-row" href="${i.href}">
+                  <span class="home-att-drop-main"><span class="home-att-drop-title">${escapeHtml(i.title)}</span>${i.sub ? `<span class="home-att-drop-sub muted">${escapeHtml(i.sub)}</span>` : ""}</span>
+                  <span class="home-att-drop-end">${escapeHtml(i.end || "")}</span>
+                </a>`
+              )
+              .join("")
+          : `<p class="muted home-att-drop-note">${escapeHtml(t("kpi_none"))}</p>`;
+  return `${body}<a class="link-btn home-att-drop-all" href="${href}">${escapeHtml(t("home_att_all"))}</a>`;
+}
+
+function attentionRow({ kind, href, label, count, sub, warn }) {
+  const open = att.open.has(kind);
+  return `<div class="home-att-item" data-att="${kind}">
+    <button type="button" class="home-att-row${count ? (warn ? " is-warn" : "") : " is-clear"}" aria-expanded="${open}" aria-controls="home-att-drop-${kind}">
+      <span class="home-att-count">${fmt(count)}</span>
+      <span class="home-att-text"><span class="home-att-label">${escapeHtml(label)}</span>${sub ? `<span class="home-att-sub muted">${escapeHtml(sub)}</span>` : ""}</span>
+      <span class="home-att-chevron" aria-hidden="true">${icons.chevronRight}</span>
+    </button>
+    <div class="home-att-drop" id="home-att-drop-${kind}" data-href="${href}" ${open ? "" : "hidden"}>${open ? dropHtml(kind, href) : ""}</div>
+  </div>`;
 }
 
 function attentionHtml(k) {
   const o = k.orders;
   const waiting = o.to_confirm + o.to_pack + o.to_deliver;
   const rows = [
-    { href: "#/orders", label: t("home_att_orders"), count: waiting, sub: waiting ? fill(t("kpi_orders_sub"), { a: fmt(o.to_confirm), b: fmt(o.to_pack), c: fmt(o.to_deliver) }) : "" },
-    { href: "#/payments", label: t("home_att_unconfirmed"), count: k.payments.pending_approval, sub: k.payments.pending_approval ? t("home_att_unconfirmed_sub") : "" },
-    { href: "#/tasks", label: t("home_att_tasks"), count: k.tasks.overdue, sub: fill(t("home_att_tasks_sub"), { n: fmt(k.tasks.open) }), warn: true },
-    { href: "#/payments", label: t("home_att_excel"), count: k.payments.not_in_excel_count, sub: k.payments.not_in_excel_count ? formatAmd(k.payments.not_in_excel_amd) : "", warn: true },
+    { kind: "orders", href: "#/orders", label: t("home_att_orders"), count: waiting, sub: waiting ? fill(t("kpi_orders_sub"), { a: fmt(o.to_confirm), b: fmt(o.to_pack), c: fmt(o.to_deliver) }) : "" },
+    { kind: "unconfirmed", href: "#/payments", label: t("home_att_unconfirmed"), count: k.payments.pending_approval, sub: k.payments.pending_approval ? t("home_att_unconfirmed_sub") : "" },
+    { kind: "tasks", href: "#/tasks", label: t("home_att_tasks"), count: k.tasks.overdue, sub: fill(t("home_att_tasks_sub"), { n: fmt(k.tasks.open) }), warn: true },
+    { kind: "excel", href: "#/payments?status=excel_missing", label: t("home_att_excel"), count: k.payments.not_in_excel_count, sub: k.payments.not_in_excel_count ? formatAmd(k.payments.not_in_excel_amd) : "", warn: true },
   ];
   const clear = rows.every((r) => !r.count);
   return `<section class="card home-col home-attention" aria-labelledby="home-att-h">
@@ -102,8 +160,34 @@ function attentionHtml(k) {
   </section>`;
 }
 
+// Opening a row: its items load once (then stay until Home is left), repainted into whichever Home is on screen.
+function wireAttention(slot) {
+  slot.querySelector(".home-att-list")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".home-att-row");
+    if (!btn) return;
+    const item = btn.closest(".home-att-item");
+    const kind = item.dataset.att;
+    const drop = item.querySelector(".home-att-drop");
+    const open = !att.open.has(kind);
+    if (open) att.open.add(kind);
+    else att.open.delete(kind);
+    btn.setAttribute("aria-expanded", String(open));
+    drop.hidden = !open;
+    if (!open) return;
+    drop.innerHTML = dropHtml(kind, drop.dataset.href);
+    if (att.lists.has(kind)) return;
+    ATT_LOADERS[kind]()
+      .then((items) => att.lists.set(kind, items))
+      .catch(() => att.lists.set(kind, "error"))
+      .then(() => {
+        const live = document.querySelector(`.home-att-item[data-att="${kind}"] .home-att-drop`);
+        if (live && att.open.has(kind)) live.innerHTML = dropHtml(kind, live.dataset.href);
+      });
+  });
+}
+
 // ---- "Today" (Step 7): the field team's day, one element kept across Home's repaints so the map is drawn once, not on every paint ----
-const today = { el: null, data: null, map: null, layer: null, run: null, at: 0, sig: "" };
+const today = { el: null, data: null, map: null, layer: null, run: null, at: 0, sig: "", plans: null, open: new Set() };
 const hhmm = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Yerevan" }) : "");
 
 function todayEl() {
@@ -111,7 +195,7 @@ function todayEl() {
   const sig = `${getLang()}:${state.user.id}`;
   if (today.sig !== sig) {
     today.map?.remove();
-    Object.assign(today, { el: null, data: null, map: null, layer: null, run: null, at: 0, sig });
+    Object.assign(today, { el: null, data: null, map: null, layer: null, run: null, at: 0, sig, plans: null, open: new Set() });
   }
   if (today.el) return today.el;
   const el = document.createElement("section");
@@ -122,6 +206,16 @@ function todayEl() {
     <p class="home-today-team muted"></p>
     <div class="home-today-reps"></div>
     <div class="home-today-map"><div class="home-today-map-canvas"></div><p class="home-today-map-empty muted" hidden>${escapeHtml(t("home_today_no_visits"))}</p></div>`;
+  el.querySelector(".home-today-reps").addEventListener("click", (e) => {
+    const btn = e.target.closest("button.home-rep-row");
+    if (!btn) return;
+    const id = Number(btn.dataset.rep);
+    const open = !today.open.has(id);
+    if (open) today.open.add(id);
+    else today.open.delete(id);
+    btn.setAttribute("aria-expanded", String(open));
+    btn.nextElementSibling.hidden = !open;
+  });
   today.el = el;
   return el;
 }
@@ -140,13 +234,26 @@ function paintToday() {
     .map((r) => {
       const pct = r.planned ? Math.min(100, Math.round((r.visited / r.planned) * 100)) : r.visited ? 100 : 0;
       const tail = r.first_at ? fill(t("home_today_since"), { t: hhmm(r.first_at) }) : "";
-      return `<a class="home-rep-row${r.visited ? "" : " is-idle"}" href="#/team-progress" aria-label="${escapeHtml(fill(t("home_today_rep_aria"), { name: r.name, v: r.visited, p: r.planned }))}">
-        <span class="home-rep-dot" style="background:${repColor(r.user_id, r.map_color)}" aria-hidden="true"></span>
+      // a rep with a plan today opens in place: the customers of the plan, ticked when visited (this was the "Team today" list, owner,
+      // 2026-10-29: one section instead of two)
+      const plan = today.plans?.get(r.user_id) ?? [];
+      const open = today.open.has(r.user_id);
+      const inner = `<span class="home-rep-dot" style="background:${repColor(r.user_id, r.map_color)}" aria-hidden="true"></span>
         <span class="home-rep-name">${escapeHtml(r.name)}</span>
         <span class="home-rep-bar" aria-hidden="true"><span style="width:${pct}%"></span></span>
         <span class="home-rep-num">${fmt(r.visited)}${r.planned ? `<span class="muted">/${fmt(r.planned)}</span>` : `<span class="muted" title="${escapeHtml(t("home_today_no_plan"))}">/–</span>`}</span>
-        <span class="home-rep-since muted">${escapeHtml(tail)}</span>
-      </a>`;
+        <span class="home-rep-since muted">${escapeHtml(tail)}</span>`;
+      const label = escapeHtml(fill(t("home_today_rep_aria"), { name: r.name, v: r.visited, p: r.planned }));
+      if (!plan.length) return `<a class="home-rep-row${r.visited ? "" : " is-idle"}" href="#/team-progress" aria-label="${label}">${inner}</a>`;
+      return `<button type="button" class="home-rep-row${r.visited ? "" : " is-idle"}" data-rep="${r.user_id}" aria-expanded="${open}" aria-label="${label}">${inner}</button>
+        <div class="home-rep-plan today-plan-list" ${open ? "" : "hidden"}>${plan
+          .map(
+            (c) => `<a class="today-plan-row" href="#/customers/${c.id}">
+              <span class="today-plan-tick ${c.visited_today ? "today-plan-tick-done" : ""}" aria-hidden="true">${c.visited_today ? icons.checkCircle : ""}</span>
+              <span class="today-plan-name">${escapeHtml(c.name)}</span>
+            </a>`
+          )
+          .join("")}</div>`;
     })
     .join("");
   drawTodayMap();
@@ -213,6 +320,7 @@ function paintInto(slot, k) {
   if (!slot?.isConnected) return;
   slot.innerHTML = html(k);
   slot.hidden = false;
+  wireAttention(slot);
   const el = todayEl();
   slot.querySelector(".home-today-slot").replaceWith(el);
   if (today.data) paintToday();
@@ -221,11 +329,16 @@ function paintInto(slot, k) {
 }
 
 // A failure leaves the block empty (the rest of Home is not affected).
-export async function renderHomeKpis(slot) {
+// teamTodayPlans: today's plan of every rep (GET /visit-plans/team-today, loaded by dashboard.js), shown under each rep in "Today".
+export async function renderHomeKpis(slot, { teamTodayPlans = null } = {}) {
   if (!slot || !wantsKpis()) return;
   recent.slot = slot;
-  if (recent.last) paintInto(slot, recent.last);
   todayEl();
+  if (teamTodayPlans) {
+    today.plans = new Map(teamTodayPlans.map((m) => [m.user_id, m.customers ?? []]));
+    if (today.data) paintToday();
+  }
+  if (recent.last) paintInto(slot, recent.last);
   loadToday();
   if (recent.run && Date.now() - recent.at < 3000) return;
   recent.at = Date.now();

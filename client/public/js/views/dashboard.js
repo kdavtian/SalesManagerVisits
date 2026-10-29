@@ -9,7 +9,7 @@ import { applyVaghinakBadge } from "../vaghinak.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
-import { renderHomeKpis } from "./homeKpis.js";
+import { renderHomeKpis, wantsKpis } from "./homeKpis.js";
 
 // A dependency-free CSS bar chart -- this app has no charting library, and
 // 30 bars is simple enough not to need one. Each bar's height is relative
@@ -345,7 +345,8 @@ export async function renderDashboard(root, navigate) {
       // sales_director/operations_director, same as the Map's own
       // team-locations view), so teamTodayPlans is always null for every
       // other role and this whole block is skipped for them.
-      teamTodayPlans?.length
+      // On a desktop window the same list is inside Home's "Today" card (each rep opens to their plan; homeKpis.js): shown once.
+      teamTodayPlans?.length && !wantsKpis()
         ? (() => {
             const isAdmin = state.user.role === "admin";
             const totalVisited = teamTodayPlans.reduce((n, m) => n + m.customers.filter((c) => c.visited_today).length, 0);
@@ -439,7 +440,7 @@ export async function renderDashboard(root, navigate) {
   `;
 
   fitTileLabels(container.querySelector(".quick-actions-grid"));
-  renderHomeKpis(container.querySelector("#home-kpis"));
+  renderHomeKpis(container.querySelector("#home-kpis"), { teamTodayPlans });
   container.querySelector("#view-all-activity")?.addEventListener("click", () => navigate("#/activity"));
   container.querySelector("#company-dashboard-preview-card")?.addEventListener("click", () => navigate("#/company-dashboard"));
   // Every tile is optional now (an admin can hide any of them for any role),
