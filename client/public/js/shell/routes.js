@@ -1,6 +1,7 @@
 // The router: which screen each #/hash opens (moved out of app.js with the refactor tool, docs/architecture-roadmap.md step 6).
 // renderRoute takes app.js's shared state as `ctx` (the ctx object at the top of app.js); render() in app.js calls it.
 import { allTextsLoaded, getLang, loadAllTexts } from "../i18n.js";
+import { loadStylesFor, stylesReadyFor } from "../styles.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
@@ -100,6 +101,9 @@ export async function renderRoute(ctx) {
     location.reload();
     return;
   }
+  // Styles per area (step 8c): the style areas this screen needs, before it is drawn (Home needs none: its rules are all in css/app.css;
+  // once loaded there is no wait at all).
+  if (!stylesReadyFor(hash)) await fresh(loadStylesFor(hash));
   // Texts in two parts (step 11): the first screen is drawn with `common` and its own areas; every screen after it waits until all areas
   // are in (normally they already are: they load in idle time right after the first screen). A text that arrives after a screen was drawn
   // can be swapped in only when it is plain, not when the screen put a value into it ("Payment term: {n} days").
