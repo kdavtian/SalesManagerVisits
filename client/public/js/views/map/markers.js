@@ -18,6 +18,7 @@ export function renderSideList(ctx, entries) {
       badgeOf: (status) => ctx.customerStatusBadge(status),
       inView: (c) => ctx.map.getBounds().contains([c.lat, c.lng]),
       onPick: (id) => ctx.focusCustomerPin(id),
+      onResize: () => ctx.map?.invalidateSize({ animate: false }),
     });
     ctx.loadSideDebt();
     // after this screen's setup has run (the cached customer list can paint before the planned-visit code below is set up)

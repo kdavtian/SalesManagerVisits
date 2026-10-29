@@ -22,7 +22,7 @@ export function deskHeadHtml(extraClass, cells, opts = {}) {
           .map((i) =>
             i.key
               ? `<button type="button" class="desk-sort" data-sort-key="${i.key}" title="${escapeHtml(t("desk_col_sort_hint"))}">${escapeHtml(i.label)}<span class="desk-sort-arrow" aria-hidden="true"></span></button>`
-              : `<span class="desk-th-label">${escapeHtml(i.label)}</span>`
+              : `<span class="desk-th-label" title="${escapeHtml(i.label)}">${escapeHtml(i.label)}</span>`
           )
           .join("")}</div>`
       )
@@ -232,6 +232,9 @@ export function wireDeskKeys(listEl, { rowSelector, onToggle, onEscape } = {}) {
    body of every row, calls renderHead() when its shell is built and renderFoot(n) + paintSelection() after the list is
    painted. Elements may be given as functions when the page rebuilds its shell (Activity, Tasks). */
 const el = (x) => (typeof x === "function" ? x() : x);
+// the smallest width of the name cell and of the chips cell (any further lead cell): below that the table scrolls sideways
+const LEAD_MIN = [200, 120];
+const scrollSynced = new WeakSet();
 
 export function createDeskTable(opts) {
   const {
@@ -292,10 +295,15 @@ export function createDeskTable(opts) {
     view.classList.toggle("desk-docked", d);
     view.classList.toggle("desk-no-select", !withSelection);
     view.dataset.deskCols = list.map((c) => c.key).join(" ");
-    view.style.setProperty(
-      "--desk-cols",
-      `${withSelection ? "24px " : ""}36px ${d ? leadColsDocked : leadCols} ${list.map((c) => (d ? c.narrowWidth || c.width : c.width)).join(" ")} 28px`.replace(/\s+/g, " ")
-    );
+    // The name and chips cells keep a readable minimum, so with many columns the table grows wider than the window: it then
+    // scrolls sideways inside its own box (heading row in step) instead of pushing columns out of sight (owner, 2026-10-29).
+    let leadIndex = 0;
+    const leadTracks = (d ? leadColsDocked : leadCols).replace(/minmax\(0,/g, () => `minmax(${LEAD_MIN[Math.min(leadIndex++, 1)]}px,`);
+    const widths = list.map((c) => (d ? c.narrowWidth || c.width : c.width));
+    view.style.setProperty("--desk-cols", `${withSelection ? "24px " : ""}36px ${leadTracks} ${widths.join(" ")} 28px`.replace(/\s+/g, " "));
+    const leadMins = LEAD_MIN.slice(0, leadIndex).reduce((a, b) => a + b, 0) + Math.max(0, leadIndex - LEAD_MIN.length) * LEAD_MIN[1];
+    const tracks = (withSelection ? 1 : 0) + 2 + leadIndex + widths.length;
+    const fixed = (withSelection ? 24 : 0) + 36 + 28 + widths.reduce((sum, w) => sum + (parseFloat(w) || 0), 0) + leadMins;
     const leadCells = (d ? lead.slice(0, 1) : lead).map((c) => ({ align: c.align, items: [c.key ? { label: c.label, key: c.key } : { label: c.label }] }));
     slot.innerHTML = deskHeadHtml(
       `desk-thead-${pageKey}`,
@@ -303,6 +311,20 @@ export function createDeskTable(opts) {
       { select: withSelection, picker: true }
     );
     headEl = slot.firstElementChild;
+    const gap = parseFloat(getComputedStyle(headEl).columnGap) || 16;
+    view.style.setProperty("--desk-min-w", `${Math.ceil(fixed + gap * (tracks - 1))}px`);
+    if (!scrollSynced.has(view)) {
+      scrollSynced.add(view);
+      // scroll does not bubble: caught on the way down, the list's sideways scroll moves its heading row with it
+      view.addEventListener(
+        "scroll",
+        (e) => {
+          const head = view.querySelector(".desk-thead");
+          if (head && e.target.classList?.contains("card-list")) head.scrollLeft = e.target.scrollLeft;
+        },
+        { capture: true, passive: true }
+      );
+    }
     wireDeskHead(headEl, (key) => onSort?.(key));
     headEl.querySelector(".desk-col-gear").addEventListener("click", (e) => {
       openDeskColumnMenu(e.currentTarget, columns(), cols, (changedKey) => {
