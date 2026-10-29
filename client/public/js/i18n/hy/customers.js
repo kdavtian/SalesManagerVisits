@@ -194,6 +194,8 @@ export const hyCustomers = {
     mst_today: "Այսօր",
     mst_planned_aria: "Պլանավորված է այսօր, կանգառ {n}",
     mst_visible: "Միայն տեսանելի հատվածը",
+    mst_hide: "Թաքցնել ցանկը",
+    mst_show: "Ցույց տալ ցանկը",
     mst_count: "{n} հաճախորդ",
     mst_more: "ևս {n}՝ մոտեցրեք քարտեզը կամ միացրեք «Միայն տեսանելի հատվածը»",
     try_again: "Կրկին փորձել",

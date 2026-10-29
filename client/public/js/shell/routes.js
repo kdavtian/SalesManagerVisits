@@ -16,6 +16,9 @@ import { startDriverArrival } from "../driverArrival.js";
 import { flushQueue } from "../offlineQueue.js";
 import { refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshOrderBadge, refreshPaymentBadge, refreshPlanApprovalBadge, refreshUnrecordedBadge, refreshWarehouseBadge } from "../badges.js";
 
+const WAIT_LIMIT_MS = 4000;
+const atMost = (promise, ms) => Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+
 export async function renderRoute(ctx) {
   // A screen whose code arrives after a newer render started (the session turned out to be expired while the remembered Home was
   // loading, a fast second tap) must not paint over the newer screen: it is dropped (render() ignores STALE_ROUTE).
@@ -110,12 +113,14 @@ export async function renderRoute(ctx) {
   }
   // Styles per area (step 8c): the style areas this screen needs, before it is drawn (Home needs none: its rules are all in css/app.css;
   // once loaded there is no wait at all).
-  if (!stylesReadyFor(hash)) await fresh(loadStylesFor(hash));
+  // Each wait has a time limit (owner, 2026-10-29: "Settings is not opening, just spinning"): a stylesheet or text file that never
+  // answers (a stuck connection, a stale offline copy) must not hold a screen back for ever; it is drawn with what is in.
+  if (!stylesReadyFor(hash)) await fresh(atMost(loadStylesFor(hash), WAIT_LIMIT_MS));
   // Texts in two parts (step 11): the first screen is drawn with `common` and its own areas; every screen after it waits until all areas
   // are in (normally they already are: they load in idle time right after the first screen). A text that arrives after a screen was drawn
   // can be swapped in only when it is plain, not when the screen put a value into it ("Payment term: {n} days").
   // (only then a wait: when everything is in, the route goes on at once, as before)
-  if (ctx.lastRenderedHash && !allTextsLoaded()) await fresh(loadAllTexts().catch(() => {}));
+  if (ctx.lastRenderedHash && !allTextsLoaded()) await fresh(atMost(loadAllTexts().catch(() => {}), WAIT_LIMIT_MS));
   if (ctx.HOME_TREE_ROUTES.has(hash.split("?")[0])) ctx.lastHomeHash = hash;
 
   // Restore from the back-cache -- only on a genuine back/forward

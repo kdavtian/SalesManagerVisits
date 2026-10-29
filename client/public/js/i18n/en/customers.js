@@ -194,6 +194,8 @@ export const enCustomers = {
     mst_today: "Today",
     mst_planned_aria: "Planned today, stop {n}",
     mst_visible: "Only the visible area",
+    mst_hide: "Hide the list",
+    mst_show: "Show the list",
     mst_count: "{n} customers",
     mst_more: "+{n} more: zoom in or turn on “Only the visible area”",
     try_again: "Try again",

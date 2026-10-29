@@ -346,6 +346,12 @@
   .desk-th-end {
     justify-content: flex-end;
   }
+  /* a long Armenian heading in a narrow column ends in "..." (the full heading shows on hover) instead of being cut mid-letter */
+  .desk-th-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .desk-sort {
     display: inline-flex;
     align-items: center;
@@ -519,6 +525,23 @@
   .desk-view #customer-list > .list-row .list-row-body > .list-row-bottom.product-match-row {
     grid-column: 3 / span 2;
     grid-row: 3;
+  }
+  /* more columns than the window holds (deskTable.js writes the table's smallest width into --desk-min-w): the rows keep that width
+     and the list scrolls sideways inside its rounded box; the heading row is moved in step by deskTable.js */
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list).card-list {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
+    min-width: calc(var(--desk-min-w, 0px) + 32px);
+  }
+  /* group bands, "loading", "nothing found", "load more": they stay put across the visible width while the rows scroll sideways */
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > :not(.list-row) {
+    position: sticky;
+    left: 0;
+  }
+  .desk-view .desk-thead {
+    overflow: hidden;
   }
   /* a table without a checkbox column starts one column earlier */
   .desk-view.desk-no-select :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row > .list-row-icon {
