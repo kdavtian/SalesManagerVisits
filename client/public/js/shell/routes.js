@@ -294,6 +294,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/returns.js"))).renderReturns(ctx.app, ctx.navigate);
   } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {
     (await fresh(import("../views/staff.js"))).renderStaff(ctx.app, ctx.navigate, path.split("/")[2] ?? null, query);
+  } else if (path === "#/stock-count") {
+    ctx.currentCleanup = await (await fresh(import("../views/stockCount.js"))).renderStockCount(ctx.app, ctx.navigate, query);
   } else if (path === "#/wh-pack") {
     ctx.currentCleanup = await (await fresh(import("../views/warehousePack.js"))).renderWarehousePack(ctx.app, ctx.navigate, query.get("tab"));
   } else if (path === "#/dashboard") {

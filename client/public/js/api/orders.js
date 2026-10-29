@@ -68,6 +68,12 @@ export const ordersApi = {
   getWarehouseHome: () => request("/warehouse/home", { fresh: true }),
   getWarehousePackedList: () => request("/warehouse/packed-list", { fresh: true }),
   getDeliveryHome: () => request("/delivery/home", { fresh: true }),
+  // Stock count (Գույքագրում, server/src/orders/stockCount.js)
+  getStockCountDay: (day) => request(`/stock-count/day${day ? `?day=${day}` : ""}`, { fresh: true }),
+  saveStockCount: (productId, qty, note) => json(`/stock-count/items/${productId}`, "PUT", { qty, note }),
+  clearStockCount: (productId) => request(`/stock-count/items/${productId}`, { method: "DELETE" }),
+  finishStockCountDay: () => json("/stock-count/finish", "POST", {}),
+  getStockCountMonth: (month) => request(`/stock-count/month${month ? `?month=${month}` : ""}`, { fresh: true }),
   getWarehousePendingCount: () => request("/warehouse/pending-count"),
   getPickList: () => request("/warehouse/pick-list"),
   getStagingList: () => request("/warehouse/staging-list"),

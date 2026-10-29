@@ -322,6 +322,19 @@ export function canManageWarehouse(role) {
   );
 }
 
+// Stock count (Գույքագրում, owner 2026-10-30): the warehouse manager counts the day's plan; admin, CEO and the operations director can
+// count too (they cover for him) and see the Excel numbers; the accountant, who gets the differences as a task, sees the results.
+// The warehouse manager counts blind: he does not see the Excel stock of a product before its count is closed.
+export function canCountStock(role) {
+  return role === "warehouse_manager" || role === "admin" || role === "ceo" || role === "operations_director";
+}
+export function canViewStockCount(role) {
+  return canCountStock(role) || role === "accountant";
+}
+export function seesStockCountExpected(role) {
+  return canViewStockCount(role) && role !== "warehouse_manager";
+}
+
 // Who plans/edits a delivery route (distinct from canPlanForOthers, which
 // is about the SM "Plan day" visit-plan tool, not deliveries).
 export function canPlanRoutes(role) {

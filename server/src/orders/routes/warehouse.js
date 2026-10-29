@@ -16,6 +16,7 @@ import { yerevanToday } from "../../utils/yerevanDate.js";
 import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
+import { stockCountToday } from "../stockCount.js";
 
 export const warehouseRouter = Router();
 warehouseRouter.use(requireAuth);
@@ -41,11 +42,11 @@ warehouseRouter.use(requireWarehouse);
 // The warehouse manager's new Home (owner, 2026-10-23): what to do now, and what is going wrong -- one request, numbers only.
 // Waiting times and limits come from the same order-flow numbers the Operations control page uses (Vaghinak's SLA settings).
 warehouseRouter.get("/home", async (req, res) => {
-  const { list } = await orderWaiting();
-  const pack = list.filter((w) => w.step === "pack");
-  const deliver = list.filter((w) => w.step === "deliver");
   const today = yerevanToday();
-  const [{ rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }, { rows: [returns] }] = await Promise.all([
+  // every number in parallel: the screen waits for the slowest query, not for their sum
+  const [{ list }, count, { rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }, { rows: [returns] }] = await Promise.all([
+    orderWaiting(),
+    stockCountToday(pool, today).catch((err) => (console.error("Stock count numbers failed:", err.message), null)),
     pool.query(
       `SELECT oi.product_name, oi.brand, SUM(oi.quantity)::int AS need, p.stock_qty AS have, COUNT(DISTINCT oi.order_id)::int AS orders
        FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
@@ -67,6 +68,8 @@ warehouseRouter.get("/home", async (req, res) => {
     ),
     pool.query(`SELECT COUNT(*)::int AS n FROM order_returns WHERE status = 'approved'`),
   ]);
+  const pack = list.filter((w) => w.step === "pack");
+  const deliver = list.filter((w) => w.step === "deliver");
   const hours = (rows) => (rows.length ? Math.max(...rows.map((w) => w.waiting_h)) : 0);
   res.json({
     to_pack: { count: pack.length, over_sla: pack.filter((w) => w.over_sla).length, app: pack.filter((w) => w.via_app).length, oldest_h: hours(pack), blocked: pack.filter((w) => w.blocked_by).length },
@@ -76,6 +79,7 @@ warehouseRouter.get("/home", async (req, res) => {
     stale_stops: stale.n,
     tasks: { open: tasks.open, overdue: tasks.overdue },
     returns_to_receive: returns.n,
+    stock_count: count,
   });
 });
 

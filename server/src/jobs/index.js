@@ -10,6 +10,7 @@ import { runCashSheetJobs } from "../money/cashSheets.js";
 import { checkDailySummary } from "../reports/dailySummary.js";
 import { checkErpSyncFreshness, checkWorkbookAge } from "../erp/erpSyncMonitor.js";
 import { sendDeadlineReminders, runAutoTasksOnceADay } from "../team/taskReminders.js";
+import { closeOpenDays } from "../orders/stockCount.js";
 import { sendWeeklyScorecards } from "../reports/scorecard.js";
 import { sendWeeklyDebtDigest } from "../money/debtDigest.js";
 import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
@@ -32,6 +33,7 @@ export const JOBS = [
   { name: "weekly-scorecard", everyMs: MINUTE, run: (now) => sendWeeklyScorecards(now) },
   { name: "weekly-debt-digest", everyMs: MINUTE, run: (now) => sendWeeklyDebtDigest(now) },
   { name: "auto-tasks", everyMs: MINUTE, run: (now) => runAutoTasksOnceADay(now) },
+  { name: "stock-count-close", everyMs: 15 * MINUTE, run: (now) => closeOpenDays(now) },
   { name: "daily-summary", everyMs: 5 * MINUTE, run: () => checkDailySummary(), ...needsPush },
   { name: "ops-control", everyMs: 30 * MINUTE, run: () => runOpsJobs() },
   { name: "cash-sheets", everyMs: 30 * MINUTE, run: () => runCashSheetJobs() },

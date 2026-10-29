@@ -17,6 +17,8 @@ export const NOTIFICATION_GROUPS = [
       { type: "order_delivered", roles: ["admin", "sales_director", "warehouse_manager"] },
       { type: "order_returned", roles: ["admin", "sales_director", "warehouse_manager"] },
       { type: "order_stale_packed", roles: ["admin", "warehouse_manager"] },
+      // the day's stock count found differences against Excel, or left products uncounted (orders/stockCount.js)
+      { type: "stock_count_diff", roles: ["admin", "ceo"] },
       { type: "accounting_update", roles: MANAGEMENT },
       // the AI check of a photographed order blank found a problem (aiBlankCheck.js): told to the person who took it
       { type: "document_issue", roles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager", "delivery_manager", "accountant"] },

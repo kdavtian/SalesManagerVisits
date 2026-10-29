@@ -10,6 +10,7 @@ import { createMessage, isWorkingDay, minuteOfDay } from "./engine.js";
 import { durationHy } from "./phrases.js";
 import { humanDelayPassed } from "./humanDelay.js";
 import { bullets } from "../../utils/bullets.js";
+import { stockCountToday } from "../../orders/stockCount.js";
 
 export const DIGEST_ROLES = ["ceo", "admin"]; // who receives it (owner: "only to CEO and admin")
 // after the end of the work day and the wrap-up (+5 min) and management brief: the day's facts are in
@@ -127,6 +128,16 @@ export function personSummary(f, { graceMin = 15 } = {}) {
   return { name: firstName(u), fullName: u.name_hy || u.name, role: ROLE_HY[role] ?? role, parts, recos: recos.sort((a, b) => b.w - a.w) };
 }
 
+// The day's stock count (orders/stockCount.js): progress and differences, and a recommendation when products are left uncounted.
+function stockLines(s) {
+  if (!s || (!s.due && !s.counted)) return [];
+  return [`Գույքագրում՝ հաշվվել է ${s.counted}/${s.due}${s.differences ? ` · տարբերություններ Excel-ի հետ՝ ${s.differences}` : ""}`];
+}
+function stockRecos(s) {
+  if (!s || !s.due || s.counted >= s.due) return [];
+  return [{ w: 55, text: `Գույքագրում — այսօր չի հաշվվել ${s.due - s.counted} ապրանք (կտեղափոխվի վաղը)` }];
+}
+
 const compare = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${usual.toLocaleString("en-US")}${now >= usual ? "" : " · ավելի քիչ"})` : "");
 const compareAmd = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${amd(usual)}${Number(now) >= usual ? "" : " · ավելի քիչ"})` : "");
 
@@ -140,10 +151,12 @@ export function digestBody(facts, totals, opts) {
     ...(totals.waiting.to_confirm ? [`Հաստատման սպասող պատվերներ՝ ${totals.waiting.to_confirm}`] : []),
     ...(totals.waiting.pack_late ? [`Մեկ օրից ավելի փաթեթավորման սպասող պատվերներ՝ ${totals.waiting.pack_late}`] : []),
     ...(totals.waiting.pay_pending ? [`Հաստատման սպասող վճարումներ՝ ${totals.waiting.pay_pending}`] : []),
+    ...stockLines(totals.stock),
   ]);
   const people = facts.map((f) => personSummary(f, opts));
   const top = people
     .flatMap((p) => p.recos.map((r) => ({ w: r.w, text: `${p.fullName} — ${r.text}` })))
+    .concat(stockRecos(totals.stock))
     .sort((a, b) => b.w - a.w)
     .slice(0, 8)
     .map((r) => r.text);
@@ -170,7 +183,8 @@ export async function fullDigest(now = new Date(), db = pool, { pick, delayMaxMs
   const { rows: sent } = await db.query("SELECT count(*)::int AS n FROM vaghinak_messages WHERE kind = 'full_digest' AND day = $1", [day]);
   if (sent[0].n >= recipients.length) return { created: 0 };
   if (!humanDelayPassed(day, "fulldigest", now, { maxMs: delayMaxMs, pick })) return { created: 0 };
-  const [facts, totals] = await Promise.all([dayFacts(db, day), companyTotals(db, day)]);
+  const [facts, totals, stock] = await Promise.all([dayFacts(db, day), companyTotals(db, day), stockCountToday(db, day).catch(() => null)]);
+  totals.stock = stock;
   const { body } = digestBody(facts, totals, { graceMin: settings.lateGraceMin });
   let created = 0;
   for (const user of recipients) {

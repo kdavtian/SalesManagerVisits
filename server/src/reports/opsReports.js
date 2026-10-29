@@ -228,15 +228,11 @@ export async function winback(db = pool, weeks = 8) {
 // ---------- order flow ----------
 // Orders waiting at a step (confirm / pack / deliver), longest first, each with the SLA hours it is judged by (app orders are chased sooner).
 export async function orderWaiting(db = pool) {
-  const settings = await getVaghinakSettings(db);
-  const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
-  const sla = { confirm: settings.slaConfirmH, pack: settings.slaPackH, deliver: settings.slaDeliverH };
-  // App orders (KAD OS) are chased sooner: the confirm limit is the app setting (default 2 h), the other steps wait half the usual time.
-  const app = await getAppOrderSettings(db);
-  const appSla = app.chase_enabled
-    ? { confirm: Math.min(sla.confirm, app.chase_confirm_hours), pack: Math.max(1, sla.pack / 2), deliver: Math.max(1, sla.deliver / 2) }
-    : sla;
-  const { rows: waiting } = await db.query(
+  // the two settings and the orders in one round trip each, side by side
+  const [settings, app, { rows: waiting }] = await Promise.all([
+    getVaghinakSettings(db),
+    getAppOrderSettings(db),
+    db.query(
     `SELECT o.id, o.order_code, o.status, o.placed_via_app, o.total_amd::float8 AS total_amd, c.name AS customer_name, o.approval_status, o.credit_status,
             CASE o.status WHEN 'submitted' THEN o.created_at
                  WHEN 'confirmed' THEN COALESCE((SELECT MIN(changed_at) FROM order_status_history WHERE order_id = o.id AND new_status = 'confirmed'), o.updated_at)
@@ -244,7 +240,14 @@ export async function orderWaiting(db = pool) {
      FROM orders o JOIN customers c ON c.id = o.customer_id
      WHERE o.status IN ('submitted', 'confirmed', 'packed_stock_out')
      ORDER BY since`
-  );
+    ),
+  ]);
+  const round1 = (n) => (n == null ? null : Math.round(n * 10) / 10);
+  const sla = { confirm: settings.slaConfirmH, pack: settings.slaPackH, deliver: settings.slaDeliverH };
+  // App orders (KAD OS) are chased sooner: the confirm limit is the app setting (default 2 h), the other steps wait half the usual time.
+  const appSla = app.chase_enabled
+    ? { confirm: Math.min(sla.confirm, app.chase_confirm_hours), pack: Math.max(1, sla.pack / 2), deliver: Math.max(1, sla.deliver / 2) }
+    : sla;
   const now = Date.now();
   const stepOf = { submitted: "confirm", confirmed: "pack", packed_stock_out: "deliver" };
   const list = waiting.map((w) => {

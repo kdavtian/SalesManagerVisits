@@ -22,7 +22,13 @@ export function driverAttention(h) {
 }
 
 function paint(box, h) {
+  // the 30-second refresh redraws only when something changed: no flicker, no lost scroll, no idle DOM work
+  const sig = JSON.stringify(h);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
   const next = h.next;
+  // the stops after the next one, so the driver sees where the day goes (tap = the route screen)
+  const later = h.stops.filter((s) => !s.completed_at && s.stop_id !== next?.stop_id).slice(0, 4);
   const att = driverAttention(h);
   const pct = h.total ? Math.round((h.done / h.total) * 100) : 0;
   box.innerHTML = `
@@ -49,6 +55,14 @@ function paint(box, h) {
         : h.total
           ? `<p class="ops-clear">✓ ${t("ops_driver_all_done")}</p>`
           : `<button type="button" class="btn btn-primary btn-block ops-plan-btn" data-go="#/delivery">${t("ops_driver_plan")}</button>`
+    }
+
+    ${
+      later.length
+        ? `<h2 class="section-title">${t("ops_driver_later")}</h2><div class="ops-attention">${later
+            .map((s) => `<button type="button" class="ops-att ops-later" data-go="#/delivery"><span class="ops-later-seq">${s.sequence}</span><span><strong>${escapeHtml(s.customer_name)}</strong><br><span class="muted">${escapeHtml(s.address || "")}</span></span><span class="ops-att-chevron" aria-hidden="true">›</span></button>`)
+            .join("")}</div>`
+        : ""
     }
 
     ${
@@ -103,6 +117,9 @@ export async function renderDriverHome(root, navigate) {
     if (alive) timer = setTimeout(async () => ((document.hidden ? 0 : await load()), schedule()), REFRESH_MS);
   };
   const onChanged = () => load();
+  // back to the app (phone unlocked, tab shown): fresh numbers at once, not after up to 30 s
+  const onVisible = () => !document.hidden && load();
+  document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("orders-changed", onChanged);
   window.addEventListener("delivery-changed", onChanged);
   await load();
@@ -110,6 +127,7 @@ export async function renderDriverHome(root, navigate) {
   return () => {
     alive = false;
     clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onVisible);
     window.removeEventListener("orders-changed", onChanged);
     window.removeEventListener("delivery-changed", onChanged);
   };

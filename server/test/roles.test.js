@@ -31,6 +31,9 @@ import {
   isTerminalHandoffRole,
   canSubmitHandoffForOthers,
   canManageWarehouse,
+  canCountStock,
+  canViewStockCount,
+  seesStockCountExpected,
   canPlanRoutes,
   canDeliverOrders,
   canMarkDeliveredWithoutRoute,
@@ -207,6 +210,15 @@ test("canSubmitHandoffForOthers: mirrors canSubmitPaymentsForOthers", () => {
 test("canManageWarehouse: warehouse_manager/sales_director/ceo/operations_director/accountant/admin only", () => {
   for (const role of ["warehouse_manager", "sales_director", "ceo", "operations_director", "accountant", "admin"]) assert.equal(canManageWarehouse(role), true, role);
   assert.equal(canManageWarehouse("delivery_manager"), false);
+});
+
+test("stock count: warehouse_manager/admin/ceo/operations_director count, the accountant only views, the counter counts blind", () => {
+  for (const role of ROLES) {
+    const counts = ["warehouse_manager", "admin", "ceo", "operations_director"].includes(role);
+    assert.equal(canCountStock(role), counts, role);
+    assert.equal(canViewStockCount(role), counts || role === "accountant", role);
+    assert.equal(seesStockCountExpected(role), (counts || role === "accountant") && role !== "warehouse_manager", role);
+  }
 });
 
 test("canPlanRoutes: delivery_manager/admin only", () => {

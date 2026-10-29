@@ -1363,6 +1363,7 @@ export const hyCommon = {
     ops_driver_stops_done: "{total} կանգառից կատարված է {done}-ը",
     ops_driver_no_route: "Այսօր երթուղի չկա",
     ops_driver_next: "Հաջորդ կանգառը",
+    ops_driver_later: "Հետո երթուղում",
     ops_driver_here: "Դուք այստեղ եք",
     ops_driver_all_done: "Բոլոր կանգառները կատարված են։ Ապրե՛ք",
     ops_driver_navigate: "Ուղղորդել",
@@ -1466,4 +1467,7 @@ export const hyCommon = {
     vg_must_answer: "Վաղինակին քո պատասխանն է պետք",
     vg_block_hint: "Շարունակելու համար խնդրում ենք պատասխանել։",
     ops_age_days: "{n} օր",
+    qa_stock_count: "Գույքագրում",
+    notification_type_stock_count_diff: "Գույքագրման տարբերություններ",
+    job_stock_count_close: "Գույքագրում․ օրվա ավտոմատ փակում (20:00)",
 };

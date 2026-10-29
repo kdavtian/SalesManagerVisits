@@ -1519,6 +1519,8 @@ input[type="search"]:focus-visible {
   background: transparent;
   border: none;
 }
+/* the field has its own "x" (installInlineClearButton): Chrome / Safari's built-in clear button would make a second one */
+.search-input-clear-wrap input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
 
 .unified-search-clear {
   flex: none;
@@ -9403,6 +9405,10 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   flex: 1;
   min-width: 0;
 }
+/* the driver's next stops after the big "next" card; the warehouse Home's stock count line */
+.ops-later-seq { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--bg-card-pressed); font-weight: 700; font-variant-numeric: tabular-nums; }
+.ops-later .muted { font-size: 0.82rem; }
+.ops-stat.ops-stat-wide { min-height: 64px; flex-direction: row; align-items: center; gap: 12px; width: 100%; }
 
 .ops-att-dot {
   flex: none;
@@ -10042,4 +10048,8 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 @media (hover: none) and (pointer: coarse) {
   .photo-lightbox-overlay .photo-lightbox-nav,
   .file-viewer .photo-lightbox-nav { display: none; }
+}
+/* the warehouse / driver Home on a computer: a readable column, not stretched across the screen */
+@media (min-width: 1024px) {
+  .ops-view { max-width: 820px; margin: 0 auto; width: 100%; }
 }
