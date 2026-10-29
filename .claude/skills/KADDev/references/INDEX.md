@@ -118,7 +118,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
 
-## ops-runbook.md (19 KB, 110 lines)
+## ops-runbook.md (20 KB, 111 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
 - L9 App deploy (preferred, fast) - cd /opt/field-visits && ./deploy/deploy.sh
 - L21 Bot deploy - cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot &
@@ -126,11 +126,11 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L33 CI and PR flow - GitHub Actions: test (npm ci, check:version, migrate, npm test, verify:ui, audit) and e2e-smoke (Playwright).
 - L50 Local environment (for verification) - pgctlcluster 16 main start; DATABASEURL=postgres://postgres:postgres@localhost:5432/fieldvisitstest; JWTSECRET
 - L55 Lessons added 2026-10-05 - "dubious ownership" on the bot: git pull as castrolbot fails after any root-run git touched the repo.
-- L62 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
-- L76 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
-- L86 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
-- L96 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
-- L103 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
+- L63 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
+- L77 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
+- L87 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
+- L97 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
+- L104 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
 ## optimization-ideas.md (9 KB, 62 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>

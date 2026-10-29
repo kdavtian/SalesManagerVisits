@@ -53,7 +53,7 @@ export function decodeMappings(mappings) {
 }
 
 const maps = new Map(); // built file's map path -> { sources, lines } (or null: no map)
-const MAX_MAPS = 40;
+const MAX_MAPS = 10; // the shared chunk's map alone decodes to a few MB
 
 function loadMap(mapFile) {
   if (maps.has(mapFile)) return maps.get(mapFile);

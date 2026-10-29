@@ -1,6 +1,6 @@
 // The router: which screen each #/hash opens (moved out of app.js with the refactor tool, docs/architecture-roadmap.md step 6).
 // renderRoute takes app.js's shared state as `ctx` (the ctx object at the top of app.js); render() in app.js calls it.
-import { getLang } from "../i18n.js";
+import { allTextsLoaded, getLang, loadAllTexts } from "../i18n.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
@@ -100,6 +100,11 @@ export async function renderRoute(ctx) {
     location.reload();
     return;
   }
+  // Texts in two parts (step 11): the first screen is drawn with `common` and its own areas; every screen after it waits until all areas
+  // are in (normally they already are: they load in idle time right after the first screen). A text that arrives after a screen was drawn
+  // can be swapped in only when it is plain, not when the screen put a value into it ("Payment term: {n} days").
+  // (only then a wait: when everything is in, the route goes on at once, as before)
+  if (ctx.lastRenderedHash && !allTextsLoaded()) await fresh(loadAllTexts().catch(() => {}));
   if (ctx.HOME_TREE_ROUTES.has(hash.split("?")[0])) ctx.lastHomeHash = hash;
 
   // Restore from the back-cache -- only on a genuine back/forward

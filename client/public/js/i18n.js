@@ -27,6 +27,7 @@ async function loadAreas(lang, areas) {
   );
 }
 const allLoaded = (lang) => TEXT_AREAS.every((area) => loaded[lang]?.has(area));
+export const allTextsLoaded = () => allLoaded(getLang());
 // Which areas this page has loaded so far (the tests check the first part is in before a screen is drawn).
 export const loadedTextAreas = (lang = getLang()) => [...(loaded[lang] ?? [])];
 
@@ -75,7 +76,11 @@ function needText(key) {
   const lang = getLang();
   if (!allLoaded(lang)) {
     loadAllTexts(lang)
-      .then(() => replaceOnScreen(dicts[lang]))
+      .then(() => {
+        replaceOnScreen(dicts[lang]);
+        // still missing with every area in: a text of a newer release (the fresh fetch below)
+        if ([...missing].some((k) => dicts[lang][k] === undefined)) refreshOnMiss(lang);
+      })
       .catch(() => {});
     return;
   }
