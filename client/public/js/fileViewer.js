@@ -11,7 +11,7 @@ import { icons } from "./icons.js";
 import { state } from "./state.js";
 import { canManageSignedDocuments, seesAllCustomerFiles } from "./shared/roles.js";
 import { escapeHtml, formatDateTime, saveBlob, showToast } from "./util.js";
-import { openPhotoLightbox } from "./photoLightbox.js";
+import { createZoomStage, preloadPicture } from "./zoomStage.js";
 
 export const fileKindLabel = (kind) => t(`file_kind_${kind}`);
 export const isPdf = (file) => file.mime === "application/pdf";
@@ -74,7 +74,7 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
       <div class="file-viewer-title"></div>
       <button type="button" class="icon-btn file-viewer-close" aria-label="${t("close")}">${icons.close}</button>
     </div>
-    <div class="file-viewer-stage"></div>
+    <div class="file-viewer-stage"><div class="file-viewer-zoom"></div><div class="file-viewer-msg" hidden></div></div>
     ${list.length > 1 ? `<button type="button" class="photo-lightbox-nav photo-lightbox-prev" aria-label="${t("previous")}">&#8249;</button><button type="button" class="photo-lightbox-nav photo-lightbox-next" aria-label="${t("next")}">&#8250;</button>` : ""}
     <div class="file-viewer-info"></div>
     <div class="file-viewer-bar"></div>`;
@@ -88,11 +88,30 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
     }
   });
   const title = overlay.querySelector(".file-viewer-title");
-  const stage = overlay.querySelector(".file-viewer-stage");
+  // The picture itself: pinch / double-tap zoom, swipe to the next document, swipe down to close, as in Photos (zoomStage.js).
+  // `stage` holds what is shown instead of it (the PDF's progress bar, the "Open" button when no picture can be made).
+  const zoomHost = overlay.querySelector(".file-viewer-zoom");
+  const stage = overlay.querySelector(".file-viewer-msg");
+  const zoom = createZoomStage(zoomHost, {
+    onSwipe: list.length > 1 ? (dir) => go(dir) : null,
+    onClose: () => close(),
+    onTap: () => overlay.classList.toggle("is-bare"),
+  });
+  const zoomImg = zoomHost.querySelector("img");
+  function showPictureMode(on) {
+    zoomHost.hidden = !on;
+    stage.hidden = on;
+    if (on) stage.innerHTML = "";
+  }
+  function go(dir) {
+    index = (index + dir + list.length) % list.length;
+    show();
+  }
   const info = overlay.querySelector(".file-viewer-info");
   const bar = overlay.querySelector(".file-viewer-bar");
 
   const close = () => {
+    zoom.destroy();
     overlay.remove();
     document.body.style.overflow = "";
     objectUrls.forEach((u) => URL.revokeObjectURL(u));
@@ -155,8 +174,14 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
     const file = list[index];
     title.textContent = `${file.name && file.external ? file.name : fileKindLabel(file.kind)}${list.length > 1 ? ` · ${index + 1}/${list.length}` : ""}`;
     if (isPdf(file)) showPdf(file);
-    else stage.innerHTML = `<img class="file-viewer-img" src="${srcUrl(file)}" alt="${escapeHtml(fileKindLabel(file.kind))}" />`;
-    stage.querySelector(".file-viewer-img")?.addEventListener("click", (e) => openPhotoLightbox([e.currentTarget.src], 0));
+    else {
+      // a stored photo: its small copy at once, the screen copy right after, the original only when zoomed in
+      showPictureMode(true);
+      zoomImg.className = "zoom-stage-img file-viewer-img";
+      zoom.show({ ...(file.external ? { full: srcUrl(file) } : { thumb: api.fileUrl(file, { thumb: true }), screen: `${srcUrl(file)}&size=screen`, full: srcUrl(file) }), alt: fileKindLabel(file.kind) });
+    }
+    // the neighbours are on their way before a swipe asks for them
+    if (list.length > 1) for (const n of [list[(index + 1) % list.length], list[(index - 1 + list.length) % list.length]]) if (!isPdf(n) && !n.external) preloadPicture(`${srcUrl(n)}&size=screen`);
     info.innerHTML = `
       <div class="file-viewer-meta">${escapeHtml(formatDateTime(file.created_at))}${file.user_name ? ` · ${escapeHtml(file.user_name)}` : ""}${file.customer_name ? ` · ${escapeHtml(file.customer_name)}` : ""}${file.order_codes?.length ? ` · ${escapeHtml(file.order_codes.join(", "))}` : ""}</div>
       ${file.note ? `<div class="file-viewer-note">${escapeHtml(file.note)}</div>` : ""}
@@ -178,10 +203,12 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
   function showPdf(file) {
     const e = entry(file);
     const showPicture = (blob) => {
-      stage.innerHTML = `<img class="file-viewer-img file-viewer-page" src="${blobUrl(blob)}" alt="${escapeHtml(fileKindLabel(file.kind))}" />`;
-      stage.querySelector(".file-viewer-img").addEventListener("click", (ev) => openPhotoLightbox([ev.currentTarget.src], 0));
+      showPictureMode(true);
+      zoomImg.className = "zoom-stage-img file-viewer-img file-viewer-page";
+      zoom.show({ full: blobUrl(blob), alt: fileKindLabel(file.kind) });
     };
     if (e.pictureBlob) return showPicture(e.pictureBlob);
+    showPictureMode(false);
     stage.innerHTML = `<div class="file-viewer-loading" role="status" aria-live="polite"><div class="file-viewer-progress"><span></span></div><span class="muted">${t("loading")}</span></div>`;
     const bar = stage.querySelector(".file-viewer-progress span");
     const progress = stage.querySelector(".file-viewer-progress");
@@ -268,19 +295,15 @@ export function openFileViewer(files, startIndex = 0, { onChanged } = {}) {
     }
   }
 
-  overlay.querySelector(".photo-lightbox-prev")?.addEventListener("click", () => {
-    index = (index - 1 + list.length) % list.length;
-    show();
-  });
-  overlay.querySelector(".photo-lightbox-next")?.addEventListener("click", () => {
-    index = (index + 1) % list.length;
-    show();
-  });
+  overlay.querySelector(".photo-lightbox-prev")?.addEventListener("click", () => go(-1));
+  overlay.querySelector(".photo-lightbox-next")?.addEventListener("click", () => go(1));
   document.addEventListener(
     "keydown",
     function onKey(e) {
       if (!overlay.isConnected) return document.removeEventListener("keydown", onKey);
       if (e.key === "Escape") close();
+      else if (e.key === "ArrowLeft" && list.length > 1) go(-1);
+      else if (e.key === "ArrowRight" && list.length > 1) go(1);
     },
     { passive: true }
   );
