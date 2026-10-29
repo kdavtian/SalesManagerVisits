@@ -458,4 +458,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 11 texts in two parts: 1.473.0, PR #518, 2026-10-29.
 - Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, PR #519, 2026-10-29.
 - Step 12 speed budgets in CI (first start on a slow phone; 10 busiest endpoints with a company-sized data set): tests only, PR #520, 2026-10-29.
-- Step 8c styles per area (css/areas/*, loaded with the screen; computed-style parity on every screen): 1.475.0, 2026-10-29.
+- Step 8c styles per area (css/areas/*, loaded with the screen; computed-style parity on every screen): 1.475.0, PR #521, 2026-10-29.

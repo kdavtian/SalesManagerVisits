@@ -36,7 +36,12 @@ test("each area file has the same keys in English and Armenian, every area file 
   const { TEXT_AREAS } = await import(pathToFileURL(path.join(jsDir, "i18nAreas.js")).href);
   assert.deepEqual([...TEXT_AREAS].sort(), en, "TEXT_AREAS in i18nAreas.js lists every area file");
   const themeInit = fs.readFileSync(path.join(jsDir, "theme-init.js"), "utf8");
-  assert.match(themeInit, /"\/js\/i18n\/" \+ lang \+ "\/common\.js"/, "theme-init.js preloads the common texts (step 11)");
+  assert.match(themeInit, /\["common"\]/, "theme-init.js preloads the common texts (step 11)");
+  assert.match(themeInit, /"\/js\/i18n\/" \+ lang \+ "\/" \+ areas\[i\] \+ "\.js"/, "theme-init.js preloads the text area files by address");
+  // a launch on Home also preloads Home's own areas: theme-init.js's copy of the list must match i18nAreas.js
+  const { ROUTE_TEXT_AREAS } = await import(pathToFileURL(path.join(jsDir, "i18nAreas.js")).href);
+  const homeAreas = JSON.parse(themeInit.match(/var HOME_TEXT_AREAS = (\[[^\]]*\]);/)[1]);
+  assert.deepEqual(homeAreas, ROUTE_TEXT_AREAS["#/dashboard"], "HOME_TEXT_AREAS in theme-init.js = ROUTE_TEXT_AREAS['#/dashboard']");
   for (const area of en) {
     const keys = async (lang) => Object.keys(Object.values(await import(pathToFileURL(path.join(jsDir, "i18n", lang, `${area}.js`)).href))[0]).sort();
     const [a, b] = [await keys("en"), await keys("hy")];

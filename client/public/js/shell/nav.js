@@ -217,7 +217,7 @@ export function rebuildSidebarMarkup(ctx, hash) {
       ?.insertAdjacentHTML("beforeend", `<button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-pressed="false">${icons.chevronLeft}</button>`);
   }
   ctx.sidebar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => ctx.handleNavTap(el.dataset.hash === "#/dashboard" ? ctx.homeNavTarget() : el.dataset.hash));
+    el.addEventListener("click", () => ctx.handleNavTap(el.dataset.hash === "#/dashboard" ? ctx.homeNavTarget() : el.dataset.hash, el.dataset.hash));
   });
   ctx.sidebar.querySelectorAll("[data-group-toggle]").forEach((el) =>
     el.addEventListener("click", () => {
@@ -282,7 +282,7 @@ export function rebuildNavMarkup(ctx, hash) {
     .join("");
 
   ctx.navBar.querySelectorAll("[data-hash]").forEach((el) => {
-    el.addEventListener("click", () => ctx.handleNavTap(el.dataset.hash === "#/dashboard" ? ctx.homeNavTarget() : el.dataset.hash));
+    el.addEventListener("click", () => ctx.handleNavTap(el.dataset.hash === "#/dashboard" ? ctx.homeNavTarget() : el.dataset.hash, el.dataset.hash));
   });
 
   ctx.topBar.innerHTML = `

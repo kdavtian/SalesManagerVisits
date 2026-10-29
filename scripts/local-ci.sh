@@ -42,9 +42,18 @@ run() {
 }
 static() { npm run check:version && npm run verify:ui && npm run lint && { [ "$AUDIT" = 0 ] || npm audit --audit-level=high; }; }
 shard()  { fresh_db "fieldvisits_ci_$1" && DATABASE_URL="$PGBASE/fieldvisits_ci_$1" node --test --test-reporter=tap --test-shard="$1/$SHARDS" $(tests); }
-isolated() { bash scripts/run-isolated.sh test/isolated-tests.txt; }
+# The speed budgets (step 12) time the app: next to the other jobs on one machine they measure the crowd, not the app. They run alone at
+# the end (job "speed"); CI gives every job its own machine, so it runs them in the normal jobs.
+SPEED_TESTS="test/integration/speedBudget.test.js"
+isolated() { grep -vxF "$SPEED_TESTS" test/isolated-tests.txt > "$LOG/isolated-list.txt"; bash scripts/run-isolated.sh "$LOG/isolated-list.txt"; }
+speed() {
+  echo "$SPEED_TESTS" > "$LOG/speed-list.txt"
+  ISOLATED_LOG="$LOG/speed-isolated" bash scripts/run-isolated.sh "$LOG/speed-list.txt" || return 1
+  [ "$E2E" = 1 ] || return 0
+  fresh_db fieldvisits_ci_speed && DATABASE_URL="$PGBASE/fieldvisits_ci_speed" CLIENT_BUILD=1 E2E_PORT=3301 npx playwright test --project=chromium speed-budget
+}
 # The browser tests run against the deploy build (client/dist, built once below before they start), like CI.
-e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" CLIENT_BUILD=1 npm run test:e2e:smoke; }
+e2e()    { fresh_db fieldvisits_ci_e2e && DATABASE_URL="$PGBASE/fieldvisits_ci_e2e" CLIENT_BUILD=1 npm run test:e2e:smoke -- --grep-invert "speed budget"; }
 # The @iphone tests in Safari's engine (project iphone-webkit), on their own database and port next to the Chrome run. WebKit and its system
 # libraries are installed once into WEBKIT_DIR (the install is a no-op when that revision is already there); exit 77 = not installable here.
 WEBKIT_DIR="${WEBKIT_DIR:-$HOME/.cache/ms-playwright-webkit}"
@@ -62,6 +71,8 @@ if [ "$QUICK" = 0 ]; then
   [ "$E2E" = 1 ] && { npm run build:client >/dev/null || exit 1; jobs+=(e2e iphone); run e2e e2e & run iphone iphone & }
 fi
 wait
+# alone, on a quiet machine (see SPEED_TESTS above)
+[ "$QUICK" = 0 ] && { jobs+=(speed); run speed speed; }
 
 fail=()
 for j in "${jobs[@]}"; do

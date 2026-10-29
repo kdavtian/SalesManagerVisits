@@ -18,10 +18,17 @@ try {
   if (!(calcMeta && calcMeta.content === "true")) {
     var lang = localStorage.getItem("fieldvisits_lang") === "en" ? "en" : "hy";
     // the common texts (i18n/<lang>/common.js): every first screen needs them; the other areas follow after it (i18n.js, step 11)
-    var preload = document.createElement("link");
-    preload.rel = "modulepreload";
-    preload.href = "/js/i18n/" + lang + "/common.js";
-    document.head.appendChild(preload);
+    // Opening on Home (most launches): Home's own text area too, so it does not wait for the app's code to ask for it (about 0.3 s on
+    // a slow phone). HOME_TEXT_AREAS = i18nAreas.js ROUTE_TEXT_AREAS["#/dashboard"] (i18nParity.test.js checks they match).
+    var HOME_TEXT_AREAS = ["orders"];
+    var path = (location.hash || "").split("?")[0];
+    var areas = ["common"].concat(path === "" || path === "#" || path === "#/" || path === "#/dashboard" ? HOME_TEXT_AREAS : []);
+    for (var i = 0; i < areas.length; i++) {
+      var preload = document.createElement("link");
+      preload.rel = "modulepreload";
+      preload.href = "/js/i18n/" + lang + "/" + areas[i] + ".js";
+      document.head.appendChild(preload);
+    }
   }
 } catch (e) {}
 

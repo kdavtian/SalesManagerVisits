@@ -125,6 +125,7 @@ import * as shellNav from "./shell/nav.js";
 import * as shellRoutes from "./shell/routes.js";
 import { markFirstScreenShown } from "./launchTiming.js";
 import { loadOtherStylesSoon } from "./styles.js";
+import { dropTabTrails, switchTab } from "./shell/tabs.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -306,6 +307,7 @@ window.addEventListener("app-rerender", () => {
 window.addEventListener("app-preferences-changed", () => {
   backStack.forEach(disposeBackEntry);
   backStack = [];
+  dropTabTrails(ctx);
   disposeParkedMap();
   pruneParkedSheet([]);
   lastNavSignature = null; // rebuild the tab bar, top bar and sidebar
@@ -379,10 +381,13 @@ const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/cu
 // refresh" gesture. A single tap never reloads, so an accidental tap costs
 // nothing. Tapping any other tab navigates as before.
 let lastActiveTabTap = { hash: "", at: 0 };
-function handleNavTap(target) {
+// `tab` is the tab tapped (its own address; the Home tab's target can be a screen inside Home): another tab comes back with its
+// pages as they were left (shell/tabs.js), or opens fresh when it has none kept.
+function handleNavTap(target, tab = target.split("?")[0]) {
   const targetBase = target.split("?")[0];
   const currentBase = (location.hash || "#/dashboard").split("?")[0];
   if (currentBase !== targetBase || !NAV_TAB_ROOT_HASHES.has(targetBase)) {
+    if (switchTab(ctx, tab)) return;
     navigate(target);
     return;
   }
