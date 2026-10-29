@@ -147,6 +147,10 @@ app.use(
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
+        // helmet adds upgrade-insecure-requests by default. Production keeps it; the test server (plain http://127.0.0.1) drops it,
+        // because Safari's engine (the iPhone browser tests, project "iphone-webkit") obeys it even on 127.0.0.1 and then asks for
+        // https://127.0.0.1, which fails every request. Chrome exempts 127.0.0.1 itself.
+        ...(process.env.NODE_ENV === "test" ? { upgradeInsecureRequests: null } : {}),
       },
     },
   })

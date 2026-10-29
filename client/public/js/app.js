@@ -627,6 +627,7 @@ async function refreshSessionOnFocus() {
   }
 }
 window.addEventListener("focus", refreshSessionOnFocus);
+window.addEventListener("online", refreshSessionOnFocus); // an app opened without network confirms the session once it is back
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") refreshSessionOnFocus();
 });
@@ -729,8 +730,19 @@ async function init() {
     startLocationBroadcast();
     startDriverArrival(navigate);
     startErrorMonitoring();
-  } catch {
-    setUser(null);
+  } catch (err) {
+    // Only the server's answer "not signed in / not allowed" (401, 403) signs out. No network, a timeout or a server error is not a
+    // sign-out: a rep opening the app without signal used to land on the login screen with the saved user deleted, locked out of the
+    // offline lists and the offline order queue until the signal came back (found by the iPhone browser tests, 1.471.0). Keep the saved
+    // user and the screen already drawn; the server still checks the session on every request, and the next focus re-asks /api/me.
+    if (err?.status === 401 || err?.status === 403 || !cachedUser) {
+      setUser(null);
+    } else {
+      skipRedundantRender = optimisticRenderDone;
+      startLocationBroadcast();
+      startDriverArrival(navigate);
+      startErrorMonitoring();
+    }
   }
   renderSyncBanner();
   flushQueue();

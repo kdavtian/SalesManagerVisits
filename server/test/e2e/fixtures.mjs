@@ -220,7 +220,7 @@ export async function loginViaUi(page, email, password = TEST_PASSWORD) {
 // multi-identity spec behaves identically.
 export async function newIdentityPage(browser) {
   const context = await browser.newContext({
-    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3101",
+    baseURL: process.env.E2E_BASE_URL ?? `http://127.0.0.1:${process.env.E2E_PORT ?? "3101"}`,
     extraHTTPHeaders: { "x-e2e-rate-limit-bypass": process.env.E2E_RATE_LIMIT_BYPASS_TOKEN ?? "e2e-suite-local-bypass" },
   });
   const page = await context.newPage();

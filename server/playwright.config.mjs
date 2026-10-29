@@ -23,6 +23,9 @@ import { defineConfig, devices } from "@playwright/test";
 // outside the E2E webServer, so production and the node:test integration
 // suite (which tests this same limiter's real behavior) are unaffected.
 const E2E_RATE_LIMIT_BYPASS_TOKEN = process.env.E2E_RATE_LIMIT_BYPASS_TOKEN ?? "e2e-suite-local-bypass";
+// The test server's port: a second run in parallel (scripts/local-ci.sh runs the Chrome smoke and the iPhone run side by side, each on
+// its own database) needs its own server.
+const PORT = process.env.E2E_PORT ?? "3101";
 
 export default defineConfig({
   testDir: "./test/e2e",
@@ -41,7 +44,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3101",
+    baseURL: process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
@@ -51,6 +54,14 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+    },
+    // Safari's engine (WebKit) on an iPhone screen, for the tests tagged @iphone (owner 2026-10-29: catch iPhone-only problems before
+    // a release). The launch slowdown of 1.468.0 (every Cache Storage entry slowed each launch) existed only in Safari and was invisible
+    // in Chrome. Run with `npm run test:e2e:iphone` (CI job "e2e (iphone webkit)"); needs `npx playwright install --with-deps webkit`.
+    {
+      name: "iphone-webkit",
+      use: { ...devices["iPhone 15"] },
+      grep: /@iphone/,
     },
   ],
   // Boots the real app against DATABASE_URL (set by whoever runs this --
@@ -62,11 +73,11 @@ export default defineConfig({
     ? undefined
     : {
         command: "node src/index.js",
-        url: "http://127.0.0.1:3101/api/health",
+        url: `http://127.0.0.1:${PORT}/api/health`,
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,
         env: {
-          PORT: "3101",
+          PORT,
           NODE_ENV: "test",
           E2E_RATE_LIMIT_BYPASS_TOKEN,
         },

@@ -317,6 +317,8 @@ test("split-object refuses what it cannot move safely", () => {
   assert.match(refused(API.replace('request("/me")', 'api.login("x")'), ["me"]), /uses api itself/);
   // this
   assert.match(refused(API.replace('me: () => request("/me")', 'me() { return this.login("x"); }'), ["me"]), /uses this/);
+  // a getter: joined back with a spread it would be read once and become a fixed value
+  assert.match(refused(API.replace('me: () => request("/me"),', 'get me() { return Date.now(); },'), ["me"]), /me: a getter cannot be moved/);
   // a key that is not there
   assert.match(refused(API, ["nope"]), /nope: not a plain property/);
   // duplicated key

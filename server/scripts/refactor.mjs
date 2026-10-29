@@ -24,7 +24,7 @@
 //       Split one big top-level object literal (the `api` object of api.js, a text dictionary) into several files: plan.json is
 //       { "path/to/target.js": { "name": "ordersApi", "keys": ["listOrders", ...] }, ... }. Each target exports `const <name> = { ... }`
 //       with those properties (text and comments exactly as they were), and the source object takes them back with `...<name>`, so
-//       the object has the same properties and values. Refused when a moved property uses a top-level declaration of the source (move
+//       the object has the same properties and values. Refused when a moved property is a getter/setter, uses a top-level declaration of the source (move
 //       it out first with extract-top: target and source would import each other), uses the object itself or `this`, or when a key is
 //       duplicated, missing or not a plain property.
 //
@@ -629,6 +629,11 @@ function splitObject(sourceRel, objectName, planFile) {
   for (const p of obj.properties) {
     const k = keyOf(p);
     if (k == null) continue;
+    // a getter / setter cannot travel through a spread: the getter would be read once at load and become a fixed value, the setter lost
+    if (p.kind !== "init") {
+      if (Object.values(plan).some((t) => t.keys.includes(k))) throw new Error(`${k}: a ${p.kind}ter cannot be moved (joining with ...spread would turn it into a fixed value); leave it in ${objectName}`);
+      continue;
+    }
     if (byKey.has(k)) throw new Error(`${k}: defined twice in ${objectName} (line ${p.loc.start.line})`);
     byKey.set(k, p);
   }
