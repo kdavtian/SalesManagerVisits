@@ -124,6 +124,7 @@ import { renderSyncBanner } from "./shell/syncBanner.js";
 import * as shellNav from "./shell/nav.js";
 import * as shellRoutes from "./shell/routes.js";
 import { markFirstScreenShown } from "./launchTiming.js";
+import { loadOtherStylesSoon } from "./styles.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -536,7 +537,10 @@ async function render() {
   const seq = ++renderSeq;
   try {
     await renderRoute();
-    if (seq === renderSeq) markFirstScreenShown();
+    if (seq === renderSeq) {
+      markFirstScreenShown();
+      loadOtherStylesSoon();
+    }
   } catch (err) {
     if (err === STALE_ROUTE) return;
     showRenderFailure(err);

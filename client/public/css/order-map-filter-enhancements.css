@@ -1,29 +1,4 @@
-/* Orders: keep both dimension filters inside the same compact search action rail. */
-.orders-region-filter-wrap {
-  flex: 0 0 auto;
-}
 
-.orders-region-filter-menu {
-  right: 0;
-  min-width: 220px;
-}
-
-.order-status-count-badge {
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  line-height: 1;
-  font-weight: 750;
-  margin-left: 2px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  color: currentColor;
-  font-variant-numeric: tabular-nums;
-}
 
 /* Map: manager -> channel -> category -> status, all in one search bar.
    #map-icon-filter-row is also styled as .customer-filter-row (shared
@@ -71,10 +46,6 @@
 .map-search-combined .map-search-actions {
   gap: 2px;
   align-items: center;
-}
-
-.map-search-combined .map-search-actions > * + * {
-  margin-left: 0;
 }
 
 /* Icon-only now (see unifiedSearchEnhancements.js, which visually-hides
@@ -137,9 +108,6 @@
   flex-direction: column;
   gap: 2px;
 }
-.map-dimension-popover #tree-sheet-body {
-  display: block;
-}
 .map-dimension-popover .route-plan-tree-search {
   flex: 0 0 auto;
   margin: 8px 8px 0;
@@ -161,71 +129,6 @@
   min-height: 42px;
 }
 
-/* Brand tree rows: the "customers" unit is dropped inside the popover so the
-   brand name (e.g. "Competitors") is never cut off by its own count. */
-.map-dimension-popover .route-plan-tree-unit {
-  display: none;
-}
-.map-dimension-popover .route-plan-tree-name {
-  text-overflow: clip;
-}
-
-.map-dimension-popover .filter-sheet-option {
-  min-height: 44px;
-  padding: 9px 11px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  font-size: .88rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 11px;
-  text-align: left;
-}
-
-.map-dimension-popover .filter-sheet-option:active {
-  background: var(--bg-card-pressed);
-}
-
-.map-dimension-popover .filter-sheet-option-selected {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-}
-
-/* Checkbox in front of every multi-select option, so what is ticked is
-   obvious at a glance (before, only a hidden trailing check existed). */
-.filter-sheet-box {
-  flex: 0 0 20px;
-  width: 20px;
-  height: 20px;
-  box-sizing: border-box;
-  border: 1.75px solid var(--control-border, var(--border));
-  border-radius: 6px;
-  background: var(--bg-card);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-.filter-sheet-box::after {
-  content: "";
-  width: 10px;
-  height: 5.5px;
-  border-left: 2.2px solid #fff;
-  border-bottom: 2.2px solid #fff;
-  transform: translateY(-1px) rotate(-45deg) scale(0);
-  transition: transform 120ms ease;
-}
-.filter-sheet-option-selected .filter-sheet-box {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.filter-sheet-option-selected .filter-sheet-box::after {
-  transform: translateY(-1px) rotate(-45deg) scale(1);
-}
-
 /* The map's search bar sits above the zoom/locate cluster, so a menu that
    drops down over the right-hand side is never hidden under those buttons. */
 .map-view .map-top-controls {
@@ -243,13 +146,6 @@
   .map-search-combined .map-search-actions {
     gap: 0;
   }
-
-  .order-status-count-badge {
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    font-size: 10px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -266,18 +162,6 @@
 .map-view .map-top-controls .map-search-row {
   position: relative;
   z-index: 3;
-}
-
-/* Customer tier chips inside the Map's type filter: the new-customer tier chips, but they wrap
-   (the filter opens as a narrow popover) and several can be on at once. */
-.map-tier-filter-title {
-  margin: 14px 0 6px;
-  padding: 0 14px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-dim);
 }
 
 .map-tier-filter-chips {
@@ -300,26 +184,4 @@
 .map-tier-filter-chips .tier-btn .tier-label {
   font-size: 0.6rem;
   text-overflow: clip;
-}
-
-/* The type + tier filter always shows complete, no scrolling: compact rows, no inner scroll area. */
-.map-dimension-popover.map-type-tier-sheet {
-  max-height: none;
-  overflow: visible;
-}
-
-.map-type-tier-sheet .map-type-options {
-  flex: 0 0 auto;
-  overflow: visible;
-  padding: 2px 7px 8px;
-}
-
-.map-type-tier-sheet .map-type-options .filter-sheet-option {
-  min-height: 40px;
-  padding-top: 6px;
-  padding-bottom: 6px;
-}
-
-.map-type-tier-sheet .map-tier-filter-title:first-of-type {
-  margin-top: 10px;
 }

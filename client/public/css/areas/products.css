@@ -1,0 +1,202 @@
+/* Styles of the "products" screens (docs/architecture-roadmap.md step 8c): loaded by js/styles.js before such a screen is drawn,
+   and in the background after the first screen. Moved here from the shared stylesheets by server/scripts/split-css.mjs, in their old
+   order; a new rule only screens of this area use goes here. */
+
+/* ---- from styles.css ---- */
+.pricelist-table-wrap {
+  overflow-x: auto;
+}
+.pricelist-table {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+.pricelist-table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.pricelist-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+}
+.pricelist-promo {
+  color: var(--danger);
+}
+.pricelist-filter-row:not(:empty) {
+  padding: 0 16px 10px;
+}
+.pricelist-expiring-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+.pricelist-brand-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 32px);
+  margin: 12px 16px 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.pricelist-brand-toggle span:first-child {
+  flex: 1;
+  text-align: left;
+}
+.pricelist-collapse-icon {
+  display: flex;
+  color: var(--text-dim);
+}
+/* No justify-content: space-between here on purpose -- with 3 flex
+   children (thumb, main, prices) that would center the middle one
+   (product name/details) in the leftover space instead of keeping it
+   flush against the thumb. .pricelist-row-main's own flex: 1 below does
+   the "push prices to the far right" job instead, while keeping the name
+   left-aligned right after the thumb. */
+.pricelist-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+/* Fixed square thumbnail, consistent regardless of the source image's
+   own aspect ratio (item 38) -- helps identify a product without ever
+   letting one oversized photo blow out a row's height. */
+.pricelist-row-thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--bg-elevated);
+}
+.pricelist-row-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+.pricelist-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.pricelist-row-prices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  white-space: nowrap;
+}
+.pricelist-price-special {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--danger);
+}
+.pricelist-price-standard-struck {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.pricelist-special-valid {
+  font-size: 0.7rem;
+}
+.pricelist-select-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+}
+.pricelist-row-selectable {
+  cursor: pointer;
+  padding-left: 40px;
+  position: relative;
+}
+.pricelist-select-check {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.pricelist-select-check-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+/* Desktop dense table (item 35) -- kicks in only at the >=900px
+   breakpoint (see isDesktop in pricelist.js); the mobile card list is
+   used below that regardless of window resize mid-session. */
+.pricelist-desktop-table {
+  min-width: 100%;
+}
+.pricelist-desktop-table th,
+.pricelist-desktop-table td {
+  padding: 8px 12px;
+}
+.pricelist-brand-toggle {
+  min-height: 44px;
+}
+.pricelist-row-open { cursor: pointer; align-items: center; }
+.pricelist-row-open:active { background: var(--bg-card-pressed); }
+.pricelist-row-main strong { overflow-wrap: anywhere; }
+/* The size ("1L", "4L") is what tells two cards of the same oil apart, so this line wraps instead of being cut with "...". */
+.pricelist-row-meta { overflow-wrap: anywhere; }
+.pricelist-row-thumb { object-fit: contain; background: #fff; border: 1px solid var(--border); }
+.pricelist-desktop-table .pricelist-row-thumb { width: 36px; height: 36px; }
+.pricelist-desktop-table th.pl-th-photo { width: 48px; }
+.pricelist-desktop-table td.pl-td-photo { padding-top: 4px; padding-bottom: 4px; }
+.pricelist-table-row { cursor: pointer; }
+.pricelist-table-row:hover { background: var(--bg-card-pressed); }
+.pl-col-option { display: flex; justify-content: space-between; align-items: center; }
+.pl-col-option input { width: 22px; height: 22px; }
+.export-choices { display: grid; gap: 8px; margin: 12px 0 16px; }
+/* Products: "Silver: 8,500 AMD" -- label and amount on ONE line (right aligned). */
+.pricelist-row-prices { align-items: flex-end; }
+.pl-price-line { white-space: nowrap; font-size: 0.78rem; color: var(--text-dim); }
+.pl-price-line strong { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.pl-price-primary { font-size: 0.95rem; }
+.pl-price-primary strong { font-weight: 800; }
+.pl-price-label { color: var(--text-dim); font-weight: 500; }
+.pl-price-line .pricelist-price-special { font-weight: 800; color: var(--danger); }
+.cost-calc .cc-brands { align-self: flex-start; }
+.cost-calc .cc-fig:nth-child(odd) { border-right: 1px solid var(--border); }
+.cost-calc .cc-details[open] summary::after { content: "\2212"; }
+.cost-calc .cc-sec[open] > summary { border-bottom: 1px solid var(--border); }
+.cost-calc .cc-item-name small { color: var(--text-dim); font-size: 0.7rem; }
+.cost-calc .cc-item-off .cc-item-name { opacity: 0.5; }
+.cost-calc .cc-item-val em { max-width: 58px; }
+.cost-calc .cc-item:has(.cc-item-del) .cc-item-del { grid-column: 4; }
+.cost-calc .cc-add #cc-add-name { grid-column: 1 / -1; }
+.cost-calc .cc-method-doc h4 { margin: 14px 0 4px; font-size: 0.92rem; }
+.cost-calc .cc-method-doc p, .cost-calc .cc-method-doc li { font-size: 0.82rem; line-height: 1.45; margin: 4px 0; }
+.cost-calc .cc-method-doc ul { padding-left: 18px; margin: 4px 0; }
+/* Product cards: a long label is shortened below the computer layout (1024px), kept in full above it. */
+.pl-lbl-short { display: none; }
+@media (max-width: 1023px) {
+  .pl-lbl-full { display: none; }
+  .pl-lbl-short { display: inline; }
+}

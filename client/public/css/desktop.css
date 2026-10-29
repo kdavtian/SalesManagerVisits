@@ -81,12 +81,6 @@
     top: -6px;
     right: -8px;
   }
-
-  /* ---------- 2. Filters keep a sensible width ---------- */
-
-  .list-header-row {
-    padding-top: 4px;
-  }
   .detail-view .list-toolbar,
   .detail-view .list-toolbar:not(.activity-search-combined) {
     max-width: 640px;
@@ -304,10 +298,6 @@
   .customer-detail-view > .form-error {
     grid-column: 1 / -1;
   }
-  .customer-detail-view .detail-actions-grid .action-btn {
-    font-size: 0.8rem;
-    padding: 12px 4px;
-  }
 
   /* ---------- 5. Column headings (Orders, Customers) ---------- */
 
@@ -463,48 +453,8 @@
   :root {
     --desk-cols-debt: 8px minmax(170px, 2.2fr) 118px 126px 112px 108px 108px 84px 142px 12px;
   }
-  .debt-desk-analysis {
-    display: flex;
-    gap: 12px;
-    align-items: stretch;
-    margin: 4px 0 12px;
-  }
-  .debt-desk-buckets {
-    flex: 1;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
-  }
-  .debt-desk-bucket {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-    padding: 10px 12px;
-    text-align: left;
-    font: inherit;
-    color: inherit;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    cursor: pointer;
-  }
-  .debt-desk-bucket:hover { background: var(--bg-card-pressed); }
   .debt-desk-bucket strong { font-size: 1.02rem; }
   .debt-desk-bucket .muted { font-size: 0.78rem; }
-  .debt-desk-bucket-on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft, rgba(10, 132, 255, 0.18)); }
-  .debt-desk-facts {
-    flex: 0 0 280px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-  }
-  .debt-desk-facts > div { display: flex; align-items: baseline; gap: 10px; }
   .debt-desk-facts strong { min-width: 3.2ch; text-align: right; font-size: 1.05rem; }
   .debt-desk-facts .muted { font-size: 0.8rem; line-height: 1.25; }
 
@@ -525,80 +475,20 @@
     border-bottom: 1px solid var(--border);
     border-radius: 0;
   }
-  .debt-desk-row {
-    display: grid;
-    grid-template-columns: var(--desk-cols-debt);
-    column-gap: 12px;
-    align-items: center;
-    width: 100%;
-    min-height: 58px;
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background-color 0.12s ease;
-  }
-  .debt-desk-row:last-child { border-bottom: 0; }
-  .debt-desk-row:hover { background: var(--bg-card-pressed); }
-  .debt-desk-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .debt-desk-row-overdue { box-shadow: inset 3px 0 0 var(--danger, #e33b43); }
-  .debt-desk-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .debt-desk-end { align-items: flex-end; text-align: right; }
-  .debt-desk-main { font-size: 0.9rem; overflow-wrap: anywhere; }
-  .debt-desk-sub { font-size: 0.76rem; overflow-wrap: anywhere; }
-  .debt-desk-name .debt-desk-main strong { font-weight: 600; }
-  .debt-desk-warn { color: var(--warning, #b7791f); }
-  .debt-desk-unrec { color: var(--warning, #b7791f); }
-  .debt-desk-group {
-    display: flex;
-    justify-content: space-between;
-    padding: 7px 16px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
   .debt-desk-list > .loading-state, .debt-desk-list > .empty-state { padding: 28px 16px; text-align: center; }
-  /* the phone's card-style total / filters stay, but the table needs the width: no 12px gap above it */
-  #debt-list.debt-desk-list { margin-top: 0 !important; }
 }
 
 /* ---------- 8. Map side list as a table (mapSideTable.js; docs/desktop-roadmap.md step 8) ----------
    customer | channel | debt | last visit | planned today; headers sort (tap again to reverse); a row pans to the pin and opens its popup. */
 @media (min-width: 1024px) {
-  .map-side-list { width: 440px; padding: 0; }
-  .mst-bar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 0.82rem; }
-  .mst-visible { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; white-space: nowrap; }
-  .mst-visible input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-  .mst-head,
-  .mst-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px 84px 60px 40px; align-items: center; column-gap: 8px; padding: 0 12px; }
-  .mst-head { position: sticky; top: 49px; z-index: 1; background: var(--bg); border-bottom: 1px solid var(--border); }
-  .mst-th { display: flex; align-items: center; gap: 2px; min-height: 32px; padding: 0; border: 0; background: none; color: var(--text-dim); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; text-align: left; }
-  .mst-th.mst-end { justify-content: flex-end; }
-  .mst-th.mst-center { justify-content: center; }
-  .mst-th.is-sorted { color: var(--text); }
-  .mst-th:focus-visible,
-  .mst-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
   .mst-row { width: 100%; min-height: 40px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: 0.84rem; text-align: left; cursor: pointer; }
   .mst-row:hover { background: var(--bg-hover, rgba(0, 0, 0, 0.04)); }
   .mst-row.is-active { background: var(--accent-soft, rgba(10, 132, 255, 0.1)); }
-  .mst-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
-  .mst-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mst-dot { flex: none; width: 8px; height: 8px; padding: 0; border-radius: 50%; background: var(--text-dim); }
   .mst-dot.badge-success { background: var(--success, #1a7f37); }
   .mst-dot.badge-danger { background: var(--danger, #d6403f); }
   .mst-dot.badge-info { background: var(--accent); }
   .mst-dot.badge-neutral { background: var(--border-strong, #c7c7cc); }
-  .mst-channel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.78rem; }
-  .mst-end { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .mst-center { display: flex; justify-content: center; }
-  .mst-stop { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; color: #fff; font-size: 0.72rem; font-weight: 700; }
-  .mst-empty, .mst-more { margin: 12px; font-size: 0.82rem; }
-}
-@media (min-width: 1400px) {
-  .map-side-list { width: 440px; }
-  .mst-head,
-  .mst-row { grid-template-columns: minmax(0, 1fr) 72px 90px 66px 40px; }
-}
-@media (min-width: 1600px) {
-  .map-side-list { width: 500px; }
 }
 
 /* ---------- 9. Tables on the desktop table engine (deskTable.js createDeskTable; docs/desktop-roadmap.md steps 1-2) ----------
@@ -976,13 +866,6 @@
     padding-left: 16px;
     padding-right: 16px;
   }
-  /* the Orders action bar (confirm / reject / deliver / print) sits at the bottom right beside the table */
-  .orders-select-bar {
-    left: auto;
-    right: 24px;
-    bottom: 24px;
-    width: 420px;
-  }
   /* row count + export under the table */
   .desk-foot {
     display: flex;
@@ -1053,12 +936,6 @@
     position: static;
     float: none;
     margin: 0;
-  }
-  .customer-panel-open {
-    font-size: 0.86rem;
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
   }
   .customer-panel-body .customer-detail-view {
     display: block;
@@ -1164,58 +1041,19 @@
   .sales-desk-list .dtl-row { grid-template-columns: var(--desk-cols-sales); }
   .pay-desk-list > .desk-thead,
   .pay-desk-list .dtl-row { grid-template-columns: var(--desk-cols-pay); }
-  .dtl-row {
-    display: grid;
-    column-gap: 12px;
-    align-items: center;
-    width: 100%;
-    min-height: 54px;
-    padding: 8px 16px;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    cursor: pointer;
-    transition: background-color 0.12s ease;
-  }
-  .dtl-row:hover { background: var(--bg-card-pressed); }
-  .dtl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .dtl-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; text-align: left; }
-  .dtl-end { align-items: flex-end; text-align: right; }
-  .dtl-main { font-size: 0.9rem; overflow-wrap: anywhere; }
-  .dtl-sub { font-size: 0.76rem; overflow-wrap: anywhere; }
-  .dtl-name .dtl-main strong { font-weight: 600; }
-  .dtl-group { display: flex; justify-content: space-between; padding: 7px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
   .dtl-list > .loading-state, .dtl-list > .empty-state { padding: 28px 16px; text-align: center; }
   #payments-list.dtl-list > .btn-block { margin: 12px 16px; width: auto; }
-}
-
-/* Cashflow period row on a computer: one row of natural-width pills (the 3-column grid is for phones) */
-@media (min-width: 1024px) {
-  .cf-periods { display: flex; flex-wrap: wrap; }
-  .cf-periods .cf-period, .cf-period-pair .cf-period:first-child { flex: 0 0 auto; padding: 0 18px; }
-  .cf-period-pair { display: contents; }
 }
 
 /* ---------- 10. Customer card in three columns (>= 1400 px; customerWide.js; docs/desktop-roadmap.md step 3) ----------
    left: facts, mini map, stat tiles, actions, products | middle: the whole visit history | right: tasks, next visit, orders,
    payments, files. A sheet opened from the card docks to the right (dockSheet.js) and takes the right column's place. */
 @media (min-width: 1400px) {
-  .customer-detail-view.cd-three > .cd-col {
-    display: none;
-  }
-  .customer-detail-view.cd-three > .cd-wide {
-    grid-column: 1 / -1;
-  }
   .cd-wide {
     display: grid;
     grid-template-columns: minmax(340px, 1fr) minmax(340px, 1.15fr) minmax(320px, 1fr);
     column-gap: 20px;
     align-items: start;
-  }
-  .cd-wcol {
-    min-width: 0;
   }
   .cd-wcol > .section-title:first-child,
   .cd-wcol > .cd-panel:first-child .section-title,
@@ -1238,43 +1076,6 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
   }
-  .cd-wcol-mid #checkin-history > .checkin-row {
-    margin: 0;
-    min-height: 52px;
-    padding: 8px 14px;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .cd-wcol-mid #checkin-history > .checkin-row:last-child {
-    border-bottom: 0;
-  }
-  .cd-wcol-mid #checkin-history > .checkin-row:hover {
-    background: var(--bg-card-pressed);
-  }
-  .cd-wcol-mid .checkin-row-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 12px;
-    min-width: 0;
-  }
-  .cd-wcol-mid .checkin-row-main > .checkin-row-outcomes {
-    grid-column: 1 / -1;
-  }
-  .checkin-row-outcomes {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 0.82rem;
-    color: var(--text-dim);
-  }
-
-  /* right-column panels */
-  .cd-panel {
-    margin-bottom: 16px;
-  }
   .cd-panel-head {
     display: flex;
     align-items: baseline;
@@ -1285,16 +1086,6 @@
   .cd-panel-head .section-title {
     margin: 0;
   }
-  .cd-panel-link {
-    padding: 4px 2px;
-    border: 0;
-    background: none;
-    color: var(--accent);
-    font: inherit;
-    font-size: 0.86rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
   .cd-panel-body {
     padding: 4px 0;
   }
@@ -1303,129 +1094,8 @@
     margin: 0;
     padding: 12px 14px;
   }
-  .cd-row {
-    display: grid;
-    grid-template-columns: 76px minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: 10px;
-    width: 100%;
-    min-height: 40px;
-    padding: 6px 14px;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    background: none;
-    color: inherit;
-    font: inherit;
-    font-size: 0.9rem;
-    text-align: left;
-    cursor: pointer;
-  }
-  button.cd-row:hover {
-    background: var(--bg-card-pressed);
-  }
-  .cd-row:last-child {
-    border-bottom: 0;
-  }
-  .cd-row-date {
-    color: var(--text-dim);
-    font-variant-numeric: tabular-nums;
-  }
-  .cd-row-main {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-  }
-  .cd-row-code {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   .cd-row-main > .badge {
     flex: none;
-  }
-  .cd-row-date {
-    white-space: nowrap;
-  }
-  .cd-row-amount {
-    justify-self: end;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .cd-row-total {
-    cursor: default;
-    font-weight: 700;
-  }
-  .cd-thumbs {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 6px;
-    padding: 8px 10px 4px;
-  }
-  .cd-thumb {
-    position: relative;
-    aspect-ratio: 1;
-    padding: 0;
-    overflow: hidden;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--bg);
-    cursor: pointer;
-  }
-  .cd-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-  .cd-thumb .files-blank-pdf {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-  }
-  .cd-thumbs-count {
-    margin: 0;
-    padding: 4px 12px 8px;
-    font-size: 0.8rem;
-  }
-
-  /* small map under the facts */
-  .cd-mini-map {
-    position: relative;
-    padding: 0;
-    overflow: hidden;
-    margin-bottom: 12px;
-  }
-  .cd-mini-map-canvas {
-    height: 190px;
-    background: var(--bg);
-  }
-  .cd-mini-map-open {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    z-index: 500;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 32px;
-    padding: 0 12px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: var(--bg-card);
-    color: var(--accent);
-    font: inherit;
-    font-size: 0.84rem;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-    cursor: pointer;
-  }
-  .cd-mini-map-open svg {
-    width: 16px;
-    height: 16px;
   }
   .cd-mini-map .leaflet-control-attribution {
     font-size: 9px;
@@ -1736,25 +1406,6 @@
     align-items: start;
     padding: 16px 24px 24px;
   }
-  .reports-side {
-    position: sticky;
-    top: 0;
-    max-height: calc(100vh - 80px);
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  .reports-side-title {
-    margin: 4px 8px 8px;
-    font-size: 1.4rem;
-  }
-  .reports-side-heading {
-    padding: 12px 8px 4px;
-    font-size: var(--fs-eyebrow, 0.72rem);
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-dim);
-  }
   .reports-side-item {
     display: flex;
     align-items: center;
@@ -1779,25 +1430,6 @@
     color: var(--accent);
     font-weight: 600;
   }
-  .reports-side-icon {
-    display: flex;
-    flex: none;
-    color: var(--accent);
-  }
-  .reports-side-icon svg {
-    width: 18px;
-    height: 18px;
-  }
-  .reports-side-name {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* the report in the right pane: no Back (the list is beside it), no page padding of its own */
-  .reports-pane {
-    min-width: 0;
-  }
   .reports-pane > .detail-view {
     padding: 0;
   }
@@ -1813,17 +1445,6 @@
     display: flex;
     gap: 8px;
     margin-left: auto;
-  }
-  .reports-tool {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 34px;
-    white-space: nowrap;
-  }
-  .reports-tool svg {
-    width: 16px;
-    height: 16px;
   }
 }
 
@@ -1853,9 +1474,7 @@
    Above 1400 px Team performance puts its channel cards in a grid, the Company dashboard puts sales on the left and the
    prospects / stock / brand volume on the right, and Cashflow keeps accounts and categories in a side column beside the movements. */
 @media (min-width: 1400px) {
-  .perf-channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; align-items: start; }
   .perf-channel-grid > .card { margin: 0; }
-  .perf-aggregate-card { margin-bottom: 12px; }
 
   .company-dashboard-view { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
   .company-dashboard-view > .detail-header,
@@ -1864,11 +1483,6 @@
   .company-dashboard-view > .company-dashboard-side { min-width: 0; }
   #company-dashboard-sales .card-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); padding-left: 0; padding-right: 0; }
   #company-dashboard-rest .card-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 0; padding-right: 0; }
-
-  .cf-body { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
-  .cf-side { min-width: 0; }
-  .cf-side .cf-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
-  .cf-main { min-width: 0; }
   .cf-main .cf-search { margin-left: 0; margin-right: 0; }
 }
 
@@ -1877,7 +1491,6 @@
    funnel menu), and the pin key opens as a panel on the right that stays open while the map is used (map.js skips its outside-click
    close at this width). */
 @media (min-width: 1400px) {
-  .map-canvas { display: flex; flex-direction: column; }
   .map-view .map-top-controls { position: relative; inset: auto; order: -1; flex: none; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--border); }
   .map-canvas > #leaflet-map { flex: 1; height: auto; min-height: 0; }
   .map-view .map-controls,
@@ -1887,9 +1500,6 @@
   .map-view .map-dimension-filter-inline .map-dimension-filter-btn { flex: 0 0 auto; width: auto; min-width: 40px; padding: 0 12px; gap: 6px; }
   .map-view .map-dimension-filter-inline { gap: 4px; }
   .map-view .map-dimension-filter-btn::after { content: attr(title); font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
-
-  /* the status menu as a row of chips under the search field */
-  .map-view .map-top-controls .map-search-row { margin-bottom: 46px; }
   .map-view .map-top-controls .map-search-actions,
   .map-view .map-primary-filter-wrap { position: static; }
   .map-view .map-primary-filter-wrap > .activity-search-filter-btn { display: none; }
@@ -1930,33 +1540,6 @@
   .map-view .map-search-filter-menu > .map-filter-chip.filter-dropdown-selected,
   .map-view .map-search-filter-menu > .map-filter-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft, rgba(10, 132, 255, 0.12)); color: var(--accent-dark, var(--accent)); }
   .map-view .map-search-filter-menu .activity-menu-check { display: none; }
-  .map-view .map-search-filter-menu .map-filter-chip-icon svg { width: 16px; height: 16px; }
-
-  /* the pin key: a panel on the right, the map narrows beside it */
-  .map-view .map-legend-panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: auto;
-    width: 320px;
-    max-width: none;
-    max-height: none;
-    margin: 0;
-    padding: 0 16px 12px;
-    border: 0;
-    border-left: 1px solid var(--border);
-    border-radius: 0;
-    box-shadow: none;
-    transform: none !important;
-    z-index: 1020;
-  }
-  .map-view .map-legend-panel .map-sheet-grab { display: none; }
-  .map-view .map-legend-panel .map-legend-header { padding-top: 12px; }
-  .map-canvas:has(#map-legend-panel:not([hidden])) { padding-right: 320px; }
-  .map-canvas:has(#map-legend-panel:not([hidden])) .map-controls { right: 332px; }
-  /* with the key open the bar is narrower: the filter buttons go back to icons */
-  .map-canvas:has(#map-legend-panel:not([hidden])) .map-dimension-filter-btn::after { content: none; }
 }
 
 /* Desktop roadmap step 9: mouse-sized controls on a computer. */
@@ -1970,10 +1553,6 @@
     padding-left: 22px;
     padding-right: 22px;
     align-self: flex-start;
-  }
-  .rps-top-row {
-    display: flex;
-    flex-wrap: wrap;
   }
   .rps-top-row .btn {
     flex: 0 0 auto;

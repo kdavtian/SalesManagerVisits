@@ -1,0 +1,548 @@
+/* Styles of the "field" screens (docs/architecture-roadmap.md step 8c): loaded by js/styles.js before such a screen is drawn,
+   and in the background after the first screen. Moved here from the shared stylesheets by server/scripts/split-css.mjs, in their old
+   order; a new rule only screens of this area use goes here. */
+
+/* ---- from styles.css ---- */
+/* Used for the "new customer" sheet, opened right after dropping a pin —
+   a lighter wash keeps the just-placed pin clearly visible above the sheet
+   instead of being obscured by a near-opaque backdrop. */
+.sheet-overlay-light {
+  background: rgba(0, 0, 0, 0.15);
+}
+.plan-day-list {
+  max-height: 45vh;
+  overflow-y: auto;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.plan-day-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+/* Highlight the row itself by color when its checkbox is checked, instead
+   of relying on the checkbox's own default outline/border to show
+   selection state. */
+.plan-day-row:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.plan-day-row input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.weekday-picker {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0;
+}
+.weekday-btn {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+}
+.weekday-btn-active {
+  /* background/border-color come from the shared design-system migration
+     block further down (--accent-fill) -- declared here too previously,
+     but that always lost the cascade to the later rule and, in dark mode,
+     silently disagreed with it (--accent is a different color from
+     --accent-fill there). */
+  color: #ffffff;
+}
+.route-plan-rep-card {
+  margin-bottom: 10px;
+}
+.route-plan-rep-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.route-plan-week-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+}
+.route-plan-week-row-standalone {
+  margin: 10px 0;
+}
+.route-plan-day-chip {
+  /* Seven chips share the row width instead of each demanding 44px (7 x 44 +
+     gaps = 344px, wider than the card), which cut "Sun" off at the edge. */
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 4px;
+  cursor: pointer;
+  min-height: 48px;
+}
+.route-plan-day-chip-active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  border-color: var(--accent);
+}
+.route-plan-day-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.route-plan-day-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.route-plan-view-customers-btn {
+  margin-top: 6px;
+}
+/* "View customers" sheet: same Region -> Subregion -> Customer accordion
+   shape as .route-plan-tree-* (customer-pick sheet), but read-only -- each
+   leaf row shows day-of-week badges instead of a selection checkbox, so a
+   manager can see at a glance who's assigned to which weekday(s) and who
+   isn't assigned to any (route-plan-day-badge-unplanned, sorted first
+   within each group). */
+.route-plan-customer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.route-plan-customer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-plan-customer-badges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.route-plan-day-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.route-plan-day-badge-unplanned {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+/* Region/subregion group headers get the same day badges, summarizing
+   every day covered by ANY customer inside that group (union, not a
+   per-customer breakdown -- expanding the group already shows that).
+   A sibling of .route-plan-tree-row rather than nested inside it, so this
+   never touches that row's own flex layout -- .route-plan-tree-row is
+   shared with the checkbox-driven customer-PICK tree (regionTree.js),
+   which must keep its single-line name/count/chevron shape untouched. */
+.route-plan-tree-group-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 8px 8px;
+  margin-top: -4px;
+}
+.route-plan-tree-node-nested > .route-plan-tree-group-badges {
+  padding-left: 0;
+}
+/* Smaller than the leaf-row badge (.route-plan-day-badge) -- a group
+   header already carries the region/subregion name plus a customer
+   count, so its own badge row stays compact rather than competing for
+   the same visual weight. */
+.route-plan-day-badge-sm {
+  font-size: 0.62rem;
+  padding: 1px 6px;
+}
+/* Capped at 3 real day badges (MAX_GROUP_DAY_BADGES in routePlans.js) --
+   a region open every day of the week would otherwise print 6-7 pills
+   across the header and defeat the point of a quick summary. The "+N"
+   overflow badge carries the rest as a native title tooltip (a same
+   best-effort as the desktop hover it actually works on -- the group is
+   one tap away from expanding into the full per-customer breakdown
+   either way, so this never gates real information, just how it's first
+   glanced at) and is neutral-toned so it doesn't read as its own weekday. */
+.route-plan-day-badge-overflow {
+  background: var(--bg);
+  color: var(--text-dim);
+}
+.plan-day-row-radio input {
+  border-radius: 50%;
+}
+/* Routes Distribution: channel button on the right of each region/subregion
+   row, and the floating bulk-apply bar. */
+.rd-channel-btn {
+  flex-shrink: 0;
+  min-height: 32px;
+  max-width: 40%;
+  padding: 4px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rd-channel-set {
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.rd-channel-inherited {
+  font-style: italic;
+}
+.rd-channel-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.rd-bulk-bar {
+  position: sticky;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-elevated, var(--bg-card));
+  box-shadow: var(--shadow-elevated, 0 4px 16px rgba(0, 0, 0, 0.2));
+}
+.rd-bulk-bar[hidden] {
+  display: none;
+}
+.rd-bulk-bar > span {
+  margin-right: auto;
+  font-weight: 600;
+}
+/* Route plans: pressing a weekday chip must highlight THAT chip only. The
+   generic ".card:active" press effect (shrink + fade) used to fire on the
+   whole rep card, because the chip is a child of the card. */
+.route-plan-rep-card:active {
+  transform: none;
+  opacity: 1;
+  background: var(--bg-card);
+}
+.route-plan-day-chip {
+  transition: transform 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.route-plan-day-chip:active {
+  transform: scale(0.92);
+  background: var(--bg-card-pressed);
+  border-color: var(--accent);
+}
+/* Route plan sets: Auto route plan sheet, plans list, plan editor (views/routePlanSets.js) */
+.rps-top-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.rps-auto-btn {
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  border: none;
+  font-weight: 600;
+}
+.rps-sheet {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.rps-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rps-sheet-head h2 {
+  margin: 0;
+}
+.rps-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.rps-note {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+}
+.rps-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.rps-chips input[type="number"] {
+  width: 72px;
+  min-height: 40px;
+}
+.rps-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+.rps-day-name {
+  flex: 0 0 44px;
+  font-weight: 600;
+}
+.rps-seg {
+  flex: 1 1 auto;
+  display: flex;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+}
+.rps-seg button {
+  flex: 1 1 0;
+  min-height: 40px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.rps-seg button.seg-active {
+  background: var(--bg-card, #fff);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.rps-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rps-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rps-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rps-badge {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--success, #1f9d55) 16%, transparent);
+  color: var(--success, #1f9d55);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.rps-badge-off {
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+}
+.rps-head-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rps-head-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.rps-head-stats > span {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.rps-warn {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  color: var(--warning, #b36b00);
+}
+.rps-freq-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+.rps-actions {
+  margin-top: 8px;
+}
+.rps-actions-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rps-rep {
+  margin-top: 10px;
+  cursor: default;
+}
+.rps-rep-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rps-unplanned {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning, #b36b00) 14%, transparent);
+  color: var(--warning, #b36b00);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rps-daylist {
+  margin-top: 10px;
+}
+.rps-daylist-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rps-daylist-head .rps-link {
+  margin-left: auto;
+}
+.rps-cust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rps-cust:disabled {
+  cursor: default;
+}
+.rps-cust-n {
+  flex: 0 0 24px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.rps-cust-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.rps-chev {
+  color: var(--text-dim);
+}
+.rps-day-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 10px 0;
+}
+.rps-day-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 52px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.rps-day-pick.is-current {
+  background: var(--bg-card-pressed, rgba(128, 128, 128, 0.15));
+  color: var(--text-dim);
+  cursor: default;
+}
+.rps-unplanned-item {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.rps-delete {
+  display: block;
+  margin: 4px 0 0 auto;
+  color: var(--danger);
+}
+.rps-sheet input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+}
+.rps-seg button {
+  min-height: 36px;
+}
+.rps-head #rps-ok {
+  margin-top: 10px;
+}
+/* A person's separate plan (SM B2B) under their own week row on "my route plan". */
+.route-plan-scope-title { margin: 16px 4px 6px; font-size: 1rem; }
+/* Route plans: the red number on "View customers" is its own tap target (only the customers on no day); the invisible padding makes it easy to hit. */
+.route-plan-unplanned-badge { position: relative; cursor: pointer; }
+.route-plan-unplanned-badge::after { content: ""; position: absolute; inset: -12px -10px; }
+
+/* ---- from desktop.css ---- */
+@media (min-width: 1024px) {
+  .rps-top-row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}

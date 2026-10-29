@@ -38,52 +38,8 @@
 }
 .unified-search-clear svg { width: 18px; height: 18px; display: block; }
 
-/* ----- Customers ------------------------------------------------------- */
-.customers-search-combined {
-  position: relative;
-  overflow: visible;
-}
-
-.customers-search-actions {
-  gap: 1px;
-}
-
 .customer-filter-inline {
   display: contents;
-}
-
-.unified-customer-filter-btn {
-  flex: 0 0 auto;
-}
-
-.customers-search-menu {
-  right: 0;
-}
-
-.customer-map-add-action {
-  width: 50px !important;
-  height: 50px !important;
-  min-width: 50px;
-  padding: 0 !important;
-  border-radius: 16px !important;
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent) !important;
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border)) !important;
-  box-shadow: var(--shadow-subtle);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.customer-map-add-action:active {
-  transform: scale(.95);
-  background: color-mix(in srgb, var(--accent) 13%, var(--bg-card)) !important;
-}
-
-.customer-map-add-action svg {
-  width: 27px !important;
-  height: 27px !important;
 }
 
 /* ----- Orders ---------------------------------------------------------- */
@@ -131,13 +87,6 @@
   -webkit-tap-highlight-color: transparent;
   transition: transform 90ms ease, background 120ms ease, box-shadow 120ms ease;
 }
-
-.orders-new-action:active {
-  transform: scale(.94);
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-card)) !important;
-  box-shadow: 0 2px 7px rgba(15, 23, 42, .08);
-}
-.orders-new-action svg { width: 28px; height: 28px; }
 
 /* ----- Map ------------------------------------------------------------- */
 .map-search-combined {
@@ -243,13 +192,6 @@
 .map-search-filter-menu .map-filter-chip-icon svg { width: 21px; height: 21px; }
 .map-search-filter-menu .activity-menu-check { margin-left: auto; }
 
-/* The primary chip row lives in the popup now; brand-specific choices are
-   intentionally still rendered below the search field only after Brands is
-   selected, because those are the second level of that filter. */
-.map-top-controls > .map-filter-row:not(#brand-picker-row) {
-  margin: 0;
-}
-
 /* Keep all search action bars visually balanced even when the clear X appears. */
 @media (max-width: 430px) {
   .customers-search-actions .activity-search-filter-btn,
@@ -268,9 +210,6 @@
 @media (max-width: 380px) {
   .customers-search-actions .activity-search-filter-btn {
     width: 35px;
-  }
-  .customers-search-combined input[type="search"] {
-    min-width: 64px;
   }
 }
 

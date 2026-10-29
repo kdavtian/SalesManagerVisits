@@ -1,0 +1,1635 @@
+/* Styles of the "money" screens (docs/architecture-roadmap.md step 8c): loaded by js/styles.js before such a screen is drawn,
+   and in the background after the first screen. Moved here from the shared stylesheets by server/scripts/split-css.mjs, in their old
+   order; a new rule only screens of this area use goes here. */
+
+/* ---- from styles.css ---- */
+/* A small heading inside a menu (Payments: "Customer confirmation"). */
+.dropdown-menu-label { padding: 6px 12px 2px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+/* Customer Debt report's own "Total debt" figure (reports.js) -- the base
+   .stat-value size/color work fine for every other stat-card (a percentage,
+   a count, a comparison delta), but a full AMD total across the whole
+   customer base can run to 9+ digits, which at 1.7rem wrapped onto two
+   lines inside the card instead of reading as one clean number (reported
+   as "doesn't fit the button"). Scoped to this one figure rather than the
+   shared .stat-value class, which every other report/dashboard stat-card
+   still uses unchanged. Graphite instead of the bright accent blue those
+   other stat-cards use, matching the same near-black --text tone every
+   other primary figure in the app (customer detail's own stat tiles, debt
+   balance amounts) already reads in. */
+/* Any stat card whose figure is an AMD amount (reports, via util.js
+   amdWithUnitHtml): number plus a small unit, shrinking a little on narrow
+   phones so a 9-10 digit total and its unit stay on one line inside a
+   half-width card instead of "AMD" dropping to a second line or the grid
+   running wider than the screen. Size and wrapping only -- each card keeps
+   its own colour. */
+.stat-value-amd {
+  font-size: 1.2rem;
+  font-size: clamp(1rem, 4.7vw, 1.3rem);
+  overflow: hidden;
+  min-width: 0;
+}
+.report-debt-total-value {
+  font-size: 1.3rem;
+  /* Scales down a little on narrow phones so a 9-10 digit total plus its
+     unit still fits the half-width card on one line. Both stat cards on
+     this page share this class so the figure and the customer count read
+     as the same kind of number (they used to differ in size and colour). */
+  font-size: clamp(1.05rem, 5.4vw, 1.4rem);
+  color: var(--text);
+  white-space: nowrap;
+  /* No ellipsis: a clipped "…" hides the amount. fitReportStatValue() in
+     reports.js shrinks the AMD unit first, then the figure, until it fits. */
+  overflow: visible;
+}
+.text-danger {
+  color: var(--danger);
+}
+.stat-grid-4 {
+  margin-bottom: 6px;
+}
+.expense-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+.expense-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.expense-card-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.expense-card-amount {
+  flex-shrink: 0;
+  font-size: var(--fs-amount);
+  font-weight: var(--fw-amount);
+}
+.expense-card-readonly {
+  opacity: 0.5;
+  cursor: default;
+}
+.expenses-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.expenses-filters input[type="search"] {
+  flex: 1;
+  min-width: 0;
+}
+/* The date filter itself is now the shared .pill-date-filter-wrap (see
+   styles.css's "Generic native pill-style date filter" block) -- sized
+   here rather than flex: 1 like its sibling search input, since a date
+   pill only needs to fit its own caption/value text. */
+.expenses-filters .pill-date-filter-wrap {
+  flex: 0 0 42%;
+}
+/* Debt Balances' as-of-date filter: a compact pill in the header, pushed
+   to the right edge the same way .perf-month-filter-wrap is on Team
+   Performance -- same "invisible native <input> laid over a styled
+   button" technique (see .debt-as-of-picker-input below), so a tap opens
+   each browser/OS's own native date picker (the iOS wheel scroller)
+   directly instead of a custom calendar UI. */
+.debt-as-of-filter-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+.debt-as-of-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* The small "back to live" clear -- sits on top of the invisible date
+   input (not behind it) with pointer-events re-enabled, so tapping it
+   clears the filter instead of reopening the date picker. */
+.debt-as-of-clear-btn {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.debt-as-of-clear-btn svg {
+  width: 13px;
+  height: 13px;
+}
+/* Debt Balances headline total: a filled card, same visual language as
+   Warehouse Inventory's own .inventory-grand-total so every "total across
+   what's currently on screen" summary in the app reads the same way.
+   Empty (no rows to sum) hides entirely rather than showing "Total: 0
+   AMD" as if there really were a balance. */
+.debt-total-card {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-subtle);
+  padding: 12px 14px;
+  margin: 10px 16px 0;
+}
+.debt-total-amount {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+/* Mode tabs (Flat/By-manager) and the manager filter dropdown side by side
+   in one row instead of the manager filter dropping to its own full-width
+   line below -- the two are never both the full row's concern at once
+   (the manager filter only matters, and only shows, in by-manager mode),
+   so they read as one filter control, not two stacked ones. */
+.debt-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 0;
+}
+/* Generic native pill-style date filter -- an invisible native <input
+   type="date"/"month"> overlaid on a styled, non-interactive button, so
+   the tap target looks like the rest of the app's pills but still opens
+   the OS's own native picker (same haptics/behavior as a raw input, only
+   the visual differs). Originally sales-date-filter-* (Sales page only);
+   generalized so every screen with a plain native date filter can share
+   one CSS block instead of each carrying its own near-identical copy.
+   NOT used by Activity's own custom range -- that one already has a
+   richer, non-native wheel-picker treatment (see
+   activity-date-picker.css / activityDatePicker.js), deliberately built
+   because Safari's native date input can't be given a "Today" action or
+   have its Reset/Done toolbar localized to the app's own language. */
+.pill-date-filter-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px 0;
+}
+.pill-date-filter-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.pill-date-filter-btn {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  pointer-events: none; /* the real <input type="date"> laid on top (see
+                            .pill-date-picker-input) is what actually
+                            receives the tap. */
+}
+.pill-date-filter-caption {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+.pill-date-filter-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pill-date-picker-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.payment-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.payment-row-bottom-line {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+/* Reports list v2 (1.358.0): grouped, one 56 px row per report, the
+   explanation behind a "!" (was a 3-4 line paragraph on each of 19 cards). */
+.report-group-title {
+  margin: 14px 4px 6px;
+}
+.report-group {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.report-item {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--border);
+}
+.report-item:first-child {
+  border-top: 0;
+}
+.report-list-card {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 4px 8px 12px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.report-list-card strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.report-item-chevron {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  display: flex;
+}
+.report-item-chevron svg {
+  width: 18px;
+  height: 18px;
+}
+.report-item-info {
+  flex: 0 0 auto;
+  margin: 0 16px 0 10px;
+}
+.report-list-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-fill);
+}
+.report-list-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.report-filter-form .report-period-tabs::-webkit-scrollbar {
+  display: none;
+}
+/* Long Armenian titles wrap NEXT to the back button instead of dropping
+   below it (Daily management report). */
+.report-header {
+  flex-wrap: nowrap;
+}
+.fuel-settings-btn {
+  min-height: 44px;
+}
+.report-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.report-filter-form select {
+  /* Two dropdowns per row (was one per row: the Visits report's four
+     filters took 240 px of height before the first result). */
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+  /* form select's width: 100% becomes this flex item's basis when
+     flex-basis is auto (the "auto" in flex: 1 1 auto), so without this
+     override each select claims a full-width basis and two of them can
+     never share a row -- always wrapping to one-per-line regardless of
+     how much space is actually free. */
+  width: auto;
+}
+.report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  /* The Documents report renders these as <a href> download links (a plain
+     <div> can't trigger a browser download) -- override the default
+     anchor underline/color so it still reads as a card row, not a link. */
+  text-decoration: none;
+  color: inherit;
+}
+.report-row-multiline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+}
+.report-row-amount {
+  white-space: nowrap;
+  text-align: right;
+}
+/* Customer debt list card: name on the left, the debt figure (the point of
+   the row) bold on the right, channel/aging underneath. */
+.report-debt-customer-top {
+  align-self: stretch;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.report-debt-customer-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Customer debt filters: As-of pill, channel and debt-only selects stacked
+   as three equal full-width controls. Before, the channel select shared a
+   line with the date pill and was stretched to the pill's height while the
+   other select (on its own line) kept its natural one; the pill row's own
+   16px side padding also pushed the pill off the selects' left edge. */
+.report-debt-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+/* The as-of pill spans the full width; channel and debt-only share the
+   next row, two equal columns. */
+.report-debt-filters .pill-date-filter-row {
+  grid-column: 1 / -1;
+}
+.report-debt-filters .pill-date-filter-row {
+  padding: 0;
+  align-items: stretch;
+}
+.report-debt-filters .pill-date-filter-btn {
+  min-height: 46px;
+}
+.report-debt-filters select {
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  text-overflow: ellipsis;
+}
+.pill-date-clear-btn {
+  flex: 0 0 46px;
+  width: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.pill-date-clear-btn[hidden] {
+  display: none;
+}
+.pill-date-clear-btn svg {
+  width: 18px;
+  height: 18px;
+}
+/* Cash reconciliation (renderCashReconciliationReport): date left, difference
+   right; any day whose difference is not 0 fills the whole card red (no outline). */
+.cash-recon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cash-recon-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.cash-recon-top > strong {
+  text-align: left;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cash-recon-top > span {
+  margin-left: auto;
+  text-align: right;
+}
+.cash-recon-card-diff {
+  background: color-mix(in srgb, var(--danger) 20%, var(--bg-card));
+  border-color: transparent;
+}
+.cash-recon-diff-amount {
+  font-weight: 700;
+  color: var(--danger);
+}
+.sync-adjusted-note {
+  font-weight: 400;
+  opacity: 0.8;
+}
+.order-date-heading-label {
+  font-size: var(--fs-eyebrow);
+  font-weight: var(--fw-eyebrow);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-eyebrow);
+}
+.order-date-heading-stats {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Sales order card: identical two-up-row layout to the debt balance card
+   above (ID/channel + amount, then the customer name, then the order id),
+   just under its own name since it's a different screen -- see
+   views/sales.js. */
+.sales-order-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sales-order-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.85rem;
+}
+/* Truncates instead of wrapping -- a long order id + channel string
+   (e.g. "ORD-2026-00001234 · SM Davtashen") used to wrap onto a second
+   line, leaving the amount pinned to just the first line and visually
+   detached from a clean right edge (reported as "amounts aren't
+   right-aligned"). min-width: 0 is required for text-overflow to take
+   effect on a flex item, which otherwise refuses to shrink below its
+   content's natural width. */
+.sales-order-row > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.sales-source-hint {
+  margin: 6px 0 0;
+}
+/* Sales screen's channel filter -- same tappable-pill pattern as
+   .activity-manager-bar (Activity's "by sales manager" bar): a horizontal-
+   scrolling row of .stat-pill buttons instead of a <select>, count + label
+   doubling as the filter. */
+.sales-channel-bar {
+  scrollbar-width: none;
+}
+.sales-channel-bar::-webkit-scrollbar {
+  display: none;
+}
+/* Cash custody chain (views/cashHandoffs.js). The channel breakdown is a
+   real table because that is exactly what it is: the receiver reads down
+   the channel column while counting physical notes, so the columns must
+   line up. */
+.handoff-breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.9rem;
+}
+.handoff-breakdown th,
+.handoff-breakdown td {
+  padding: 6px 4px;
+  text-align: left;
+}
+.handoff-breakdown td:last-child,
+.handoff-breakdown th:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+.handoff-breakdown tfoot th,
+.handoff-breakdown tfoot td {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+/* A whole handoff card is one tap target (opens the count-and-confirm
+   sheet), so it is a button that has to shed the UA's button styling. */
+.handoff-card-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+/* ---- Amount alignment + compact Sales day blocks -----------------------
+   iOS Safari's UA stylesheet gives <button> `align-items: flex-start`, so a
+   card that is a flex-column <button> shrink-wraps each child row instead of
+   stretching it -- the amount then sits right after the text instead of at
+   the card's right edge. Every card-button list that carries a trailing
+   amount stretches its rows explicitly and pins the amount right. */
+.sales-order-card,
+.debt-balance-card {
+  align-items: stretch;
+  width: 100%;
+}
+.payment-row-bottom-line .payment-approve-btn {
+  margin-left: 0;
+}
+/* Reports: creation date right-aligned; aging rows are tappable filters. */
+.report-created-date { flex: none; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.report-bucket-btn { width: 100%; text-align: left; cursor: pointer; font: inherit; color: inherit; border: 1px solid var(--border); }
+.report-bucket-btn.report-bucket-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); }
+.report-channel-btn { align-self: flex-start; }
+/* Sales | Payments switch in the Sales page header (replaces the plain title). */
+.sales-tab-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg-card-pressed);
+  font-size: 0.8rem;
+  max-width: 100%;
+}
+.sales-tab-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-radius: 999px;
+  min-height: 32px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sales-tab-btn.sales-tab-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.sales-tab-header .sales-tab-switch {
+  display: flex;
+  cursor: default;
+}
+.sales-tab-header .sales-tab-btn {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sales-subtotal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Customer debt report: while a filter change is loading the page stays put
+   (no spinner replacing it); the numbers and lists just dim until they land. */
+.report-body-refreshing {
+  pointer-events: none;
+}
+.report-body-refreshing .report-bucket-btn {
+  pointer-events: none;
+}
+/* Fuel allowance report (views/fuelReport.js) */
+.fuel-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fuel-settings-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; font-size: 0.85rem; flex: 0 0 auto; }
+.fuel-settings-btn svg { width: 18px; height: 18px; }
+.fuel-controls { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; }
+.fuel-month-pill { flex: 1; min-width: 0; position: relative; margin: 0; display: flex; align-items: center; justify-content: center; height: 44px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); font-weight: 700; text-transform: capitalize; }
+.fuel-month-pill input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.fuel-skeleton { display: grid; gap: 12px; }
+.fuel-skeleton div { height: 96px; border-radius: 16px; background: var(--bg-inset, var(--border)); animation: fuel-pulse 1.2s ease-in-out infinite; }
+.fuel-loading-note { text-align: center; margin-top: 12px; }
+.fuel-error { display: flex; flex-direction: column; gap: 10px; }
+.fuel-setup { margin-bottom: 12px; border-color: transparent; background: color-mix(in srgb, var(--warning) 8%, var(--bg-card)); }
+.fuel-setup p { margin: 4px 0 8px; font-size: 0.85rem; }
+.fuel-setup-item { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 46px; padding: 8px 4px; background: none; border: 0; border-top: 1px solid var(--border); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fuel-hero { display: flex; flex-direction: column; gap: 4px; padding: 16px; margin-bottom: 10px; }
+.fuel-hero-label { color: var(--text-dim); font-size: 0.82rem; font-weight: 700; }
+.fuel-hero-amount { font-size: 2rem; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fuel-hero-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.fuel-hero-stats span { display: flex; flex-direction: column; font-size: 0.75rem; color: var(--text-dim); }
+.fuel-hero-stats b { font-size: 1.05rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.fuel-progress { display: flex; flex-direction: column; gap: 6px; margin: 0 4px 12px; font-size: 0.85rem; color: var(--text-dim); }
+.fuel-progress-bar { height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.fuel-progress-bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.4s ease; }
+.fuel-note { margin: 0 4px 10px; font-size: 0.85rem; color: var(--text-dim); }
+.fuel-note-warn { color: var(--warning); font-weight: 600; font-size: 0.82rem; line-height: 1.4; }
+.fuel-link { background: none; border: 0; padding: 4px 2px; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; }
+.fuel-reps { display: flex; flex-direction: column; gap: 10px; }
+.fuel-empty { text-align: center; color: var(--text-dim); }
+.fuel-idle { margin: 12px 4px; font-size: 0.82rem; color: var(--text-dim); }
+.fuel-idle summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+.fuel-idle p { margin: 4px 0 0; line-height: 1.5; }
+.fuel-how { margin-top: 14px; padding: 12px 14px; }
+.fuel-how summary { cursor: pointer; font-weight: 700; }
+.fuel-how ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 0.85rem; color: var(--text-dim); }
+.fuel-rep { padding: 0; overflow: hidden; }
+.fuel-rep-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 14px 10px; background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.fuel-avatar { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--bg-card)); }
+.fuel-rep-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fuel-rep-amount { font-weight: 800; font-variant-numeric: tabular-nums; }
+.fuel-chevron { display: flex; color: var(--text-dim); transition: transform 0.2s ease; }
+.fuel-rep.is-open .fuel-chevron { transform: rotate(180deg); }
+.fuel-bar { height: 4px; margin: 0 14px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.fuel-bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.fuel-rep-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px; min-height: 8px; }
+.fuel-rep-chips:empty { display: none; }
+.fuel-chip { border: 0; cursor: pointer; font: inherit; font-size: 0.75rem; font-weight: 700; position: relative; }
+.fuel-chip:not(:disabled)::after { content: ""; position: absolute; inset: -11px -4px; }
+.fuel-chip:disabled { cursor: default; }
+.fuel-days { border-top: 1px solid var(--border); }
+.fuel-day { border-bottom: 1px solid var(--border); }
+.fuel-day:last-child { border-bottom: 0; }
+.fuel-day-head { width: 100%; display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 10px; min-height: 56px; padding: 8px 14px; background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fuel-day-date { display: flex; flex-direction: column; line-height: 1.2; }
+.fuel-day-date b { text-transform: capitalize; }
+.fuel-day-date span { font-size: 0.78rem; color: var(--text-dim); }
+.fuel-day-mid { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fuel-day-km { font-weight: 700; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fuel-day-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.fuel-day.is-open { background: color-mix(in srgb, var(--accent) 5%, var(--bg-card)); }
+.fuel-route { padding: 2px 14px 14px; }
+.fuel-stops { list-style: none; margin: 6px 0 0; padding: 0; }
+.fuel-stop { display: grid; grid-template-columns: 44px 24px 1fr; gap: 8px; align-items: start; padding: 7px 0; position: relative; }
+.fuel-stop::before { content: ""; position: absolute; left: 63px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+.fuel-stop:first-child::before { top: 20px; }
+.fuel-stop:last-child::before { bottom: calc(100% - 20px); }
+.fuel-time { color: var(--text-dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; padding-top: 3px; }
+.fuel-stop-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 1px; }
+.fuel-stop-body strong { overflow-wrap: anywhere; }
+.fuel-leg { color: var(--text-dim); font-size: 0.8rem; }
+.fuel-skipped-list { list-style: none; margin: 8px 0 0; padding: 0; font-size: 0.8rem; color: var(--text-dim); }
+.fuel-skipped { padding: 2px 0; }
+.fuel-skipped .fuel-time { display: inline-block; min-width: 44px; }
+.fuel-map-wrap { margin-top: 10px; }
+.fuel-map { height: 240px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.fuel-map-note { margin: 6px 2px 0; font-size: 0.75rem; }
+.fuel-pin { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 800; }
+.fuel-pin-home { background: var(--success); }
+.fuel-day-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.fuel-sheet { max-height: 88vh; overflow-y: auto; }
+.fuel-price-box { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 8px; }
+.fuel-price-box label { flex: 1; margin: 0; }
+.fuel-rep-settings { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.fuel-search-results { display: flex; flex-direction: column; gap: 4px; }
+.fuel-result { text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer; }
+.fuel-home-status { font-size: 0.8rem; }
+.fuel-cons-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fuel-cons-row label { margin: 0; }
+.sales-order-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sales-order-name-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.debt-chip-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+.vol-active {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.vol-active:empty {
+  display: none;
+}
+.vol-active-chip {
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.12));
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.vol-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.vol-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0 8px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.1));
+}
+.vol-hero-label {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.vol-hero-num {
+  font-size: 2.1rem;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.vol-hero-num .vol-delta {
+  font-size: 0.9rem;
+}
+.vol-hero-prev {
+  font-size: 0.8rem;
+}
+.vol-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+.vol-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.vol-group {
+  margin-top: 6px;
+}
+.vol-group .vol-chips {
+  margin-top: 6px;
+}
+.vol-more {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent-fill-soft, rgba(10, 132, 255, 0.1));
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vol-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vol-bar-row .vol-bar {
+  flex: 1 1 auto;
+}
+.vol-delta {
+  margin-left: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.vol-delta-up {
+  color: var(--success, #1f9d55);
+}
+.vol-delta-down {
+  color: var(--danger);
+}
+.vol-pending {
+  margin: 4px 0 8px;
+  font-size: 0.82rem;
+  color: var(--warning, #b36b00);
+}
+.vol-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.vol-row-tap {
+  cursor: pointer;
+}
+.vol-row-top,
+.vol-row-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vol-row-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vol-row-liters {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.vol-row-sub {
+  font-size: 0.8rem;
+}
+.vol-bar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+.vol-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-fill, var(--accent));
+}
+.vol-share {
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.vol-hint {
+  font-size: 0.8rem;
+}
+.vol-periods {
+  margin-top: 12px;
+}
+.vol-period-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.vol-period-row:first-of-type {
+  border-top: none;
+}
+.vol-period-vals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+.vol-charts-title {
+  margin: 22px 0 2px;
+  font-size: 1.05rem;
+}
+.vol-chart {
+  margin-top: 10px;
+  cursor: default;
+}
+.vol-chart-box {
+  width: 100%;
+  min-height: 190px;
+}
+.vol-svg {
+  display: block;
+  max-width: 100%;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.vz-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.vz-axis {
+  fill: var(--text-dim);
+  font-size: 10.5px;
+}
+.vz-bar {
+  fill: var(--vz-1);
+}
+.vz-line1,
+.vz-line2 {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.vz-line1 {
+  stroke: var(--vz-1);
+}
+.vz-line2 {
+  stroke: var(--vz-2);
+}
+.vz-band {
+  fill: var(--text-dim);
+  opacity: 0.12;
+}
+.vol-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 2px 0 6px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.vol-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.vol-legend-item i,
+.vol-mix-legend i {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.vol-legend-item i.vz-l1,
+.vol-legend-item i.vz-l2 {
+  height: 3px;
+  border-radius: 2px;
+}
+.vz-b1,
+.vz-l1 {
+  background: var(--vz-1);
+}
+.vz-l2 {
+  background: var(--vz-2);
+}
+.vz-sx {
+  background: var(--vz-x);
+}
+.vol-readout {
+  min-height: 1.3em;
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.vol-chart-note {
+  margin: 4px 0 0;
+  font-size: 0.74rem;
+}
+.vol-mix-bar {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  margin: 8px 0 10px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.vol-mix-bar > span {
+  min-width: 2px;
+}
+.vol-mix-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vol-mix-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.vol-mix-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vol-mix-pct {
+  min-width: 38px;
+  text-align: right;
+}
+.vol-sync {
+  margin: 14px 0 20px;
+}
+.vol-view .report-header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.vol-view .report-header h1 {
+  font-size: 1.3rem;
+}
+.vol-delta-flat {
+  color: var(--text-dim);
+}
+/* ===== Debt balances: total / overdue / not-yet-in-Excel (1.349.0) ===== */
+.debt-total-card { flex-direction: column; align-items: stretch; gap: 6px; }
+.debt-total-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.debt-total-line + .debt-total-line { padding-top: 6px; border-top: 1px solid var(--border); }
+.debt-total-line-overdue .debt-total-amount { font-size: 0.98rem; }
+.debt-amount-overdue { color: var(--danger); }
+.debt-total-line-unrecorded .debt-total-amount { color: var(--warning-text, var(--warning)); font-size: 0.98rem; }
+.debt-total-label { text-transform: none; letter-spacing: 0; font-size: 0.8rem; }
+.debt-header .debt-as-of-filter-wrap { margin-left: 0; }
+.debt-as-of-filter-btn { gap: 6px; min-height: 44px; padding: 0 12px; max-width: 150px; }
+.debt-as-of-filter-btn svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--text-dim); }
+.debt-as-of-filter-wrap.has-date .debt-as-of-filter-btn { padding-right: 28px; }
+.debt-as-of-picker-input { min-height: 44px; }
+.debt-filter-row-split { justify-content: space-between; }
+.debt-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.25; }
+.debt-owner-line { font-size: 0.8rem; margin-top: -2px; }
+.debt-total-label { display: inline-flex; align-items: center; flex-wrap: nowrap; min-width: 0; }
+.debt-top, .debt-bottom { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; width: 100%; }
+.debt-name-line { flex: 1 1 0; min-width: 0; line-height: 1.25; overflow-wrap: break-word; }
+.debt-balance-card .debt-balance-amount { flex: 0 0 auto; margin-left: 0; font-size: 1rem; text-align: right; }
+.debt-card-left { flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.debt-card-right { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.debt-name { overflow-wrap: break-word; }
+.debt-id { color: var(--text-dim); font-size: 0.82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.debt-dot { color: var(--text-dim); }
+.debt-date-line { font-size: 0.75rem; line-height: 1.3; white-space: nowrap; }
+.debt-date-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.debt-due-line { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.debt-due-head { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.debt-due-small { font-size: 0.7rem; font-weight: 400; color: var(--text-dim); }
+.debt-due-amount { font-size: 0.88rem; font-weight: 800; color: var(--danger, #b3261e); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.due-chip-ok { background: color-mix(in srgb, var(--success, #2e9e5b) 18%, var(--bg-card)); color: var(--success, #2e9e5b); }
+.debt-unrecorded-line { font-size: 0.7rem; color: var(--warning-text, var(--warning)); }
+.debt-unrecorded-line strong { font-weight: 700; white-space: nowrap; }
+.debt-search input[type="search"] { width: 100%; }
+/* ===== Cashflow (owner, 2026-10-23) ===== */
+.cf-view {
+  padding: 12px 16px calc(24px + var(--nav-safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cf-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+.cf-note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.cf-accounts {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+}
+.cf-account {
+  flex: 0 0 auto;
+  min-width: 150px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+.cf-account-total {
+  border-color: var(--accent);
+  cursor: default;
+}
+.cf-account-name {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+.cf-account-bal {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cf-kind {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.cf-kind > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cf-kind-total {
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.cf-cat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.cf-cat > span:last-child {
+  display: inline-flex;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.cf-cat-active {
+  background: rgba(22, 119, 255, 0.1);
+}
+.cf-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 6px;
+}
+.cf-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cf-row-sub {
+  flex-basis: 100%;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+.cf-row-amt {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cf-row-amt small {
+  font-weight: 400;
+}
+.cf-foot {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+/* Cashflow phase 2: tappable rows (every row opens its details), add button in the header */
+button.cf-row { width: 100%; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.cf-head #cf-add { min-height: 44px; }
+/* Bank statements (Cashflow phase 3, owner 2026-10-24) */
+.cf-head-actions { display: flex; align-items: center; gap: 8px; }
+.bk-sheet { max-height: 92vh; overflow-y: auto; }
+.bk-import { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.bk-import summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.bk-import label { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; color: var(--text-dim); }
+.bk-import select { font: inherit; min-height: 44px; padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); }
+.bk-file-btn { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; overflow: hidden; }
+.bk-file-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bk-file-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.bk-sample { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; }
+.bk-sample > div { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: baseline; }
+.bk-sample-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-map { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+.bk-result { margin: 8px 0; font-weight: 700; color: var(--success, #1a7f37); }
+.bk-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.bk-line { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.bk-line-main { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.bk-line-sub { font-size: 0.82rem; overflow-wrap: anywhere; }
+.bk-line-amt { font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bk-actions { display: flex; gap: 8px; margin-top: 8px; }
+.bk-extra { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.bk-extra label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.count-badge-quiet { background: var(--text-dim); }
+/* Cashflow redesign (owner, 2026-10-27) ---------------------------------------------------------------------------------------- */
+/* Period row (also the Bank sheet's tabs): one compact row of equal-height pills, no extra side padding, scrolls when it does not fit. */
+.cf-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+/* Narrow phones: the title on its own line, the buttons under it on the right (Armenian "Ավելացնել" no longer runs off the screen) */
+.cf-head { flex-wrap: wrap; }
+.cf-head h1 { min-width: 0; }
+.cf-head-actions { margin-left: auto; }
+.cf-period::after { content: ""; position: absolute; inset: -2px 0; }
+.cf-period-icon { flex: 0 0 auto; padding: 0 12px; }
+.cf-period-icon svg { width: 18px; height: 18px; }
+@media (max-width: 359px) {
+  .cf-period-icon { padding: 0 8px; }
+}
+.cf-tabs-even { display: flex; margin: 8px 0; flex-wrap: nowrap; }
+.cf-custom { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cf-custom label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--text-dim); }
+.cf-custom input { min-height: 44px; font: inherit; color: var(--text); }
+/* In / Out / Net: filter cards; the number fits the card on one line at any phone width (container query units) */
+.cf-sum-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; min-height: 64px; padding: 8px 8px 10px 10px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  container-type: inline-size; }
+.cf-sum-card strong { display: block; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: clip; font-size: min(1.15rem, 13.5cqw); font-variant-numeric: tabular-nums; overflow-wrap: normal; }
+.cf-sum-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cf-sum-top { display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; min-width: 0; }
+.cf-sum-card .cf-sum-label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-sum-count { flex: none; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--bg); color: var(--text-dim);
+  font-size: 0.7rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.cf-sum-active .cf-sum-count { background: var(--accent); color: #fff; }
+/* Account cards: the chosen one is marked; the total card means "every account" */
+.cf-account-total { cursor: pointer; border-color: var(--border); }
+.cf-account-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+/* Details of one movement */
+.cf-d-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cf-d-head h2 { margin: 0; }
+.cf-chip-static { flex: none; padding: 6px 10px; border-radius: 999px; background: var(--bg); font-size: 0.85rem; font-weight: 600; }
+.cf-d-amount { margin: 6px 0 10px; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cf-d-lines { display: flex; flex-direction: column; border-top: 1px solid var(--border); margin-bottom: 10px; }
+.cf-d-line { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.cf-d-line > span:last-child { text-align: right; overflow-wrap: anywhere; }
+.cf-d-subtitle { margin: 12px 0 4px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
+.cf-log { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
+.cf-log-when { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.cf-d-pending { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--warning, #c98a00) 14%, transparent); font-size: 0.85rem; }
+.cf-d-hint { font-size: 0.85rem; }
+.cf-d-actions { flex-wrap: wrap; }
+.cf-request-box { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.cf-request-box label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.cf-req { margin-bottom: 10px; }
+.cf-req-actions { display: flex; gap: 8px; }
+/* The Add sheet: Add + date chip / account + currency chips / amount / category chip / customer + channel / note */
+.cf-form { display: flex; flex-direction: column; gap: 10px; }
+.cf-f-row { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.cf-f-row1 { justify-content: space-between; }
+.cf-f-row1 h2 { margin: 0; font-size: 1.35rem; font-weight: 800; text-align: left; }
+label.cf-f-row { flex-direction: column; align-items: stretch; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.cf-form input, .cf-form select { min-height: 44px; font: inherit; color: var(--text); min-width: 0; }
+.cf-f-chips > * { flex: 1 1 0; }
+.cf-chip { position: relative; display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-height: 48px; padding: 4px 12px;
+  border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.cf-chip strong { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cf-chip-label { font-size: 0.72rem; color: var(--text-dim); }
+.cf-chip-grow { flex: 2 1 0; }
+.cf-date-chip { flex: none; flex-direction: row; align-items: center; gap: 6px; min-height: 40px; border-radius: 999px; font-weight: 700; font-size: 0.9rem; }
+.cf-date-chip svg { width: 16px; height: 16px; flex: none; }
+/* the native date input covers the chip, invisible: a tap opens the phone's own date wheel */
+.cf-date-chip input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; opacity: 0; border: 0; padding: 0; cursor: pointer; }
+.cf-amount-row { position: relative; }
+.cf-amount { flex: 1; font-size: 1.6rem !important; font-weight: 800; font-variant-numeric: tabular-nums; padding-right: 64px; min-height: 56px !important; }
+.cf-amount-cur { position: absolute; right: 14px; color: var(--text-dim); font-weight: 700; pointer-events: none; }
+.cf-dir { flex: none !important; display: inline-flex; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; overflow: hidden; }
+.cf-dir button { min-height: 46px; min-width: 64px; padding: 0 12px; border: 0; background: var(--bg-card); color: var(--text-dim); font: inherit; font-weight: 700; cursor: pointer; }
+.cf-dir button.cf-dir-on { background: var(--accent-soft, rgba(10, 132, 255, 0.12)); color: var(--accent-dark, var(--accent)); }
+.cf-customer-row { align-items: stretch; }
+.cf-customer-wrap { flex: 3 1 0; position: relative; min-width: 0; display: block; }
+.cf-customer-wrap input { width: 100%; }
+.cf-channel { flex: 2 1 0; width: 100%; }
+.cf-ghost { opacity: 0.45; }
+.cf-cust-name { margin: -4px 0 0 4px; min-height: 1em; font-size: 0.85rem; color: var(--text-dim); }
+.cf-cust-unknown { color: var(--danger); }
+.cf-pick-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; }
+.cf-pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cf-pick-on { color: var(--accent-dark, var(--accent)); font-weight: 700; }
+.payment-delete-box input { width: 100%; box-sizing: border-box; }
+.doc-row-thumb { flex: none; width: 56px; height: 72px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: var(--bg-card); }
+.doc-row-pdf { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-dim); }
+.documents-selects select { min-width: 0; min-height: 44px; font-size: 0.9rem; }
+.documents-flags { display: flex; gap: 8px; margin-bottom: 8px; }
+/* Reports > Wished products (1.452.0) */
+.wish-report-summary {
+  margin: 0 4px 8px;
+}
+.wish-report-row {
+  padding: 0;
+}
+.wish-report-row > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.wish-report-row > summary::-webkit-details-marker {
+  display: none;
+}
+.wish-report-name strong {
+  overflow-wrap: anywhere;
+}
+.wish-report-nums {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.wish-items {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px 10px;
+  border-top: 1px solid var(--border);
+}
+.wish-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.wish-item:last-child {
+  border-bottom: 0;
+}
+.wish-item-main {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wish-item-qty {
+  white-space: nowrap;
+}
+.wish-item-note {
+  font-style: italic;
+}
+/* Document flow (1.453.0): the receiver counts the cash in the sheet; daily cash sheets list */
+.handoff-decide {
+  margin: 8px 0 4px;
+}
+.handoff-decide label {
+  display: block;
+  margin-bottom: 8px;
+}
+.handoff-diff {
+  margin: 0 0 8px;
+  font-weight: 600;
+  color: var(--danger);
+}
+.handoff-diff-note {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 69, 58, 0.12);
+  color: var(--danger);
+}
+.cash-sheet-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.cash-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ---- from orders-search-filters.css ---- */
+.order-status-filter-row {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 3px;
+  /* Same trailing-edge fade as .map-filter-row in styles.css, so a
+     partially-scrolled last tab reads as "more to scroll" instead of
+     looking clipped -- previously this row scrolled but gave no visual
+     hint that the last tab (Delivered) wasn't the full list. */
+  mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 24px), transparent 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-status-filter-row {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}
+
+/* ---- from desktop.css ---- */
+@media (min-width: 1024px) {
+  /* ---------- 2. Filters keep a sensible width ---------- */
+
+  .list-header-row {
+    padding-top: 4px;
+  }
+  .debt-desk-analysis {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    margin: 4px 0 12px;
+  }
+  .debt-desk-buckets {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .debt-desk-bucket {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: 10px 12px;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+  }
+  .debt-desk-bucket:hover { background: var(--bg-card-pressed); }
+  .debt-desk-bucket-on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft, rgba(10, 132, 255, 0.18)); }
+  .debt-desk-facts {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .debt-desk-facts > div { display: flex; align-items: baseline; gap: 10px; }
+  .debt-desk-row {
+    display: grid;
+    grid-template-columns: var(--desk-cols-debt);
+    column-gap: 12px;
+    align-items: center;
+    width: 100%;
+    min-height: 58px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  .debt-desk-row:last-child { border-bottom: 0; }
+  .debt-desk-row:hover { background: var(--bg-card-pressed); }
+  .debt-desk-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .debt-desk-row-overdue { box-shadow: inset 3px 0 0 var(--danger, #e33b43); }
+  .debt-desk-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .debt-desk-end { align-items: flex-end; text-align: right; }
+  .debt-desk-main { font-size: 0.9rem; overflow-wrap: anywhere; }
+  .debt-desk-sub { font-size: 0.76rem; overflow-wrap: anywhere; }
+  .debt-desk-name .debt-desk-main strong { font-weight: 600; }
+  .debt-desk-warn { color: var(--warning, #b7791f); }
+  .debt-desk-unrec { color: var(--warning, #b7791f); }
+  .debt-desk-group {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  /* the phone's card-style total / filters stay, but the table needs the width: no 12px gap above it */
+  #debt-list.debt-desk-list { margin-top: 0 !important; }
+  .dtl-row {
+    display: grid;
+    column-gap: 12px;
+    align-items: center;
+    width: 100%;
+    min-height: 54px;
+    padding: 8px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+  }
+  .dtl-row:hover { background: var(--bg-card-pressed); }
+  .dtl-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .dtl-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; align-items: flex-start; text-align: left; }
+  .dtl-end { align-items: flex-end; text-align: right; }
+  .dtl-main { font-size: 0.9rem; overflow-wrap: anywhere; }
+  .dtl-sub { font-size: 0.76rem; overflow-wrap: anywhere; }
+  .dtl-name .dtl-main strong { font-weight: 600; }
+  .dtl-group { display: flex; justify-content: space-between; padding: 7px 16px; background: var(--bg); border-bottom: 1px solid var(--border); }
+  .cf-periods { display: flex; flex-wrap: wrap; }
+  .cf-periods .cf-period, .cf-period-pair .cf-period:first-child { flex: 0 0 auto; padding: 0 18px; }
+  .cf-period-pair { display: contents; }
+  .reports-side {
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .reports-side-title {
+    margin: 4px 8px 8px;
+    font-size: 1.4rem;
+  }
+  .reports-side-heading {
+    padding: 12px 8px 4px;
+    font-size: var(--fs-eyebrow, 0.72rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .reports-side-icon {
+    display: flex;
+    flex: none;
+    color: var(--accent);
+  }
+  .reports-side-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+  .reports-side-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* the report in the right pane: no Back (the list is beside it), no page padding of its own */
+  .reports-pane {
+    min-width: 0;
+  }
+  .reports-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    white-space: nowrap;
+  }
+  .reports-tool svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+@media (min-width: 1400px) {
+  .cf-body { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .cf-side { min-width: 0; }
+  .cf-side .cf-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .cf-main { min-width: 0; }
+}

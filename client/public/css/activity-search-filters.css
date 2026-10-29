@@ -193,10 +193,6 @@
   letter-spacing: 0.02em;
 }
 
-.activity-manager-group-heading:first-child {
-  margin-top: 2px;
-}
-
 .activity-view .activity-filter-row {
   display: none;
 }
