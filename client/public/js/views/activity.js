@@ -458,7 +458,7 @@ export function renderActivity(root, navigate) {
     });
 
     enhanceDateRange(container); // the custom range's date fields open the wheel picker (activityDatePicker.js)
-    enhanceActivity(); // the search bar's clear "x" (searchBar.js)
+    enhanceActivity(container); // the search bar's clear "x" (searchBar.js)
     renderList();
   }
 
@@ -633,8 +633,8 @@ export function renderActivity(root, navigate) {
   return cleanup;
 }
 
-function enhanceActivity() {
-  const input = document.querySelector("#activity-search");
+function enhanceActivity(root) {
+  const input = root.querySelector("#activity-search");
   const container = input?.closest(".activity-search-combined");
   const actions = container?.querySelector(".activity-search-actions");
   if (!input || !container || !actions) return;

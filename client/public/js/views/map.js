@@ -1519,9 +1519,10 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function openNewCustomerForm(...args) { return mapAddCustomer.openNewCustomerForm(ctx, ...args); }
 
   // The search bar (status and icon filters inside the field, clear "x") and the selected-pin halo (map/searchBar.js).
-  enhanceMapSearchRow();
-  enhanceMapDimensionFilters();
-  attachCompetitorToggle();
+  // (inside this screen's own root: it may be parked for Back when a slow start finishes)
+  enhanceMapSearchRow(root);
+  enhanceMapDimensionFilters(root);
+  attachCompetitorToggle(root);
   wireMarkerSelection(map, mapEl);
   map.whenReady(loadCustomersCached);
 

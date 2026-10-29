@@ -16,8 +16,8 @@ function mapFilterIcon(value) {
   return SEARCH_ICONS.filters;
 }
 
-export function enhanceMapSearchRow() {
-  const input = document.querySelector("#map-customer-search");
+export function enhanceMapSearchRow(root = document) {
+  const input = root.querySelector("#map-customer-search");
   const row = input?.closest(".map-search-row");
   const view = input?.closest(".map-view");
   if (!input || !row || !view || row.dataset.unifiedMapSearch) return;
@@ -153,11 +153,11 @@ function compactNativeFilterSheet(button) {
   });
 }
 
-export function enhanceMapDimensionFilters() {
-  const input = document.querySelector("#map-customer-search");
+export function enhanceMapDimensionFilters(root = document) {
+  const input = root.querySelector("#map-customer-search");
   const searchRow = input?.closest(".map-search-row.activity-search-combined");
   const actions = searchRow?.querySelector(":scope > .activity-search-actions");
-  const filterRow = document.querySelector("#map-icon-filter-row");
+  const filterRow = root.querySelector("#map-icon-filter-row");
   if (!input || !searchRow || !actions || !filterRow) return;
 
   if (!filterRow.classList.contains("map-dimension-filter-inline")) filterRow.classList.add("map-dimension-filter-inline");
@@ -234,8 +234,8 @@ function labels() {
 
 // The "Competitors" chip in the status filter: competitors are hidden on every Map entry, the chip shows them (was mapSafeUi.js,
 // which mounted it from outside with retries after each route change; step 7b).
-export function attachCompetitorToggle() {
-  const mapView = document.querySelector(".map-view");
+export function attachCompetitorToggle(root = document) {
+  const mapView = root.querySelector(".map-view");
   if (!mapView || mapView.dataset.safeUiReady === "1") return Boolean(mapView);
   const filterRow = mapView.querySelector(".map-filter-row");
   if (!filterRow) return false;

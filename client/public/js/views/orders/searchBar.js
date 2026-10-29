@@ -7,8 +7,8 @@ import { SEARCH_ICONS, addClasses, installClearButton } from "../../searchBar.js
 import { FILTER_ICONS } from "../../filterIcons.js";
 import { APP_VERSION } from "../../version.js";
 
-export function enhanceOrders() {
-  const input = document.querySelector("#order-search");
+export function enhanceOrders(root = document) {
+  const input = root.querySelector("#order-search");
   const container = input?.closest(".activity-search-combined");
   const actions = container?.querySelector(".activity-search-actions");
   if (input && container && actions) installClearButton(input, container, actions);
@@ -23,7 +23,7 @@ export function enhanceOrders() {
   // (the filter button's icon is the sales-channel one, set by enhanceOrdersToolbar: it filters by channel. Two enhancers used
   // to race here and the person icon won about half the time.)
 
-  const add = document.querySelector("#orders-new-btn");
+  const add = root.querySelector("#orders-new-btn");
   if (add && !add.dataset.unifiedOrderAdd) {
     add.dataset.unifiedOrderAdd = "true";
     add.classList.add("orders-new-action");
@@ -58,8 +58,8 @@ const CHANNEL_ICON = FILTER_ICONS.channel;
 // ORDER_STATUS_ICONS above) rather than injected here after the fact --
 // this only still decorates the status *filter tab bar*, which has no
 // per-status data attribute of its own to key off of at render time.
-export function decorateOrdersStatusUi() {
-  const filterRow = document.querySelector("#order-status-filters");
+export function decorateOrdersStatusUi(root = document) {
+  const filterRow = root.querySelector("#order-status-filters");
   filterRow?.querySelectorAll("[data-status]").forEach((btn) => {
     // The "All" tab's data-status is "" (see STATUS_FILTERS in
     // views/orders.js) -- mapped to the "all" icon key here rather than
@@ -81,10 +81,10 @@ export function decorateOrdersStatusUi() {
   });
 }
 
-export function enhanceOrdersToolbar() {
-  const search = document.querySelector("#order-search");
-  const filterBtn = document.querySelector("#order-filter-btn");
-  const filterMenu = document.querySelector("#order-filter-menu");
+export function enhanceOrdersToolbar(root = document) {
+  const search = root.querySelector("#order-search");
+  const filterBtn = root.querySelector("#order-filter-btn");
+  const filterMenu = root.querySelector("#order-filter-menu");
   const toolbar = search?.closest(".list-toolbar");
   if (!search || !filterBtn || !filterMenu || !toolbar || toolbar.dataset.ordersSearchEnhanced === "true") return;
   toolbar.dataset.ordersSearchEnhanced = "true";
@@ -272,8 +272,8 @@ async function getSummary(force = false) {
   return summaryPromise;
 }
 
-function paintCounts(counts = {}) {
-  const filterRow = document.querySelector("#order-status-filters");
+function paintCounts(counts = {}, root = document) {
+  const filterRow = root.querySelector("#order-status-filters");
   if (!filterRow) return;
 
   filterRow.querySelectorAll("[data-status]").forEach((chip) => {
@@ -294,10 +294,10 @@ function paintCounts(counts = {}) {
   });
 }
 
-export async function enhanceOrdersRegionAndCounts() {
-  const search = document.querySelector("#order-search");
+export async function enhanceOrdersRegionAndCounts(root = document) {
+  const search = root.querySelector("#order-search");
   const actions = search?.closest(".activity-search-combined")?.querySelector(".activity-search-actions");
-  const channelButton = document.querySelector("#order-filter-btn");
+  const channelButton = root.querySelector("#order-filter-btn");
   if (!search || !actions || !channelButton) return;
 
   let regionWrap = actions.querySelector(".orders-region-filter-wrap");
@@ -348,7 +348,7 @@ export async function enhanceOrdersRegionAndCounts() {
   setButtonState(regionButton);
   try {
     const summary = await getSummary();
-    paintCounts(summary.counts);
+    paintCounts(summary.counts, root);
   } catch {
     // Informative UI only; never block the Orders list.
   }

@@ -107,4 +107,35 @@ test.describe("Search bars", () => {
     await page.locator("#leaflet-map .leaflet-popup-close-button").evaluate((el) => el.click());
     await expect(marker).not.toHaveClass(/kad-marker-selected/);
   });
+
+  test("a screen that finishes loading while parked for Back (detached) still builds its bar", async ({ page, fixtures }) => {
+    // Leaving a screen before its data arrives parks it for Back, detached from the page; it then paints there. The bar code must
+    // look inside the screen's own container, not in the page (it used to be added by a page-wide observer on reattach).
+    const admin = await fixtures.createUser("admin");
+    await loginViaUi(page, admin.email);
+    const built = await page.evaluate(async () => {
+      const screens = [
+        ["activity", "renderActivity", ".activity-search-combined .unified-search-clear"],
+        ["tasks", "renderTasks", ".activity-search-combined .unified-search-clear"],
+        ["customers", "renderCustomers", ".customers-search-combined .unified-search-clear"],
+        ["payments", "renderPayments", ".payments-search-combined .unified-search-clear"],
+        ["pricelist", "renderPricelist", ".pricelist-search-combined .unified-search-clear"],
+        ["orders", "renderOrders", ".orders-search-combined .orders-region-filter-wrap"],
+      ];
+      const out = {};
+      for (const [file, fn, selector] of screens) {
+        const mod = await import(`/js/views/${file}.js`);
+        const root = document.createElement("div"); // never attached
+        mod[fn](root, () => {});
+        let found = false;
+        for (let i = 0; i < 40 && !found; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          found = Boolean(root.querySelector(selector));
+        }
+        out[file] = found;
+      }
+      return out;
+    });
+    expect(built).toEqual({ activity: true, tasks: true, customers: true, payments: true, pricelist: true, orders: true });
+  });
 });

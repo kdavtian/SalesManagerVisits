@@ -440,7 +440,7 @@ export function renderTasks(root, navigate, openId) {
         renderShell();
       })
     );
-    enhanceTasks(); // the search bar's clear "x" (searchBar.js)
+    enhanceTasks(container); // the search bar's clear "x" (searchBar.js)
     paintChrome();
     paintList();
   }
@@ -1105,8 +1105,8 @@ export async function renderHomeTasks(slot, navigate) {
   await load();
 }
 
-function enhanceTasks() {
-  const input = document.querySelector("#task-search");
+function enhanceTasks(root) {
+  const input = root.querySelector("#task-search");
   const container = input?.closest(".activity-search-combined");
   const actions = container?.querySelector(".activity-search-actions");
   if (input && container && actions) installClearButton(input, container, actions);

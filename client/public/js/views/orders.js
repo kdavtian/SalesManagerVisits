@@ -385,10 +385,10 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
   });
   // The search bar: channel filter inside the field, region filter, clear "x", status icons and counts (orders/searchBar.js; these
   // used to be added from outside by three page-wide "enhancer" observers, docs/architecture-roadmap.md step 7a).
-  enhanceOrdersToolbar();
-  enhanceOrders();
-  decorateOrdersStatusUi();
-  enhanceOrdersRegionAndCounts();
+  enhanceOrdersToolbar(root);
+  enhanceOrders(root);
+  decorateOrdersStatusUi(root);
+  enhanceOrdersRegionAndCounts(root);
 
   async function load({ silent = false } = {}) {
     const mine = ++loadSeq;
@@ -491,7 +491,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
 
   function paint() {
     // the status counts and the region button follow every repaint (cached 15 s, so this is at most one request per 15 s)
-    enhanceOrdersRegionAndCounts();
+    enhanceOrdersRegionAndCounts(root);
     const search = searchInput.value.trim().toLowerCase();
     let filtered = orders;
     if (channelFilter) filtered = filtered.filter((o) => o.sales_channel === channelFilter);
