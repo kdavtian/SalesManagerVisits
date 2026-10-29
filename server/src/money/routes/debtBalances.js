@@ -210,20 +210,7 @@ async function loadCustomerHistory(rows, today, asOf, db = pool) {
         ORDER BY erp_customer_id, cashflow_date DESC, id DESC`,
       [erpIds, bound]
     ),
-    db.query(
-      `WITH o AS (
-         SELECT erp_customer_id, order_id, MIN(order_date) AS d, SUM(COALESCE(revenue_amd, 0)) AS total
-           FROM erp_order_lines WHERE erp_customer_id = ANY($1) AND ($2::date IS NULL OR order_date <= $2::date)
-          GROUP BY erp_customer_id, order_id
-       ), last AS (
-         SELECT DISTINCT ON (erp_customer_id) erp_customer_id, to_char(d, 'YYYY-MM-DD') AS last_order_date, total AS last_order_amount
-           FROM o ORDER BY erp_customer_id, d DESC, order_id DESC
-       ), year AS (
-         SELECT erp_customer_id, SUM(total) AS orders_12m_amd FROM o WHERE d > $3::date - 365 GROUP BY erp_customer_id
-       )
-       SELECT last.*, COALESCE(year.orders_12m_amd, 0) AS orders_12m_amd FROM last LEFT JOIN year USING (erp_customer_id)`,
-      [erpIds, bound, today]
-    ),
+    loadOrdersNewestFirst(db, erpIds, { asOf: bound }),
     db.query(
       `SELECT DISTINCT ON (p.customer_id) p.customer_id, to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS d, p.amount_amd
          FROM payments p
@@ -233,9 +220,26 @@ async function loadCustomerHistory(rows, today, asOf, db = pool) {
     ),
   ]);
   for (const r of pay.rows) result.set(r.erp_customer_id, { last_erp_payment_date: r.d, last_erp_payment_amount: Number(r.amount_amd) });
-  for (const r of ord.rows) {
-    const cur = result.get(r.erp_customer_id) ?? {};
-    result.set(r.erp_customer_id, { ...cur, last_order_date: r.last_order_date, last_order_amount: Number(r.last_order_amount), orders_12m_amd: Number(r.orders_12m_amd) });
+  // the last order and the last 12 months, from the server's copy of the order lines (debtAging.js): one order = one order id, dated by
+  // its first day
+  const yearAgo = new Date(Date.parse(`${String(today).slice(0, 10)}T00:00:00Z`) - 365 * 86400000).toISOString().slice(0, 10);
+  for (const [erpId, list] of ord) {
+    const byOrder = new Map();
+    for (const o of list) {
+      const cur = byOrder.get(o.order_id);
+      if (cur) {
+        cur.total += o.total;
+        if (o.date < cur.date) cur.date = o.date;
+      } else byOrder.set(o.order_id, { order_id: o.order_id, date: o.date, total: o.total });
+    }
+    let last = null;
+    let year = 0;
+    for (const o of byOrder.values()) {
+      if (!last || o.date > last.date || (o.date === last.date && o.order_id > last.order_id)) last = o;
+      if (o.date > yearAgo) year += o.total;
+    }
+    const cur = result.get(erpId) ?? {};
+    result.set(erpId, { ...cur, last_order_date: last.date, last_order_amount: last.total, orders_12m_amd: year });
   }
   for (const r of app.rows) result.appPayments.set(r.customer_id, { date: r.d, amount: Number(r.amount_amd) });
   return result;
@@ -308,10 +312,14 @@ debtBalancesRouter.get("/", async (req, res) => {
   // FIFO aging per customer (payments clear the oldest invoices first, credit term deducted -- see
   // debtAging.js): the oldest unpaid invoice's days past due and the overdue part of the balance.
   const today = asOfDate ?? yerevanToday();
-  const orders = await loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate });
-  // Money the reps collected in the app that the Excel (ERP) does not hold yet (live view only -- a past date has no "yet").
-  const unrecorded = asOfDate ? new Map() : await loadUnrecordedPayments(rows, req.user);
-  const history = await loadCustomerHistory(rows, today, asOfDate);
+  // The four follow-up reads depend only on the rows: they run at the same time (owner, 2026-10-29: the slowest screen to load).
+  const [orders, unrecorded, history, sync] = await Promise.all([
+    loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate }),
+    // Money the reps collected in the app that the Excel (ERP) does not hold yet (live view only -- a past date has no "yet").
+    asOfDate ? new Map() : loadUnrecordedPayments(rows, req.user),
+    loadCustomerHistory(rows, today, asOfDate),
+    erpSyncFreshness("erp_customer_data"),
+  ]);
   const withAging = rows.map(({ credit_term_days, ...r }) => {
     const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt: Number(r.remaining_balance), today, termDays: credit_term_days ?? 45 });
     const u = unrecorded.get(r.internal_customer_id);
@@ -332,5 +340,5 @@ debtBalancesRouter.get("/", async (req, res) => {
       bucket: agingBucket(debt, a.oldest_due_days),
     };
   });
-  res.json({ rows: withAging, as_of_date: asOfDate, sync: await erpSyncFreshness("erp_customer_data") });
+  res.json({ rows: withAging, as_of_date: asOfDate, sync });
 });

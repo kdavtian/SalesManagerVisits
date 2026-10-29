@@ -13,6 +13,8 @@
 //
 // Usage: add DEBT_AGE_LATERAL after `erp_customer_data erp` in the FROM clause, then
 // overdueDebtSql("$n::date") in the WHERE clause (customers is aliased `c`).
+import { loadOrdersNewestFirst } from "./debtAging.js";
+
 const COVER_TOLERANCE_AMD = 1000; // rounding between the Excel debt and the sum of order lines
 export const ERP_OPENING_DATE = "2025-05-01"; // the electronic system started in May 2025: debt older than the order history is the opening balance (Balance0)
 
@@ -62,30 +64,26 @@ export async function loadUnpaidOrders(db, erpIds) {
   const ids = [...new Set((erpIds ?? []).filter(Boolean))];
   const result = { orders: new Map(), opening: new Map() };
   if (!ids.length) return result;
-  const { rows } = await db.query(
-    `WITH ord AS (
-       SELECT erp_customer_id, order_id, order_date, SUM(COALESCE(revenue_amd, 0)) AS total
-       FROM erp_order_lines WHERE erp_customer_id = ANY($1) GROUP BY erp_customer_id, order_id, order_date
-     ), cum AS (
-       SELECT o.*, SUM(o.total) OVER (PARTITION BY o.erp_customer_id ORDER BY o.order_date DESC, o.order_id DESC) AS running FROM ord o
-     )
-     SELECT cum.erp_customer_id, cum.order_id, to_char(cum.order_date, 'YYYY-MM-DD') AS order_date, cum.total,
-            GREATEST(0, LEAST(cum.total, erp.debt_amd - (cum.running - cum.total))) AS unpaid_amd
-     FROM cum JOIN erp_customer_data erp ON erp.erp_customer_id = cum.erp_customer_id
-     WHERE erp.debt_amd > 0 AND cum.running - cum.total < erp.debt_amd - ${AMOUNT_EPSILON}`,
-    [ids]
-  );
-  for (const r of rows) result.orders.set(`${r.erp_customer_id}|${r.order_id}|${r.order_date}`, { unpaid_amd: Number(r.unpaid_amd), total_amd: Number(r.total) });
-  const { rows: open } = await db.query(
-    `SELECT erp.erp_customer_id, erp.balance0_amd, GREATEST(erp.debt_amd - COALESCE(t.total, 0), 0) AS unpaid_amd
-     FROM erp_customer_data erp
-     LEFT JOIN (SELECT erp_customer_id, SUM(COALESCE(revenue_amd, 0)) AS total FROM erp_order_lines WHERE erp_customer_id = ANY($1) GROUP BY erp_customer_id) t
-       ON t.erp_customer_id = erp.erp_customer_id
-     WHERE erp.erp_customer_id = ANY($1) AND erp.debt_amd > 0`,
-    [ids]
-  );
-  for (const r of open) {
-    if (Number(r.unpaid_amd) > AMOUNT_EPSILON) result.opening.set(r.erp_customer_id, { balance0_amd: r.balance0_amd == null ? null : Number(r.balance0_amd), unpaid_amd: Number(r.unpaid_amd) });
+  // the orders come from the server's copy of the order lines (debtAging.js), only the debts from the table
+  const [orders, { rows: debts }] = await Promise.all([
+    loadOrdersNewestFirst(db, ids),
+    db.query("SELECT erp_customer_id, debt_amd, balance0_amd FROM erp_customer_data WHERE erp_customer_id = ANY($1) AND debt_amd > 0", [ids]),
+  ]);
+  for (const erp of debts) {
+    const debt = Number(erp.debt_amd);
+    let running = 0;
+    for (const o of orders.get(erp.erp_customer_id) ?? []) {
+      // newest first: an order is (partly) unpaid while the newer ones have not yet added up to the debt
+      const before = running;
+      running += o.total;
+      if (before < debt - AMOUNT_EPSILON) {
+        result.orders.set(`${erp.erp_customer_id}|${o.order_id}|${o.date}`, { unpaid_amd: Math.max(0, Math.min(o.total, debt - before)), total_amd: o.total });
+      }
+    }
+    const openingUnpaid = Math.max(debt - running, 0);
+    if (openingUnpaid > AMOUNT_EPSILON) {
+      result.opening.set(erp.erp_customer_id, { balance0_amd: erp.balance0_amd == null ? null : Number(erp.balance0_amd), unpaid_amd: openingUnpaid });
+    }
   }
   return result;
 }

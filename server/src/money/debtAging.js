@@ -45,11 +45,68 @@ export function allocateFifo({ orders, debt, today, termDays }) {
   return result;
 }
 
+// Every customer's Excel orders (one total per order and date), newest first. The order lines change once a day (the ERP sync) but are
+// read on every Debt balances, Customer debt and dashboard load, so the server keeps this copy and reloads it only when the table's
+// version (migration 168: raised by every statement that changes it) has moved. Owner, 2026-10-29: "make the server faster".
+let allOrders = null; // { version, map }
+let loadingAll = null; // { version, promise }
+
+async function orderLinesVersion(db) {
+  const { rows } = await db.query("SELECT version FROM data_versions WHERE table_name = 'erp_order_lines'");
+  return rows[0] ? String(rows[0].version) : null;
+}
+
+function groupOrders(rows) {
+  const map = new Map();
+  for (const r of rows) {
+    if (!map.has(r.erp_customer_id)) map.set(r.erp_customer_id, []);
+    map.get(r.erp_customer_id).push({ order_id: r.order_id, date: r.date, total: Number(r.total) });
+  }
+  return map;
+}
+
+async function allOrdersMap(db, version) {
+  if (allOrders?.version === version) return allOrders.map;
+  if (loadingAll?.version !== version) {
+    const promise = db
+      .query(
+        `SELECT erp_customer_id, order_id, to_char(order_date, 'YYYY-MM-DD') AS date, SUM(COALESCE(revenue_amd, 0)) AS total
+         FROM erp_order_lines GROUP BY erp_customer_id, order_id, order_date
+         ORDER BY erp_customer_id, order_date DESC, order_id DESC`
+      )
+      .then(({ rows }) => {
+        const map = groupOrders(rows);
+        // a version read before the load: a change while loading only makes the next request load again
+        allOrders = { version, map };
+        return map;
+      })
+      .finally(() => {
+        if (loadingAll?.promise === promise) loadingAll = null;
+      });
+    loadingAll = { version, promise };
+  }
+  return loadingAll.promise;
+}
+
+// A few customers (a customer card) are read straight from the table unless the copy is already current; a long list builds the copy.
+const COPY_FROM = 50;
+
 // erpIds -> Map(erpId -> [{ order_id, date, total }]) newest first, optionally only orders up to asOf.
 export async function loadOrdersNewestFirst(db, erpIds, { asOf = null } = {}) {
   const ids = [...new Set((erpIds ?? []).filter(Boolean))];
   const map = new Map();
   if (!ids.length) return map;
+  const version = await orderLinesVersion(db);
+  if (version && (ids.length >= COPY_FROM || allOrders?.version === version)) {
+    const all = await allOrdersMap(db, version);
+    for (const id of ids) {
+      const list = all.get(id);
+      if (!list) continue;
+      const shown = asOf ? list.filter((o) => o.date <= String(asOf)) : list.slice();
+      if (shown.length) map.set(id, shown);
+    }
+    return map;
+  }
   const params = [ids];
   let bound = "";
   if (asOf) {
@@ -63,9 +120,5 @@ export async function loadOrdersNewestFirst(db, erpIds, { asOf = null } = {}) {
      ORDER BY erp_customer_id, order_date DESC, order_id DESC`,
     params
   );
-  for (const r of rows) {
-    if (!map.has(r.erp_customer_id)) map.set(r.erp_customer_id, []);
-    map.get(r.erp_customer_id).push({ order_id: r.order_id, date: r.date, total: Number(r.total) });
-  }
-  return map;
+  return groupOrders(rows);
 }
