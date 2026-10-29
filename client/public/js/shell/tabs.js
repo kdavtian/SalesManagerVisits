@@ -11,11 +11,13 @@ const MAP = "#/map";
 const trails = new Map(); // tab -> [entry, ...], the last one the screen to show
 let currentTab = null;
 
-// The tab the screen at `hash` belongs to when nothing else says so (the first screen after start, a link from a notification).
+// The tab the screen at `hash` belongs to. A tab's own screens (its first one, one under it like #/customers/12) or a Home screen always
+// say which tab is on -- they can be reached without a tab tap too: a link, an address, Back. Any other screen keeps the tab it was
+// opened from.
 export function noteScreen(ctx, hash) {
-  if (currentTab) return;
   const base = (hash || "#/dashboard").split("?")[0];
-  if (ctx.NAV_TAB_ROOT_HASHES.has(base)) currentTab = base;
+  const root = [...ctx.NAV_TAB_ROOT_HASHES].find((r) => base === r || base.startsWith(`${r}/`));
+  if (root) currentTab = root;
   else if (ctx.HOME_TREE_ROUTES.has(base)) currentTab = "#/dashboard";
 }
 
@@ -77,11 +79,17 @@ function parkCurrent(ctx) {
 export function switchTab(ctx, tab) {
   if (!tab || tab === currentTab) return false;
   // leaving the Map: its own parking happens in the router, as before
-  if (currentTab !== MAP) parkCurrent(ctx);
+  const leavingMap = currentTab === MAP;
+  if (!leavingMap) parkCurrent(ctx);
   currentTab = tab;
   const trail = tab === MAP ? null : trails.get(tab);
   if (!trail) return false;
   trails.delete(tab);
+  // the router does not run when a tab's pages come back: the Map on screen is parked here the same way it parks it (app.js parkMap)
+  if (leavingMap && ctx.lastRenderedHash?.startsWith(MAP)) {
+    const map = takeScreen(ctx);
+    if (map) ctx.parkMap(map);
+  }
   const shown = trail.pop();
   // whatever the router holds for the tab left behind is parked above; the restored tab's pages become the back-cache
   ctx.backStack.forEach((entry) => !entry.hash.startsWith(MAP) && ctx.disposeBackEntry(entry));

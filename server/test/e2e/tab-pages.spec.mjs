@@ -41,3 +41,29 @@ test("@smoke @iphone a tab comes back with its pages as left: the card, then Bac
   await tab("#/orders").click();
   await expect.poll(marked).toBe("orders");
 });
+
+// Leaving the Map for a tab whose pages come back keeps the Map as it was (the same map, not rebuilt), and a screen reached without a tab
+// tap (an address, a link) still counts as its tab's.
+test("the Map is kept when another tab's pages come back; an address typed in counts as its tab", async ({ page, fixtures }) => {
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+hc2rNAAAAABJRU5ErkJggg==", "base64");
+  await page.context().route(/^https:\/\/.*\.png/, (r) =>
+    r.fulfill({ contentType: "image/png", body: Buffer.concat([PNG, Buffer.alloc(1 + Math.floor(Math.random() * 400))]), headers: { "access-control-allow-origin": "*" } })
+  );
+  const rep = await fixtures.createUser("sales_manager");
+  const c = await fixtures.createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, sales_channel: "SM YVN" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginViaUi(page, rep.email);
+  const tab = (hash) => page.locator(`#nav-bar [data-hash="${hash}"]`).first();
+
+  await page.evaluate((id) => (location.hash = `#/customers/${id}`), c.id); // not a tab tap
+  await expect(page.locator("#edit-customer-btn")).toBeVisible();
+  await tab("#/map").click();
+  await expect(page.locator("#leaflet-map")).toBeVisible();
+  await page.evaluate(() => (window.__keptMap = document.querySelector("#leaflet-map")));
+  await tab("#/customers").click();
+  await expect(page).toHaveURL(new RegExp(`#/customers/${c.id}$`));
+  await expect(page.locator("#leaflet-map")).toHaveCount(0);
+  await tab("#/map").click();
+  await expect(page.locator("#leaflet-map")).toBeVisible();
+  expect(await page.evaluate(() => document.querySelector("#leaflet-map") === window.__keptMap)).toBe(true);
+});

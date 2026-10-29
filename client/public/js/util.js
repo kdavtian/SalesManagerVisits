@@ -1538,6 +1538,8 @@ export function customerSearchKind(c, query, extraText = "") {
   // (e.g. the brands check-ins recorded -- see brandChips.js).
   const prepared = preparedFor(c, extraText);
   const phone = phoneTail(c.phone);
+  // a phone number typed with spaces ("091 007 019", "+374 91 007019") is one number, not three words
+  if (/^[\d\s+()-]+$/.test(query.trim()) && phoneTail(query).length >= 3 && phone.includes(phoneTail(query))) return 3;
   let kind = 3;
   for (const w of words) {
     const k = matchKind(prepared, w.replace(/^@/, ""));

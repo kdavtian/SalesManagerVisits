@@ -12,6 +12,8 @@ export async function customerIdsMatching(search) {
      FROM customers`
   );
   const words = foldText(search).split(/\s+/).filter(Boolean).slice(0, 8);
+  const wholeDigits = /^[\d\s+()-]+$/.test(search.trim()) ? search.replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "") : "";
+  const wholePhone = wholeDigits.length >= 3 ? wholeDigits : "";
   const hits = [];
   const seen = new Set();
   for (const r of rows) {
@@ -22,6 +24,11 @@ export async function customerIdsMatching(search) {
       preparedCustomers.set(r.id, entry);
     }
     const phone = String(r.phone ?? "").replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
+    // a phone number typed with spaces ("091 007 019") is one number, not three words
+    if (wholePhone && phone.includes(wholePhone)) {
+      hits.push({ id: r.id, kind: 3 });
+      continue;
+    }
     let kind = 3;
     for (const w of words) {
       const k = matchKind(entry.prepared, w.replace(/^@/, ""));
