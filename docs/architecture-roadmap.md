@@ -307,6 +307,18 @@ areas goes to `shared/`.
 
 ### Phase C - speed
 
+#### Launch fix (owner 2026-10-29, done in 1.468.0, before step 9)
+"Very long load before the white screen; the speed measure starts at the white screen, measure from the tap." Found on WebKit (Safari's
+engine, Playwright, cold browser start each run): Safari starts the page's clock only AFTER the service worker has handed over the start
+page, and Safari's Cache Storage costs each launch time for EVERY entry in ANY of the app's caches (5,000 map tiles: start page found
+after 0.17-0.19 s instead of 0.016 s on a fast computer; linear, ~35 us per entry; a phone is several times slower and the tile cache had
+no limit). The same 5,000 tiles in IndexedDB cost nothing (0.017 s). Done: map tiles moved to IndexedDB (`sw.js` TILE_DB, 4,000 tiles,
+oldest dropped first, a stored tile is not downloaded again); the old tile cache is deleted on activation; the start page is looked up
+in the app's own cache only. The launch record (`launchTiming.js`) now starts when the worker starts for the launch (it reports its
+start and the start-page times by message), saves times after the frame is drawn, and adds "First screen". Rule from now on: no bulk
+data in Cache Storage (only the app files); bulk goes to IndexedDB.
+
+
 #### Step 9. One stylesheet request - size 1
 - [ ] The server joins the 11 boot stylesheets (in today's order) into one response `/css/app.css`, minified with the existing
       clean-css path and cached in memory in production; `index.html` links only that; `sw.js` precaches it.
@@ -377,3 +389,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 6c + 6d settings, admin, reports, customer card: 1.464.0, PR #508, 2026-10-28.
 - Step 7a search bars built by their screens: 1.465.0, PR #509, 2026-10-28.
 - Step 7b1 Map bar, pin halo, customer channel rule in api.js: 1.466.0, PR #510, 2026-10-29.
+- Step 7b2 last outside patchers gone, screens build their own parts: 1.467.0, PR #511, 2026-10-29.
+- Launch fix (tiles to IndexedDB, launch clock from the worker's start): 1.468.0, 2026-10-29.
