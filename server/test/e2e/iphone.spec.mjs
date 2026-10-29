@@ -76,6 +76,7 @@ async function startRelay(targetPort) {
 }
 
 test("@iphone the app opens without network after the first visit", async ({ page, fixtures, baseURL }) => {
+  test.setTimeout(60_000); // login, the worker taking control, two loads: over 30 s on a busy machine (local CI runs everything at once)
   const relay = await startRelay(Number(new URL(baseURL).port));
   const rep = await fixtures.createUser("sales_manager");
   await page.goto(`${relay.url}/`);

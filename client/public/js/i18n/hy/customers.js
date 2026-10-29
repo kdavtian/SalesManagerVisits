@@ -1,9 +1,6 @@
 // Part of the `hy` object of ../../i18n-hy.js (docs/architecture-roadmap.md, step 8): joined back there with ...hyCustomers.
 
 export const hyCustomers = {
-    place_saved_as: "Պահպանվեց որպես՝ {value}։",
-    place_not_in_list: "«{typed}»-ը հայկական վայրերի ցանկում չկա։ Պահպանվեց ինչպես գրվել է և ուղարկվեց ստուգման։",
-    place_other_region: "«{typed}»-ը գտնվում է մեկ այլ մարզում ({region})։ Պահպանվեց և ուղարկվեց ստուգման։",
     place_to_review: "ստուգման մեջ է",
     card_partial_load: "Էջի մի մասը չբեռնվեց։",
     zoom_in: "Մեծացնել",
@@ -254,10 +251,6 @@ export const hyCustomers = {
     opening_balance_credit: "հաճախորդը կանխավճար է արել",
     opening_balance_hint: "Էլեկտրոնային համակարգից (2025 մայիս) առաջ փոխանցված պարտք՝ Excel-ի Balance0 սյունակից։ Չի խմբագրվում։ Բացասական թիվ՝ հաճախորդը ավելի է վճարել, քան պարտք էր։",
     end_visit: "Ավարտել այցը",
-    customer_email: "Էլ. փոստ",
-    customer_email_placeholder: "name@example.com",
-    customer_website: "Կայք",
-    customer_website_placeholder: "example.am",
     account_settings: "Հաշվի կարգավորումներ",
     payment_settings: "Վճարման կարգավորումներ",
     payment_method_label: "Վճարման եղանակ",
