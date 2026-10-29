@@ -41,11 +41,12 @@ export function getLang() {
 await loadAreas(getLang(), typeof location === "undefined" ? TEXT_AREAS : firstTextAreas(location.hash));
 
 // The other areas, once the first screen has had its turn. A text needed before they arrive loads them at once (see t below).
-let loadingRest = null;
+// one load per language: the language can change while the other one is still loading (Settings, another tab)
+const loadingRest = {};
 export function loadAllTexts(lang = getLang()) {
   if (allLoaded(lang)) return Promise.resolve();
-  loadingRest ||= loadAreas(lang, TEXT_AREAS).finally(() => (loadingRest = null));
-  return loadingRest;
+  loadingRest[lang] ||= loadAreas(lang, TEXT_AREAS).finally(() => delete loadingRest[lang]);
+  return loadingRest[lang];
 }
 if (typeof window !== "undefined") {
   const later = window.requestIdleCallback ? (fn) => window.requestIdleCallback(fn, { timeout: 2000 }) : (fn) => setTimeout(fn, 1200);
