@@ -181,7 +181,7 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
-    <div class="sheet">
+    <div class="sheet route-plan-sheet">
       <h2>${escapeHtml(userName)}</h2>
       <p class="muted">${[...days].sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b)).map((d) => t(WEEKDAY_KEYS[d])).join(", ")}</p>
       <div id="route-plan-customer-list" class="plan-day-list"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -375,7 +375,7 @@ async function openCustomersByDaySheet(userId, userName, scope = "", { unplanned
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
-    <div class="sheet">
+    <div class="sheet route-plan-sheet">
       <h2>${escapeHtml(userName)}</h2>
       <p class="route-plan-tree-total" id="route-plan-customers-summary"></p>
       <button type="button" class="btn" id="route-plan-customers-toggle" hidden></button>
@@ -443,7 +443,7 @@ async function openNewRoutePlanFlow(onSaved) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay sheet-overlay-light";
   overlay.innerHTML = `
-    <div class="sheet">
+    <div class="sheet route-plan-sheet">
       <h2>${t("new_route_plan")}</h2>
       <div id="new-plan-step-body"><p class="loading-state" role="status">${t("loading")}</p></div>
       <p class="form-error" id="new-plan-error" hidden></p>

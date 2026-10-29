@@ -1,6 +1,11 @@
 // Part of the `en` object of ../../i18n-en.js (docs/architecture-roadmap.md, step 8): joined back there with ...enSettings.
 
 export const enSettings = {
+    home_order_title: "Home buttons",
+    home_order_hint: "Put the buttons you use most at the top. The order is saved for your account, on every device.",
+    home_order_reset: "Standard order",
+    home_order_up: "Move up",
+    home_order_down: "Move down",
     purge_link: "Delete test user with all data…",
     purge_title: "Delete this test user and ALL their data",
     purge_intro: "Only for test accounts. Everything below is deleted permanently, together with the user.",

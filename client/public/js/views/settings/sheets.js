@@ -5,6 +5,8 @@ import { getLang, t } from "../../i18n.js";
 import { ownsCustomers } from "../../shared/roles.js";
 import { activateDialog, attachSwipeToDismiss, escapeHtml } from "../../util.js";
 import { ICON } from "./rows.js";
+import { state, setUser } from "../../state.js";
+import { visibleQuickActionIds, orderHomeTiles } from "../../quickActions.js";
 
 // Shown in-app full-screen with its own X to get back to Settings. The
 // iframe preview is only best-effort: an installed iOS PWA's WKWebView
@@ -249,4 +251,96 @@ export async function loadSalesPerformance(slot, role) {
   // numbers for the same thing in two different places.
 
   slot.innerHTML = sections.join("");
+}
+
+// Settings > Home buttons (owner, 2026-10-29: "let user rearrange home buttons in his settings"): this person's Home tiles in their
+// order, each moved up or down with a tap; every move is saved on the server (users.home_tile_order), so the same order shows on the
+// phone and the computer. "Standard order" puts back the app's order. Which tiles show stays the admin's setting.
+export async function openHomeOrderSheet() {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet home-order-sheet" role="dialog" aria-labelledby="home-order-title">
+      <h2 id="home-order-title">${escapeHtml(t("home_order_title"))}</h2>
+      <p class="muted home-order-hint">${escapeHtml(t("home_order_hint"))}</p>
+      <ol class="home-order-list" aria-live="polite"><li class="muted">${escapeHtml(t("loading"))}</li></ol>
+      <p class="form-error" id="home-order-error" hidden></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn" id="home-order-reset">${escapeHtml(t("home_order_reset"))}</button>
+        <button type="button" class="btn btn-primary" id="home-order-done">${escapeHtml(t("done"))}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+  overlay.querySelector("#home-order-done").addEventListener("click", close);
+  const listEl = overlay.querySelector(".home-order-list");
+  const errorEl = overlay.querySelector("#home-order-error");
+
+  let ids = [];
+  try {
+    const settings = await api.getSettings();
+    const visible = visibleQuickActionIds(state.user.role, settings.quick_action_visibility).filter((id) => id !== "qa_bonuses" || settings.bonuses_enabled);
+    ids = orderHomeTiles(visible, state.user.home_tile_order);
+  } catch (err) {
+    listEl.innerHTML = `<li class="form-error">${escapeHtml(err.message)}</li>`;
+    return;
+  }
+
+  let saveTimer = null;
+  function save(order) {
+    setUser({ ...state.user, home_tile_order: order });
+    clearTimeout(saveTimer);
+    // a few quick taps are one save
+    saveTimer = setTimeout(() => {
+      errorEl.hidden = true;
+      api.setHomeTileOrder(order).catch((err) => {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+      });
+    }, 400);
+  }
+
+  function paint(focusId, dir) {
+    listEl.innerHTML = ids
+      .map(
+        (id, i) => `<li class="home-order-row" data-id="${id}">
+          <span class="home-order-n muted">${i + 1}</span>
+          <span class="home-order-label">${escapeHtml(t(id))}</span>
+          <button type="button" class="icon-btn home-order-btn" data-move="-1" aria-label="${escapeHtml(t("home_order_up"))}: ${escapeHtml(t(id))}" ${i === 0 ? "disabled" : ""}>${ICON.chevron}</button>
+          <button type="button" class="icon-btn home-order-btn home-order-down" data-move="1" aria-label="${escapeHtml(t("home_order_down"))}: ${escapeHtml(t(id))}" ${i === ids.length - 1 ? "disabled" : ""}>${ICON.chevron}</button>
+        </li>`
+      )
+      .join("");
+    // keep the keyboard / screen reader on the button that was used (or its neighbour at the end of the list)
+    if (focusId) {
+      const row = listEl.querySelector(`[data-id="${focusId}"]`);
+      (row?.querySelector(`[data-move="${dir}"]:not([disabled])`) ?? row?.querySelector(".home-order-btn:not([disabled])"))?.focus();
+    }
+  }
+  listEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".home-order-btn");
+    if (!btn) return;
+    const id = btn.closest(".home-order-row").dataset.id;
+    const dir = Number(btn.dataset.move);
+    const i = ids.indexOf(id);
+    const j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    paint(id, dir);
+    save([...ids]);
+  });
+  overlay.querySelector("#home-order-reset").addEventListener("click", async () => {
+    const settings = await api.getSettings().catch(() => null);
+    ids = visibleQuickActionIds(state.user.role, settings?.quick_action_visibility).filter((id) => id !== "qa_bonuses" || settings?.bonuses_enabled);
+    paint();
+    setUser({ ...state.user, home_tile_order: null });
+    clearTimeout(saveTimer);
+    api.setHomeTileOrder(null).catch((err) => {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    });
+  });
+  paint();
 }

@@ -546,3 +546,26 @@
     flex-wrap: wrap;
   }
 }
+
+/* Route plans on a desktop window (owner, 2026-10-29: "optimize the page for desktop"): each plan is one compact row -- name | the
+   seven days | View customers -- so every rep's week is seen at once, like a table; the pickers open wider with a taller list.
+   Phones keep the cards. */
+@media (min-width: 1024px) {
+  .route-plan-rep-card {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.1fr) minmax(0, 5fr) 240px; /* a fixed last column: the days line up from row to row */
+    align-items: center;
+    column-gap: 16px;
+    margin-bottom: 6px;
+    padding: 10px 14px;
+  }
+  .route-plan-rep-header { flex-direction: column; gap: 2px; margin: 0; min-width: 0; }
+  .route-plan-rep-header strong { overflow-wrap: anywhere; }
+  .route-plan-week-row { overflow: visible; }
+  .route-plan-day-chip { min-height: 44px; padding: 6px 4px; flex-direction: row; justify-content: center; gap: 8px; }
+  .route-plan-day-label { font-size: 0.78rem; }
+  .route-plan-day-count { font-size: 0.95rem; }
+  .route-plan-view-customers-btn { width: 100%; margin: 0; white-space: nowrap; }
+  .route-plan-week-row-standalone { max-width: 980px; }
+  .sheet.route-plan-sheet { max-width: 760px; }
+}

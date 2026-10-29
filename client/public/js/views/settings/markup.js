@@ -70,6 +70,7 @@ export function paintSettingsMarkup(ctx) {
 
       ${ctx.pageOpen(ctx.pageById("p-appearance"))}
       <div class="card settings-list">
+        ${settingsRow({ icon: ICON.team, label: t("home_order_title"), id: "row-home-order", color: "blue" })}
         ${settingsToggleRow({ icon: ICON.appearance, label: t("appearance"), value: getTheme() === "dark" ? t("dark") : t("light"), id: "toggle-appearance", checked: getTheme() === "dark", color: "indigo" })}
         ${settingsToggleRow({ icon: ICON.language, label: t("language"), value: getLang() === "hy" ? t("armenian") : t("english"), id: "toggle-language", checked: getLang() === "hy", color: "blue" })}
         ${settingsToggleRow({ icon: ICON.bolt, label: t("efficiency_mode"), value: getPerfMode() === "efficiency" ? t("toggle_on") : t("toggle_off"), id: "toggle-perf-mode", checked: getPerfMode() === "efficiency", color: "orange", hintBtnId: "efficiency-mode-hint-btn", hintTextId: "efficiency-mode-hint-text" })}

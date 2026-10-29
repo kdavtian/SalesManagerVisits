@@ -144,3 +144,11 @@ export function visibleQuickActionIds(role, visibility) {
   // renamed or removed can never resurrect a tile that no longer exists.
   return QUICK_ACTION_IDS.filter((id) => allowed.includes(id));
 }
+
+// This person's own order of their Home buttons (Settings > Home buttons, saved on the server: users.home_tile_order). The ids they put
+// in order come first in that order, any other visible tile follows in the standard order; an id that is not visible is ignored.
+export function orderHomeTiles(ids, order) {
+  if (!Array.isArray(order) || !order.length) return ids;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return [...ids].sort((a, b) => (rank.get(a) ?? 1e6 + ids.indexOf(a)) - (rank.get(b) ?? 1e6 + ids.indexOf(b)));
+}

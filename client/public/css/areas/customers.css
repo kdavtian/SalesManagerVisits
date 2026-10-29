@@ -2341,7 +2341,7 @@
 .cl-legend-tiers .cl-legend-row { margin: 0; }
 .cl-legend-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .settings-textsize { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px 14px; }
-.settings-textsize .ts-a1 { font-size: 0.95rem; }
+.settings-textsize .ts-a1 { font-size: min(0.95rem, 3.7vw); } /* "Սովորական" fits a 320-390 px phone */
 .settings-textsize .ts-a2 { font-size: 1.1rem; }
 .settings-textsize .ts-a3 { font-size: 1.3rem; }
 .om-loading { text-align: center; margin: 4px 0; }
