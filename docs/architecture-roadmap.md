@@ -369,14 +369,15 @@ data in Cache Storage (only the app files); bulk goes to IndexedDB.
       Mbit/s + 150 ms latency, CPU 4x, Armenian; median of 3 starts.
 - [x] `server/test/integration/speedBudget.test.js` (isolated: own database): 4,000 customers, 60,000 Excel order lines, 3,000 app
       orders (9,000 lines), a debt row per customer; the 10 busiest endpoints as the admin (largest answers), median of 3 after a warm-up.
-- Done in PR (step 12), 2026-10-29. Both run in CI on every PR. Budgets (raise one only with the reason written here):
+- Done in PR #520, 2026-10-29. Both run in CI on every PR. The first-start budgets leave ~40 % over the CI numbers (CI runners vary;
+  a flaky gate would block every release), the endpoint budgets ~4x. Budgets (raise one only with the reason written here):
 
-  | First start (budget / measured on a fast computer) | |
+  | First start (budget / measured here / in CI) | |
   | --- | --- |
-  | Home drawn | 6.0 s / 3.9-4.2 s |
-  | End of the white screen (first paint) | 3.0 s / 2.1 s |
-  | Scripts downloaded before Home | 700 KB / 302 KB compressed |
-  | Scripts + stylesheets the first paint waited for | 20 / 12-15 (the source files: ~80) |
+  | Home drawn | 6.0 s / 3.9-4.2 s / 4.3 s |
+  | End of the white screen (first paint) | 3.0 s / 2.1 s / 2.0 s |
+  | Scripts downloaded before Home | 700 KB / 302 KB / 358 KB compressed |
+  | Scripts + stylesheets the first paint waited for | 20 / 12-15 / 12 (the source files: ~80) |
 
   | Endpoint (budget / measured) | |
   | --- | --- |
@@ -448,3 +449,4 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 8b texts split by area: 1.472.0, PR #517, 2026-10-29.
 - Step 11 texts in two parts: 1.473.0, PR #518, 2026-10-29.
 - Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, PR #519, 2026-10-29.
+- Step 12 speed budgets in CI (first start on a slow phone; 10 busiest endpoints with a company-sized data set): tests only, PR #520, 2026-10-29.
