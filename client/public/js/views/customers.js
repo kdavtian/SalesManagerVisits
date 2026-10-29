@@ -213,7 +213,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // session rather than always fetched with the rest of the list.
   let showDebt = false;
   const filterRow = root.querySelector("#customer-filter-row");
-  enhanceCustomers(); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
+  enhanceCustomers(root); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
   // "!" next to the title: what the icon colours and the chips on this list mean.
   root.querySelector("#cl-legend-btn").addEventListener("click", () => {
     const tiers = TIER_OPTIONS.map((o) => `<div class="cl-legend-row">${customerListIconHtml({ customer_tier: o.value, category: "" })}<span>${escapeHtml(t(o.labelKey))}</span></div>`).join("");
@@ -1122,8 +1122,8 @@ function syncCustomerFilterButtons(filterRow) {
   });
 }
 
-function enhanceCustomers() {
-  const input = document.querySelector("#customer-search");
+function enhanceCustomers(root) {
+  const input = root.querySelector("#customer-search");
   const toolbar = input?.closest(".list-toolbar");
   const view = input?.closest(".list-view");
   if (!input || !toolbar || !view) return;

@@ -2166,6 +2166,7 @@ export default {
 
     new_customer: "New customer",
     name: "Name",
+    new_customer_name: "Name",
     category: "Category",
     category_placeholder: "e.g. garage, lube shop",
     category_oil_point: "Oil change point",

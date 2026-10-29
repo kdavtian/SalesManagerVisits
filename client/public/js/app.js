@@ -427,10 +427,9 @@ function navigate(hash) {
     // See NAV_TAB_ROOT_HASHES above -- replace rather than push, so hopping
     // between bottom-nav tabs never grows the shared browser history stack.
     // replaceState doesn't fire hashchange on its own, so it's dispatched
-    // manually -- render() below is one listener, but mapSafeUi.js,
-    // customerSocialProfiles.js and views/orders.js (the region filter) each
-    // register their own route-driven hashchange listener too, and all of
-    // them need to run exactly as they would for a normal push navigation.
+    // manually -- render() below is one listener, and views/orders.js (the
+    // region filter) registers its own route-driven hashchange listener
+    // too; both need to run exactly as they would for a normal push navigation.
     history.replaceState(null, "", hash);
     window.dispatchEvent(new HashChangeEvent("hashchange"));
     return;

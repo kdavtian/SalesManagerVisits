@@ -13,7 +13,7 @@ const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PUBLIC = path.resolve(SERVER, "../client/public");
 const walk = (dir) =>
   fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]));
-const parse = (file) => espree.parse(fs.readFileSync(file, "utf8"), { ecmaVersion: "latest", sourceType: "module", loc: true });
+const parse = (file) => espree.parse(fs.readFileSync(file, "utf8"), { ecmaVersion: "latest", sourceType: "module", loc: true, range: true });
 function eachNode(node, visit) {
   if (!node || typeof node.type !== "string") return;
   visit(node);
@@ -183,3 +183,26 @@ test("server/src: only the entry points at the top, every route file in <area>/r
   assert.deepEqual(misplaced, []);
 });
 
+
+// ---- 8. no page-wide observers --------------------------------------------------------------------------------------------------------
+// A screen builds its own parts right after it renders (docs/architecture-roadmap.md, step 7): no script may watch the whole page
+// (document.body / document.documentElement / #app with subtree) to patch screens from outside. Allowed: app.js's announcement of
+// error / success messages to screen readers, and an observer that watches only its own element.
+const PAGE_OBSERVER_ALLOWED = new Set(["js/app.js"]);
+test("no script watches the whole page to patch screens from outside", () => {
+  const offenders = [];
+  for (const file of walk(path.join(PUBLIC, "js")).filter((f) => f.endsWith(".js"))) {
+    const rel = path.relative(PUBLIC, file).split(path.sep).join("/");
+    const src = fs.readFileSync(file, "utf8");
+    eachNode(parse(file), (n) => {
+      if (n.type !== "CallExpression" || n.callee.type !== "MemberExpression" || n.callee.property.name !== "observe") return;
+      const [target, options] = n.arguments;
+      const targetText = target ? src.slice(target.range[0], target.range[1]) : "";
+      // the page itself, or #app (the old enhancers' `const app = document.querySelector("#app"); observer.observe(app, ...)`)
+      const pageWide = /^(document\.body|document\.documentElement|document|app)$/.test(targetText) || /querySelector\(["']#app["']\)|getElementById\(["']app["']\)/.test(targetText);
+      const subtree = options?.type === "ObjectExpression" && options.properties.some((p) => p.key?.name === "subtree" && p.value?.value === true);
+      if (pageWide && subtree && !PAGE_OBSERVER_ALLOWED.has(rel)) offenders.push(`${rel}:${n.loc.start.line}`);
+    });
+  }
+  assert.deepEqual(offenders, [], "build the part in the screen that renders it (call it right after rendering) instead of observing the page");
+});

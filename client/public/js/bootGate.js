@@ -15,16 +15,10 @@
 // re-renders) never re-shows the calculator.
 const UNLOCK_KEY = "kad_calc_unlocked";
 
-// Same order the static <script type="module"> tags used to declare --
-// preserved here since a couple of these attach page-wide listeners the
-// first time they run and there's no reason to risk changing that.
+// The app itself. The "enhancer" scripts that used to load next to it (and patched screens from outside) are gone: each screen
+// builds its own parts now (docs/architecture-roadmap.md step 7).
 const REAL_APP_MODULES = [
-  "./competitorPolicySafe.js",
-  "./activityDatePicker.js",
-  "./fieldVisitEnhancements.js",
-  "./customerSocialProfiles.js",
   "./app.js",
-  "./mapSafeUi.js",
 ];
 
 async function bootRealApp() {

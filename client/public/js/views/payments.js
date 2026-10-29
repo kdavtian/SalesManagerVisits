@@ -350,7 +350,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(load, 300);
   });
-  enhancePayments(); // the combined search pill: filter inside the field, clear "x" (searchBar.js)
+  enhancePayments(root); // the combined search pill: filter inside the field, clear "x" (searchBar.js)
 
   function paymentRowHtml(p) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
@@ -915,8 +915,8 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
 // its menu already exist in payments.js's own markup (so their click
 // handlers survive being moved, DOM listeners aren't lost on reparenting),
 // this just wraps them into the shared combined-search look.
-function enhancePayments() {
-  const input = document.querySelector("#payment-search");
+function enhancePayments(root) {
+  const input = root.querySelector("#payment-search");
   const toolbar = input?.closest(".list-toolbar");
   if (!input || !toolbar) return;
 

@@ -1,6 +1,6 @@
-import { getLang, t } from "./i18n.js";
-import { labelColon } from "./util.js";
-import { patchCachedCustomer } from "./listCache.js";
+import { getLang, t } from "../../i18n.js";
+import { labelColon } from "../../util.js";
+import { patchCachedCustomer } from "../../listCache.js";
 
 const INSTAGRAM_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.4" cy="6.7" r="1" fill="currentColor" stroke="none"/></svg>`;
 const FACEBOOK_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13.8 21v-8h2.7l.4-3h-3.1V8.1c0-.9.25-1.5 1.55-1.5H17V3.9c-.3-.04-1.3-.12-2.5-.12-2.48 0-4.18 1.5-4.18 4.3V10H7.5v3h2.82v8z" fill="currentColor" stroke="none"/></svg>`;
@@ -46,11 +46,6 @@ function escapeAttr(value) {
     '"': "&quot;",
     "'": "&#39;",
   }[c]));
-}
-
-function customerIdFromHash() {
-  const match = location.hash.match(/^#\/customers\/(\d+)(?:$|[/?])/);
-  return match ? Number(match[1]) : null;
 }
 
 // Matches server/src/middleware/csrf.js's double-submit-cookie check --
@@ -135,8 +130,8 @@ function websiteHref(value) {
 // the header's overflow menu. That menu is gone now -- these fields are a
 // section inside customerDetail.js's one "Edit" sheet instead -- so what
 // this module exports is just the section's markup/read/save, not a whole
-// standalone dialog. The one-tap external links row below (paint/
-// decorateCustomerDetail) is unrelated and unchanged.
+// standalone dialog. The one-tap external links row (socialLinksHtml) is
+// painted by the customer card itself.
 export async function fetchCustomerSocial(customerId) {
   return apiRequest(`/api/customer-social/${customerId}`);
 }
@@ -169,7 +164,7 @@ export function collectSocialPayload(form) {
 }
 
 // The icon row for one customer's social/contact data. Used by the customer card itself (it fetches this together with the customer so the
-// icons are there on the first paint) and by decorateCustomerDetail below (a card that did not fill them).
+// icons are there on the first paint).
 export function socialLinksHtml(data) {
   return [
     data.instagram_username ? socialButton("instagram", data.instagram_username) : "",
@@ -184,65 +179,3 @@ export function bindSocialLinks(root) {
     button.addEventListener("click", () => openPlatformProfile(button.dataset.socialKind, button.dataset.socialValue));
   });
 }
-
-let renderToken = 0;
-async function decorateCustomerDetail() {
-  const customerId = customerIdFromHash();
-  if (!customerId) return;
-  // The left slot of the facts card's own toolbar row (see
-  // detail-facts-card-actions in customerDetail.js) -- sits directly next to
-  // Account settings/Edit on the right of the same row, inside the main
-  // customer info card, rather than a separate row of its own above it.
-  const actions = document.querySelector(".detail-view .detail-facts-card-actions-social");
-  if (!actions || actions.dataset.socialProfilesReady === String(customerId)) return;
-  actions.dataset.socialProfilesReady = String(customerId);
-  const token = ++renderToken;
-
-  let data;
-  try {
-    data = await apiRequest(`/api/customer-social/${customerId}`);
-  } catch {
-    delete actions.dataset.socialProfilesReady;
-    return;
-  }
-  if (token !== renderToken || customerIdFromHash() !== customerId || !actions.isConnected) return;
-
-  // One-tap external links only -- these cost nothing to keep visible
-  // because they just hand off to another app/tab. Editing these fields
-  // happens inside customerDetail.js's merged "Edit" sheet (item 8) via
-  // the fetchCustomerSocial/socialFieldsHtml/collectSocialPayload/
-  // saveCustomerSocial exports above, not here.
-  const links = socialLinksHtml(data);
-
-  actions.innerHTML = links;
-  // With links, the row goes back to its own line above the facts so the
-  // icons never sit on top of the address.
-  if (links) actions.closest(".detail-facts-card-actions")?.classList.remove("is-compact");
-  bindSocialLinks(actions);
-}
-
-function boot() {
-  decorateCustomerDetail();
-  const app = document.querySelector("#app");
-  if (!app) return;
-  // Coalesced -- a burst of mutations (a list re-rendering) previously
-  // queued one requestAnimationFrame callback per mutation record, all
-  // still running before the next paint; one flag caps that at one.
-  let scheduled = false;
-  const observer = new MutationObserver(() => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      decorateCustomerDetail();
-    });
-  });
-  observer.observe(app, { childList: true, subtree: true });
-  window.addEventListener("hashchange", () => {
-    renderToken += 1;
-    requestAnimationFrame(decorateCustomerDetail);
-  });
-}
-
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true });
-else boot();

@@ -5,7 +5,7 @@
 // SOON_MS does not hold the card back: it is `undefined` in the bundle and its promise is in `lateParts`, which the card fills in from.
 import { api } from "./api.js";
 import { state } from "./state.js";
-import { fetchCustomerSocial } from "./customerSocialProfiles.js";
+import { fetchCustomerSocial } from "./views/customer/social.js";
 import { warmCache } from "./listCache.js";
 
 // The card shows this many latest visits at once; older ones load when the rep asks (a long-standing customer has hundreds).

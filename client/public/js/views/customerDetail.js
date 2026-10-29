@@ -15,7 +15,7 @@ import { bindStepperButton } from "../stepper.js";
 import { warmCache, peekCache, refreshCache } from "../listCache.js";
 import { cardSource, fetchedJustNow, isWholeBundle, lateParts, VISITS_PAGE } from "../customerCardLoader.js";
 import { paymentsSource, allOrdersSource, orderDetailSource } from "../customerCardData.js";
-import { socialLinksHtml, bindSocialLinks } from "../customerSocialProfiles.js";
+import { socialLinksHtml, bindSocialLinks } from "./customer/social.js";
 import { openAccountSettingsSheet } from "./customer/accountSettings.js";
 import { openEditSheet } from "./customer/editSheet.js";
 import { openCustomerFiles } from "./customer/files.js";
@@ -120,8 +120,8 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
   // two taps here: "Account settings" (manager/ERP-ID/payment, whichever
   // this viewer is allowed to touch) and "Edit" (core fields, plus contact
   // & social profiles as a section of the same sheet). The one-tap
-  // external links (Instagram/Facebook/email/website, injected by
-  // customerSocialProfiles.js) stay alongside them -- those just hand off
+  // external links (Instagram/Facebook/email/website, see
+  // customer/social.js) stay alongside them -- those just hand off
   // to another app and cost nothing to keep in the open.
   const hasAccountSettings =
     canReassignCustomers() || canAssignErpCustomerId(customer) || canEditOwnSalesChannel(customer) || seesFinancialExports();
@@ -155,8 +155,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     <div class="card detail-facts-card">
       <!-- One toolbar row: social/contact links (Instagram/Facebook/email/
            website) on the left, Account settings + Edit on the right.
-           customerSocialProfiles.js finds the left slot by its own class and
-           fills it in -- left empty (zero width, so space-between still pins
+           the card fills the left slot (customer/social.js socialLinksHtml) -- left empty (zero width, so space-between still pins
            the right group to the edge) for any customer with no profiles
            linked yet. -->
       <div class="detail-facts-card-actions is-compact">
@@ -265,9 +264,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     });
   });
   container.querySelector("#customer-reload-btn")?.addEventListener("click", reload);
-  // customerSocialProfiles.js's own decoration (a second request after the paint) leaves a slot marked like this alone.
   const socialSlot = container.querySelector(".detail-facts-card-actions-social");
-  if (socialSlot) socialSlot.dataset.socialProfilesReady = String(customerId);
   fillPart(socialEarly, "social", (data) => {
     const slot = socialSlot;
     if (!slot || !data) return;

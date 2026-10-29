@@ -16,8 +16,8 @@ function mapFilterIcon(value) {
   return SEARCH_ICONS.filters;
 }
 
-export function enhanceMapSearchRow() {
-  const input = document.querySelector("#map-customer-search");
+export function enhanceMapSearchRow(root = document) {
+  const input = root.querySelector("#map-customer-search");
   const row = input?.closest(".map-search-row");
   const view = input?.closest(".map-view");
   if (!input || !row || !view || row.dataset.unifiedMapSearch) return;
@@ -52,8 +52,10 @@ export function enhanceMapSearchRow() {
         chip.setAttribute("role", "menuitemradio");
         chip.setAttribute("aria-checked", String(chip === selected));
         chip.classList.add("unified-map-menu-option");
+        // only the status chips (data-filter): the Competitors toggle keeps its own icon (it used to get the generic filter icon
+        // after the first filter was picked)
         const iconHost = chip.querySelector(".map-filter-chip-icon");
-        if (iconHost) iconHost.innerHTML = mapFilterIcon(chip.dataset.filter || "");
+        if (iconHost && chip.dataset.filter !== undefined) iconHost.innerHTML = mapFilterIcon(chip.dataset.filter);
       });
       ensureSelectedCheck(filterRow, ".map-filter-chip");
       syncDropdownButton(button, filterRow, Boolean(value));
@@ -151,11 +153,11 @@ function compactNativeFilterSheet(button) {
   });
 }
 
-export function enhanceMapDimensionFilters() {
-  const input = document.querySelector("#map-customer-search");
+export function enhanceMapDimensionFilters(root = document) {
+  const input = root.querySelector("#map-customer-search");
   const searchRow = input?.closest(".map-search-row.activity-search-combined");
   const actions = searchRow?.querySelector(":scope > .activity-search-actions");
-  const filterRow = document.querySelector("#map-icon-filter-row");
+  const filterRow = root.querySelector("#map-icon-filter-row");
   if (!input || !searchRow || !actions || !filterRow) return;
 
   if (!filterRow.classList.contains("map-dimension-filter-inline")) filterRow.classList.add("map-dimension-filter-inline");
@@ -217,4 +219,61 @@ export function wireMarkerSelection(map, mapEl) {
       if (openPopups === 0) clear();
     });
   });
+}
+
+function competitorIcon() {
+  return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19z"/><path d="m5 10 1.2-5h11.6L19 10M8 20.5v-6h4v6M4.5 10c.8 1.4 2.6 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0 .8 1.4 2.7 1.4 3.5 0"/></svg>`;
+}
+
+function labels() {
+  const lang = document.documentElement.lang || "en";
+  if (lang.startsWith("hy")) return { label: "Մրցակիցներ", show: "Ցույց տալ մրցակիցներին", hide: "Թաքցնել մրցակիցներին" };
+  if (lang.startsWith("ru")) return { label: "Конкуренты", show: "Показать конкурентов", hide: "Скрыть конкурентов" };
+  return { label: "Competitors", show: "Show competitors", hide: "Hide competitors" };
+}
+
+// The "Competitors" chip in the status filter: competitors are hidden on every Map entry, the chip shows them (was mapSafeUi.js,
+// which mounted it from outside with retries after each route change; step 7b).
+export function attachCompetitorToggle(root = document) {
+  const mapView = root.querySelector(".map-view");
+  if (!mapView || mapView.dataset.safeUiReady === "1") return Boolean(mapView);
+  const filterRow = mapView.querySelector(".map-filter-row");
+  if (!filterRow) return false;
+
+  mapView.dataset.safeUiReady = "1";
+  mapView.classList.remove("kad-show-competitors"); // hidden by default on every Map entry
+
+  const copy = labels();
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "map-filter-chip map-competitor-toggle";
+  button.setAttribute("aria-pressed", "false");
+  button.setAttribute("aria-label", copy.show);
+  button.title = copy.show;
+  button.innerHTML = `<span class="map-filter-chip-icon">${competitorIcon()}</span>${copy.label}`;
+
+  const syncButton = () => {
+    const visible = mapView.classList.contains("kad-show-competitors");
+    button.classList.toggle("chip-active", visible);
+    button.setAttribute("aria-pressed", String(visible));
+    button.setAttribute("aria-label", visible ? copy.hide : copy.show);
+    button.title = visible ? copy.hide : copy.show;
+  };
+
+  button.addEventListener("click", () => {
+    mapView.classList.toggle("kad-show-competitors");
+    syncButton();
+  });
+
+  // Existing Map filters reset .chip-active on every filter chip. Re-sync
+  // this independent intelligence toggle immediately after those handlers
+  // run, without observing or scanning the DOM.
+  mapView.addEventListener("click", (event) => {
+    if (event.target.closest(".map-filter-chip") || event.target.closest("#nearby-panel-close")) {
+      requestAnimationFrame(syncButton);
+    }
+  });
+
+  filterRow.appendChild(button);
+  return true;
 }

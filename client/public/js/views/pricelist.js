@@ -425,7 +425,7 @@ export async function renderPricelist(root, navigate) {
   renderFilters();
 
   const searchInput = container.querySelector("#pricelist-search");
-  enhancePricelist(); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
+  enhancePricelist(container); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
   searchInput.addEventListener(
     "input",
     debounce(() => {
@@ -840,8 +840,8 @@ function syncPricelistFilterButtons(filterRow) {
 // special-only toggle, plus its sort dropdown, folded into the same
 // combined-search pill Customers/Activity/Payments already use -- same
 // reparent-in-place approach as enhanceCustomers/enhancePayments above.
-function enhancePricelist() {
-  const input = document.querySelector("#pricelist-search");
+function enhancePricelist(root) {
+  const input = root.querySelector("#pricelist-search");
   const toolbar = input?.closest(".list-toolbar");
   const view = input?.closest(".detail-view");
   if (!input || !toolbar || !view) return;
