@@ -2166,6 +2166,7 @@ export default {
 
     new_customer: "Նոր հաճախորդ",
     name: "Անուն",
+    new_customer_name: "Անվանում",
     category: "Կատեգորիա",
     category_placeholder: "օր․ ավտոսպասարկում, յուղի կետ",
     category_oil_point: "Յուղման կետ",

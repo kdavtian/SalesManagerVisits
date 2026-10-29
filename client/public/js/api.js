@@ -198,6 +198,17 @@ function normalizeCustomer(customer) {
   return copy;
 }
 
+// Competitors are market-intelligence records, not customers to visit: never overdue, never in the "overdue" / "not visited"
+// queues, never put on a visit plan (was competitorPolicySafe.js, which replaced these api methods from outside; step 7b).
+const competitorIds = new Set();
+function rememberCompetitors(rows) {
+  for (const c of Array.isArray(rows) ? rows : rows ? [rows] : []) {
+    if (c?.customer_tier === "competitor" && Number.isInteger(Number(c.id))) competitorIds.add(Number(c.id));
+  }
+}
+const stripCompetitorIds = (ids) => (Array.isArray(ids) ? ids.filter((id) => !competitorIds.has(Number(id))) : ids);
+const competitorNotDue = (c) => (c?.customer_tier === "competitor" ? { ...c, overdue: false, visit_required: false } : c);
+
 export const api = {
   login: (email, password) => json("/auth/login", "POST", { email, password }),
   logout: () => request("/auth/logout", { method: "POST" }),
@@ -216,7 +227,10 @@ export const api = {
   listCustomers: async (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     const rows = await request(`/customers${qs ? `?${qs}` : ""}`);
-    return Array.isArray(rows) ? rows.map(normalizeCustomer) : rows;
+    const list = Array.isArray(rows) ? rows.map(normalizeCustomer) : rows;
+    rememberCompetitors(list);
+    const operationalQueue = params?.visited === "overdue" || params?.visited === "not_visited";
+    return list.filter((c) => !(operationalQueue && c?.customer_tier === "competitor")).map(competitorNotDue);
   },
   // Order returns and cancellations (see server/src/orders/orderReturns.js)
   listReturns: (params = {}) => request(`/returns?${new URLSearchParams(params)}`, { fresh: true }),
@@ -236,7 +250,11 @@ export const api = {
     await dropCachedCustomerLists();
     return normalizeCustomer(created);
   },
-  getCustomer: async (id) => normalizeCustomer(await request(`/customers/${id}`)),
+  getCustomer: async (id) => {
+    const c = normalizeCustomer(await request(`/customers/${id}`));
+    rememberCompetitors(c);
+    return competitorNotDue(c);
+  },
   getVolumeReport: (params) => request(`/volume-report?${new URLSearchParams(params).toString()}`),
   getPinReview: () => request("/pin-review"),
   acceptPinReview: (customerId) => json(`/pin-review/${customerId}/accept`, "POST", {}),
@@ -423,15 +441,17 @@ export const api = {
   mySignatureUrl: () => `/api/me/signature?t=${Date.now()}`,
   myAvatarUrl: () => `/api/me/avatar?t=${Date.now()}`,
 
-  getMyVisitPlan: (date, userId) => {
+  getMyVisitPlan: async (date, userId) => {
     const params = new URLSearchParams();
     if (date) params.set("date", date);
     if (userId) params.set("user_id", userId);
     const qs = params.toString();
-    return request(`/visit-plans/mine${qs ? `?${qs}` : ""}`);
+    const plan = await request(`/visit-plans/mine${qs ? `?${qs}` : ""}`);
+    if (!plan || !Array.isArray(plan.customer_ids)) return plan;
+    return { ...plan, customer_ids: stripCompetitorIds(plan.customer_ids) };
   },
   saveVisitPlan: (date, customerIds, userId) =>
-    json("/visit-plans", "POST", { date, customer_ids: customerIds, user_id: userId }),
+    json("/visit-plans", "POST", { date, customer_ids: stripCompetitorIds(customerIds), user_id: userId }),
   getPendingVisitPlans: () => request("/visit-plans/pending"),
   getTeamTodayVisitPlans: () => request("/visit-plans/team-today"),
   reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
@@ -439,7 +459,7 @@ export const api = {
   // planChannel: "" = save the main plan, "SM B2B" = that channel's own plan (the person's other plans stay as they are);
   // undefined = replace the whole day (the Map's quick planner)
   saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds, planChannel) =>
-    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: customerIds, ...(planChannel === undefined ? {} : { plan_channel: planChannel }) }),
+    json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: stripCompetitorIds(customerIds), ...(planChannel === undefined ? {} : { plan_channel: planChannel }) }),
   listRoutePlanSets: () => request("/route-plan-sets"),
   autoRoutePlanSet: (data) => json("/route-plan-sets/auto", "POST", data),
   snapshotRoutePlanSet: (name) => json("/route-plan-sets/snapshot", "POST", { name }),

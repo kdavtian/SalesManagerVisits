@@ -5,7 +5,7 @@ import { activateCategorySelector, activateDialog, activateTierSelector, categor
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { canEditDirectly, isAdmin } from "../../state.js";
-import { collectSocialPayload, fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml } from "../../customerSocialProfiles.js";
+import { collectSocialPayload, fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml } from "./social.js";
 
 export const EDIT_FIELDS = [
   { name: "name", labelKey: "name", type: "text" },
@@ -24,9 +24,8 @@ export const EDIT_FIELDS = [
 // bottom of the same form/sheet, rather than two separate entry points.
 // That section only appears once the social data has loaded AND says this
 // viewer may edit it (fetchCustomerSocial's can_edit) -- it's fetched here,
-// independently of customerSocialProfiles.js's own decoration of the
-// header's one-tap links, so this sheet can open immediately without
-// waiting on that module's timing.
+// independently of the card's own one-tap links, so this sheet can open
+// immediately without waiting on them.
 export async function openEditSheet(customer, navigate, onDone) {
   const fields = EDIT_FIELDS;
   const overlay = document.createElement("div");

@@ -10,6 +10,7 @@ import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../
 import { dockedKey } from "../dockSheet.js";
 import { periodLabel, periodKey, periodAria, tapPeriod } from "../periodButtons.js";
 import { installClearButton } from "../searchBar.js";
+import { enhanceDateRange } from "../activityDatePicker.js";
 
 const OUTCOMES = [
   "order_placed",
@@ -456,6 +457,7 @@ export function renderActivity(root, navigate) {
       });
     });
 
+    enhanceDateRange(container); // the custom range's date fields open the wheel picker (activityDatePicker.js)
     enhanceActivity(); // the search bar's clear "x" (searchBar.js)
     renderList();
   }

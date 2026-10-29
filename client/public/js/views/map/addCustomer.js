@@ -381,7 +381,7 @@ export function openNewCustomerForm(ctx, latlng) {
       <form id="new-customer-form">
         ${tierSelectorHtml("potential")}
         ${categorySelectorHtml(CATEGORY_LIST[0].value)}
-        <label>${t("name")}<input name="name" required /></label>
+        <label>${t("new_customer_name")}<input name="name" required /></label>
         <label>${t("phone")}<input name="phone" type="tel" value="+374 " /></label>
         <label>${t("address")}<input name="address" id="new-customer-address" /></label>
         <div class="form-row-2">
@@ -533,6 +533,17 @@ export function openNewCustomerForm(ctx, latlng) {
   }
   wirePlaceInput(overlay.querySelector("#new-customer-subregion"), () => regionSelect.value);
   const channelSelect = overlay.querySelector("#new-customer-channel");
+  // A sales manager never picks the channel: it is preset from their position and the field is hidden (the server sets it from
+  // the rep anyway, as the authority). Was fieldVisitEnhancements.js, step 7b.
+  if (state.user?.role === "sales_manager") {
+    const guessed = managerChannelGuess();
+    if (guessed) {
+      if (![...channelSelect.options].some((o) => o.value === guessed)) channelSelect.add(new Option(guessed, guessed));
+      channelSelect.value = guessed;
+    }
+    const channelLabel = channelSelect.closest("label");
+    if (channelLabel) channelLabel.hidden = true;
+  }
   const managerSelect = overlay.querySelector("#new-customer-manager");
   let managerOptionsHtml = `<option value="">${t("unassigned")}</option>`;
   api
@@ -754,4 +765,15 @@ export function openNewCustomerForm(ctx, latlng) {
       form.removeAttribute("aria-busy");
     }
   }
+}
+
+// The channel a sales manager works in, read from their position (or name).
+function managerChannelGuess() {
+  const source = `${state.user?.position || ""} ${state.user?.name || ""}`.toLowerCase();
+  if (source.includes("davtashen") || source.includes("դավթաշեն")) return "SM Davtashen";
+  if (source.includes("shirak") || source.includes("gyumri") || source.includes("շիրակ") || source.includes("գյումրի")) return "SM Shirak";
+  if (source.includes("b2b")) return "SM B2B";
+  if (source.includes("sm cas") || source.includes("sales manager cas")) return "SM CAS";
+  if (source.includes("yvn") || source.includes("yerevan") || source.includes("երևան")) return "SM YVN";
+  return "";
 }

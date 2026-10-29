@@ -281,8 +281,22 @@ areas goes to `shared/`.
   Customers "subregion" button removal (Customers no longer draws one). Proof as in 7a: the Map (pins, icon filters open and
   closed, a pin chosen and its popup closed, the add flow's address search) and the customer list and cards (normal, potential,
   competitor), both languages, render the same before and after; `search-bars.spec.mjs` covers the Map bar and the halo.
-- Still to fold (7b2): `fieldVisitEnhancements.js`, `customerSocialProfiles.js`, `activityDatePicker.js`; and
-  `competitorPolicySafe.js`, which wraps the visit-planning api methods from outside (same treatment as normalizeCustomer).
+- 7b2 as built (1.467.0): the last outside patchers are gone and `bootGate.js` loads only `app.js`.
+  `fieldVisitEnhancements.js`: what it really changed was found by recording the screens with and without it (both languages,
+  admin and sales manager); its three live effects are now in the screens: the new-customer form's business-name label
+  (`new_customer_name`, "Անվանում"), a sales manager's channel preset from their position and hidden (`map/addCustomer.js`), and
+  Armenian region names on the plan-day sheet's recurring tab (`map/planning.js`, regionLabelHy / subregionLabelHy); its version
+  patch and its other region rewrites changed nothing any more. `activityDatePicker.js` stays as the picker module; Activity calls
+  `enhanceDateRange` itself. `customerSocialProfiles.js` -> `views/customer/social.js` without its observer (the card already
+  painted the links itself, so the observer never did anything). `competitorPolicySafe.js` (competitors never overdue, never in
+  the overdue / not-visited queues, never on a visit plan) is inside `api.js`. `mapSafeUi.js` (not on the list above; it mounted the
+  Map's Competitors chip with retries after every route change) is `attachCompetitorToggle` in `views/map/searchBar.js`. Fixed on
+  the way: the Competitors chip was missing whenever the Map took more than 1 s to draw (the retries gave up), and it lost its
+  own icon after the first status filter was picked. New guard: architecture check 8 (no observer on the whole page); new e2e
+  `screen-parts.spec.mjs`.
+- Step 7 result: no page-wide observer is left except `app.js`'s screen-reader announcer. Observers that watch only their own
+  element stay inside the screens' bar code (sort menus, filter rows, the Orders channel menu); replacing them with direct calls is
+  optional polish.
 
 #### Step 8. Split the shared files - size 2
 - 8a `api.js` -> `api/index.js` (request, json, cache, CSRF) + one file per area (`api/orders.js`, ...), re-exported as the same `api`
@@ -361,3 +375,5 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 6a refactor tool + map split: 1.462.0, PR #506, 2026-10-28.
 - Step 6b app.js into shell/: 1.463.0, PR #507, 2026-10-28.
 - Step 6c + 6d settings, admin, reports, customer card: 1.464.0, PR #508, 2026-10-28.
+- Step 7a search bars built by their screens: 1.465.0, PR #509, 2026-10-28.
+- Step 7b1 Map bar, pin halo, customer channel rule in api.js: 1.466.0, PR #510, 2026-10-29.

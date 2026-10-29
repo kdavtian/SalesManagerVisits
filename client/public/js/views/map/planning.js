@@ -2,7 +2,7 @@
 // function takes the screen's state as `ctx` (see the ctx object at the top of renderMapInner).
 import { NO_GROUP_KEY, buildCustomerTree, renderTriStateTree } from "../../regionTree.js";
 import { routeLegs } from "../../routeNavigation.js";
-import { activateDialog, escapeHtml, formatDistance, haversineMeters, showToast } from "../../util.js";
+import { activateDialog, escapeHtml, formatDistance, haversineMeters, regionLabelHy, showToast, subregionLabelHy } from "../../util.js";
 import { t } from "../../i18n.js";
 import { api } from "../../api.js";
 import { canPlanForOthers, canViewTeamLocations, state } from "../../state.js";
@@ -372,7 +372,7 @@ export async function openPlanDaySheet(ctx) {
                 .map(
                   (a, i) => `
             <div class="plan-area-row" data-index="${i}">
-              <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
+              <span>${escapeHtml(regionLabelHy(a.region))}${a.subregion ? ` · ${escapeHtml(subregionLabelHy(a.subregion))}` : ""}</span>
               <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
             </div>`
                 )
@@ -383,7 +383,7 @@ export async function openPlanDaySheet(ctx) {
       <div class="plan-area-add-row">
         <select id="plan-add-region">
           <option value="">${t("region")}</option>
-          ${regionNames.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join("")}
+          ${regionNames.map((r) => `<option value="${escapeHtml(r)}">${escapeHtml(regionLabelHy(r))}</option>`).join("")}
         </select>
         <select id="plan-add-subregion">
           <option value="">${t("all_subregions")}</option>
@@ -399,7 +399,7 @@ export async function openPlanDaySheet(ctx) {
     regionSelect.addEventListener("change", () => {
       const subregions = regions.filter((r) => r.region === regionSelect.value && r.subregion).map((r) => r.subregion);
       subregionSelect.innerHTML = `<option value="">${t("all_subregions")}</option>${subregions
-        .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)
+        .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(subregionLabelHy(s))}</option>`)
         .join("")}`;
     });
 
@@ -410,7 +410,7 @@ export async function openPlanDaySheet(ctx) {
             .map(
               (a, i) => `
         <div class="plan-area-row" data-index="${i}">
-          <span>${escapeHtml(a.region)}${a.subregion ? ` · ${escapeHtml(a.subregion)}` : ""}</span>
+          <span>${escapeHtml(regionLabelHy(a.region))}${a.subregion ? ` · ${escapeHtml(subregionLabelHy(a.subregion))}` : ""}</span>
           <button type="button" class="icon-btn plan-area-remove" data-index="${i}" aria-label="${t("cancel")}">${icons.close}</button>
         </div>`
             )

@@ -122,8 +122,10 @@ function enhanceInput(input) {
   button.addEventListener("click", () => openPicker(input));
 }
 
-function enhanceVisibleActivityDates() {
-  document.querySelectorAll('.activity-custom-range input[type="date"]').forEach(enhanceInput);
+// Activity's custom date range: each date box becomes a field that opens the wheel picker. views/activity.js calls this right after
+// it renders the range (docs/architecture-roadmap.md step 7b; a page-wide observer used to look for it).
+export function enhanceDateRange(root) {
+  root.querySelectorAll('.activity-custom-range input[type="date"]').forEach(enhanceInput);
 }
 
 // --- Wheel picker -----------------------------------------------------
@@ -412,23 +414,6 @@ export function pickDate({ value = "", title = "" } = {}) {
     openPicker(input);
   });
 }
-
-// Coalesced to one rAF-deferred pass per frame instead of running
-// enhanceVisibleActivityDates() synchronously for every mutation batch --
-// this observer watches the whole document, so any view's re-render
-// (search debounce settling, a list repainting) triggered it repeatedly
-// even though only views with a .activity-custom-range ever match.
-let scheduled = false;
-const observer = new MutationObserver(() => {
-  if (scheduled) return;
-  scheduled = true;
-  requestAnimationFrame(() => {
-    scheduled = false;
-    enhanceVisibleActivityDates();
-  });
-});
-observer.observe(document.documentElement, { childList: true, subtree: true });
-enhanceVisibleActivityDates();
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && overlay) closePicker();

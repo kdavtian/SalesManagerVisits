@@ -19,7 +19,7 @@ import * as mapSearch from "./map/search.js";
 import * as mapLocation from "./map/location.js";
 import * as mapAddCustomer from "./map/addCustomer.js";
 import * as mapTemplate from "./map/template.js";
-import { enhanceMapSearchRow, enhanceMapDimensionFilters, wireMarkerSelection } from "./map/searchBar.js";
+import { enhanceMapSearchRow, enhanceMapDimensionFilters, attachCompetitorToggle, wireMarkerSelection } from "./map/searchBar.js";
 
 export const NEARBY_RADIUS_METERS = 5000;
 
@@ -1153,9 +1153,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   function dismissAddressResultsOutside(...args) { return mapSearch.dismissAddressResultsOutside(ctx, ...args); }
   document.addEventListener("click", dismissAddressResultsOutside);
 
-  // The competitor visibility toggle is mounted separately (see
-  // mapSafeUi.js) and is deliberately CSS-only/DOM-only with no direct call
-  // into this module. Re-clustering on its click (delegated, since the
+  // The competitor visibility toggle (map/searchBar.js attachCompetitorToggle) is
+  // deliberately CSS-only/DOM-only with no direct call into this module. Re-clustering on its click (delegated, since the
   // button doesn't exist yet at render time) keeps cluster badge counts
   // honest -- see the showCompetitors check in applyFilter above.
   root.addEventListener("click", (e) => {
@@ -1522,6 +1521,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // The search bar (status and icon filters inside the field, clear "x") and the selected-pin halo (map/searchBar.js).
   enhanceMapSearchRow();
   enhanceMapDimensionFilters();
+  attachCompetitorToggle();
   wireMarkerSelection(map, mapEl);
   map.whenReady(loadCustomersCached);
 
