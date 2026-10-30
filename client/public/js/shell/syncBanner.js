@@ -21,7 +21,13 @@ export function renderSyncBanner() {
   const needsAttention = queue.filter((e) => e.needsAttention).length;
   // Either way the banner opens the "waiting to send" sheet (what is queued, retry now, discard a
   // stuck item); stuck items keep the red button look from before.
-  const template = needsAttention ? t("sync_needs_attention_banner") : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
+  // only stock counts waiting (the warehouse): "check-ins" would be the wrong word
+  const onlyCounts = queue.every((e) => e.type === "stock_count");
+  const template = needsAttention
+    ? t("sync_needs_attention_banner")
+    : onlyCounts
+      ? t(navigator.onLine ? "syncing_counts" : "offline_counts_waiting")
+      : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
   const count = needsAttention || pending;
   // "{s}" is the English plural ending only; the Armenian texts have none.
   syncBanner.textContent = template.replace("{n}", count).replace("{s}", count > 1 && getLang() !== "hy" ? "s" : "");

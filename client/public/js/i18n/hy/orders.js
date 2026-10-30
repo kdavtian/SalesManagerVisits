@@ -361,4 +361,8 @@ export const hyOrders = {
     ops_stock_count: "Գույքագրում այսօր",
     ops_att_stock_count: "Գույքագրում․ այսօր մնաց {n} ապրանք",
     ops_stock_count_done: "Ավարտված",
+    stock_count_waiting_item: "սպասում է ուղարկման",
+    stock_count_offline: "Կապ չկա։ Շարունակեք հաշվել․ թվերը պահվում են հեռախոսում և կուղարկվեն, երբ կապը վերականգնվի։",
+    stock_count_waiting_signal: "{n} հաշվարկ դեռ սպասում է կապի։ Ավարտեք օրը, երբ դրանք ուղարկվեն։",
+    stock_count_finish_offline: "Կապ չկա։ Ավարտեք օրը, երբ կապը վերականգնվի (հաշվարկները պահված են)։",
 };

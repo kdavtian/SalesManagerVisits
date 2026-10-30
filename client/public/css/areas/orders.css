@@ -218,3 +218,6 @@
 }
 /* while counting, "Finish the day" owns the bottom: the "install the app" banner would cover it (iPhone Safari) */
 body:has(.sc-view.has-bar) .install-banner { display: none; }
+.sc-pending { font-size: 0.78rem; font-weight: 600; color: var(--warning); white-space: nowrap; }
+.sc-offline { margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 12%, var(--bg-card)); border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border)); font-size: 0.88rem; }
+.sc-offline[hidden] { display: none; }

@@ -361,4 +361,8 @@ export const enOrders = {
     ops_stock_count: "Stock count today",
     ops_att_stock_count: "Stock count: {n} products left today",
     ops_stock_count_done: "Finished",
+    stock_count_waiting_item: "waiting to send",
+    stock_count_offline: "No signal. Keep counting: the numbers are kept on the phone and sent when the signal is back.",
+    stock_count_waiting_signal: "{n} counts are still waiting for signal. Finish the day when they are sent.",
+    stock_count_finish_offline: "No signal. Finish the day when the signal is back (the counts are kept).",
 };

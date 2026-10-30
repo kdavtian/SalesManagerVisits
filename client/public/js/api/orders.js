@@ -70,7 +70,7 @@ export const ordersApi = {
   getDeliveryHome: () => request("/delivery/home", { fresh: true }),
   // Stock count (Գույքագրում, server/src/orders/stockCount.js)
   getStockCountDay: (day) => request(`/stock-count/day${day ? `?day=${day}` : ""}`, { fresh: true }),
-  saveStockCount: (productId, qty, note) => json(`/stock-count/items/${productId}`, "PUT", { qty, note }),
+  saveStockCount: (productId, qty, note, day) => json(`/stock-count/items/${productId}`, "PUT", { qty, note, ...(day ? { day } : {}) }),
   clearStockCount: (productId) => request(`/stock-count/items/${productId}`, { method: "DELETE" }),
   finishStockCountDay: () => json("/stock-count/finish", "POST", {}),
   getStockCountMonth: (month) => request(`/stock-count/month${month ? `?month=${month}` : ""}`, { fresh: true }),

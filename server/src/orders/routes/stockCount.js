@@ -12,6 +12,7 @@ stockCountRouter.use(requireAuth);
 stockCountRouter.use((req, res, next) => (canViewStockCount(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" })));
 const counter = (req, res, next) => (canCountStock(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const addDays = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 
 // ?day=YYYY-MM-DD (default today; an earlier day is read-only)
 stockCountRouter.get("/day", async (req, res) => {
@@ -23,7 +24,11 @@ stockCountRouter.get("/day", async (req, res) => {
 
 stockCountRouter.put("/items/:productId", counter, async (req, res) => {
   const qty = req.body?.qty;
-  const r = await saveCount(pool, req.user, { productId: Number(req.params.productId), qty: typeof qty === "number" ? qty : Number.NaN, note: req.body?.note });
+  // A count made without signal reaches the server later: it is saved on the day it was counted (not older than 3 days, never in the future)
+  const today = yerevanToday();
+  const asked = String(req.body?.day ?? "");
+  const day = DAY.test(asked) && asked <= today && asked >= addDays(today, -3) ? asked : today;
+  const r = await saveCount(pool, req.user, { productId: Number(req.params.productId), qty: typeof qty === "number" ? qty : Number.NaN, note: req.body?.note }, day);
   if (r.error) return res.status(r.status).json({ error: r.error });
   // the counter is told the difference only once the day is closed
   res.json(seesStockCountExpected(req.user.role) ? { ...r.item, difference: r.item.counted_qty - (r.item.expected_qty ?? 0) } : { product_id: r.item.product_id, counted_qty: r.item.counted_qty });
