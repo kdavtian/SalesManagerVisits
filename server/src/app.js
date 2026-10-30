@@ -365,6 +365,15 @@ app.get("/manifest.json", async (req, res) => {
   );
 });
 
+// A script, style, picture or font that does not exist is a real 404, never the app's own page with "200 OK" (owner, 2026-10-30: white screen after an
+// update, Reload spinning for ever). A browser cannot run HTML as a script, and the service worker used to keep that answer under the file's
+// address. `no-store`: nothing in between may keep the 404 either (the file can exist after the next deploy).
+const ASSET_PATH = /^\/(?:js|css|icons|brand|fonts|vendor|assets)\/|\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|webmanifest)$/i;
+app.get(ASSET_PATH, (req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.status(404).type("text/plain").send("Not found");
+});
+
 // A raw RegExp, not the string "*" -- Express 5's path-to-regexp no longer
 // accepts a bare "*" (its named-wildcard replacement, "/*splat", requires
 // at least one path segment after the slash and so wouldn't match the
@@ -393,7 +402,9 @@ app.get(/.*/, async (req, res) => {
     // Calculator Mode promises that nothing of the real app is fetched or
     // shown before the unlock code is entered, so neither the preload hints
     // nor the spinner are emitted for it.
-    .replace("<!--MODULE_PRELOAD-->", calculatorModeEnabled ? "" : modulePreloadHtml)
+    // A retry after a failed start (?fv_retry=..., bootGate.js / slowRoute.js) comes WITHOUT the preload hints: Safari keeps a preloaded file that
+    // failed and a reload kept getting the same failure (owner, 2026-10-30), whereas a plain import() asks the server again every time.
+    .replace("<!--MODULE_PRELOAD-->", calculatorModeEnabled || req.query.fv_retry ? "" : modulePreloadHtml)
     .replace("<!--BOOT_SPLASH-->", calculatorModeEnabled ? "" : BOOT_SPLASH_HTML);
   // Same reasoning as /manifest.json above -- this page's branding depends
   // on the same admin setting and must never be served stale from cache.

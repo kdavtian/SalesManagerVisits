@@ -38,6 +38,7 @@ const PUBLIC_ROUTES = new Map([
   ["calculatorLock.js POST /verify", "PIN of the calculator mode, before any login (rate limited)"],
   ["lockdown.js GET /", "the lockdown screen asks whether the app is locked, before any login"],
   ["app.js GET /^\\/css\\/.*\\.css$/", "stylesheets"],
+  ["app.js GET /^\\/(?:js|css|icons|brand|fonts|vendor|assets)\\/|\\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|webmanifest)$/i", "a missing script / style / picture file: a plain 404, never the app page (no data)"],
   ["app.js GET /manifest.json", "the install manifest"],
   ["app.js GET /.*/", "the app page for every other address (no data)"],
 ]);

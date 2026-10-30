@@ -1,8 +1,10 @@
 import { api } from "./api.js";
+import { forgetView, restoreScroll, saveView, viewToReopen } from "./viewMemory.js";
+import { APP_VERSION } from "./version.js";
 import { refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
 import { state, setUser, loadCachedUser } from "./state.js";
 import { t } from "./i18n.js";
-import { SLOW_MS, showSlowBar, hideSlowBar, cleanReload } from "./shell/slowRoute.js";
+import { SLOW_MS, showSlowBar, hideSlowBar, cleanReload, noteLoadFailure } from "./shell/slowRoute.js";
 
 // The module's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).
 const ctx = {
@@ -30,6 +32,7 @@ const ctx = {
   get disposeParkedMap() { return disposeParkedMap; },
   get doLogout() { return doLogout; },
   get HOME_TREE_ROUTES() { return HOME_TREE_ROUTES; },
+  get IS_IOS() { return IS_IOS; },
   get installRoot() { return installRoot; },
   get isModalMapFlow() { return isModalMapFlow; },
   get lastHomeHash() { return lastHomeHash; }, set lastHomeHash(v) { lastHomeHash = v; },
@@ -264,7 +267,8 @@ let fieldErrorId = 0;
 // iPhone/iPad keep 10 screens (iPadOS reports itself as a Mac with a touch
 // screen); other devices keep 5, since every kept screen is live DOM in memory.
 const IS_IOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
-const BACK_STACK_MAX = IS_IOS ? 10 : 5;
+// iPhone: 30 pages (owner, 2026-10-30: "for iphone raise the limit to 30 pages and all tabs"); every other device keeps 5.
+const BACK_STACK_MAX = IS_IOS ? 30 : 5;
 let renderSeq = 0; // see render()'s safety net
 let backStack = []; // [{ hash, nodes: DocumentFragment, cleanup, scrollTop, appClassName, bodyClassName }]
 function disposeBackEntry(entry) {
@@ -479,6 +483,7 @@ navigate.goBack = (fallbackHash) => {
 };
 
 async function doLogout() {
+  forgetView();
   await api.logout();
   setUser(null);
   stopLocationBroadcast();
@@ -510,11 +515,15 @@ function showRenderFailure(err) {
   // Scripts of two versions meeting (an update arrived while the app was open) or a file that did not download: one reload fixes it,
   // so do it by itself -- whether or not something is still on screen.
   const moduleLoadFailure = isModuleLoadFailure(err);
+  noteLoadFailure();
+  // Said to the server too, with the file it was about: a failure that only the person saw could not be found afterwards.
+  api.reportClientError({ kind: "error", message: `Screen failed (${location.hash || "#/dashboard"}; app ${APP_VERSION}): ${String(err?.message || err)}`.slice(0, 1500), url: location.href }).catch(() => {});
   try {
     const last = Number(sessionStorage.getItem("fv_render_reload") || 0);
     if (moduleLoadFailure && Date.now() - last > 60000) {
       sessionStorage.setItem("fv_render_reload", String(Date.now()));
-      location.reload();
+      // A plain reload kept the same stored copy that had just failed (owner, 2026-10-30): start clean instead.
+      cleanReload();
       return;
     }
   } catch {
@@ -530,11 +539,9 @@ function showRenderFailure(err) {
           <button type="button" class="btn" id="render-failed-home">${t("nav_dashboard")}</button>
           <button type="button" class="btn btn-primary" id="render-failed-reload">${t("reload_app")}</button>
         </div>
-        <button type="button" class="btn-link" id="render-failed-clean">${t("slow_route_clean")}</button>
       </div>
     </div>`;
-  app.querySelector("#render-failed-reload").addEventListener("click", () => location.reload());
-  app.querySelector("#render-failed-clean").addEventListener("click", cleanReload);
+  app.querySelector("#render-failed-reload").addEventListener("click", cleanReload);
   app.querySelector("#render-failed-home").addEventListener("click", () => {
     location.hash = "#/dashboard";
     location.reload();
@@ -552,6 +559,8 @@ async function render() {
     await renderRoute();
     if (seq === renderSeq) {
       hideSlowBar();
+      document.documentElement.dataset.fvBooted = "1"; // bootGate.js: the app did start
+      restoreScroll(app, ctx.lastRenderedHash || location.hash); // a reopened screen goes back to where it was scrolled (viewMemory.js)
       markFirstScreenShown();
       loadOtherStylesSoon();
     }
@@ -699,6 +708,9 @@ async function init() {
   let optimisticRenderDone = false;
   if (cachedUser) {
     state.user = cachedUser;
+    // A fresh start (the phone closed the app, an update reloaded it) opens the screen the person was on, not Home (viewMemory.js).
+    const reopen = viewToReopen(cachedUser.id, location.hash);
+    if (reopen) history.replaceState(null, "", reopen);
     // Same optimistic-paint reasoning as cachedUser above, applied to the
     // quick-action tile badges specifically -- without this, every one of
     // them starts this render at 0/hidden (see the module-level `let
@@ -825,5 +837,14 @@ async function init() {
 }
 
 initServiceWorkerUpdates();
+
+// Where the person is, saved whenever the app goes to the background and now and then while it is open (viewMemory.js).
+function saveCurrentView() {
+  if (!state.user) return;
+  saveView(state.user.id, () => ({ hash: lastRenderedHash || location.hash, scroll: app.scrollTop, state: currentCleanup?.getViewState?.() ?? null }));
+}
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && saveCurrentView());
+window.addEventListener("pagehide", saveCurrentView);
+setInterval(() => document.visibilityState !== "hidden" && saveCurrentView(), 15000);
 
 init();

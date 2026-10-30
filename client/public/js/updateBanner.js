@@ -1,19 +1,21 @@
 // Everything to do with "a new deploy is ready": registering the service
-// worker, detecting when a new one has taken over, showing a blurred,
-// hard-to-miss prompt for it (re-shown on every later app open until the
-// user actually taps Refresh), and the manual "Check for updates" action
-// in Settings. Centralized here so app.js just calls init() once and
-// settings.js can call checkForUpdateManually() without needing to know
-// any of the service-worker plumbing.
+// worker, detecting a new version, showing a blurred, hard-to-miss prompt
+// for it (re-shown on every later app open until the user actually taps
+// Refresh), and the manual "Check for updates" action in Settings.
+// Centralized here so app.js just calls init() once and settings.js can
+// call checkForUpdateManually() without needing to know any of the
+// service-worker plumbing.
 //
-// Why the prompt has to be re-shown rather than shown once: sw.js calls
-// self.skipWaiting() unconditionally, so by the time this module can
-// observe an update at all, the new worker has already activated and
-// claimed every open page -- there's no "waiting" state left to poll
-// later. The only thing that's still stale is this page's own
-// already-loaded JS in memory, and the only way to know that is to
-// remember it ourselves (updateReady) until an actual reload happens.
+// How an update is taken (owner, 2026-10-30: after an update a white screen,
+// "Reload" spinning for ever): the new worker is installed in the background
+// and WAITS (sw.js). The open page keeps working on its own version -- old
+// scripts, old files -- so the two versions never meet. When the person taps
+// Refresh (or opens the app again and finds one waiting), applyUpdate() asks
+// the worker to take over and reloads the app onto the new version in one
+// step, from the new files. A page of an older version of the app, which does
+// not know this, gets the new worker at once as before (controllerchange).
 import { t } from "./i18n.js";
+import { cleanReload } from "./shell/slowRoute.js";
 
 let container = null;
 let registration = null;
@@ -27,6 +29,34 @@ export function isUpdatePending() {
 
 export function mountUpdateBanner(el) {
   container = el;
+}
+
+// Takes the waiting version: the worker takes over, then this page reloads onto it. Without a waiting worker (it already took over, or the
+// update never installed) a clean reload (stored files thrown away and downloaded again) does the same job. At most once a minute by itself.
+export async function applyUpdate() {
+  const reg = registration || (await navigator.serviceWorker?.getRegistration?.().catch(() => null));
+  const waiting = reg?.waiting;
+  if (!waiting || !navigator.serviceWorker) {
+    if (navigator.onLine) cleanReload();
+    else location.reload();
+    return;
+  }
+  let reloaded = false;
+  const reloadOnce = () => {
+    if (reloaded) return;
+    reloaded = true;
+    location.reload();
+  };
+  navigator.serviceWorker.addEventListener("controllerchange", reloadOnce, { once: true });
+  waiting.postMessage({ type: "skip-waiting" });
+  // the worker did not take over in time: start clean
+  setTimeout(() => {
+    if (!reloaded) {
+      reloaded = true;
+      if (navigator.onLine) cleanReload();
+      else location.reload();
+    }
+  }, 5000);
 }
 
 function renderBanner() {
@@ -64,7 +94,7 @@ function renderBanner() {
       btn.disabled = false;
       btn.textContent = t("refresh_now");
     }, 15000);
-    window.location.reload();
+    applyUpdate();
   });
   container.querySelector("#update-dismiss").addEventListener("click", () => {
     container.innerHTML = "";
@@ -121,12 +151,48 @@ export function initServiceWorkerUpdates() {
     updateReady = true;
     renderBanner();
   });
+  // sw.js asks every open page before it decides to wait: a page that answers is one that offers the update itself.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "update-ping") event.ports?.[0]?.postMessage("update-pong");
+  });
+  // Safari delivers a worker's messages to a page only after this (Chrome does it by itself once the page has loaded)
+  navigator.serviceWorker.startMessages?.();
+
+  // A new version installed and is waiting: say so (only when this page already has a worker -- the very first install has nothing to update).
+  function watchForWaiting(reg) {
+    const announce = () => {
+      if (!navigator.serviceWorker.controller) return;
+      updateReady = true;
+      renderBanner();
+    };
+    reg.addEventListener("updatefound", () => {
+      const worker = reg.installing;
+      worker?.addEventListener("statechange", () => {
+        if (worker.state === "installed") announce();
+      });
+    });
+    if (reg.waiting) {
+      // One was already waiting when the app opened: nothing is on screen to lose yet, so the app starts on the new version straight away
+      // (once a minute at most, so a version that cannot take over never makes the app reload in a loop).
+      announce();
+      try {
+        const last = Number(sessionStorage.getItem("fv_boot_update") || 0);
+        if (Date.now() - last > 60000) {
+          sessionStorage.setItem("fv_boot_update", String(Date.now()));
+          applyUpdate();
+        }
+      } catch {
+        // no sessionStorage: the banner is enough
+      }
+    }
+  }
 
   function registerServiceWorker() {
     navigator.serviceWorker
       .register("/sw.js")
       .then((reg) => {
         registration = reg;
+        watchForWaiting(reg);
         // The browser only checks for a changed sw.js on its own schedule
         // (throttled to roughly once a day), which is much too slow for an
         // app under active daily development -- and an installed PWA

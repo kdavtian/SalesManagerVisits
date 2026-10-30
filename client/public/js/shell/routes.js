@@ -9,7 +9,7 @@ import { shellAllows } from "../opsShell.js";
 import { canSeeCashflow } from "../shared/roles.js";
 import { mountInstallPrompt } from "../install.js";
 import { preloadArmeniaTiles, preloadCoreViews } from "./preload.js";
-import { isUpdatePending } from "../updateBanner.js";
+import { applyUpdate, isUpdatePending } from "../updateBanner.js";
 import { pruneParkedSheet, takeParkedSheet } from "../util.js";
 import { startLocationBroadcast } from "../locationBroadcast.js";
 import { startDriverArrival } from "../driverArrival.js";
@@ -128,7 +128,7 @@ export async function renderRoute(ctx) {
   // screen is the safe moment to switch: reload straight onto it.
   // At most once a minute: a version that keeps announcing itself (two windows of the app on a computer) must not reload every screen.
   if (isUpdatePending() && ctx.lastRenderedHash && hash.split("?")[0] !== ctx.lastRenderedHash.split("?")[0] && updateReloadAllowed()) {
-    location.reload();
+    applyUpdate(); // the waiting version takes over and the app reloads onto this screen (updateBanner.js)
     return;
   }
   // Styles per area (step 8c): the style areas this screen needs, before it is drawn (Home needs none: its rules are all in css/app.css;

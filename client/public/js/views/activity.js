@@ -1,3 +1,4 @@
+import { takeViewState } from "../viewMemory.js";
 import { api } from "../api.js";
 import { escapeHtml, formatDistance, formatAmd, categoryIcon, customerIconTint, formatDayMonth, formatDateTime, formatDuration, regionLabelHy } from "../util.js";
 import { t, getLang } from "../i18n.js";
@@ -119,6 +120,16 @@ export function renderActivity(root, navigate) {
   let openDropdown = null;
 
   const filters = { search: "", manager: "", status: "", outcome: "" };
+  // Reopened after the app was closed (viewMemory.js): the range, sort and filters the person had.
+  const restored = takeViewState("activity");
+  if (restored) {
+    range = restored.range ?? range;
+    rangePrev = Boolean(restored.rangePrev);
+    customFrom = restored.customFrom ?? "";
+    customTo = restored.customTo ?? "";
+    sortMode = restored.sortMode ?? sortMode;
+    Object.assign(filters, restored.filters ?? {});
+  }
 
   // The desktop table (deskTable.js): the shell is rebuilt on every filter change, so the slots are looked up each time.
   const table = createDeskTable({
@@ -631,6 +642,8 @@ export function renderActivity(root, navigate) {
     table.destroy();
   };
   cleanup.onRestore = () => container.isConnected && load({ silent: true });
+  // (the search is read from the box itself: `filters.search` follows it a moment after typing)
+  cleanup.getViewState = () => ({ screen: "activity", range, rangePrev, customFrom, customTo, sortMode, filters: { ...filters, search: container.querySelector("#activity-search")?.value ?? filters.search } });
   return cleanup;
 }
 

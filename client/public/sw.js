@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v502";
+const CACHE_VERSION = "field-visits-v503";
 // Map tiles are kept in IndexedDB (TILE_DB below), not in Cache Storage (1.468.0). On iPhone, Safari's Cache Storage costs every launch
 // time for EVERY entry stored in ANY of the app's caches, even when the launch only reads the start page from another cache: measured on
 // WebKit, 5,000 stored tiles delayed the start page by ~0.16 s on a fast computer (a phone is several times slower), before the white
@@ -268,6 +268,7 @@ const APP_SHELL = [
   "/js/zoomStage.js",
   "/js/productSort.js",
   "/js/updateBanner.js",
+  "/js/viewMemory.js",
   "/js/visitFirstCard.js",
   "/js/visitSchedule.js",
   "/js/views/accounting.js",
@@ -308,9 +309,45 @@ const APP_SHELL = [
   "/brand/kad-wordmark.png",
 ];
 
+// A new version used to take over the open app the moment it was installed (skipWaiting + claim) and delete the old files while the old page
+// was still running: the page then mixed its old scripts with the new files and showed a white screen, and Reload kept failing (owner,
+// 2026-10-30). Now the new worker WAITS: the open page keeps working on its own version until the person takes the update (the page sends
+// "skip-waiting"), and the app is reloaded onto the new version in one step. A page of an older version of the app does not know this and
+// would never offer the update: the worker takes over at once when any open page does not answer the "update-ping" (the way it always did).
+const PING_WAIT_MS = 1500;
+async function everyPageKnowsTheWait() {
+  const pages = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (!pages.length) return true; // nothing open: the new worker simply takes over
+  const answers = pages.map(
+    (page) =>
+      new Promise((resolve) => {
+        const channel = new MessageChannel();
+        const timer = setTimeout(() => resolve(false), PING_WAIT_MS);
+        channel.port1.onmessage = () => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+        try {
+          page.postMessage({ type: "update-ping" }, [channel.port2]);
+        } catch {
+          clearTimeout(timer);
+          resolve(false);
+        }
+      })
+  );
+  return (await Promise.all(answers)).every(Boolean);
+}
+
 self.addEventListener("install", (event) => {
   handledEvent = true;
-  event.waitUntil(caches.open(CACHE_VERSION).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(
+    caches
+      .open(CACHE_VERSION)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(async () => {
+        if (!(await everyPageKnowsTheWait())) await self.skipWaiting();
+      })
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -320,12 +357,30 @@ self.addEventListener("activate", (event) => {
       Promise.all(
         keys.filter((key) => key !== CACHE_VERSION && key !== RUNTIME_CACHE).map((key) => caches.delete(key))
       )
-    ).then(() => self.clients.claim())
+    ).then(dropWrongAnswers).then(() => self.clients.claim())
   );
 });
 
+// An answer that is a web page (HTML) where a script, style or picture was asked for: the server used to answer an unknown file with the
+// app's own page ("200 OK"), and the worker kept it under the file's address. Never kept now; any already kept is removed here.
+const isWrongAnswer = (request, response) => request.mode !== "navigate" && /text\/html/i.test(response.headers.get("content-type") || "");
+async function dropWrongAnswers() {
+  for (const name of [CACHE_VERSION, RUNTIME_CACHE]) {
+    const cache = await caches.open(name);
+    for (const request of await cache.keys()) {
+      const stored = await cache.match(request);
+      if (stored && isWrongAnswer(request, stored) && !/\/(index\.html)?$/.test(new URL(request.url).pathname)) await cache.delete(request);
+    }
+  }
+}
+
 // launchTiming.js: when this worker started and when it received / answered the last start-page request (epoch milliseconds).
 self.addEventListener("message", (event) => {
+  // the person took the update (updateBanner.js): this worker takes over now, the page reloads when it has
+  if (event.data?.type === "skip-waiting") {
+    self.skipWaiting();
+    return;
+  }
   if (event.data?.type !== "launch-times" || !event.ports?.[0]) return;
   event.ports[0].postMessage({ workerStartedAt: WORKER_STARTED_AT, launch: lastLaunch });
 });
@@ -477,6 +532,9 @@ self.addEventListener("fetch", (event) => {
   // below). The "Check for updates" banner (updateBanner.js) is what surfaces a newly deployed version, not a background fetch.
   // Looked up in the app's own store only (caches.match() searches every store, in creation order; the tile store used to come first).
   // `launch` records when the request came and when the page was found, for launchTiming.js.
+  // A retry after a failed start (bootGate.js / slowRoute.js) comes straight from the server: the stored start page has the preload hints
+  // whose failure is what the retry is getting away from.
+  if (request.mode === "navigate" && url.searchParams.has("fv_retry")) return;
   if (request.mode === "navigate") {
     const launch = { at: Date.now(), woke: firstEvent };
     lastLaunch = launch;
@@ -508,11 +566,19 @@ self.addEventListener("fetch", (event) => {
 });
 
 // Everything else from this origin (not in APP_SHELL): cache, then revalidate in the background.
+// A file that does not answer must not hold a screen for ever: the cached copy (or an error) after this long.
+const NETWORK_WAIT_MS = 15000;
+function fetchWithin(request, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(request, { signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 function runtimeFetch(request) {
   return caches.open(RUNTIME_CACHE).then((runtime) => runtime.match(request)).then((cached) => {
-    const network = fetch(request)
+    if (cached && isWrongAnswer(request, cached)) cached = undefined; // never serve a page in place of a script
+    const network = fetchWithin(request, NETWORK_WAIT_MS)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && !isWrongAnswer(request, res)) {
           caches.open(RUNTIME_CACHE).then(async (cache) => {
             await cache.put(request, res.clone());
             trimCache(cache, RUNTIME_CACHE_MAX_ENTRIES);
