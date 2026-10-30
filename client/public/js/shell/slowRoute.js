@@ -10,16 +10,26 @@ import { APP_VERSION } from "../version.js";
 export const SLOW_MS = 6000;
 let bar = null;
 
+// Safari keeps a file that failed to load for about a second or two when the page asked for it to be preloaded: a reload straight after the
+// failure gets the same failure (owner, 2026-10-30: "Reload" kept failing, force-closing the app fixed it). Reloads wait RETRY_GAP_MS after it.
+const RETRY_GAP_MS = 3000;
+let failedAt = 0;
+export function noteLoadFailure() {
+  failedAt = Date.now();
+}
+
 export async function cleanReload() {
-  try {
+  // The browser's own answer can fail to come at all (a stuck worker): the reload happens after 3 s whatever the clearing is doing.
+  const clearing = (async () => {
     const regs = (await navigator.serviceWorker?.getRegistrations?.()) ?? [];
     await Promise.all(regs.map((r) => r.unregister()));
     const keys = (await globalThis.caches?.keys?.()) ?? [];
     await Promise.all(keys.map((k) => caches.delete(k)));
-  } catch {
-    // whatever could be cleared is cleared; the reload below still helps
-  }
-  location.reload();
+  })().catch(() => {}); // whatever could be cleared is cleared; the reload below still helps
+  await Promise.race([clearing, new Promise((resolve) => setTimeout(resolve, 3000))]);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, RETRY_GAP_MS - (Date.now() - failedAt))));
+  // a new address, and the page without preload hints (server/src/app.js); bootGate.js removes the mark again once the app runs
+  location.replace(`${location.pathname}?fv_retry=${Date.now()}${location.hash}`);
 }
 
 export function hideSlowBar() {

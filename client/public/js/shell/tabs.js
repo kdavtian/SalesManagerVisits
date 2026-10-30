@@ -6,7 +6,8 @@
 //
 // A trail is the tab's back-cache entries (the same entries shell/routes.js keeps for Back) plus the screen on display when the tab was
 // left. At most TRAILS_MAX other tabs are kept (the oldest is let go: its screens' cleanups run), so a 3 GB phone holds a bounded amount.
-const TRAILS_MAX = 3;
+// iPhone keeps every tab (owner, 2026-10-30: "all tabs"); other devices the 5 most recent.
+const TRAILS_MAX = 5;
 const MAP = "#/map";
 const trails = new Map(); // tab -> [entry, ...], the last one the screen to show
 let currentTab = null;
@@ -67,7 +68,7 @@ function parkCurrent(ctx) {
   if (trails.has(currentTab)) dispose(ctx, trails.get(currentTab));
   trails.delete(currentTab);
   trails.set(currentTab, trail);
-  while (trails.size > TRAILS_MAX) {
+  while (trails.size > (ctx.IS_IOS ? Infinity : TRAILS_MAX)) {
     const [oldest, old] = trails.entries().next().value;
     trails.delete(oldest);
     dispose(ctx, old);

@@ -1,3 +1,4 @@
+import { takeViewState } from "../viewMemory.js";
 import { api } from "../api.js";
 import { reorderChipHtml } from "../reorder.js";
 import { customerMatchesSearch, customerSearchKind, escapeHtml, formatDateTime, formatDayMonth, formatAmd, haversineMeters, getCurrentPosition, customerListIconHtml, categoryLabel, activateDialog, channelDisplayLabel, TIER_OPTIONS, labelColon, openInfoPopup, regionLabelHy, subregionLabelHy, showToast, parseDateOnly } from "../util.js";
@@ -212,6 +213,20 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // lookup is a real join server-side, not free, so it's opt-in per
   // session rather than always fetched with the rest of the list.
   let showDebt = false;
+  // Reopened after the app was closed (viewMemory.js): the tab, sort, filters and search the person had.
+  const restored = takeViewState("customers");
+  if (restored) {
+    filter = restored.filter ?? filter;
+    sortKey = restored.sortKey ?? sortKey;
+    sortReversed = Boolean(restored.sortReversed);
+    regionSubregionKeys = restored.regionSubregionKeys ?? regionSubregionKeys;
+    assignmentKeys = restored.assignmentKeys ?? assignmentKeys;
+    typeFilters = restored.typeFilters ?? typeFilters;
+    tierFilters = restored.tierFilters ?? tierFilters;
+    brandChipIds = restored.brandChipIds ?? brandChipIds;
+    potentialFilter = restored.potentialFilter ?? potentialFilter;
+    searchInput.value = restored.q ?? "";
+  }
   const filterRow = root.querySelector("#customer-filter-row");
   enhanceCustomers(root); // the combined search pill: filters and sort inside the field, clear "x" (searchBar.js)
   // "!" next to the title: what the icon colours and the chips on this list mean.
@@ -1090,6 +1105,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       root.scrollTop = scrollTop;
     });
   };
+  cleanup.getViewState = () => ({ screen: "customers", filter, sortKey, sortReversed, regionSubregionKeys, assignmentKeys, typeFilters, tierFilters, brandChipIds, potentialFilter, q: searchInput.value });
   return cleanup;
 }
 

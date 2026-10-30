@@ -1,3 +1,4 @@
+import { takeViewState } from "../viewMemory.js";
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiters, monthShort, formatDateTime, formatDayMonth, showToast } from "../util.js";
 import { t } from "../i18n.js";
@@ -327,6 +328,20 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
   let activeStatus = DEFAULT_STATUS_FILTER;
   let channelFilter = "";
   let accountingFilter = "";
+  // Reopened after the app was closed (viewMemory.js): the tab, sort, filters and search the person had.
+  const restored = takeViewState("orders");
+  if (restored) {
+    activeStatus = restored.activeStatus ?? activeStatus;
+    channelFilter = restored.channelFilter ?? "";
+    accountingFilter = restored.accountingFilter ?? "";
+    repFilter = restored.repFilter ?? "";
+    periodFilter = restored.periodFilter ?? "";
+    paymentFilter = restored.paymentFilter ?? "";
+    attentionFilter = Boolean(restored.attentionFilter);
+    sortKey = restored.sortKey ?? sortKey;
+    sortReversed = Boolean(restored.sortReversed);
+    searchInput.value = restored.q ?? "";
+  }
   let orders = [];
   let hasMore = false;
   let loadingMore = false;
@@ -734,6 +749,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
     table.destroy();
   };
   cleanup.onRestore = () => refreshIfStale(0);
+  cleanup.getViewState = () => ({ screen: "orders", activeStatus, channelFilter, accountingFilter, repFilter, periodFilter, paymentFilter, attentionFilter, sortKey, sortReversed, q: searchInput.value });
   return cleanup;
 }
 
