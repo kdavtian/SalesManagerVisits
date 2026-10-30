@@ -5,6 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs, trackProduct } from "./helpers.js";
+import fs from "node:fs";
 import { pool } from "../../src/db/pool.js";
 import { spreadOverDays, workingDaysOfMonth, ensurePlan, dayList, saveCount, clearCount, closeDay, closeOpenDays, monthReport } from "../../src/orders/stockCount.js";
 
@@ -156,4 +157,22 @@ test("API: who may see and count; the counter gets no Excel number back", async 
   const home = await apiRequest("/api/warehouse/home", { cookie: cookies.warehouse_manager });
   assert.equal(home.status, 200);
   assert.ok(home.data.stock_count && typeof home.data.stock_count.due === "number");
+});
+
+test("migration 173: the Stock count tile is added to customized lists of its roles, empty lists and other roles stay as they are, twice is safe", async () => {
+  const sql = fs.readFileSync(new URL("../../migrations/173_stock_count_home_tile.sql", import.meta.url), "utf8");
+  const { rows: [before] } = await pool.query("SELECT quick_action_visibility AS v FROM app_settings WHERE id = 1");
+  try {
+    await pool.query(
+      `INSERT INTO app_settings (id, quick_action_visibility) VALUES (1, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET quick_action_visibility = EXCLUDED.quick_action_visibility`,
+      [JSON.stringify({ admin: ["qa_tasks"], ceo: ["qa_tasks", "qa_stock_count"], accountant: [], sales_manager: ["qa_tasks"] })]
+    );
+    await pool.query(sql);
+    await pool.query(sql);
+    const { rows: [after] } = await pool.query("SELECT quick_action_visibility AS v FROM app_settings WHERE id = 1");
+    assert.deepEqual(after.v, { admin: ["qa_tasks", "qa_stock_count"], ceo: ["qa_tasks", "qa_stock_count"], accountant: [], sales_manager: ["qa_tasks"] });
+  } finally {
+    await pool.query("UPDATE app_settings SET quick_action_visibility = $1::jsonb WHERE id = 1", [before?.v == null ? null : JSON.stringify(before.v)]);
+  }
 });

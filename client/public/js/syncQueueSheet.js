@@ -31,22 +31,23 @@ export function openSyncQueueSheet() {
   function itemHtml(entry) {
     const isOrder = entry.type === "order";
     const stuck = Boolean(entry.needsAttention);
-    const name = entry.customerName || `#${entry.customerId}`;
+    const isCount = entry.type === "stock_count";
+    const name = isCount ? entry.productName || `#${entry.productId}` : entry.customerName || `#${entry.customerId}`;
     const when = entry.createdAt ? formatDateTime(new Date(entry.createdAt).toISOString()) : "";
     const status = stuck
       ? `<span class="badge badge-danger">${t("sync_item_attention")}</span>`
       : `<span class="badge badge-neutral">${t(navigator.onLine ? "sync_item_sending" : "sync_item_waiting")}</span>`;
     const detail = stuck && entry.lastError ? `<span class="sync-queue-error">${escapeHtml(entry.lastError)}</span>` : "";
-    const amount = isOrder && entry.totalAmd ? ` · ${formatAmd(entry.totalAmd)}` : "";
+    const amount = isOrder && entry.totalAmd ? ` · ${formatAmd(entry.totalAmd)}` : isCount ? ` · ${entry.qty}` : "";
     const discard = stuck
       ? `<button type="button" class="btn sync-queue-discard ${armedDiscard === entry.id ? "sync-queue-discard-armed" : ""}" data-discard="${escapeHtml(entry.id)}">${t(armedDiscard === entry.id ? "sync_discard_confirm" : "sync_discard")}</button>`
       : "";
     return `
       <div class="sync-queue-item ${stuck ? "sync-queue-item-stuck" : ""}">
-        <span class="sync-queue-icon">${isOrder ? icons.cart : icons.pin}</span>
+        <span class="sync-queue-icon">${isOrder ? icons.cart : isCount ? icons.clipboardCheck : icons.pin}</span>
         <span class="sync-queue-main">
           <strong>${escapeHtml(name)}</strong>
-          <span class="muted">${t(isOrder ? "sync_item_order" : "sync_item_checkin")} · ${escapeHtml(when)}${escapeHtml(amount)}</span>
+          <span class="muted">${t(isOrder ? "sync_item_order" : isCount ? "sync_item_stock_count" : "sync_item_checkin")} · ${escapeHtml(when)}${escapeHtml(amount)}</span>
           ${detail}
         </span>
         <span class="sync-queue-side">${status}${discard}</span>

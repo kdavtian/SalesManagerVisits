@@ -8,12 +8,32 @@ import { t } from "../i18n.js";
 import { escapeHtml } from "../util.js";
 import { prepareSearchText, matchKind } from "../shared/searchKey.js";
 import { installInlineClearButton } from "../searchBar.js";
+import { enqueueStockCount, discardEntry, flushQueue, getQueue, onQueueChange } from "../offlineQueue.js";
 
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), t(key));
 const shortDate = (day) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
 const weekday = (day) => t(`stock_count_wd_${new Date(`${day}T00:00:00Z`).getUTCDay()}`);
 const signed = (n) => (n > 0 ? `+${n}` : String(n));
 let lastDay = null; // the last answer: painted at once when the screen opens again
+const CACHE_KEY = "fv_stock_count_day"; // the last answer of today's list, for a warehouse without signal
+
+const readCache = () => {
+  try {
+    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+    return c?.items ? c : null;
+  } catch {
+    return null;
+  }
+};
+const writeCache = (d) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(d));
+  } catch {
+    // storage full / blocked: the list just is not kept for offline use
+  }
+};
+// counts typed without signal that are still waiting to be sent (offlineQueue.js, one per product and day)
+const waiting = (day) => getQueue().filter((e) => e.type === "stock_count" && e.day === day);
 
 function diffChip(item) {
   if (item.difference == null) return item.expected_qty != null ? `<span class="sc-excel">${t("stock_count_excel")} ${item.expected_qty}</span>` : "";
@@ -23,13 +43,14 @@ function diffChip(item) {
 
 function rowHtml(item, canCount) {
   const sub = [item.brand, item.size].filter(Boolean).map(escapeHtml).join(" · ");
+  const pendingChip = item.pending ? `<span class="sc-pending">${t("stock_count_waiting_item")}</span>` : "";
   const value = item.counted ? String(item.counted_qty) : "";
   return `
     <li class="sc-row${item.counted ? " is-counted" : ""}" data-id="${item.product_id}">
       <div class="sc-name">
         <strong>${escapeHtml(item.name)}</strong>
         <span class="muted">${sub}${item.carried ? ` · <span class="sc-carried">${fill("stock_count_from_day", { d: shortDate(item.planned_date) })}</span>` : ""}</span>
-        <span class="sc-chips">${diffChip(item)}</span>
+        <span class="sc-chips">${pendingChip}${diffChip(item)}</span>
       </div>
       ${
         canCount
@@ -135,6 +156,7 @@ export async function renderStockCount(root, navigate, query) {
       <div id="sc-head"></div>
       <div class="sc-search" id="sc-search-row"><input type="search" enterkeyhint="search" id="sc-search" placeholder="${t("stock_count_search")}" autocomplete="off"></div>
       <p class="form-error" id="sc-error" role="alert" hidden></p>
+      <p class="sc-offline" id="sc-offline" role="status" hidden></p>
       <div id="sc-body"><p class="loading-state" role="status">${t("loading")}</p></div>
       <div class="sc-bar" id="sc-bar" hidden>
         <p class="sc-bar-hint" id="sc-bar-hint"></p>
@@ -152,6 +174,7 @@ export async function renderStockCount(root, navigate, query) {
   installInlineClearButton(search);
   let data = null;
   let month = null;
+  const offlineNote = view.querySelector("#sc-offline");
   let alive = true;
   let armed = false; // "Finish the day" with products left: the first tap says what happens, the second one finishes
 
@@ -196,16 +219,45 @@ export async function renderStockCount(root, navigate, query) {
     } else if (data) paintDay();
   }
 
+  // Shows the counts still waiting for signal as counted (marked "waiting to send") on top of what the server last said.
+  function applyWaiting() {
+    if (!data) return;
+    const queued = new Map(waiting(data.day).map((e) => [e.productId, e]));
+    for (const it of data.items) {
+      const q = queued.get(it.product_id);
+      if (q) Object.assign(it, { counted: true, counted_qty: q.qty, pending: true, difference: null });
+      else if (it.pending) Object.assign(it, { pending: false, counted: false, counted_qty: null }); // it was sent, or taken back: the server's answer decides
+    }
+    data.numbers.counted = data.items.filter((i) => i.counted).length;
+  }
+  const setOffline = (on) => {
+    offlineNote.hidden = !on;
+    offlineNote.textContent = on ? t("stock_count_offline") : "";
+  };
   async function loadDay() {
     try {
       const fresh = await api.getStockCountDay(day);
       if (!alive) return;
       data = fresh;
-      if (!day) lastDay = fresh;
+      if (!day) {
+        lastDay = fresh;
+        writeCache(fresh);
+      }
+      applyWaiting();
+      setOffline(false);
       showError("");
       if (tab === "day") paintDay();
     } catch (err) {
-      if (alive) showError(err.message);
+      if (!alive) return;
+      const cached = !day && err instanceof TypeError ? readCache() : null;
+      if (cached) {
+        // no signal: today's list as it was last seen, counting goes on and is sent later
+        data = cached;
+        applyWaiting();
+        setOffline(true);
+        showError("");
+        if (tab === "day") paintDay();
+      } else showError(err.message);
     }
   }
   async function loadMonth() {
@@ -249,8 +301,19 @@ export async function renderStockCount(root, navigate, query) {
       paintBar();
       showError("");
     } catch (err) {
-      row.classList.add("is-error");
-      showError(err.message);
+      if (err instanceof TypeError) {
+        // no signal: keep the count on the phone, it is sent as soon as there is signal again
+        await enqueueStockCount({ productId: id, productName: item.name, qty: Number(raw), day: data.day });
+        input.dataset.saved = raw;
+        if (!item.counted) data.numbers.month_counted += 1;
+        applyWaiting();
+        paintDay();
+        armed = false;
+        showError("");
+      } else {
+        row.classList.add("is-error");
+        showError(err.message);
+      }
     } finally {
       row.classList.remove("is-saving");
     }
@@ -278,10 +341,12 @@ export async function renderStockCount(root, navigate, query) {
     if (undo) {
       const id = Number(undo.dataset.undo);
       try {
-        await api.clearStockCount(id);
+        const queued = waiting(data.day).find((e) => e.productId === id);
+        if (queued) await discardEntry(queued.id); // never sent: just forget it
+        else await api.clearStockCount(id);
         const item = data.items.find((i) => i.product_id === id);
         if (item.counted) data.numbers.month_counted -= 1;
-        Object.assign(item, { counted: false, counted_qty: null, difference: null });
+        Object.assign(item, { counted: false, counted_qty: null, difference: null, pending: false });
         if (!data.shows_expected) delete item.expected_qty;
         data.numbers.counted = data.items.filter((i) => i.counted).length;
         armed = false;
@@ -300,13 +365,22 @@ export async function renderStockCount(root, navigate, query) {
     }
     finishBtn.disabled = true;
     try {
+      // counts typed without signal must be on the server before the day is closed, or they would be lost to the carry-over
+      if (waiting(data.day).length) {
+        await flushQueue({ force: true });
+        if (waiting(data.day).length) {
+          showError(fill("stock_count_waiting_signal", { n: waiting(data.day).length }));
+          finishBtn.disabled = false;
+          return;
+        }
+      }
       data = await api.finishStockCountDay();
       armed = false;
       showError("");
       paintDay();
       window.dispatchEvent(new Event("warehouse-changed"));
     } catch (err) {
-      showError(err.message);
+      showError(err instanceof TypeError ? t("stock_count_finish_offline") : err.message);
       finishBtn.disabled = false;
     }
   });
@@ -327,13 +401,28 @@ export async function renderStockCount(root, navigate, query) {
   search.addEventListener("input", () => data && paintDay());
 
   setTabs();
-  if (tab === "day" && !day && lastDay) {
-    data = lastDay;
+  if (tab === "day" && !day && (lastDay || readCache())) {
+    data = lastDay || readCache();
+    applyWaiting();
     paintDay();
   }
+  // the phone sent the waiting counts (signal is back): show what the server now says
+  // iPhone Safari does not always report "signal is back": while counts wait, try again on a timer and when the app comes to the front
+  const retry = () => !document.hidden && waiting(data?.day ?? "").length && flushQueue();
+  const retryTimer = setInterval(retry, 10000);
+  document.addEventListener("visibilitychange", retry);
+  let sent = waiting(data?.day ?? "").length;
+  const stopWatching = onQueueChange(() => {
+    const now = waiting(data?.day ?? "").length;
+    if (now < sent && alive && navigator.onLine) loadDay();
+    sent = now;
+  });
   if (tab === "month") loadMonth();
   await loadDay();
   return () => {
     alive = false;
+    stopWatching();
+    clearInterval(retryTimer);
+    document.removeEventListener("visibilitychange", retry);
   };
 }

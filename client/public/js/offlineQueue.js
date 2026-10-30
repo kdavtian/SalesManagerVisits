@@ -156,6 +156,18 @@ export async function enqueueOrder(entry) {
   notify();
 }
 
+// A stock count typed without signal (owner, 2026-10-30: "implement optimization idea 2"). One entry per product and day: typing the same
+// product again replaces the waiting one. The server saves it on the day it was counted (server/src/orders/routes/stockCount.js).
+export async function enqueueStockCount(entry) {
+  await ready;
+  const stale = memoryQueue.filter((e) => e.type === "stock_count" && e.productId === entry.productId && e.day === entry.day);
+  for (const e of stale) await removeEntry(e.id);
+  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "stock_count", ...entry };
+  memoryQueue = [...memoryQueue.filter((e) => !stale.includes(e)), record];
+  await persistNewEntry(record);
+  notify();
+}
+
 async function submitCheckin(entry) {
   const form = new FormData();
   form.set("customer_id", entry.customerId);
@@ -222,6 +234,7 @@ function submitOrder(entry) {
 // are always checkins -- keeps an already-queued entry on an old client
 // submitting correctly after a deploy.
 function submitEntry(entry) {
+  if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day);
   return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }
 
