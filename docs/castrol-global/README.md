@@ -6,37 +6,25 @@ An English deck and leave-behind that present the KAD Motors platform (Field Vis
 
 | File | What it is |
 |---|---|
-| `KAD_Platform_Castrol_Global.pptx` | The deck: 16:9, 12 slides + 2 appendix slides (architecture & security; sources), speaker notes on every slide. Font Arial (looks the same in PowerPoint and LibreOffice). |
-| `KAD_Platform_OnePager.pdf` | One-page A4 leave-behind that summarises the deck. |
-| `screenshots/*.png` | The framed iPhone images used in the deck and the one-pager (`checkin`, `map`, `customer`, `order`, `debt`, `dashboard`, `team`, `bot`) and the Castrol-only crop of the shelf audit (`shelf_audit`). |
+| `KAD_Platform_Castrol_Global.pptx` | The deck: 16:9, 21 slides + 1 appendix slide (architecture & security), speaker notes on every slide. Font Arial (same look in PowerPoint and LibreOffice). |
+| `KAD_Platform_OnePager.pdf` | One-page A4 leave-behind: the ten distributor problems and what the platform does about each, the data → decision → action loop, the proposal. |
+| `screenshots/*.png` | Framed iPhone images used in the deck and the one-pager: `checkin`, `map`, `customer`, `order`, `debt`, `dashboard`, `team`, `vaghinak` (management view), `vaghinak_rep` (a rep's must-answer question), `tasks`, `reports`, `bot` (CEO-bot mock), `shelf_audit` (Castrol-only crop). |
 | `screenshots/raw/*.png` | The unframed screenshots (390x844 @3x) the frames are made from. |
-| `build/` | Everything needed to rebuild the above (scripts, icons, the bot mock page, the one-pager page). |
+| `build/` | Everything needed to rebuild the above (scripts, icons, the bot mock page, the one-pager page, the Vaghinak demo messages). |
 
-**Logo spots:** slide 1, slide 12 and the one-pager top right have a dashed box marked "CASTROL LOGO". Replace it with the official Castrol asset; the deck never draws or imitates the Castrol logo.
+**Logo spots:** slide 1, slide 21 and the one-pager top right have a dashed box marked "CASTROL LOGO". Replace it with the official Castrol asset; the deck never draws or imitates the Castrol logo.
 
-## Data rules (how the deck stays clean)
+## Deck outline
 
-- Every app screen and the CEO-bot report use **made-up demo data** from the app's own demo seed (`server/scripts/demo-site.mjs`), then `build/anonymize-demo.mjs` gives the shops English names, the reps neutral names (Rep A/B/C), fake phones (`+374 00 000 0xx`) and a Castrol-only catalogue. Nothing comes from production.
-- Map tiles are drawn locally by `build/tiles.mjs` (neutral made-up streets), so no real map or address data is used.
-- Business numbers are **aggregates** only (no customer, rep, price or debt detail).
+1 Title · 2 At a glance · 3 Built by our whole team · 4 Data → decision → action · 5 Ten real problems · 6-7 Problem → solution · 8 The platform (app, Vaghinak, bot) · 9 How it works · 10 Field execution · 11 Commercial control · 12 Vaghinak: what he controls · 13 Vaghinak closes the loop · 14 AI and automatic calculations · 15 Financial and management reports · 16 Management visibility · 17 Twelve unique features · 18 A month at a glance (illustrative) · 19 3-stage market plan · 20 Roadmap · 21 Why it matters + proposal · A1 Architecture and security.
 
-## Where every number comes from
+## No real data (owner's rule, 2026-10-30)
 
-| Number on the slides | Meaning | Source |
-|---|---|---|
-| +27% | litres sold 1 Jan - 8 Oct 2026 (72.7k L) vs full year 2025 (57.4k L) | ERP workbook ORDERS sheet (v2.1.0 for 2026, v2.0.7 for 2025), internal stock rows (customer 10000) excluded. Recorded in the `Castrol-file` skill snapshots of 2026-10-12 and 2026-10-03 |
-| 96% | Castrol litres vs 2026 plan to date (37,664 of 39,200 L) | Plan_2026 sheet, total block (snapshot 2026-10-12) |
-| 90% | 2026 collections / 2026 sales | Cashflow "Oil order" receipts / ORDERS (snapshot 2026-10-12) |
-| 78% / 103% / 93% | collections / sales for Q1, Q2, Q3 2026 | sums of the monthly sales and collection totals in snapshot 2026-10-12 (Q1 56.1/71.8, Q2 81.4/79.2, Q3 89.7/96.4, M AMD) |
-| 230, 159 | customers who ordered in 2026 / in the last 90 days | ORDERS sheet (snapshot 2026-10-12) |
-| 415, 10 of 11 | customer accounts / regions with customers (Yerevan + 9 of 10 provinces; none in Vayots Dzor) | Customers sheet (snapshot 2026-10-12) |
-| 38.8k L | Castrol litres sold 1 Jan - 8 Oct 2026 | ORDERS sheet, brand Castrol (snapshot 2026-10-12) |
-| live since Aug 2026; 750+ improvements; ~1,200 tests; 8 roles | platform facts | git history of this repo (first deploy 2026-08-24/25; 754 commits on `main` by 2026-10-30), `server/test` (`test(`/`it(` count), `client/public/js/shared/roles.js` |
-| 300 m check-in limit; discounts above 3% need approval | app rules | App configuration default (`checkin_radius_meters`), `server/src/orders/discountPolicy.js` |
-| Bot report and screen numbers | demo data | the demo database (e.g. bot "6 orders / 268 L / 1,636,640 AMD" = demo orders of 29 Oct) |
-
-The Plan_2026 actual (37.7k L) uses the plan sheet's own cut-off and scope, so it differs slightly from the 38.8k L counted from ORDERS.
-Field metrics from the live app (visits per month, Castrol presence %, coverage per region) are NOT in this version: they live only in the production database.
+- **No real company figures anywhere**: no sales, litres, customers, debt, plan or collection numbers of KAD Motors. Slide 18 and the bot mock use **illustrative values in USD**, labelled as such; they only show what the platform measures.
+- Every app screen uses **made-up demo data** from the app's demo seed (`server/scripts/demo-site.mjs`). `build/anonymize-demo.mjs` gives the shops English names, the reps neutral names (Rep A/B/C), fake phones and a Castrol-only catalogue. The app screens keep the app's own currency (AMD) on demo amounts.
+- Vaghinak's messages are written in Armenian by the app; `build/vaghinak-demo.sql` puts English demo messages and English automatic-task titles into the demo database for the screenshots (marked "demo, translated" on the slide).
+- Map tiles are drawn locally by `build/tiles.mjs` (neutral made-up streets).
+- Facts that are kept are product facts, not business data: the 300 m check-in limit and 3% discount rule (app defaults), 8 roles, ~1,200 automated tests, 750+ improvements since August 2026 (git history).
 
 ## How to regenerate
 
@@ -49,6 +37,7 @@ psql postgres://postgres:postgres@localhost:5432/postgres -c "CREATE DATABASE fv
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/fv_deck JWT_SECRET=deck-local-secret-xxxxxxxx NODE_ENV=test
 (cd server && npm run migrate && DEMO_MODE=1 DEMO_PASSWORD=pick-any-demo-password node scripts/demo-site.mjs seed)
 node docs/castrol-global/build/anonymize-demo.mjs        # SHIFT_HOURS=0 if the machine clock is already Yerevan time
+psql "$DATABASE_URL" -f docs/castrol-global/build/vaghinak-demo.sql
 
 # 2. run the app on port 3201
 (cd server && PORT=3201 node src/index.js &)
