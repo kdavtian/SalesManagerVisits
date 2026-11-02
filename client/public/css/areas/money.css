@@ -1682,10 +1682,39 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .bd-dup-title { font-weight: 700; color: var(--warning-text, var(--warning, #b26a00)); }
 .bd-dup { font-size: 0.85rem; padding: 6px 10px; border-radius: 10px; background: var(--bg-subtle, rgba(0, 0, 0, 0.04)); }
 .bd-aliases { font-size: 0.8rem; }
+/* Four tabs: each keeps its whole label; on a narrow phone (Armenian at 320 px) the row scrolls sideways instead of cutting words */
+.bd-view .cf-tabs-even { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.bd-view .cf-tabs-even::-webkit-scrollbar { display: none; }
+.bd-view .cf-tabs-even .cf-period { flex: 1 0 auto; min-width: max-content; padding: 0 8px; }
+/* Today: the daily money board (release 4) */
+.bd-day { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bd-day-btn { min-width: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.bd-day-btn svg { width: 20px; height: 20px; }
+.bd-day-label { font-weight: 700; text-align: center; flex: 1 1 auto; min-width: 0; }
+.bd-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bd-tile { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); min-width: 0; }
+.bd-tile-label { font-size: 0.8rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.bd-tile-amt { font-size: 1.25rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+.bd-tile-sub { font-size: 0.75rem; overflow-wrap: anywhere; text-align: right; }
+.bd-tile-warn { border-color: var(--warning, #b26a00); }
+.bd-panel { display: flex; flex-direction: column; gap: 4px; }
+.bd-panel-title { margin: 0 0 4px; font-size: 0.95rem; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.bd-panel-sum { flex: none; }
+.bd-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; min-height: 32px; border-top: 1px solid var(--border); padding-top: 4px; }
+.bd-row-name { min-width: 0; overflow-wrap: anywhere; }
+.bd-warn-text { margin: 4px 0 0; color: var(--warning-text, var(--warning, #b26a00)); font-weight: 700; font-size: 0.85rem; }
+.bd-alerts { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.bd-alert { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-subtle, rgba(0, 0, 0, 0.04)); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.bd-alert > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.bd-alert-warn { border-color: var(--warning, #b26a00); }
+.bd-methods { border: 1px solid var(--border); }
+.bd-methods .chip { min-height: 40px; }
 /* Wide screens: the lists in two columns (desktop is a main device for the accountants) */
 @media (min-width: 900px) {
   .bd-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-  .bd-body > .empty-state, .bd-body > .loading-state, .bd-body > .bd-search, .bd-body > .bd-total, .bd-body > #bd-new-desk { grid-column: 1 / -1; }
+  .bd-body > .empty-state, .bd-body > .loading-state, .bd-body > .bd-search, .bd-body > .bd-total, .bd-body > #bd-new-desk,
+  .bd-body > .bd-day, .bd-body > .bd-tiles, .bd-body > .bd-methods { grid-column: 1 / -1; }
+  .bd-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .bd-body > .bk-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* ===== Counting shortfalls (payments redesign, release 3, owner's answer 6) ===== */

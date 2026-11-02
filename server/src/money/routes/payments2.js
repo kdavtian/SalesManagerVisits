@@ -23,6 +23,7 @@ import { runBridge } from "../payments2/bridge.js";
 import { runBooks, unrecordedCashRows } from "../payments2/books.js";
 import { changeCustomer, recordByHand, resolveLine } from "../payments2/bankPayments.js";
 import { ensureAllRepDesks, listDesks, repsWithoutDesk, saveDesk } from "../payments2/desks.js";
+import { moneyBoard } from "../payments2/board.js";
 
 export const payments2Router = Router();
 payments2Router.use(requireAuth);
@@ -91,6 +92,13 @@ payments2Router.get("/setup", bankOnly, async (req, res) => {
   });
 });
 
+// The daily money board (release 4): ?day=YYYY-MM-DD, default today (Yerevan).
+payments2Router.get("/board", bankOnly, async (req, res) => {
+  const { rows: [t] } = await pool.query("SELECT to_char((now() AT TIME ZONE 'Asia/Yerevan')::date, 'YYYY-MM-DD') AS today");
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.day ?? "")) && req.query.day <= t.today ? req.query.day : t.today;
+  res.json(await moneyBoard(pool, day));
+});
+
 payments2Router.get("/bank/unspecified", bankOnly, async (req, res) => {
   const cutover = await getCutover();
   const [{ rows: lines }, { rows: noDesk }] = await Promise.all([
@@ -113,12 +121,13 @@ payments2Router.get("/bank/payments", bankOnly, async (req, res) => {
   const { rows } = await pool.query(
     `SELECT p.id, to_char(p.pay_day, 'YYYY-MM-DD') AS day, p.customer_id, p.customer_name_snapshot AS customer, p.erp_customer_id_snapshot AS erp,
             p.amount_amd::float8 AS amount, p.method, a.name AS account, p.source, p.payer_match, p.books_state, p.books_note, p.voided_at, p.void_reason, p.note,
+            p.cash_state, hu.name AS holder_name, p.legacy_payment_id,
             p.created_at, u.name AS created_by_name,
             CASE WHEN l.id IS NULL THEN NULL ELSE json_build_object('id', l.id, 'day', to_char(l.line_date, 'YYYY-MM-DD'), 'counterparty', l.counterparty, 'description', l.description) END AS line
      FROM customer_payments p LEFT JOIN cash_accounts a ON a.id = p.account_id LEFT JOIN bank_statement_lines l ON l.id = p.bank_line_id
-     LEFT JOIN users u ON u.id = p.created_by
-     WHERE p.method IN ('bank', 'card') AND p.pay_day >= $1 ORDER BY p.pay_day DESC, p.id DESC LIMIT $2`,
-    [cutover, limit]
+     LEFT JOIN users u ON u.id = p.created_by LEFT JOIN users hu ON hu.id = p.holder_id
+     WHERE (p.method IN ('bank', 'card') OR $3) AND p.pay_day >= $1 ORDER BY p.pay_day DESC, p.id DESC LIMIT $2`,
+    [cutover, limit, req.query.methods === "all"]
   );
   res.json({ payments: rows });
 });

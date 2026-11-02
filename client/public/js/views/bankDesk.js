@@ -1,8 +1,12 @@
 // Bank & cash desks (payments redesign, release 2, owner 2026-11-02) -- the accountants' screen (admin and CEO too):
+//   Today      (release 4) the daily money board: cash collected, counted, received at the office, bank / card; and now: cash still in
+//              someone's hands, open shortfalls, lines to check, payments the Excel lacks. The same summary goes to the accounting
+//              Telegram group at 20:00 (the bot, erpSync money-board).
 //   To check   statement lines the app could not give to a customer (unknown payer, several customers fit, a possible second copy) and cash
 //              held by someone without a cash desk. One tap answers each: the customer (remembered for that payer next time), not a
 //              customer payment, same money / separate payment.
-//   Bank       every bank / card payment since the start date: how its customer was found, whether the statement confirmed it, whether
+//   Payments   (release 4: one ledger) every payment since the start date: cash (copies of the Payments screen, changed there), bank
+//              and card. Bank / card: how its customer was found, whether the statement confirmed it, whether
 //              the Excel has it. Tap: the history, change the customer (with a reason), void (admin / CEO).
 //   Cash desks each desk, who holds it and the cash on it that still waits to be handed over; admin adds and edits desks.
 // "+ Payment" types a bank / card payment by hand (refused when it looks already recorded, until "separate payment"); "Statement"
@@ -17,8 +21,10 @@ import { prepareSearchText, matchKind } from "../shared/searchKey.js";
 const nf = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), t(key));
 const todayYmd = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Yerevan" }).format(new Date());
-const TABS = ["todo", "bank", "desks"];
-let memo = { setup: null, todo: null, bank: null, desks: null }; // the last answers: painted at once when the screen opens again
+const TABS = ["today", "todo", "bank", "desks"];
+const METHODS = ["all", "cash", "bank", "card"];
+const shiftDay = (ymd, by) => new Date(Date.parse(`${ymd}T12:00:00Z`) + by * 86400000).toISOString().slice(0, 10);
+let memo = { setup: null, board: null, todo: null, bank: null, desks: null }; // the last answers: painted at once when the screen opens again
 
 function sheet(html, cls = "") {
   const overlay = document.createElement("div");
@@ -95,8 +101,10 @@ function titleHtml() {
 }
 
 export async function renderBankDesk(root, navigate, query) {
-  let tab = TABS.includes(query?.get("tab")) ? query.get("tab") : "todo";
+  let tab = TABS.includes(query?.get("tab")) ? query.get("tab") : "today";
   let search = "";
+  let method = "all";
+  let boardDay = todayYmd();
   root.innerHTML = `
     <div class="cf-view bd-view">
       <div class="cf-head">
@@ -126,16 +134,58 @@ export async function renderBankDesk(root, navigate, query) {
     $("#bd-tabs").innerHTML = TABS.map(
       (k) => `<button type="button" role="tab" aria-selected="${k === tab}" class="cf-period ${k === tab ? "cf-period-active" : ""}" data-tab="${k}">${escapeHtml(t(`bd_tab_${k}`))}${k === "todo" && n ? ` <span class="count-badge">${n}</span>` : ""}</button>`
     ).join("");
+    // the chosen tab in view when the row scrolls (narrow phones)
+    const active = $("#bd-tabs .cf-period-active");
+    if (active && $("#bd-tabs").scrollWidth > $("#bd-tabs").clientWidth) active.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   $("#bd-tabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]");
     if (!b || b.dataset.tab === tab) return;
     tab = b.dataset.tab;
-    history.replaceState(null, "", `#/bank-desk${tab === "todo" ? "" : `?tab=${tab}`}`);
+    history.replaceState(null, "", `#/bank-desk${tab === "today" ? "" : `?tab=${tab}`}`);
     paintTabs();
     paint();
     load(tab);
   });
+
+  // ---- Today: the daily money board ----
+  function tile(label, amount, sub, cls = "") {
+    return `<div class="bd-tile ${cls}"><span class="bd-tile-label">${escapeHtml(label)}</span><span class="bd-tile-amt">${nf(amount)}</span>${sub ? `<span class="muted bd-tile-sub">${escapeHtml(sub)}</span>` : ""}</div>`;
+  }
+  const row = (name, amount, sub = "") =>
+    `<div class="bd-row"><span class="bd-row-name">${escapeHtml(name || "—")}${sub ? ` <span class="muted">${escapeHtml(sub)}</span>` : ""}</span><span class="bk-line-amt">${nf(amount)}</span></div>`;
+  function boardHtml() {
+    const b = memo.board;
+    const isToday = boardDay === todayYmd();
+    const nav = `<div class="bd-day">
+        <button type="button" class="btn bd-day-btn" data-day="-1" aria-label="${escapeHtml(t("bd_b_prev"))}">${icons.chevronLeft}</button>
+        <span class="bd-day-label">${escapeHtml(isToday ? `${t("bd_b_today")} · ${formatDateDMY(boardDay)}` : formatDateDMY(boardDay))}</span>
+        <button type="button" class="btn bd-day-btn" data-day="1" aria-label="${escapeHtml(t("bd_b_next"))}" ${isToday ? "disabled" : ""}>${icons.chevronRight}</button>
+      </div>`;
+    if (!b || b.day !== boardDay) return `${nav}<p class="loading-state" role="status">${t("loading")}</p>`;
+    const counted = b.counted.expected_amd !== b.counted.amd ? fill("bd_b_expected", { amount: nf(b.counted.expected_amd) }) : fill("bd_b_count", { n: b.counted.n });
+    const tiles = `<div class="bd-tiles">
+        ${tile(t("bd_b_collected"), b.collected.amd, fill("bd_b_count", { n: b.collected.n }))}
+        ${tile(t("bd_b_counted"), b.counted.amd, counted, b.counted.expected_amd > b.counted.amd ? "bd-tile-warn" : "")}
+        ${tile(t("bd_b_received"), b.received.amd, fill("bd_b_received_sub", { a: nf(b.received.handovers_amd), b: nf(b.received.direct_amd) }))}
+        ${tile(t("bd_b_bank"), b.bank.amd, fill("bd_b_bank_sub", { a: nf(b.bank.bank.amd), b: nf(b.bank.card.amd) }))}
+      </div>`;
+    const byRep = `<section class="bk-line bd-panel"><h3 class="bd-panel-title">${t("bd_b_by_rep")}</h3>
+        ${b.collected.by_rep.length ? b.collected.by_rep.map((r) => row(r.name, r.amd, `(${r.n})`)).join("") : `<p class="muted">${t("bd_b_none_today")}</p>`}
+        ${b.shortfalls.today_amd ? `<p class="bd-warn-text">${escapeHtml(fill("bd_b_short_today", { amount: nf(b.shortfalls.today_amd) }))}</p>` : ""}
+      </section>`;
+    const alert = (key, label, value, go) =>
+      `<button type="button" class="bd-alert ${key}" ${go.startsWith("#") ? `data-href="${go}"` : `data-go="${go}"`}><span>${escapeHtml(label)}</span><span class="bk-line-amt">${escapeHtml(value)}</span></button>`;
+    const now = `<section class="bk-line bd-panel"><h3 class="bd-panel-title">${t("bd_b_now")} · ${t("bd_b_in_hands")} <span class="bk-line-amt bd-panel-sum">${nf(b.in_hands.amd)}</span></h3>
+        ${b.in_hands.by_person.length ? b.in_hands.by_person.map((p) => row(p.name, p.amd, `(${p.n})`)).join("") : `<p class="muted">${t("bd_b_nobody")}</p>`}
+        <div class="bd-alerts">
+          ${b.shortfalls.open_n ? alert("bd-alert-warn", t("bd_b_short_open"), `${nf(b.shortfalls.open_amd)} (${b.shortfalls.open_n})`, "#/cash-handoffs") : ""}
+          ${b.to_check ? alert("bd-alert-warn", t("bd_b_to_check"), String(b.to_check), "todo") : ""}
+          ${alert("", t("bd_b_not_in_excel"), b.not_in_excel.n ? `${nf(b.not_in_excel.amd)} (${b.not_in_excel.n})` : "0", "bank")}
+        </div>
+      </section>`;
+    return `${nav}${tiles}${byRep}${now}<p class="muted bd-total bd-board-note">${t("bd_b_telegram")}</p>`;
+  }
 
   // ---- To check ----
   function lineHtml(l) {
@@ -223,13 +273,17 @@ export async function renderBankDesk(root, navigate, query) {
   }
 
   // ---- Bank ----
+  const cashLabel = (p) => (p.cash_state === "received" ? t("bd_cash_received") : fill(`bd_cash_${p.cash_state}`, { name: p.holder_name || "—" }));
   function paymentHtml(p) {
     const books = p.books_state === "open" ? `<span class="badge badge-neutral">${t("bd_not_in_excel")}</span>` : `<span class="badge badge-success">${t("bd_in_excel")}</span>`;
     const voided = p.voided_at ? `<span class="badge badge-danger">${t("bd_voided")}</span>` : "";
+    const cash = p.method === "cash";
+    const where = cash ? `${t("bd_m_cash")}${p.account ? ` · ${escapeHtml(p.account)}` : ""}` : `${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""} · ${escapeHtml(howLabel(p))}`;
+    const state = cash && !p.voided_at ? `<span class="badge ${p.cash_state === "received" ? "badge-success" : "badge-warning"}">${escapeHtml(cashLabel(p))}</span>` : "";
     return `<button type="button" class="bk-line bd-pay ${p.voided_at ? "is-voided" : ""}" data-pay="${p.id}">
       <div class="bk-line-main"><div class="bd-line-text"><strong>${escapeHtml(p.customer)}</strong>
-        <div class="muted bk-line-sub">${escapeHtml(formatDateDMY(p.day))} · ${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""} · ${escapeHtml(howLabel(p))}</div>
-        <span class="bd-chips">${voided || books}</span></div>
+        <div class="muted bk-line-sub">${escapeHtml(formatDateDMY(p.day))} · ${where}</div>
+        <span class="bd-chips">${state}${voided || books}</span></div>
       <div class="bk-line-amt">${nf(p.amount)}</div></div>
     </button>`;
   }
@@ -237,12 +291,16 @@ export async function renderBankDesk(root, navigate, query) {
     if (!memo.bank) return `<p class="loading-state" role="status">${t("loading")}</p>`;
     const words = search.trim().split(/\s+/).filter(Boolean);
     const rows = memo.bank.filter((p) => {
+      if (method !== "all" && p.method !== method) return false;
       if (!words.length) return true;
-      p._key ??= prepareSearchText(`${p.customer} ${p.erp ?? ""} ${p.account ?? ""} ${p.line?.counterparty ?? ""} ${p.amount}`);
+      p._key ??= prepareSearchText(`${p.customer} ${p.erp ?? ""} ${p.account ?? ""} ${p.holder_name ?? ""} ${p.line?.counterparty ?? ""} ${p.amount}`);
       return words.every((w) => matchKind(p._key, w) > 0);
     });
     const total = rows.filter((p) => !p.voided_at).reduce((s, p) => s + p.amount, 0);
-    return `<div class="bd-search"><input type="search" id="bd-q" value="${escapeHtml(search)}" placeholder="${escapeHtml(t("bd_search"))}" aria-label="${escapeHtml(t("bd_search"))}" autocomplete="off" /></div>
+    const chips = `<div class="segmented bd-methods" role="group" aria-label="${escapeHtml(t("bd_f_how"))}">${METHODS.map(
+      (m) => `<button type="button" class="chip ${m === method ? "chip-active" : ""}" data-method="${m}" aria-pressed="${m === method}">${escapeHtml(t(m === "card" ? "bd_card" : `bd_m_${m}`))}</button>`
+    ).join("")}</div>`;
+    return `${chips}<div class="bd-search"><input type="search" id="bd-q" value="${escapeHtml(search)}" placeholder="${escapeHtml(t("bd_search"))}" aria-label="${escapeHtml(t("bd_search"))}" autocomplete="off" /></div>
       <p class="muted bd-total">${escapeHtml(fill("bd_total", { n: rows.length, amount: nf(total) }))}</p>
       <div class="bk-list" id="bd-pays">${rows.length ? rows.map(paymentHtml).join("") : `<p class="empty-state">${t(memo.bank.length ? "bd_no_match" : "bd_bank_empty")}</p>`}</div>`;
   }
@@ -264,8 +322,12 @@ export async function renderBankDesk(root, navigate, query) {
     overlay.querySelector("#bd-pay-body").innerHTML = `
       <dl class="bd-facts">
         <dt>${t("bd_f_date")}</dt><dd>${escapeHtml(formatDateDMY(p.day))}</dd>
-        <dt>${t("bd_f_account")}</dt><dd>${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""}</dd>
-        <dt>${t("bd_f_found")}</dt><dd>${escapeHtml(howLabel(p))}</dd>
+        ${
+          p.method === "cash"
+            ? `<dt>${t("bd_m_cash")}</dt><dd>${escapeHtml(p.voided_at ? "—" : cashLabel(p))}${p.account ? ` · ${escapeHtml(p.account)}` : ""}</dd>`
+            : `<dt>${t("bd_f_account")}</dt><dd>${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""}</dd>
+        <dt>${t("bd_f_found")}</dt><dd>${escapeHtml(howLabel(p))}</dd>`
+        }
         ${p.line ? `<dt>${t("bd_f_line")}</dt><dd>${escapeHtml(formatDateDMY(p.line.day))} · ${escapeHtml([p.line.counterparty, p.line.description].filter(Boolean).join(" · "))}</dd>` : ""}
         <dt>${t("bd_f_excel")}</dt><dd>${escapeHtml(p.books_note || (p.books_state === "open" ? t("bd_not_in_excel") : t("bd_in_excel")))}</dd>
         ${p.voided_at ? `<dt>${t("bd_voided")}</dt><dd>${escapeHtml(p.void_reason || "")}</dd>` : ""}
@@ -274,6 +336,13 @@ export async function renderBankDesk(root, navigate, query) {
       <div class="bd-inline" id="bd-inline" hidden></div>`;
     if (p.voided_at) return;
     const actions = overlay.querySelector("#bd-pay-actions");
+    if (p.legacy_payment_id) {
+      // a cash payment of the Payments screen (the old screens stay the engine, release 3): it is changed there
+      overlay.querySelector("#bd-pay-body").insertAdjacentHTML("beforeend", `<p class="muted">${t("bd_cash_on_payments")}</p>`);
+      actions.insertAdjacentHTML("afterbegin", `<button type="button" class="btn" id="bd-open-payments">${t("bd_open_payments")}</button>`);
+      overlay.querySelector("#bd-open-payments").addEventListener("click", () => (overlay.remove(), navigate("#/payments")));
+      return;
+    }
     actions.insertAdjacentHTML("afterbegin", `${memo.setup?.can_void ? `<button type="button" class="btn btn-danger" id="bd-void">${t("bd_void")}</button>` : ""}<button type="button" class="btn" id="bd-move">${t("bd_change_customer")}</button>`);
     const inline = overlay.querySelector("#bd-inline");
     const askReason = (label, onSave, { button = t("save"), danger = false } = {}) => {
@@ -446,7 +515,7 @@ export async function renderBankDesk(root, navigate, query) {
   function paint() {
     errEl.hidden = true;
     const body = $("#bd-body");
-    body.innerHTML = tab === "todo" ? todoHtml() : tab === "bank" ? bankHtml() : desksHtml();
+    body.innerHTML = tab === "today" ? boardHtml() : tab === "todo" ? todoHtml() : tab === "bank" ? bankHtml() : desksHtml();
     const q = body.querySelector("#bd-q");
     if (q) {
       installInlineClearButton(q);
@@ -464,9 +533,25 @@ export async function renderBankDesk(root, navigate, query) {
     const go = e.target.closest("[data-go]");
     if (go) {
       tab = go.dataset.go;
+      history.replaceState(null, "", `#/bank-desk?tab=${tab}`);
       paintTabs();
       paint();
       return load(tab);
+    }
+    const href = e.target.closest("[data-href]");
+    if (href) return navigate(href.dataset.href);
+    const dayBtn = e.target.closest("[data-day]");
+    if (dayBtn) {
+      const next = shiftDay(boardDay, Number(dayBtn.dataset.day));
+      if (next > todayYmd()) return;
+      boardDay = next;
+      paint();
+      return load("today");
+    }
+    const m = e.target.closest("[data-method]");
+    if (m) {
+      method = m.dataset.method;
+      return paint();
     }
     const act = e.target.closest("[data-act]");
     if (act) {
@@ -489,8 +574,13 @@ export async function renderBankDesk(root, navigate, query) {
 
   async function load(which) {
     try {
-      if (which === "todo") memo.todo = await api.getPay2Unspecified();
-      else if (which === "bank") memo.bank = (await api.getPay2BankPayments({ limit: 500 })).payments;
+      if (which === "today") {
+        const day = boardDay;
+        const b = await api.getPay2Board(day);
+        if (day !== boardDay) return; // the person moved on to another day meanwhile
+        memo.board = b;
+      } else if (which === "todo") memo.todo = await api.getPay2Unspecified();
+      else if (which === "bank") memo.bank = (await api.getPay2BankPayments({ limit: 500, methods: "all" })).payments;
       else memo.desks = await api.getCashDesks();
       if (which === tab && root.isConnected) {
         paintTabs();
@@ -508,6 +598,7 @@ export async function renderBankDesk(root, navigate, query) {
       await openBankSheet(meta, () => {
         memo.todo = null;
         memo.bank = null;
+        memo.board = null;
         load("todo");
         if (tab !== "todo") load(tab);
       });

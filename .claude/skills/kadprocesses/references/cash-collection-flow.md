@@ -125,3 +125,12 @@ R4 (owner 2026-11-02): "finish + board", the old cash screens stay (they are the
 payments of Bank & cash desks (customer_payments, books still open) lower the live debt too; the credit-limit check subtracts the
 payments the Excel does not have yet; visit priorities use the overdue part of the live debt. Next (R4b): one Payments ledger (cash +
 bank + card, both tracks), a daily money board for admin / CEO / accountant + an evening Telegram summary to the accounting group.
+R4b (1.495.0): Bank & cash desks opens on "Today", the daily money board (admin / CEO / accountant; ‹ › for earlier days): cash
+collected per rep, counted by the director (with the handed-over amount when it differs), received at the office (hand-overs to the
+accountant + payments approved directly), bank / card; and NOW: cash still in someone's hands per person, open shortfalls (tap: Cash
+hand-overs), bank lines to check (tap: To check), payments the Excel does not have yet. The same summary goes to the accounting
+Telegram group at 20:00 Yerevan (the bot asks GET /api/erp-sync/money-board/pending about every 30 s, posts it to the cash-sheet group,
+reports POST /money-board/posted; once a day, a failure is offered again up to 10 times; money_board_posts, migration 177). The "Bank"
+tab became "Payments", one ledger of cash + bank + card (All / Cash / Bank / Card): a cash row shows where the money is (with the rep,
+counted by the director, at the office) and its desk; cash rows are changed on the Payments screen (the old engine), the ledger only
+shows them.
