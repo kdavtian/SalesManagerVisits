@@ -3,6 +3,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT ?? new URL("../../../..
 const D = new URL("./", import.meta.url).pathname;
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
-await p.goto("file://" + D + "assistant.html"); await p.waitForTimeout(300);
-await p.screenshot({ path: D + "../screenshots/raw/assistant.png" });
+const HY = process.env.DECK_LANG === "hy";
+await p.goto("file://" + D + (HY ? "hy/assistant.html" : "assistant.html")); await p.waitForTimeout(300);
+await p.screenshot({ path: D + (HY ? "../screenshots_hy/raw/assistant.png" : "../screenshots/raw/assistant.png") });
 await b.close(); console.log("saved assistant.png");

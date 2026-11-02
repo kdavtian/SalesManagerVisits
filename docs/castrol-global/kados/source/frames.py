@@ -3,8 +3,9 @@
 import os
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
-RAW = os.path.join(HERE, "..", "screenshots", "raw")
-OUT = os.path.join(HERE, "..", "screenshots")
+SUF = "_hy" if os.environ.get("DECK_LANG") == "hy" else ""
+RAW = os.path.join(HERE, "..", "screenshots" + SUF, "raw")
+OUT = os.path.join(HERE, "..", "screenshots" + SUF)
 S = 3
 FONT = "/usr/share/fonts/truetype/inter/Inter-SemiBold.ttf"
 import glob, os
@@ -78,7 +79,7 @@ for n in SHOTS_LIST:
     if os.path.exists(os.path.join(RAW, n + ".png")):
         frame(n)
 # video posters: the first frame of each demo video, upscaled to the screenshot size and framed the same way (the video plays on top of it)
-VID = os.path.join(HERE, "..", "videos")
+VID = os.path.join(HERE, "..", "videos" + SUF)
 for f in sorted(os.listdir(VID)) if os.path.isdir(VID) else []:
     if f.endswith(".jpg"):
         name = "video_" + f[:-4]

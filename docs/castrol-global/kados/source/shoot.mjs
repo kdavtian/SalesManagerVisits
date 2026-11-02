@@ -6,10 +6,13 @@ const { chromium } = await import(process.env.PLAYWRIGHT ?? new URL("../../../..
 const BASE = process.env.DECK_BASE ?? "http://127.0.0.1:3201";
 const PASSWORD = process.env.DECK_PASSWORD;
 if (!PASSWORD) { console.error("Set DECK_PASSWORD (the demo password used when seeding)."); process.exit(2); }
-const OUT = new URL("../screenshots/raw/", import.meta.url).pathname;
+const LANG = process.env.DECK_LANG === "hy" ? "hy" : "en";
+const HY = {"Check In": "Չեք-ին", "KAD products": "KAD ապրանքներ", "Available": "Առկա է", "Full range": "Ամբողջական տեսականի", "Competitors": "Մրցակիցներ", "This quarter": "Այս եռամսյակ", "This month": "Այս ամիս", "How is this calculated": "Ինչպե՞ս է հաշվվում", "Start packing": "Սկսել փաթեթավորումը", "Packed": "Փաթեթավորված է", "Done": "Փակել", "Submit check-in": "Հաստատել այցը", "Invoice": "Անկանխիկ", "Add": "Ավելացնել", "Castrol": "Castrol", "Mobil": "Mobil", "Shell": "Shell", "Erebuni Auto Parts": "Էրեբունի Ավտոպարտս", "Erebuni Auto": "Էրեբունի Ավտո"};
+export const L = (s) => (LANG === "hy" ? HY[s] ?? s : s);
+const OUT = new URL(LANG === "hy" ? "../screenshots_hy/raw/" : "../screenshots/raw/", import.meta.url).pathname;
 const only = process.argv[2];
 const browser = await chromium.launch();
-const BAD = [/[԰-֏]/, /excel/i, /\bimport/i, /\bsync/i, /\bundefined\b/, /\bNaN\b/, /\b[a-z]+_[a-z]+(_[a-z]+)*\b/];
+const BAD = [...(LANG === "hy" ? [] : [/[\u0530-\u058F]/]), /excel/i, /\bimport/i, /\bsync/i, /\bundefined\b/, /\bNaN\b/, /\b[a-z]+_[a-z]+(_[a-z]+)*\b/];
 let rejected = 0;
 
 export async function session(email, { geo = true, video } = {}) {
@@ -21,16 +24,16 @@ export async function session(email, { geo = true, video } = {}) {
     recordVideo: video ? { dir: video, size: { width: 390, height: 844 } } : undefined,
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
   });
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((LANG_FOR_PAGE) => {
     try {
-      localStorage.setItem("fieldvisits_lang", "en");
+      localStorage.setItem("fieldvisits_lang", LANG_FOR_PAGE);
       localStorage.setItem("fieldvisits_theme", "light");
       localStorage.setItem("fieldvisits_install_dismissed_at", String(Date.now()));
       localStorage.setItem("fieldvisits_om_hint", "1");
       localStorage.setItem("fieldvisits_map_cluster", "off");
       localStorage.setItem("fv_map_view", JSON.stringify({ center: [40.192, 44.505], zoom: 13, at: Date.now() }));
     } catch {}
-  });
+  }, LANG);
   await ctx.route(/openstreetmap|cartocdn|arcgisonline|wikimedia/, (route) => {
     const m = route.request().url().match(/\/(\d+)\/(\d+)\/(\d+)(@2x)?\.png/);
     if (!m) return route.fulfill({ status: 404, body: "" });
@@ -85,23 +88,23 @@ const SCENES = {
     await go(page, "#/customers/16"); await tap(page, '[data-stat="debt"]'); await shot(page, "debt_sheet");
     await go(page, "#/customers/5"); await scrollDown(page, 560); await shot(page, "potential_card");
     await go(page, "#/orders"); await shot(page, "orders");
-    await go(page, "#/company-dashboard"); await page.locator('button:has-text("This quarter")').first().click().catch(() => {}); await shot(page, "dashboard", { wait: 2500 });
+    await go(page, "#/company-dashboard"); await page.locator(`button:has-text("${L("This quarter")}")`).first().click().catch(() => {}); await shot(page, "dashboard", { wait: 2500 });
     await go(page, "#/reports"); await shot(page, "reports");
   },
   rep: async (page) => {
     await go(page, "#/dashboard"); await shot(page, "home_rep");
     await go(page, "#/checkin/16"); await page.waitForTimeout(3000); await shot(page, "checkin");
     await tap(page, 'label.outcome-chip:has(input[value="order_placed"])'); await tap(page, 'label.outcome-chip:has(input[value="assortment_check"])'); await shot(page, "checkin_outcome");
-    await tap(page, 'button:has-text("KAD products")');
-    for (const label of ["Available", "Full range"]) await page.locator(`.sheet label:has-text("${label}"), .sheet button:has-text("${label}")`).first().click();
+    await tap(page, `button:has-text("${L("KAD products")}")`);
+    for (const label of ["Available", "Full range"]) await page.locator(`.sheet label:has-text("${L(label)}"), .sheet button:has-text("${L(label)}")`).first().click();
     await page.screenshot({ path: OUT + "shelf.png" }); console.log("ok shelf (cropped to the Castrol column later)");
-    await go(page, "#/checkin/16"); await page.waitForTimeout(3000); await tap(page, 'button:has-text("Competitors")');
-    for (const label of ["Mobil", "Shell"]) await page.locator(`.sheet label:has-text("${label}")`).first().click();
+    await go(page, "#/checkin/16"); await page.waitForTimeout(3000); await tap(page, `button:has-text("${L("Competitors")}")`);
+    for (const label of ["Mobil", "Shell"]) await page.locator(`.sheet label:has-text("${L(label)}")`).first().click();
     await shot(page, "competitors");
     await go(page, "#/checkin/13"); await page.waitForTimeout(4000); await shot(page, "checkin_far");
     await go(page, "#/orders/new/16"); await page.waitForTimeout(2000); await shot(page, "order_frequent");
-    await tap(page, 'button:has-text("Castrol")');
-    const add = page.locator('button:text-is("Add")');
+    await tap(page, `button:has-text("${L("Castrol")}")`);
+    const add = page.locator(`button:text-is("${L("Add")}")`);
     for (let i = 0; i < 4; i++) { await add.nth(i).click(); await page.waitForTimeout(400); }
     await shot(page, "order");
     await tap(page, "#order-cart-bar"); await shot(page, "order_sheet", { wait: 1500 });
@@ -120,9 +123,9 @@ const SCENES = {
 };
 SCENES.extra = async (page) => {
   await go(page, "#/reports?r=fuel_allowance"); await page.waitForTimeout(3000); await go(page, "#/reports?r=fuel_allowance"); await shot(page, "fuel", { wait: 2500 });
-  await tap(page, 'summary:has-text("How is this calculated")'); await scrollDown(page, 1500); await shot(page, "fuel_how");
+  await tap(page, `summary:has-text("${L("How is this calculated")}")`); await scrollDown(page, 1500); await shot(page, "fuel_how");
   await go(page, "#/route-plan-sets/1"); await shot(page, "route_plan");
-  await go(page, "#/team-progress"); await tap(page, 'button:has-text("This month")'); await shot(page, "team_progress");
+  await go(page, "#/team-progress"); await tap(page, `button:has-text("${L("This month")}")`); await shot(page, "team_progress");
   await go(page, "#/orders?open=47"); await page.waitForTimeout(2000);
   // the manual "link to the accounting record" button is an internal fallback; hide it for the deck
   await page.evaluate(() => document.querySelectorAll("button").forEach((b) => { if (/excel/i.test(b.textContent)) b.style.visibility = "hidden"; }));
@@ -130,13 +133,17 @@ SCENES.extra = async (page) => {
   await go(page, "#/orders?open=136"); await shot(page, "order_approval", { wait: 2000 });
 };
 SCENES.repextra = async (page) => {
-  await go(page, "#/orders/new/14"); await page.waitForTimeout(2000); await tap(page, 'button:has-text("Castrol")');
-  { const add = page.locator('button:text-is("Add")'); for (let i = 0; i < 2; i++) { await add.nth(i).click(); await page.waitForTimeout(400); } }
+  await go(page, "#/orders/new/14"); await page.waitForTimeout(2000); await tap(page, `button:has-text("${L("Castrol")}")`);
+  { const add = page.locator(`button:text-is("${L("Add")}")`); for (let i = 0; i < 2; i++) { await add.nth(i).click(); await page.waitForTimeout(400); } }
   await tap(page, "#order-cart-bar"); await tap(page, "#save-order-btn"); await shot(page, "order_saved", { wait: 2500, allowSparse: true });
   await go(page, "#/bonuses"); await shot(page, "bonuses");
-  await go(page, "#/payments"); await tap(page, 'button[aria-label*="Add"], button:has-text("+"), .page-header button:last-child'); await shot(page, "payment_add", { wait: 1500 });
+  await go(page, "#/payments"); await tap(page, "#payments-new-btn"); await shot(page, "payment_add", { wait: 1500 });
 };
-const USERS = { extra: "ceo@kad.demo", repextra: "aram@kad.demo", ceo: "ceo@kad.demo", rep: "aram@kad.demo", wh: "wh@kad.demo", driver: "driver@kad.demo" };
+// the AI agent's page (its avatar is an Armenian letter, so the English deck keeps the screens made with the avatar scrolled away)
+const scrollAgent = (page) => page.evaluate(() => { const a = document.querySelector(".vg-avatar"); let el = a?.parentElement; while (el) { if (el.scrollHeight > el.clientHeight + 10 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) { el.scrollTop = 112; break; } el = el.parentElement; } scrollTo(0, 112); });
+SCENES.agent = async (page) => { await go(page, "#/vaghinak"); await page.waitForTimeout(2000); await scrollAgent(page); await shot(page, "vaghinak", { wait: 800 }); };
+SCENES.agentrep = async (page) => { await go(page, "#/vaghinak"); await page.waitForTimeout(2000); await scrollAgent(page); await shot(page, "vaghinak_rep", { wait: 800 }); };
+const USERS = { agent: "ceo@kad.demo", agentrep: "aram@kad.demo", extra: "ceo@kad.demo", repextra: "aram@kad.demo", ceo: "ceo@kad.demo", rep: "aram@kad.demo", wh: "wh@kad.demo", driver: "driver@kad.demo" };
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
   for (const [key, run] of Object.entries(SCENES)) {
     if (only ? only !== key : key.endsWith("extra") && false) continue;
@@ -147,4 +154,4 @@ if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop()
   await browser.close();
   console.log(rejected ? `${rejected} screen(s) rejected` : "all screens passed the checks");
 }
-export { browser };
+export { browser, LANG };

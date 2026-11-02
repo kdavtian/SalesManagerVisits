@@ -14,6 +14,17 @@ KAD OS explained feature by feature for Castrol Global, who asked for it so they
 | `kados/source/` | `shoot.mjs` (screens + automatic rejection), `record.mjs` (videos), `frames.py`, `build_kados.py`, `onepager.html` / `onepager.mjs`, `assistant.html` / `assets.mjs`. |
 | `assets/` | Official KAD logo; Castrol logo file used by the company's price lists (replace with Castrol's official high-resolution file). |
 
+### Armenian version (owner, 2026-11-02)
+| File | What it is |
+|---|---|
+| `KAD_OS_Castrol_Global_HY.pptx` | The same 33 slides in Armenian, with Armenian notes, Armenian app screens and 4 Armenian demo videos. Font: Segoe UI (has Armenian letters on Windows; Arial does not). |
+| `KAD_OS_Castrol_Global_HY.pdf` | PDF export (video slides show a still). Rendered with Inter + Noto Sans Armenian. |
+| `KAD_OS_OnePager_HY.pdf` | One-page A4 summary in Armenian. |
+| `kados/screenshots_hy/`, `kados/videos_hy/` | Armenian screens and videos (same scenes as the English ones). |
+| `kados/source/hy/` | `translations.json` (every slide string and note, English -> Armenian; the build fails and writes `hy/missing.json` if one is missing), `assistant.html` and `onepager.html` (Armenian), `armenize-demo.mjs` (puts names, tasks, notes and the AI agent's messages of a LOCAL demo database copy into Armenian; refuses a non-demo database). |
+
+Rebuild: copy the demo database to `fv_kados_hy`, run `armenize-demo.mjs` against it, start the server on it, then run every step below with `DECK_LANG=hy` in front (`shoot.mjs`, `record.mjs`, `assets.mjs`, `frames.py`, `build_kados.py`, `onepager.mjs`). Slide text in the hy build is 10% smaller, because Armenian words are longer. A few app labels are still English in the Armenian app (relative times such as "14m ago", month names, "pcs"): an app translation gap, not a deck issue.
+
 ### Branding
 - Name "KAD OS"; lockup = "KAD OS" with "powered by Castrol" directly under it (text only, never mixed into a logo file). Tagline: "The operating system for a modern Castrol distributor."
 - Logos are only the files in `assets/`, unmodified, on white backgrounds with clear space (there is no official reversed version, so no logo sits on a dark background). Castrol logo appears on the title slide, the closing slide and the one-pager only; every content slide carries the small KAD OS lockup in the footer.
