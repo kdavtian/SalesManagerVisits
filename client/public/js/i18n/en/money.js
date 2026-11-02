@@ -372,4 +372,9 @@ export const enMoney = {
     shortfall_note_paid: "Note (optional)",
     shortfall_note_write_off: "Why is it written off?",
     shortfall_reason_needed: "Write the reason (at least 3 letters)",
+    pay_sign_again: "The amount changed: the customer signs again for the new amount",
+    pay_no_proof_warning: "No signature and no photo of the slip: the payment will show as Not confirmed.",
+    pay_save_anyway: "Save anyway",
+    pay_record_anyway: "It is another payment: save",
+    pay_saved_offline: "No signal: the payment is saved on the phone and will be sent when the signal is back",
 };

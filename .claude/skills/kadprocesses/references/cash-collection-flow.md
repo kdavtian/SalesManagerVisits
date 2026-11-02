@@ -109,3 +109,8 @@ fix + add instead of rebuilding. R3a (1.492.0, migration 176):
 - Bridge: cash on a desk an accountant holds (the Office desk, also when the CEO holds it) = received.
 Owner's answers for R3b / R3c: keep both rep entry points and give the Payments "+" sheet signature, slip photo and offline saving; a
 payment pays the oldest unpaid orders across Excel AND app orders (leftover = advance).
+R3b (1.493.0): the Payments "+" sheet (owner: "keep both, upgrade +"): the customer's signature on the phone and / or photos of the
+signed paper slip (as at a check-in; a signature makes the signed payment-slip PDF), a rep's payment always carries
+customer_confirmation (signed / photo / none), one inline "no proof" warning instead of a pop-up, the duplicate warning inline (no
+confirm()), and without signal the payment waits in the phone's queue (offlineQueue type "payment", files kept as bytes) and is sent
+when the signal is back (client_ref: one payment however often it is retried).

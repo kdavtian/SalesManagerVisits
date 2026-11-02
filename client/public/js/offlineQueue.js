@@ -168,6 +168,45 @@ export async function enqueueStockCount(entry) {
   notify();
 }
 
+// A payment typed in the Payments "+" sheet without signal (payments redesign, release 3b, owner 2026-11-02): it waits here with the
+// customer's proof (slip photos, signature) and is sent as soon as the phone is online again. client_ref makes a retry harmless.
+// The photos and signatures are kept as plain bytes, not Blobs: Safari refuses a Blob in IndexedDB in some states (a private window,
+// older iOS), and the payment must never be lost for that.
+const toBytes = async (blob) => (!blob ? null : blob instanceof Blob ? { bytes: await blob.arrayBuffer(), type: blob.type || "image/jpeg" } : blob);
+// read a photo / signature into memory at once (while the phone still has it at hand): later, without signal, Safari may refuse to read it
+export { toBytes as fileBytes };
+const toBlob = (v) => (!v ? null : v instanceof Blob ? v : new Blob([v.bytes], { type: v.type }));
+
+export async function enqueuePayment(entry) {
+  await ready;
+  const stored = {
+    ...entry,
+    slipPhotos: await Promise.all((entry.slipPhotos ?? []).map(toBytes)),
+    customerSignature: await toBytes(entry.customerSignature),
+    repSignature: await toBytes(entry.repSignature),
+  };
+  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "payment", ...stored };
+  memoryQueue = [...memoryQueue, record];
+  await persistNewEntry(record);
+  notify();
+}
+
+export function paymentForm(entry) {
+  const form = new FormData();
+  form.set("customer_id", entry.customerId);
+  form.set("amount", entry.amount); // the server reads "amount" as amount_amd (routes/payments.js)
+  if (entry.paymentDate) form.set("payment_date", entry.paymentDate);
+  if (entry.note) form.set("note", entry.note);
+  if (entry.salesManagerId) form.set("sales_manager_id", entry.salesManagerId);
+  form.set("client_ref", entry.clientRef || entry.id);
+  // the person saved it knowing it: a background retry cannot ask "is this a duplicate?" again
+  if (entry.confirmDuplicate) form.set("confirm_duplicate", "true");
+  entry.slipPhotos?.forEach((photo, i) => form.append("payment_slip_photos", toBlob(photo), `payment-slip-${i}.jpg`));
+  if (entry.customerSignature) form.append("customer_signature", toBlob(entry.customerSignature), "customer-signature.png");
+  if (entry.repSignature) form.append("rep_signature", toBlob(entry.repSignature), "rep-signature.png");
+  return form;
+}
+
 async function submitCheckin(entry) {
   const form = new FormData();
   form.set("customer_id", entry.customerId);
@@ -235,6 +274,7 @@ function submitOrder(entry) {
 // submitting correctly after a deploy.
 function submitEntry(entry) {
   if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day);
+  if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: true }));
   return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }
 
@@ -279,6 +319,8 @@ export async function flushQueue({ force = false } = {}) {
         memoryQueue = memoryQueue.filter((e) => e.id !== entry.id);
         await removeEntry(entry.id);
         notify();
+        // a payment saved without signal is in the list now (the badge and an open Payments screen refresh)
+        if (entry.type === "payment") window.dispatchEvent(new Event("payments-changed"));
       } catch (err) {
         // 401 (session expired) and 429/423 (rate-limited / app-wide
         // emergency lockdown) are conditions affecting every request this

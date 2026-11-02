@@ -23,11 +23,15 @@ export function renderSyncBanner() {
   // stuck item); stuck items keep the red button look from before.
   // only stock counts waiting (the warehouse): "check-ins" would be the wrong word
   const onlyCounts = queue.every((e) => e.type === "stock_count");
+  // only payments typed in the Payments "+" sheet (release 3b): "payments", not "check-ins"
+  const onlyPayments = queue.every((e) => e.type === "payment");
   const template = needsAttention
     ? t("sync_needs_attention_banner")
     : onlyCounts
       ? t(navigator.onLine ? "syncing_counts" : "offline_counts_waiting")
-      : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
+      : onlyPayments
+        ? t(navigator.onLine ? "syncing_payments" : "offline_payments_waiting")
+        : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
   const count = needsAttention || pending;
   // "{s}" is the English plural ending only; the Armenian texts have none.
   syncBanner.textContent = template.replace("{n}", count).replace("{s}", count > 1 && getLang() !== "hy" ? "s" : "");
