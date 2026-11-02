@@ -8,6 +8,7 @@ import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
 import { handOverTasks } from "../taskHandover.js";
 import { ensureRepDesk } from "../../money/payments2/desks.js";
+import { CASH_IN_HAND_SQL } from "../../money/cashCustody.js";
 
 // Every sales rep has a cash desk of his own (owner, 2026-11-02): made when he is created or becomes a rep. A failure here must not undo
 // the account itself -- the desk can still be made from Bank & cash desks.
@@ -183,7 +184,7 @@ usersRouter.get("/:id/offboarding", async (req, res) => {
     ),
     pool.query("SELECT count(*)::int AS n FROM tasks WHERE assignee_id = $1 AND status = 'open'", [userId]),
     pool.query(
-      `SELECT COALESCE(SUM(amount_amd), 0)::float8 AS amount, count(*)::int AS n FROM payments WHERE current_holder_id = $1 AND status = 'pending'`,
+      `SELECT COALESCE(SUM(p.amount_amd), 0)::float8 AS amount, count(*)::int AS n FROM payments p WHERE p.current_holder_id = $1 AND ${CASH_IN_HAND_SQL}`,
       [userId]
     ),
     pool.query("SELECT count(*)::int AS n FROM orders WHERE user_id = $1 AND status = ANY($2)", [userId, OPEN_ORDER_STATUSES]),

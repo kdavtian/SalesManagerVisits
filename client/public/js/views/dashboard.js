@@ -580,12 +580,16 @@ function renderHandoverCard(slot, navigate) {
   api
     .getHandoffAvailable()
     .then((d) => {
-      if (!d.count || !slot.isConnected) return;
-      slot.innerHTML = `<button type="button" class="card home-handover-card" id="home-handover">
-        <span><strong>${t("handover_today_title")}</strong><span class="muted">${t("handover_today_meta").replace("{amount}", formatAmd(d.total_amd)).replace("{n}", String(d.count))}</span></span>
+      if ((!d.count && !d.shortfall_amd) || !slot.isConnected) return;
+      // a counting shortfall on his line (owner's answer 6) shows here until it is paid in or written off
+      const short = d.shortfall_amd ? `<span class="home-shortfall">${t("shortfall_on_you").replace("{amount}", `<span class="home-shortfall-amt">${formatAmd(d.shortfall_amd)}</span>`)}</span>` : "";
+      slot.innerHTML = d.count
+        ? `<button type="button" class="card home-handover-card" id="home-handover">
+        <span><strong>${t("handover_today_title")}</strong><span class="muted">${t("handover_today_meta").replace("{amount}", formatAmd(d.total_amd)).replace("{n}", String(d.count))}</span>${short}</span>
         <span class="btn btn-primary btn-sm">${t("handover_today_btn")}</span>
-      </button>`;
-      slot.querySelector("#home-handover").addEventListener("click", () => navigate("#/cash-handoffs?handover=1"));
+      </button>`
+        : `<button type="button" class="card home-handover-card" id="home-handover"><span>${short}</span></button>`;
+      slot.querySelector("#home-handover").addEventListener("click", () => navigate(d.count ? "#/cash-handoffs?handover=1" : "#/cash-handoffs"));
     })
     .catch(() => {});
 }

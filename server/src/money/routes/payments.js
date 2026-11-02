@@ -462,11 +462,14 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
       return res.status(409).json({ error: blocked });
     }
 
+    // Approving directly means the person received the money (payments redesign, release 3): admin or the accountant approving cash
+    // that was never handed over in the app now holds it (it lands on their desk), instead of the rep keeping it on paper forever.
     await client.query(
       `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
-              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
+              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
+              current_holder_id = CASE WHEN $3 THEN $1 ELSE current_holder_id END
        WHERE id = $2`,
-      [req.user.id, req.params.id]
+      [req.user.id, req.params.id, req.user.role === "admin" || req.user.role === "accountant"]
     );
     await client.query(
       `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)

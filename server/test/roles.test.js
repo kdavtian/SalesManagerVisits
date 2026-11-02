@@ -36,6 +36,7 @@ import {
   seesPaymentBooks,
   canRecordBankPayments,
   canManageCashDesks,
+  closesCashShortfall,
   canViewStockCount,
   seesStockCountExpected,
   canPlanRoutes,
@@ -231,6 +232,7 @@ test("payments: only admin and CEO void a counted payment; admin, CEO and the ac
     assert.equal(seesPaymentBooks(role), ["admin", "ceo", "accountant"].includes(role), role);
     assert.equal(canRecordBankPayments(role), ["admin", "ceo", "accountant"].includes(role), role);
     assert.equal(canManageCashDesks(role), role === "admin" || role === "ceo", role);
+    assert.equal(closesCashShortfall(role), ["sales_director", "accountant", "admin", "ceo", "operations_director"].includes(role), role);
   }
 });
 

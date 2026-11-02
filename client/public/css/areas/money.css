@@ -1688,3 +1688,16 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
   .bd-body > .empty-state, .bd-body > .loading-state, .bd-body > .bd-search, .bd-body > .bd-total, .bd-body > #bd-new-desk { grid-column: 1 / -1; }
   .bd-body > .bk-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* ===== Counting shortfalls (payments redesign, release 3, owner's answer 6) ===== */
+.shortfall-card { display: flex; flex-direction: column; gap: 8px; }
+.shortfall-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.shortfall-main > div { min-width: 0; overflow-wrap: anywhere; }
+.shortfall-main .text-amount { white-space: nowrap; }
+.shortfall-amount { color: var(--danger, #b3261e); font-weight: 800; }
+.shortfall-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.shortfall-actions .btn { flex: 1 1 120px; min-height: 44px; }
+.shortfall-confirm { display: flex; gap: 8px; }
+.shortfall-confirm input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 12px; font: inherit; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); box-sizing: border-box; }
+.shortfall-confirm .btn { min-height: 44px; }
+.shortfall-closed summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-dim); }
+.shortfall-card-closed { opacity: 0.75; }

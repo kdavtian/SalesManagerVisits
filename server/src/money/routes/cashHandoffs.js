@@ -20,9 +20,12 @@ import {
   validHandoffRecipientRoles,
   isTerminalHandoffRole,
   canSubmitHandoffForOthers,
+  canVoidCountedPayment,
+  closesCashShortfall,
 } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { createCashSheet, reportDiscrepancy } from "../cashSheets.js";
+import { CASH_IN_HAND_SQL } from "../cashCustody.js";
 
 export const cashHandoffsRouter = Router();
 cashHandoffsRouter.use(requireAuth);
@@ -32,7 +35,8 @@ const UNASSIGNED_CHANNEL = "—";
 
 // A payment is available for `holderId` to hand off when they physically
 // hold it, it is not already inside an in-flight handoff, and its journey
-// has not already ended (approved) or been voided (rejected).
+// has not already ended (received by a person) or been voided (rejected). cashCustody.js: a payment the Excel already shows is still
+// cash in the rep's hands until it is handed over.
 const AVAILABLE_SQL = `
   SELECT p.id, p.amount_amd, p.sales_channel, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
          p.erp_customer_id_snapshot, p.sales_manager_name_snapshot, p.payment_date
@@ -40,7 +44,7 @@ const AVAILABLE_SQL = `
   LEFT JOIN customers c ON c.id = p.customer_id
   WHERE p.current_holder_id = $1
     AND p.pending_handoff_id IS NULL
-    AND p.status = 'pending'
+    AND ${CASH_IN_HAND_SQL}
   ORDER BY p.sales_channel NULLS LAST, p.payment_date DESC
 `;
 
@@ -121,8 +125,11 @@ cashHandoffsRouter.get("/available", async (req, res) => {
       )
     : { rows: [] };
 
+  const { rows: [short] } = await pool.query("SELECT COALESCE(sum(amount_amd), 0)::float8 AS amd, count(*)::int AS n FROM cash_shortfalls WHERE user_id = $1 AND status = 'open'", [holderId]);
   res.json({
     holder: { id: holder.id, name: holder.name, role: holder.role },
+    shortfall_amd: short.amd,
+    shortfall_count: short.n,
     payments: rows,
     ...summarize(rows),
     recipient_roles: recipientRoles,
@@ -142,7 +149,7 @@ cashHandoffsRouter.get("/senders", async (req, res) => {
             COUNT(p.id)::int AS available_count
      FROM users u
      LEFT JOIN payments p
-       ON p.current_holder_id = u.id AND p.pending_handoff_id IS NULL AND p.status = 'pending'
+       ON p.current_holder_id = u.id AND p.pending_handoff_id IS NULL AND ${CASH_IN_HAND_SQL}
      WHERE u.role = 'sales_manager'
      GROUP BY u.id, u.name, u.position
      ORDER BY u.name`
@@ -191,16 +198,16 @@ cashHandoffsRouter.post("/", async (req, res) => {
     // rows with pending_handoff_id already set and finds nothing left.
     const selection = all
       ? await client.query(
-          `SELECT id, amount_amd, sales_channel FROM payments
-           WHERE current_holder_id = $1 AND pending_handoff_id IS NULL AND status = 'pending'
-           ORDER BY id FOR UPDATE`,
+          `SELECT p.id, p.amount_amd, p.sales_channel FROM payments p
+           WHERE p.current_holder_id = $1 AND p.pending_handoff_id IS NULL AND ${CASH_IN_HAND_SQL}
+           ORDER BY p.id FOR UPDATE OF p`,
           [sender.id]
         )
       : await client.query(
-          `SELECT id, amount_amd, sales_channel FROM payments
-           WHERE id = ANY($1::int[]) AND current_holder_id = $2
-             AND pending_handoff_id IS NULL AND status = 'pending'
-           ORDER BY id FOR UPDATE`,
+          `SELECT p.id, p.amount_amd, p.sales_channel FROM payments p
+           WHERE p.id = ANY($1::int[]) AND p.current_holder_id = $2
+             AND p.pending_handoff_id IS NULL AND ${CASH_IN_HAND_SQL}
+           ORDER BY p.id FOR UPDATE OF p`,
           [payment_ids.map(Number), sender.id]
         );
 
@@ -276,6 +283,47 @@ cashHandoffsRouter.get("/", async (req, res) => {
     rows: history.slice(0, PAGE_SIZE),
     has_more: history.length > PAGE_SIZE,
   });
+});
+
+// ---- Shortfalls (owner's answer 6, release 3): counted less than handed over -> on the sender's line until closed ----------------------
+//   GET  /shortfalls                 open ones (a rep: his own) + the last 30 closed
+//   POST /shortfalls/:id/close       { how: 'paid' | 'written_off', note } -- paid in: the director / accountant / admin / CEO who got the
+//                                    missing notes; written off: admin / CEO only, with a reason
+const SHORTFALL_SQL = `SELECT s.id, s.handoff_id, s.user_id, u.name AS user_name, s.amount_amd::float8 AS amount_amd, s.note, s.status,
+         s.created_at, s.closed_at, s.close_note, cu.name AS closed_by_name, h.confirmed_at, tu.name AS counted_by_name
+  FROM cash_shortfalls s JOIN users u ON u.id = s.user_id JOIN cash_handoffs h ON h.id = s.handoff_id JOIN users tu ON tu.id = h.to_user_id
+  LEFT JOIN users cu ON cu.id = s.closed_by`;
+
+cashHandoffsRouter.get("/shortfalls", async (req, res) => {
+  const own = req.user.role === "sales_manager";
+  const [{ rows: open }, { rows: closed }] = await Promise.all([
+    pool.query(`${SHORTFALL_SQL} WHERE s.status = 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.created_at`, own ? [req.user.id] : []),
+    pool.query(`${SHORTFALL_SQL} WHERE s.status <> 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.closed_at DESC LIMIT 30`, own ? [req.user.id] : []),
+  ]);
+  res.json({ open, closed, can_close: closesCashShortfall(req.user.role), can_write_off: canVoidCountedPayment(req.user.role) });
+});
+
+cashHandoffsRouter.post("/shortfalls/:id/close", async (req, res) => {
+  const how = req.body?.how;
+  const note = String(req.body?.note ?? "").trim().slice(0, 300) || null;
+  if (how !== "paid" && how !== "written_off") return res.status(400).json({ error: "how must be paid or written_off" });
+  if (how === "paid" && !closesCashShortfall(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  if (how === "written_off") {
+    if (!canVoidCountedPayment(req.user.role)) return res.status(403).json({ error: "Only admin or CEO can write a shortfall off" });
+    if (!note || note.length < 3) return res.status(400).json({ error: "Write why it is written off" });
+  }
+  const { rows } = await pool.query(
+    `UPDATE cash_shortfalls SET status = $2, closed_by = $3, closed_at = now(), close_note = $4 WHERE id = $1 AND status = 'open' RETURNING id, user_id, amount_amd`,
+    [Number(req.params.id), how, req.user.id, note]
+  );
+  if (!rows[0]) return res.status(409).json({ error: "This shortfall is already closed (or does not exist)" });
+  const closer = await getUser(req.user.id);
+  notifyHandoff(rows[0].user_id, "cash_handoff_reviewed", {
+    title: how === "paid" ? "Պակասորդը փակվեց" : "Պակասորդը դուրս գրվեց",
+    body: `${Number(rows[0].amount_amd).toLocaleString()} AMD · ${closer?.name ?? ""}`,
+    url: "/#/cash-handoffs",
+  });
+  res.json({ ok: true });
 });
 
 cashHandoffsRouter.get("/:id", async (req, res) => {
@@ -358,10 +406,30 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
           [row.id, `Cash handoff #${handoff.id} confirmed`, req.user.id]
         );
       }
+      // Already approved from the Excel, but the notes only reach the accountant now: the person who received them is recorded.
+      await client.query(
+        `UPDATE payments SET approved_by = $1, approved_at = COALESCE(approved_at, now())
+         WHERE id IN (SELECT payment_id FROM cash_handoff_items WHERE handoff_id = $2) AND status = 'approved' AND approved_from_erp AND approved_by IS NULL`,
+        [req.user.id, handoff.id]
+      );
+    }
+
+    // Owner's answer 6 (2026-11-02): counted LESS than the payments -> the difference stays on the sender's line until it is paid in or
+    // written off (cash_shortfalls). More than expected is only the note, as before.
+    const shortBy = counted !== null ? expected - Math.round(counted) : 0;
+    if (shortBy > 0) {
+      await client.query("INSERT INTO cash_shortfalls (handoff_id, user_id, amount_amd, note) VALUES ($1, $2, $3, $4)", [handoff.id, handoff.from_user_id, shortBy, discrepancyNote]);
     }
 
     await client.query("COMMIT");
 
+    if (shortBy > 0) {
+      notifyHandoff(handoff.from_user_id, "cash_handoff_reviewed", {
+        title: "Կանխիկի պակասորդ",
+        body: `${Number(shortBy).toLocaleString()} AMD · ${recipient.name}`,
+        url: "/#/cash-handoffs",
+      });
+    }
     if (discrepancy) {
       reportDiscrepancy({ handoffId: handoff.id, repName: sender?.name ?? "—", directorName: recipient.name, expected, counted, note: discrepancyNote }).catch((err) =>
         console.error("Discrepancy report failed:", err.message)

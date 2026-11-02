@@ -97,3 +97,15 @@ R2 (1.489.0, owner 2026-11-02): cash desks + bank payments. Owner's answers:
 - Owner, later the same day: the Office desk is held by the accountants, Ilona (a second user with the CEO role, who handles the CEO's
   cash) and admin; admin can do everything in every desk (release 3's cash steps treat admin as a holder of all desks); the CEO role may
   add / edit desks too (canManageCashDesks = admin, CEO).
+R3 (owner 2026-11-02): keep the existing screens (check-in payment, Home "Hand over today's cash", director count sheet, cash sheets) and
+fix + add instead of rebuilding. R3a (1.492.0, migration 176):
+- Cash in hand (server/src/money/cashCustody.js CASH_IN_HAND_SQL): a payment the Excel already shows (approved from the ERP sync) is still
+  cash in the rep's hands until handed over (it used to drop out of the hand-over); from the cutover on only. The accountant's confirmed
+  hand-over records her as the one who received it (approved_by). Used by the hand-over lists, anti-fraud custody, the cash-custody
+  report and offboarding.
+- Approving directly (admin / accountant) = the approver received the money: payments.current_holder_id moves to the approver.
+- Shortfall line (answer 6): counted LESS than handed over -> cash_shortfalls row on the sender's line (Home card, Cash handovers page)
+  until "Paid in" (director / accountant / admin / CEO / ops) or "Written off" with a reason (admin / CEO). Counted more = note only.
+- Bridge: cash on a desk an accountant holds (the Office desk, also when the CEO holds it) = received.
+Owner's answers for R3b / R3c: keep both rep entry points and give the Payments "+" sheet signature, slip photo and offline saving; a
+payment pays the oldest unpaid orders across Excel AND app orders (leftover = advance).

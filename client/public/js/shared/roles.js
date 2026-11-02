@@ -337,6 +337,11 @@ export function seesPaymentBooks(role) {
 export function canRecordBankPayments(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
+// A counting shortfall on someone's line (owner's answer 6) is closed as "paid in" by whoever received the missing notes: the sales
+// director, the accountant, admin, the CEO or the operations director (written off: canVoidCountedPayment, admin / CEO).
+export function closesCashShortfall(role) {
+  return role === "sales_director" || role === "accountant" || role === "admin" || role === "ceo" || role === "operations_director";
+}
 export function canManageCashDesks(role) {
   return role === "admin" || role === "ceo";
 }

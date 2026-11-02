@@ -5,7 +5,7 @@
 // Old status -> the cash track:
 //   held by the rep (or nobody)                      -> collected
 //   held by the sales director / CEO / ops / admin   -> counted
-//   held by the accountant, or approved by a person  -> received
+//   held by the accountant / on the office desk, or approved by a person  -> received
 //   rejected                                          -> voided ("Rejected in the old module")
 //   deleted in the old module                         -> voided ("Deleted in the old module")
 // A copy someone voided by hand is never brought back.
@@ -16,8 +16,11 @@ import { deskMap } from "./desks.js";
 const COUNTED_ROLES = new Set(["sales_director", "ceo", "operations_director", "admin"]);
 
 export function cashStateFromOld(old) {
-  if (old.status === "approved" && !old.approved_from_erp) return "received";
+  // approved by a person (also an Excel-approved payment whose notes the accountant then received in a hand-over: approved_by is set)
+  if (old.status === "approved" && (old.approved_by || !old.approved_from_erp)) return "received";
   if (old.holder_role === "accountant") return "received";
+  // on the office desk (a desk an accountant holds, e.g. the CEO who shares it): the company has it (owner, 2026-11-02)
+  if (old.holder_on_office_desk) return "received";
   if (COUNTED_ROLES.has(old.holder_role)) return "counted";
   return "collected";
 }
@@ -35,10 +38,14 @@ export async function runBridge(db = pool) {
   const copyOf = new Map(copies.filter((c) => c.legacy_payment_id).map((c) => [c.legacy_payment_id, c]));
   const desks = await deskMap(db);
   const deskOf = (userId) => desks.get(userId) ?? null;
+  const { rows: officeRows } = await db.query(
+    "SELECT DISTINCT h.account_id FROM cash_desk_holders h JOIN users u ON u.id = h.user_id WHERE u.role = 'accountant'"
+  );
+  const officeDesks = new Set(officeRows.map((r) => r.account_id));
 
   for (const o of old) {
-    const state = cashStateFromOld(o);
     const holder = o.current_holder_id ?? o.sales_manager_id;
+    const state = cashStateFromOld({ ...o, holder_on_office_desk: officeDesks.has(deskOf(holder)) });
     const copy = copyOf.get(o.id);
     const rejected = o.status === "rejected";
     if (!copy) {
