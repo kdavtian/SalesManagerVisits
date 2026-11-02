@@ -2,14 +2,14 @@
 
 ## KAD OS deck (current, November 2026)
 
-An executive deck for Castrol Global that presents **KAD OS**, KAD Motors' distributor operating system, and proposes KAD as Castrol's showcase digital distributor.
+A simple introduction to **KAD OS**, the app KAD Motors' team built to run a Castrol distributor: what it is, how it works, every function with screenshots, and the problems it solves. The only statistics are how long the app took to build and how long the team took to adopt it (owner, 2026-11-02).
 
 | File | What it is |
 |---|---|
-| `KAD_OS_Castrol_Global.pptx` | 16:9, 14 slides + 3 appendix slides (architecture, security & data ownership, integration API). Speaker notes on every slide (~60 s each); slides 1 and 14 also carry the five tough questions with answers. Font: Arial only. |
+| `KAD_OS_Castrol_Global.pptx` | 16:9, 17 slides, speaker notes on every slide (what to say). Outline: title · what is KAD OS · problems it solves · how it works · a day in KAD OS · field visits · customers & map · orders · credit, debt & cash · management · Executive Assistant · AI deputy director · AI & automation · any phone, offline, secure · built and adopted · coming next · thank you. Font: Arial only. |
 | `KAD_OS_Castrol_Global.pdf` | PDF export of the deck, for e-mail. |
-| `KAD_OS_OnePager.pdf` | One-page A4 leave-behind, ending with the proposal. |
-| `kados/screenshots/*.png` | Framed iPhone screens used in the deck: `checkin`, `order`, `orders`, `assistant`, `map`, `customer`, `dashboard`, `vaghinak` (AI deputy director, management view), `vaghinak_rep` (a rep's must-answer question), `shelf_audit` (Castrol column of the shelf audit). |
+| `KAD_OS_OnePager.pdf` | One-page A4 summary: what it is, problems it solves, how it works, what is inside, built and adopted. |
+| `kados/screenshots/*.png` | Framed iPhone screens used in the deck: `checkin`, `order`, `orders`, `assistant`, `map`, `customer`, `customers`, `tasks`, `reports`, `dashboard`, `vaghinak` (AI deputy director, management view), `vaghinak_rep` (a rep's must-answer question), `shelf_audit` (Castrol column of the shelf audit). |
 | `kados/screenshots/raw/*.png` | Unframed 390x844 @3x originals. |
 | `kados/source/` | Everything to rebuild: `shoot.mjs` (screens + automatic rejection), `assistant.html` / `assets.mjs` (Executive Assistant evening report, demo values), `frames.py`, `build_kados.py`, `onepager.html` / `onepager.mjs`. |
 | `assets/kad-logo.png` | Official KAD logo (supplied by the owner, 2026-11-02). |
@@ -17,61 +17,63 @@ An executive deck for Castrol Global that presents **KAD OS**, KAD Motors' distr
 
 ### Branding
 - Name "KAD OS"; lockup = "KAD OS" with "powered by Castrol" directly under it (text only, never mixed into a logo file). Tagline: "The operating system for a modern Castrol distributor."
-- Logos are only the files in `assets/`, unmodified, on white backgrounds with clear space (there is no official reversed version, so no logo sits on a dark background). Castrol logo appears on slide 1, slide 14 and the one-pager only; every content slide carries the small KAD OS lockup in the footer.
+- Logos are only the files in `assets/`, unmodified, on white backgrounds with clear space (there is no official reversed version, so no logo sits on a dark background). Castrol logo appears on the title slide, the closing slide and the one-pager only; every content slide carries the small KAD OS lockup in the footer.
 - Palette sampled from the official Castrol logo file: green `#009343`, red `#F00023`; text `#141B24`.
-- "powered by Castrol" is framed in the notes of slides 1 and 14 (and on the one-pager) as a PROPOSED co-brand, subject to Castrol's approval.
+- "powered by Castrol" is framed in the notes of slide 1 (and on the one-pager) as a PROPOSED co-brand, subject to Castrol's approval.
 
 ### Claims check (every capability claimed -> where it exists in the code)
 
-| Claim (slide) | Status | Proof in the repo |
+| Claim | Status | Proof in the repo |
 |---|---|---|
-| GPS-verified check-in, refused beyond the allowance (300 m default) (6, 7) | Live | `server/src/field/routes/checkins.js`, `server/migrations/111_checkin_allowance.sql`, `client/public/js/views/checkin.js` |
-| Photo with the visit (6, 7) | Live | `checkins.photo_path` in `server/src/field/routes/checkins.js` |
-| Shelf audit: Castrol present, full range, fake product, competitor brands (7, 12) | Live | `checkins.brand_status`; `GET /api/customers/brand-summary` in `server/src/customers/routes/customers.js`; `client/public/js/brandChips.js` |
-| Customer map / CRM (5, 7) | Live | `client/public/js/views/map.js`, `client/public/js/views/customerDetail.js` |
-| Routes (module "Customers & Map") (5) | Live | `server/src/orders/routePlanner.js` |
-| Central tier pricing, reps never type a price (8) | Live | `server/src/products/tierPricing.js` (gold individual prices: management only) |
-| Discounts: up to 3 % automatic, more needs approval, below cost needs the CEO (8) | Live | `server/src/orders/discountPolicy.js` |
-| Credit limits; over the limit the order waits for approval (8) | Live | `server/src/orders/creditLimit.js` |
-| Debt aged per invoice; overdue becomes a collection task (8) | Live | `server/src/money/debtAge.js`, `server/src/money/debtCollectionTasks.js` |
-| Targets and bonuses (5, 8) | Live | `server/src/bonus/`, `server/src/reports/routes/teamPerformance.js`, `client/public/js/views/teamPerformance.js` |
-| Live dashboards, litres by product line, rep scorecards, debt ageing (5, 9) | Live | `server/src/reports/routes/dashboard.js`, `server/src/reports/routes/salesPerformance.js`, `server/src/reports/volumeReport.js`, `server/src/reports/scorecard.js` |
-| Manager sees new orders live and approves (6) | Live | `server/src/orders/routes/orders.js`, `client/public/js/views/orders.js` |
-| KAD OS Executive Assistant: daily, weekly, monthly management reports with risks (6, 9) | Live | repo `kdavtian/castrol_ceo_report`, `automation/ceo_agent.py` (`build_period_briefing`, anomaly checks), `work/build_ceo_report.py` |
-| AI deputy director: watches the field day, assigns, chases, escalates (11) | Live (rule engine) | `server/src/team/vaghinak/` (`engine.js`, `evaluate.js`, `chasers.js`, `cluster.js`, `digest.js`) |
-| Must-answer questions for reps (11) | Live | `MANDATORY_ROLES` in `server/src/team/vaghinak/engine.js`; blocking sheet in `client/public/js/vaghinak.js` |
-| AI analyst, anonymised (11, A2) | Live | `server/src/team/askKad/` |
-| Self-closing tasks (11) | Live | `server/src/team/taskAutoComplete.js`, `server/src/money/debtCollectionTasks.js` |
-| Integration API for accounting, hashed tokens, test tokens (5, A3) | Live | `server/src/erp/routes/integration.js`, `server/src/erp/integrationTokens.js` |
-| Daily accounting data feed, matched by ID (A3) | Live | `server/src/erp/routes/erpSync.js` |
-| Customer ordering through partner endpoints (A3) | Pilot | `server/src/orders/routes/partner.js` (one customer) |
-| Works offline, no duplicates (13, A2) | Live | `client/public/js/offlineQueue.js` (idempotent `client_ref`) |
-| Fast on low-end phones: speed budgets on a slow phone (13) | Live | `server/test/e2e/speed-budget.spec.mjs` |
-| Mobile web app from a link, no app store (5, 13) | Live | `client/public/manifest.app.json`, `client/public/sw.js` |
-| 8 roles, enforced on the server (A2) | Live | `client/public/js/shared/roles.js`, `server/test/architecture.test.js` |
-| HTTPS; signed sessions, CSRF, rate limits, lockout (A2) | Live | `deploy/nginx.conf`, `server/src/system/routes/auth.js`, `server/src/app.js` (helmet) |
-| Audit trail (A2) | Live | `server/migrations/071_immutable_audit_logs.sql`, `070_order_status_history.sql`, `045_customer_level_audit.sql` |
-| **Delivery & Driver** (5) | **Launching next** | partial pieces exist (`server/src/orders/routes/delivery.js`, `client/public/js/views/deliveryRoute.js`) but the module is not presented as live |
-| **Warehouse** (5) | **Launching next** | partial pieces exist (`server/src/orders/routes/warehouse.js`, `client/public/js/views/warehousePack.js`, `client/public/js/views/stockCount.js`) but the module is not presented as live |
-| **Expert AI agents for sales, finance, stock** (11) | **Next** | not built |
-| **Brand-owner (Castrol) reports via the API** (A1, A3) | **Proposed** | not built |
+| GPS-verified check-in, refused beyond the allowance (300 m default) | Live | `server/src/field/routes/checkins.js`, `server/migrations/111_checkin_allowance.sql`, `client/public/js/views/checkin.js` |
+| Photo with the visit | Live | `checkins.photo_path` in `server/src/field/routes/checkins.js` |
+| Shelf audit: Castrol present, full range, fake product, competitor brands | Live | `checkins.brand_status`; `GET /api/customers/brand-summary` in `server/src/customers/routes/customers.js`; `client/public/js/brandChips.js` |
+| Customer map / CRM | Live | `client/public/js/views/map.js`, `client/public/js/views/customerDetail.js` |
+| Routes (module "Customers & Map") | Live | `server/src/orders/routePlanner.js` |
+| Central tier pricing, reps never type a price | Live | `server/src/products/tierPricing.js` (gold individual prices: management only) |
+| Discounts: up to 3 % automatic, more needs approval, below cost needs the CEO | Live | `server/src/orders/discountPolicy.js` |
+| Credit limits; over the limit the order waits for approval | Live | `server/src/orders/creditLimit.js` |
+| Debt aged per invoice; overdue becomes a collection task | Live | `server/src/money/debtAge.js`, `server/src/money/debtCollectionTasks.js` |
+| Targets and bonuses | Live | `server/src/bonus/`, `server/src/reports/routes/teamPerformance.js`, `client/public/js/views/teamPerformance.js` |
+| Live dashboards, litres by product line, rep scorecards, debt ageing | Live | `server/src/reports/routes/dashboard.js`, `server/src/reports/routes/salesPerformance.js`, `server/src/reports/volumeReport.js`, `server/src/reports/scorecard.js` |
+| Manager sees new orders live and approves | Live | `server/src/orders/routes/orders.js`, `client/public/js/views/orders.js` |
+| KAD OS Executive Assistant: daily, weekly, monthly management reports with risks | Live | repo `kdavtian/castrol_ceo_report`, `automation/ceo_agent.py` (`build_period_briefing`, anomaly checks), `work/build_ceo_report.py` |
+| AI deputy director: watches the field day, assigns, chases, escalates | Live (rule engine) | `server/src/team/vaghinak/` (`engine.js`, `evaluate.js`, `chasers.js`, `cluster.js`, `digest.js`) |
+| Must-answer questions for reps | Live | `MANDATORY_ROLES` in `server/src/team/vaghinak/engine.js`; blocking sheet in `client/public/js/vaghinak.js` |
+| AI analyst, anonymised | Live | `server/src/team/askKad/` |
+| Self-closing tasks | Live | `server/src/team/taskAutoComplete.js`, `server/src/money/debtCollectionTasks.js` |
+| Integration API for accounting, hashed tokens, test tokens | Live | `server/src/erp/routes/integration.js`, `server/src/erp/integrationTokens.js` |
+| Daily accounting data feed, matched by ID | Live | `server/src/erp/routes/erpSync.js` |
+| Customer ordering through partner endpoints | Pilot | `server/src/orders/routes/partner.js` (one customer) |
+| Works offline, no duplicates | Live | `client/public/js/offlineQueue.js` (idempotent `client_ref`) |
+| Fast on low-end phones: speed budgets on a slow phone | Live | `server/test/e2e/speed-budget.spec.mjs` |
+| Mobile web app from a link, no app store | Live | `client/public/manifest.app.json`, `client/public/sw.js` |
+| 8 roles, enforced on the server | Live | `client/public/js/shared/roles.js`, `server/test/architecture.test.js` |
+| HTTPS; signed sessions, CSRF, rate limits, lockout | Live | `deploy/nginx.conf`, `server/src/system/routes/auth.js`, `server/src/app.js` (helmet) |
+| Audit trail | Live | `server/migrations/071_immutable_audit_logs.sql`, `070_order_status_history.sql`, `045_customer_level_audit.sql` |
+| Visit plans and weekly routes, planned automatically | Live | `server/src/orders/routePlanner.js`, `server/src/field/` visit plans |
+| New customer added from the map | Live | `client/public/js/views/map.js` (add mode) |
+| Usual basket / repeat order | Live | `server/src/customers/customerReorder.js`, `client/public/js/orderMenu.js` |
+| Printable delivery form (order blank) | Live | `server/src/orders/orderBlankPdf.js` |
+| Promise dates; broken promise to the sales director | Live | `server/src/money/debtCollectionTasks.js` |
+| Payments tracked to the accountant (cash handover) | Live | `server/src/money/routes/cashHandoffs.js` |
+| Debt statement PDF | Live | `server/src/money/debtStatementPdf.js` |
+| Automatic calculations: landing cost, cost at price, credit-limit suggestion, order rhythm, days of stock, working hours, fuel | Live | `server/src/products/landingCalc.js`, `server/src/orders/discountPolicy.js`, `server/src/orders/creditLimitSuggest.js`, `server/src/orders/orderRhythm.js`, `server/src/products/stockForecast.js`, `server/src/field/repProgress.js`, `server/src/field/fuelRoute.js` |
+| **Delivery & Driver** | **Launching next** | partial pieces exist (`server/src/orders/routes/delivery.js`, `client/public/js/views/deliveryRoute.js`) but the module is not presented as live |
+| **Warehouse** | **Launching next** | partial pieces exist (`server/src/orders/routes/warehouse.js`, `client/public/js/views/warehousePack.js`, `client/public/js/views/stockCount.js`) but the module is not presented as live |
+| **Expert AI agents for sales, finance, stock** | **Next** | not built |
+| **Brand-owner (Castrol) reports via the API** | **Proposed** | not built |
 
 ### Where every number comes from
 | Number | Source |
 |---|---|
-| 300 m check-in allowance | default in `server/migrations/111_checkin_allowance.sql` (management can change it) |
-| 3 % automatic discount | `AUTO_APPROVE_PCT` in `server/src/orders/discountPolicy.js` |
-| 8 roles | `ROLES` in `client/public/js/shared/roles.js` |
-| ~1,200 automated tests | count of `test(` / `it(` in `server/test` (1,205 on 2026-10-30) |
-| Live since August 2026 | git history (first production deploy 2026-08-24/25) |
-| 9 live modules, 2 launching next | the module map above |
-| 70 % (stage 1) | owner's market-plan target |
-| Values in screens and in the Executive Assistant report | made-up demo data (local demo database; USD values in the report mock) |
-| 690 / 398 verified visits (Oct / Sep 2026), 0 before; 291 outlets visited in October; +73 % | live KAD OS database, read-only query `kados/source/results.sql`, run by the owner on 2026-11-02: rep check-ins counted once per customer per day, office excluded |
-| +13 % buying customers per month (77 -> 87) | same query: distinct buying customers per month, Mar-Aug 2026 average vs Sep-Oct 2026 average (internal stock account excluded) |
-| +17 % sales per month ($74.9k -> $87.6k); +23 % cash collected per month (-> $92.7k) | same query: monthly sales and customer payments, same periods; converted at 370 AMD per USD (the rate set in KAD OS on 2026-10-15). Monthly USD values in the slide-10 chart come from the same rows |
-| 46 % of audited shops carry Castrol (57 of 123); 10 % full range (12 of 123) | same query: each shop's latest Castrol shelf audit |
-| Caveats stated on slide 10 and in its notes | November excluded (partial); only two months after go-live; no seasonal adjustment; July-August were already strong months |
+| 2 days to the first live version (22 -> 24 Aug 2026) | git history of this repo: first commit 2026-08-22 23:11 UTC; "Verify application after deployment" 2026-08-24 |
+| Whole field team in the app in September 2026, the first full month | live system, read-only query run by the owner on 2026-11-02: rep check-ins were 1 in August and 398 in September, by all 3 field reps |
+| 10 weeks to the complete system; 763 improvements | 22 Aug -> 2 Nov 2026; 763 commits on `main` on 2026-11-02 |
+| 300 m check-in allowance; 3 % automatic discount | `server/migrations/111_checkin_allowance.sql`; `AUTO_APPROVE_PCT` in `server/src/orders/discountPolicy.js` |
+| Values on the app screens and in the Executive Assistant report | made-up demo data |
+
+No business statistics (sales, customers, debt, visits) are shown, by the owner's decision of 2026-11-02.
 
 ### How to regenerate
 1. A throwaway demo database with the app's demo seed, made deck-ready (never production):

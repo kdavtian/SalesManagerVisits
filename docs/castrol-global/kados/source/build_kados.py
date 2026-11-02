@@ -1,4 +1,4 @@
-# Builds ../KAD_OS_Castrol_Global.pptx: the KAD OS deck for Castrol Global (16:9, 14 slides + appendix, speaker notes on every slide).
+# Builds ../../KAD_OS_Castrol_Global.pptx: a simple introduction to KAD OS - what it is, how it works, every function (17 slides, notes on every slide).
 # Screens are demo data. Run: python3 build_kados.py   (then export the PDF, see ../README.md)
 # Inputs: ../screenshots/*.png (framed phones, from frames.py), icons/*.png (from assets.mjs), kad-wordmark.png.
 # Run: python3 build_deck.py
@@ -181,14 +181,27 @@ def demo_tag(slide, x, y, w=1.6):
     text(slide, x, y, w, 0.22, "Demo data", size=9, color=GREY, align=PP_ALIGN.CENTER)
 
 
-Q_TOUGH = """
-Tough questions to expect (answers):
-1. "Who approved 'powered by Castrol'?" Nobody yet. It is our proposed co-brand under the showcase partnership, subject to Castrol's brand approval. Until Castrol approves it, we use "KAD OS" alone.
-2. "Why should we give you better terms?" Because the terms buy Castrol something measurable: outlet-level coverage and shelf data, a live showcase market and a playbook for other distributors. We propose to tie the terms to KPIs we agree together, such as Castrol presence and full-range share.
-3. "Can a rep fake a visit?" A rep can only check in within a set distance of the outlet (300 m by default), with GPS accuracy recorded, a photo and an audit trail that cannot be edited. Wrong outlet locations are detected from repeated GPS evidence.
-4. "Does this scale beyond one company?" Each distributor gets its own copy with its own database. A separate demo copy already runs, the system has about 1,200 automated tests, and we ship improvements every week.
-5. "What data would Castrol get, and is it legal to share?" Operational data stays with the distributor. Castrol receives aggregated, anonymised reports: coverage, presence, full range and sell-out trends. No customer-level personal data is shared.
-"""
+
+
+def feature_slide(kicker, headline, phones, rows, talk, shelf=False):
+    s = new_slide(); n = nxt()
+    header(s, kicker, headline)
+    for i, name in enumerate(phones):
+        if name == "shelf_audit":
+            pic(s, os.path.join(SHOTS, "shelf_audit.png"), 0.45 + i * 2.6, 2.0, h=3.55)
+        else:
+            phone(s, name, 0.55 + i * 2.6, 1.75, 4.9)
+    demo_tag(s, 0.55, 6.68, 5.2)
+    step = 4.75 / len(rows)
+    for i, (ic, title, body) in enumerate(rows):
+        y = 1.9 + i * step
+        icon(s, ic, 6.35, y, 0.66)
+        text(s, 7.2, y - 0.02, 5.5, 0.35, title, size=16, bold=True)
+        text(s, 7.2, y + 0.34, 5.5, 0.4, body, size=12.5, color=GREY)
+    footer(s, n)
+    notes(s, talk)
+    return s
+
 
 # ---------------------------------------------------------------- 1. Title
 s = new_slide(); nxt()
@@ -197,128 +210,98 @@ pic(s, KAD_LOGO, 0.75, 0.9, h=0.5)
 ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(3.6), Inches(0.75), Inches(3.6), Inches(1.55)); ln.line.color.rgb = LINE; ln.line.width = Pt(1)
 pic(s, CASTROL_LOGO, 4.0, 0.86, h=0.58)
 lockup(s, 0.75, 2.35, size=60, w=6.2)
-text(s, 0.75, 4.1, 6.2, 1.0, "The operating system for a modern Castrol distributor.", size=22, color=DARK, line=1.05)
+text(s, 0.75, 4.1, 6.2, 1.0, "The operating system for a modern Castrol distributor.", size=22, line=1.05)
 box(s, 0.75, 5.3, 1.0, 0.06, fill=GREEN, radius=0)
 box(s, 1.75, 5.3, 0.35, 0.06, fill=RED, radius=0)
-text(s, 0.75, 5.55, 6.0, 0.4, "KAD Motors, Armenia · November 2026", size=15, color=GREY)
+text(s, 0.75, 5.55, 6.0, 0.4, "Introducing the app · KAD Motors, Armenia · November 2026", size=15, color=GREY)
 phone(s, "checkin", 7.55, 1.25, 5.3)
 phone(s, "assistant", 10.6, 1.25, 5.3)
 phone(s, "map", 8.95, 0.75, 6.1)
 demo_tag(s, 9.25, 7.0)
 notes(s, """
-(About 60 seconds.) Good morning, and thank you for your time. I am here on behalf of KAD Motors, Castrol's distributor in Armenia.
-In 12 minutes I want to show you three things. First, KAD runs on its own modern, AI-first distributor system: KAD OS. Second, KAD OS measurably grows Castrol's presence and share of shelf. Third, why KAD is the right partner to become Castrol's showcase digital distributor. I will finish with a concrete give-and-get proposal.
-A note on the name: "powered by Castrol" is our PROPOSED co-brand under the showcase partnership. It is subject to Castrol's approval and is part of what we ask for today. All app screens in this deck use demo data.
-""" + Q_TOUGH)
-
-# ---------------------------------------------------------------- 2. Executive summary
-s = new_slide(); n = nxt()
-header(s, "Executive summary", "KAD already runs on a complete, AI-first distributor system")
-for i, (num, lab, sub) in enumerate([("690", "GPS-verified visits in October", "from 0 before KAD OS"),
-                                     ("+23%", "cash collected per month", "Sep–Oct vs Mar–Aug average"),
-                                     ("291", "outlets visited in October", "each with GPS and shelf data")]):
-    x = 0.6 + i * 4.1
-    box(s, x, 1.95, 3.9, 1.95, fill=LIGHT)
-    text(s, x + 0.3, 2.1, 3.4, 0.85, num, size=46, bold=True, color=GREEN)
-    text(s, x + 0.3, 2.98, 3.4, 0.4, lab, size=14.5, bold=True)
-    text(s, x + 0.3, 3.38, 3.4, 0.4, sub, size=12, color=GREY)
-text(s, 0.6, 4.2, 12.1, 0.9, "Since August 2026 every visit, order, credit decision and payment at KAD runs through one system, with AI that finds problems and drives them to closure.", size=19, color=DARK, line=1.1)
-box(s, 0.6, 5.45, 12.13, 1.05, fill=GREEN, radius=0.14)
-text(s, 0.95, 5.45, 11.5, 1.05, [[("The ask: ", {"bold": True}), ("make KAD Castrol's showcase digital distributor.", {})]], size=22, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
-footer(s, n)
-notes(s, """
-(60 seconds.) The short version. Since August 2026, KAD runs its whole commercial operation on one system, KAD OS: every visit is GPS-verified, every order, credit decision and payment is in one place, and an AI layer finds problems and drives them to closure.
-Three numbers from our live system. 690 GPS-verified visits in October, from zero before KAD OS. Cash collected up 23% per month, September and October against the March to August average. And 291 different outlets visited in October, each with GPS and shelf data.
-And the ask, in one line: make KAD Castrol's showcase digital distributor. The rest of the deck shows why that is a good decision for Castrol.
+Thank you for your time. Today I want to introduce KAD OS, the app our team built to run the daily work of a Castrol distributor. I will show what it is, how it works, every function, and the problems it solves. The screens use demo data.
+"Powered by Castrol" is our proposed co-brand; we would use it only with Castrol's approval.
 """)
 
-# ---------------------------------------------------------------- 3. KAD Motors
+# ---------------------------------------------------------------- 2. What is KAD OS
 s = new_slide(); n = nxt()
-header(s, "KAD Motors", "A Castrol distributor that plans to lead Armenia's oil market")
-for i, (ic, lab) in enumerate([("store", "Castrol distributor in Armenia"), ("team", "Field, warehouse and finance teams"), ("mapPinCheck", "Customers across Armenia's regions")]):
-    x = 0.6 + i * 2.27
-    box(s, x, 2.0, 2.1, 2.05, fill=LIGHT)
-    icon(s, ic, x + 0.22, 2.22, 0.75)
-    text(s, x + 0.22, 3.12, 1.75, 0.9, lab, size=13.5, bold=True)
-text(s, 0.6, 4.45, 6.6, 0.3, "WHO WE SERVE", size=12, bold=True, color=GREY)
-for i, (ic, lab) in enumerate([("gauge", "Workshops & garages"), ("repeat", "Oil-change points"), ("store", "Auto-parts shops"), ("truck", "Fleets & car dealers")]):
-    x = 0.6 + i * 1.7
-    icon(s, ic, x + 0.38, 4.9, 0.78)
-    text(s, x, 5.78, 1.55, 0.6, lab, size=12.5, align=PP_ALIGN.CENTER)
-box(s, 7.65, 2.0, 5.08, 4.5, fill=GREEN, radius=0.18)
-text(s, 8.05, 2.3, 4.4, 0.3, "OUR AMBITION", size=12, bold=True, color=WHITE)
-text(s, 8.05, 2.65, 4.4, 1.0, "No. 1 in Armenia's oil market", size=26, bold=True, color=WHITE, line=0.95)
-for i, d in enumerate(["Volume", "Revenue", "Reputation", "Technology"]):
-    x = 8.05 + (i % 2) * 2.2
-    y = 3.9 + (i // 2) * 0.68
-    box(s, x, y, 2.05, 0.52, fill=GREEN_DARK, radius=0.26)
-    icon(s, "checkCircle", x + 0.1, y + 0.08, 0.36, bg=None, color="w", ratio=1.0)
-    text(s, x + 0.55, y + 0.1, 1.45, 0.35, d, size=14, bold=True, color=WHITE)
-text(s, 8.05, 5.45, 4.4, 0.8, "Technology is how we win the other three.", size=15, bold=True, color=WHITE)
+header(s, "What is KAD OS?", "One app for everyone in a Castrol distributor")
+text(s, 0.6, 1.75, 12.1, 0.9, "Field sales, customers, orders, credit, cash, the team and management reports in one system, with AI that keeps everyone on plan.", size=18, color=DARK, line=1.1)
+roles = [("person", "Sales reps", "Visit, check in, take orders and payments"),
+         ("target", "Sales director", "Plans routes, approves prices and credit"),
+         ("box", "Warehouse", "Sees confirmed orders to pack and ship"),
+         ("wallet", "Accountant", "Invoices, payments and cash"),
+         ("chart", "CEO", "Live dashboards and an evening report")]
+for i, (ic, title, body) in enumerate(roles):
+    x = 0.6 + i * 2.45
+    box(s, x, 2.95, 2.28, 2.55, fill=LIGHT)
+    icon(s, ic, x + 0.72, 3.15, 0.84)
+    text(s, x + 0.12, 4.1, 2.04, 0.4, title, size=15, bold=True, align=PP_ALIGN.CENTER)
+    text(s, x + 0.15, 4.5, 1.98, 0.9, body, size=12, color=GREY, align=PP_ALIGN.CENTER)
+box(s, 0.6, 5.8, 12.13, 0.85, fill=GREEN, radius=0.14)
+icon(s, "smartphone", 0.85, 5.92, 0.6, bg=WHITE)
+text(s, 1.65, 5.8, 10.9, 0.85, "Opens from a link on any iPhone, Android phone or PC. No app store. Works without signal.", size=16, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 footer(s, n)
 notes(s, """
-(60 seconds.) KAD Motors is a Castrol distributor in Armenia, with field sales, warehouse and finance teams and customers across the country's regions: workshops and garages, oil-change points, auto-parts shops, fleets and car dealers.
-Our ambition is clear: to be No. 1 in Armenia's oil market, in volume, revenue, reputation and technology. We see technology as the lever for the other three, and that is why we built KAD OS.
+KAD OS is one app for everyone in a distributor. Sales reps use it to visit customers, check in, take orders and collect payments. The sales director plans routes and approves prices and credit. The warehouse sees which confirmed orders to pack and ship. The accountant handles invoices, payments and cash. And the CEO sees live dashboards and gets an evening report.
+Everyone opens it from a link on the phone or PC they already have. There is no app store and no installation project, and it keeps working without signal.
 """)
 
-# ---------------------------------------------------------------- 4. Challenge
+# ---------------------------------------------------------------- 3. Problems it solves
 s = new_slide(); n = nxt()
-header(s, "The distributor challenge", "Most distributors cannot prove what happens in the market")
-ch = [("mapWarning", "0", "verified visits", "No proof that field work happens, or where."),
-      ("clock", "Late", "orders, credit, stock", "Problems surface weeks after the money is lost."),
-      ("eye", "0", "outlets with shelf data", "The brand owner cannot see its own shelf.")]
-for i, (ic, big, unit, body) in enumerate(ch):
-    x = 0.6 + i * 4.1
-    box(s, x, 1.95, 3.9, 3.9, fill=LIGHT)
-    icon(s, ic, x + 0.3, 2.25, 0.85, bg=RED_TINT, color="r")
-    text(s, x + 0.3, 3.3, 3.4, 0.8, big, size=40, bold=True, color=RED)
-    text(s, x + 0.3, 4.1, 3.4, 0.4, unit, size=15, bold=True)
-    text(s, x + 0.3, 4.6, 3.3, 0.9, body, size=13.5, color=GREY)
-text(s, 0.6, 6.2, 12.1, 0.5, "This was KAD before KAD OS, and it is still the norm for distributors in our region.", size=14, color=GREY)
+header(s, "Problems it solves", "Six everyday problems, and how KAD OS solves each one")
+pairs = [("mapWarning", "Visits nobody can check", "GPS check-in with a photo at the outlet"),
+         ("phone", "Orders by phone, wrong prices", "Orders in the app at fixed price lists"),
+         ("wallet", "Overdue debt found too late", "Debt per invoice and automatic collection tasks"),
+         ("eye", "No view of the shelf", "A Castrol shelf check at every visit"),
+         ("clock", "Reports that take days", "Live dashboards and an evening report"),
+         ("warning", "Problems noticed too late", "An AI deputy director gives and chases tasks")]
+for i, (ic, prob, sol) in enumerate(pairs):
+    col, row = i % 2, i // 2
+    x = 0.6 + col * 6.15
+    y = 1.9 + row * 1.6
+    box(s, x, y, 5.98, 1.42, fill=LIGHT)
+    icon(s, ic, x + 0.22, y + 0.33, 0.75, bg=RED_TINT, color="r")
+    text(s, x + 1.2, y + 0.22, 4.6, 0.4, prob, size=15.5, bold=True, color=RED)
+    icon(s, "checkCircle", x + 1.2, y + 0.78, 0.3, bg=None, color="g", ratio=1.0)
+    text(s, x + 1.6, y + 0.72, 4.25, 0.5, sol, size=14, bold=True, color=GREEN_DARK)
 footer(s, n)
 notes(s, """
-(60 seconds.) This is the challenge every distributor knows. Before KAD OS we had zero verified visits: no proof that field work happened, or where. Orders, credit and stock were visible late, so problems surfaced weeks after the money was lost. And we had zero outlets with shelf data: the brand owner, Castrol, could not see its own shelf through us.
-This is still the norm for distributors in our region. KAD OS was built to remove all three blind spots.
+These are six everyday problems of a distributor, and the answer KAD OS gives to each.
+Visits nobody can check: now every visit is a GPS check-in with a photo. Orders by phone with wrong prices: orders are made in the app at fixed price lists. Overdue debt found too late: debt is tracked per invoice and becomes a collection task automatically. No view of the shelf: reps record a Castrol shelf check at every visit. Reports that take days: dashboards are live and management gets an evening report. Problems noticed too late: an AI deputy director gives tasks to the right person and chases them.
 """)
 
-# ---------------------------------------------------------------- 5. Module map
+# ---------------------------------------------------------------- 4. How it works
 s = new_slide(); n = nxt()
-header(s, "One OS, every function", "One system runs every function of a Castrol distributor")
-live = [("mapPinCheck", "Field Sales & Visits", "GPS check-in, photo, shelf audit"),
-        ("customers", "Customers & Map", "CRM, routes, coverage"),
-        ("cart", "Orders & Pricing", "Tier prices, discount rules"),
-        ("wallet", "Credit & Collections", "Limits, debt by invoice, tasks"),
-        ("target", "Targets & Bonuses", "Plans, points, scorecards"),
-        ("chart", "Analytics", "Live dashboards and reports"),
-        ("send", "Executive Assistant", "Daily management report"),
-        ("sparkles", "AI agents", "AI deputy director, AI analyst"),
-        ("link", "Integration API", "Accounting and partner feeds")]
-nextm = [("truck", "Delivery & Driver", "Routes, arrival, e-signature"), ("box", "Warehouse", "Picking, packing, live stock")]
-for i, (ic, title, body) in enumerate(live + nextm):
-    x = 0.6 + (i % 4) * 3.07
-    y = 1.9 + (i // 4) * 1.62
-    nx = i >= len(live)
-    box(s, x, y, 2.92, 1.45, fill=WHITE if nx else GREEN_TINT, line=GREY if nx else None, line_w=1.0, dash=nx)
-    icon(s, ic, x + 0.18, y + 0.2, 0.62, bg=LIGHT if nx else WHITE, color="k" if nx else "g")
-    text(s, x + 0.95, y + 0.17, 1.9, 0.62, title, size=13.5, bold=True, anchor=MSO_ANCHOR.MIDDLE, line=0.95, color=GREY if nx else DARK)
-    text(s, x + 0.18, y + 0.92, 2.65, 0.45, body, size=11, color=GREY)
-    if nx:
-        box(s, x + 1.55, y - 0.15, 1.27, 0.3, fill=DARK, radius=0.15)
-        text(s, x + 1.55, y - 0.15, 1.27, 0.3, "LAUNCHING NEXT", size=8.5, bold=True, color=WHITE, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-x = 0.6 + 3 * 3.07
-y = 1.9 + 2 * 1.62
-box(s, x, y, 2.92, 1.45, fill=GREEN, radius=0.12)
-text(s, x + 0.2, y + 0.12, 2.55, 1.25, [[("LIVE TODAY", {"bold": True, "size": 10})], [("9 modules on one cloud database and one mobile web app", {"bold": True, "size": 13})]], color=WHITE, anchor=MSO_ANCHOR.MIDDLE, spacing=3)
+header(s, "How it works", "How KAD OS works, in four simple steps")
+steps = [("smartphone", "1. The team works in the app", "Visits, orders and payments are recorded where they happen"),
+         ("checkCircle", "2. KAD OS checks the rules", "Prices, discounts, credit and stock, at once"),
+         ("sparkles", "3. AI spots problems", "Gives a task to the right person, with a deadline"),
+         ("chart", "4. Management sees it live", "Dashboards, reports and an evening summary")]
+for i, (ic, title, body) in enumerate(steps):
+    x = 0.6 + i * 3.1
+    box(s, x, 1.95, 2.85, 2.9, fill=GREEN if i == 1 or i == 2 else LIGHT)
+    hi = i in (1, 2)
+    icon(s, ic, x + 0.25, 2.2, 0.8, bg=WHITE if hi else GREEN_TINT)
+    text(s, x + 0.25, 3.15, 2.45, 0.7, title, size=15.5, bold=True, color=WHITE if hi else DARK, line=0.95)
+    text(s, x + 0.25, 3.85, 2.45, 0.9, body, size=12.5, color=WHITE if hi else GREY)
+    if i < 3:
+        a = s.shapes.add_shape(MSO_SHAPE.RIGHT_ARROW, Inches(x + 2.88), Inches(3.2), Inches(0.2), Inches(0.36))
+        a.fill.solid(); a.fill.fore_color.rgb = GREEN_MID; a.line.fill.background()
+box(s, 0.6, 5.2, 12.13, 1.45, fill=WHITE, line=GREEN, radius=0.14, line_w=1.25)
+icon(s, "database", 0.85, 5.5, 0.85)
+text(s, 1.95, 5.27, 10.6, 1.3, [[("One cloud system. ", {"bold": True}), ("Customers, products, orders, money and tasks live in one secure database. The accounting system is connected through the integration API, so nobody types anything twice.", {})]], size=14, anchor=MSO_ANCHOR.MIDDLE)
 footer(s, n)
 notes(s, """
-(60 seconds.) This is KAD OS on one page. Nine modules are live today, all on one cloud database and one mobile web app: Field Sales and Visits; Customers and Map; Orders and Pricing; Credit and Collections; Targets and Bonuses; Analytics; the Executive Assistant, which sends management a daily report; AI agents; and an Integration API that connects accounting systems and partner data feeds.
-Two modules are launching next: Delivery and Driver, and Warehouse. I will not present them as live; they are the next steps on the same core.
+How does it work? Four simple steps.
+One: the team works in the app, so visits, orders and payments are recorded where they happen, at the customer. Two: KAD OS checks the rules at once: prices, discounts, credit and stock. Three: AI spots problems and gives a task to the right person, with a deadline. Four: management sees everything live, in dashboards, reports and an evening summary.
+Underneath there is one cloud system: customers, products, orders, money and tasks in one secure database, and the accounting system is connected through an integration API, so nobody types anything twice.
 """)
 
-# ---------------------------------------------------------------- 6. A day in KAD OS
+# ---------------------------------------------------------------- 5. A day in KAD OS
 s = new_slide(); n = nxt()
 header(s, "A day in KAD OS", "From the shop counter to the CEO's phone, in one flow")
-day = [("checkin", "09:40", "Rep checks in", "GPS + photo at the outlet"), ("order", "09:52", "Takes the order", "Tier prices, usual basket"),
+day = [("checkin", "09:40", "Rep checks in", "GPS + photo at the outlet"), ("order", "09:52", "Takes the order", "Right prices, usual basket"),
        ("orders", "09:53", "Manager sees it live", "Approves in one tap"), ("assistant", "19:00", "CEO gets the report", "Sales, cash, debt, risks")]
 for i, (shot, t, title, body) in enumerate(day):
     x = 0.75 + i * 3.1
@@ -333,321 +316,186 @@ for i, (shot, t, title, body) in enumerate(day):
         a.fill.solid(); a.fill.fore_color.rgb = GREEN; a.line.fill.background()
 footer(s, n)
 notes(s, """
-(60 seconds.) Here is one day in KAD OS, with demo data.
-At 09:40 a rep checks in at a shop: the phone confirms the GPS position and the rep adds a photo. At 09:52 the rep takes the order, from the customer's usual basket, at the right tier price. One minute later the sales manager sees the order live and can approve it in one tap. At 19:00 the CEO receives the evening report from the KAD OS Executive Assistant: sales, cash, debt and the risks to watch.
-No paper, no phone calls, no re-typing, and no waiting for month-end.
+Here is one day in KAD OS, with demo data. At 09:40 a rep checks in at a shop: the phone confirms the location and the rep adds a photo. At 09:52 the rep takes the order from the customer's usual basket, at the right prices. One minute later the manager sees the order live and approves it in one tap. At 19:00 the CEO gets the evening report: sales, cash, debt and the risks to watch.
 """)
 
-# ---------------------------------------------------------------- 7. Field execution = coverage
-s = new_slide(); n = nxt()
-header(s, "Field execution = market coverage", "Every verified visit becomes Castrol coverage data")
-for name, x, title, body in [("checkin", 1.05, "GPS-verified visit", "Accepted only within 300 m of the outlet."),
-                             ("shelf_audit", 5.2, "Shelf audit, every visit", "Castrol present, full range, fake products."),
-                             ("map", 9.25, "Customer map", "Every outlet, its visits and its plan.")]:
-    if name == "shelf_audit":
-        w, h = pic(s, os.path.join(SHOTS, "shelf_audit.png"), x + 0.05, 1.95, h=3.6)
-    else:
-        w, h = phone(s, name, x, 1.75, 4.0)
-    cx = x + w / 2
-    text(s, cx - 1.75, 5.82, 3.5, 0.35, title, size=16, bold=True, align=PP_ALIGN.CENTER)
-    text(s, cx - 1.75, 6.17, 3.5, 0.5, body, size=12.5, color=GREY, align=PP_ALIGN.CENTER)
-footer(s, n)
-notes(s, """
-(60 seconds.) Field execution is market coverage. Each visit is verified: a rep can only check in within 300 metres of the outlet, a limit management can change, and the visit is stored with its GPS accuracy and a photo.
-At each visit the rep records the Castrol shelf: present or not, full range or not, and whether there are fake or parallel-market products. The customer map shows every outlet, when it was last visited and when it is planned next.
-For Castrol this means something new: outlet-level evidence of coverage and shelf presence, not just sell-in invoices.
+# ---------------------------------------------------------------- 6-11 feature slides
+feature_slide("Visits in the field", "Every visit is checked and recorded", ["checkin", "shelf_audit"],
+    [("mapPinCheck", "GPS check-in", "Only within 300 m of the outlet (set by management)"),
+     ("camera", "Photo proof", "A photo and the visit outcome are saved"),
+     ("eye", "Shelf check", "Castrol on the shelf, full range, fake products, competitors"),
+     ("tasks", "Open tasks at the visit", "The rep sees what to do at this customer"),
+     ("wifioff", "Works without signal", "The visit is saved and sent later")],
+    """
+Visits in the field are the heart of the app. A rep can check in only near the outlet, within 300 metres by default, a limit management can change. A photo and the visit outcome are saved: order, payment, delivery or assortment check.
+At each visit the rep records the shelf: whether Castrol is there, whether the full range is there, and whether there are fake products or competitor brands. The rep also sees the open tasks for this customer. Without signal, the visit is saved on the phone and sent later.
 """)
 
-# ---------------------------------------------------------------- 8. Commercial & financial control
-s = new_slide(); n = nxt()
-header(s, "Commercial & financial control", "Prices, credit and cash follow rules, not memory")
-phone(s, "order", 0.55, 1.75, 4.9)
-phone(s, "customer", 3.15, 1.75, 4.9)
-for i, (ic, title, body) in enumerate([("tag", "Central tier pricing", "Reps never type a price."),
-                                       ("checkCircle", "Discount rules", "Over 3% needs approval; below cost, the CEO."),
-                                       ("wallet", "Credit limits", "Over the limit, the order waits for approval."),
-                                       ("history", "Debt and collections", "Aged per invoice; overdue becomes a task."),
-                                       ("target", "Targets and bonuses", "Each rep sees plan, progress and points.")]):
-    y = 1.95 + i * 0.95
-    icon(s, ic, 6.35, y, 0.7)
-    text(s, 7.3, y, 5.4, 0.35, title, size=17, bold=True)
-    text(s, 7.3, y + 0.37, 5.4, 0.4, body, size=13, color=GREY)
-footer(s, n)
-notes(s, """
-(60 seconds.) Commercial and financial control is built in. Prices come from central tier price lists; reps never type a price. Discounts up to 3% are automatic, larger ones need management approval, and anything below our cost needs the CEO.
-Every customer can have a credit limit; an order over the limit waits for approval. Debt is aged invoice by invoice, and an overdue invoice automatically becomes a collection task for the rep. Each rep sees their own plan, progress and bonus points.
-The result is margin protection and cash discipline, enforced by the system rather than by memory.
+feature_slide("Customers & map", "Every customer, on a map, with everything about them", ["map", "customers"],
+    [("map", "Customer map", "Every outlet, coloured by visit status"),
+     ("customers", "Customer card", "Contacts, orders, debt, visits, tasks"),
+     ("calendar", "Visit plans and routes", "Weekly routes for every rep, planned automatically"),
+     ("mapPinCheck", "New customers from the map", "Add a shop where you stand"),
+     ("warning", "Overdue visits", "Customers not visited on time are flagged")],
+    """
+All customers are on a map, coloured by visit status, and in a searchable list. The customer card shows contacts, orders, debt, visits and open tasks in one place.
+Each rep gets weekly visit routes, planned automatically and balanced across the week. A rep can add a new customer directly from the map, where they stand. Customers that were not visited on time are flagged, so nobody is forgotten.
 """)
 
-# ---------------------------------------------------------------- 9. Real-time management
-s = new_slide(); n = nxt()
-header(s, "Real-time management", "Management sees the business live, every day")
-phone(s, "dashboard", 0.55, 1.75, 4.9)
-phone(s, "assistant", 3.15, 1.75, 4.9)
-for i, (ic, lab) in enumerate([("chart", "Sales vs plan"), ("wallet", "Cash collected"), ("mapPinCheck", "Visits & coverage"),
-                               ("layers", "Litres by product line"), ("history", "Debt ageing"), ("team", "Rep scorecards")]):
-    x = 6.35 + (i % 2) * 3.2
-    y = 1.95 + (i // 2) * 1.0
-    box(s, x, y, 3.0, 0.82, fill=LIGHT, radius=0.12)
-    icon(s, ic, x + 0.14, y + 0.13, 0.56)
-    text(s, x + 0.85, y, 2.1, 0.82, lab, size=14.5, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-box(s, 6.35, 5.1, 6.2, 1.4, fill=GREEN, radius=0.14)
-icon(s, "send", 6.6, 5.37, 0.85, bg=WHITE)
-text(s, 7.7, 5.1, 4.7, 1.4, [[("KAD OS Executive Assistant", {"bold": True, "size": 17})], [("Daily, weekly and monthly reports on the CEO's phone, with the risks to act on.", {"size": 13.5})]], color=WHITE, anchor=MSO_ANCHOR.MIDDLE, spacing=3)
-footer(s, n)
-notes(s, """
-(60 seconds.) Management works in real time. The company dashboard shows sales against plan by channel and by rep, cash collected, visits and coverage, litres by product line, debt ageing and a scorecard for every rep.
-On top of that, the KAD OS Executive Assistant sends the CEO a daily, weekly and monthly report on the phone: what we sold, what we collected, what is overdue, which products are running low and which numbers look unusual. Management spends its time on decisions, not on building reports.
+feature_slide("Orders", "Orders in a few taps, at the right price", ["order", "orders"],
+    [("cart", "Fast ordering", "Usual basket, repeat last order, search"),
+     ("tag", "Price lists by customer level", "Bronze, Silver, Gold; reps never type prices"),
+     ("checkCircle", "Discount rules", "Over 3% needs approval; below cost, the CEO"),
+     ("send", "Live order status", "Draft, submitted, confirmed, packed, delivered"),
+     ("folder", "Printable order form", "A delivery act for the customer to sign")],
+    """
+Ordering takes a few taps: start from the customer's usual basket, repeat the last order, or search. Prices come from price lists by customer level, Bronze, Silver or Gold, and reps never type prices.
+Discount rules are built in: up to 3% is automatic, more needs approval, and anything below our cost needs the CEO. Everyone sees the order's status live, from draft to delivered, and the app prints the delivery form the customer signs.
 """)
 
-# ---------------------------------------------------------------- 10. Results
-s = new_slide(); n = nxt()
-header(s, "Results", "Two months live: more visits, more customers, more cash")
-RATE = 370  # AMD per USD, the rate set in KAD OS on 15 Oct 2026
-months = ["Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct"]
-sales_amd = [23118450, 32158600, 18235475, 28758000, 31391450, 32672250, 32255400, 32585050]
-coll_amd = [24831300, 35976200, 23870250, 21510700, 34896050, 25960400, 31043400, 37563100]
-res = [("0 → 690", "verified visits per month", "Sep 398 → Oct 690 (+73%)"),
-       ("+13%", "buying customers per month", "77 → 87 (Mar–Aug vs Sep–Oct avg)"),
-       ("+17%", "sales per month", "$74.9k → $87.6k"),
-       ("46%", "audited shops carry Castrol", "57 of 123 shops; full range 10%")]
-for i, (num, lab, sub) in enumerate(res):
-    x = 0.6 + (i % 2) * 3.25
-    y = 1.85 + (i // 2) * 2.05
-    box(s, x, y, 3.05, 1.88, fill=GREEN_TINT if i == 3 else LIGHT)
-    text(s, x + 0.25, y + 0.15, 2.7, 0.75, num, size=34, bold=True, color=GREEN)
-    text(s, x + 0.25, y + 0.9, 2.7, 0.4, lab, size=13, bold=True)
-    text(s, x + 0.25, y + 1.3, 2.75, 0.5, sub, size=11, color=GREY)
-text(s, 7.2, 1.85, 5.5, 0.35, "Sales and cash collected per month, USD thousand", size=13.5, bold=True)
-cd = CategoryChartData()
-cd.categories = months
-cd.add_series("Sales", [round(v / RATE / 1000, 1) for v in sales_amd])
-cd.add_series("Cash collected", [round(v / RATE / 1000, 1) for v in coll_amd])
-gf = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(7.1), Inches(2.25), Inches(5.65), Inches(3.55), cd)
-ch = gf.chart
-ch.has_title = False
-ch.has_legend = True
-ch.legend.include_in_layout = False
-from pptx.enum.chart import XL_LEGEND_POSITION
-ch.legend.position = XL_LEGEND_POSITION.TOP
-ch.legend.font.size = Pt(11)
-ch.font.name = FONT
-ch.font.size = Pt(11)
-plot = ch.plots[0]
-plot.gap_width = 60
-plot.overlap = -10
-for ser, col in zip(plot.series, (GREEN, GREEN_MID)):
-    ser.format.fill.solid(); ser.format.fill.fore_color.rgb = col
-va = ch.value_axis
-va.minimum_scale = 0; va.maximum_scale = 110
-va.has_major_gridlines = True
-va.major_gridlines.format.line.color.rgb = LINE
-va.tick_labels.font.size = Pt(10); va.tick_labels.font.color.rgb = GREY
-va.format.line.fill.background()
-ca = ch.category_axis
-ca.tick_labels.font.size = Pt(11)
-ca.format.line.color.rgb = LINE
-# go-live marker between Aug and Sep
-plot_left, plot_w = 7.1 + 0.55, 5.65 - 0.7
-xm = plot_left + plot_w * 6 / 8
-ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(xm), Inches(2.6), Inches(xm), Inches(5.45))
-ln.line.color.rgb = RED; ln.line.width = Pt(1.5); ln.line.dash_style = MSO_LINE_DASH_STYLE.DASH
-text(s, xm + 0.06, 2.55, 1.6, 0.3, "KAD OS live", size=10, bold=True, color=RED)
-text(s, 0.6, 6.05, 12.1, 0.7, "Before = Mar–Aug 2026 monthly average; after = Sep–Oct 2026; November excluded (partial). USD at 370 AMD (KAD OS rate, 15 Oct 2026). Aggregates only; no seasonal adjustment.", size=10.5, color=GREY)
-footer(s, n)
-notes(s, """
-(60 seconds.) Two full months since go-live, from our live system, aggregated.
-Field work: we went from zero verified visits to 398 in September and 690 in October, up 73% in one month. In October our reps visited 291 different outlets.
-Customers: on average 87 customers bought from us each month in September and October, against 77 from March to August, up 13%.
-Money: average monthly sales rose 17%, from about 74,900 to 87,600 US dollars, and cash collected rose 23%, to about 92,700 dollars a month. We convert at 370 drams per dollar, the rate set in KAD OS.
-Shelf: in the first audits, 46% of shops carry at least one Castrol product and 10% carry the full range. That is our baseline for the 70% stage-1 target.
-If asked "Isn't this seasonality?": partly, and we say so. July and August were already strong months, so the sales gain is mostly against a weaker spring, and we have only two months of data. The visit and coverage numbers are new information that did not exist before; collections at 106% of sales show the credit discipline working. We will report the same KPIs every month.
+feature_slide("Credit, debt & cash", "Credit and cash under control, without chasing", ["customer", "tasks"],
+    [("wallet", "Credit limits", "Over the limit, the order waits for approval"),
+     ("history", "Debt per invoice", "Every unpaid invoice with its due date"),
+     ("tasks", "Collection tasks", "Overdue debt becomes a task with a promise date"),
+     ("payment", "Payments at the visit", "Recorded and tracked to the accountant"),
+     ("sheet", "Debt statement", "A one-page PDF for the customer")],
+    """
+Every customer can have a credit limit; an order over the limit waits for approval. Debt is tracked invoice by invoice, each with its due date.
+When an invoice is overdue, the rep automatically gets a collection task, and can record the customer's promise date; a broken promise goes to the sales director. Payments are recorded at the visit and tracked until they reach the accountant, and the app produces a one-page debt statement for the customer.
 """)
 
-# ---------------------------------------------------------------- 11. AI-first
-s = new_slide(); n = nxt()
-header(s, "AI-first distributor", "AI finds the problems and drives them to closure")
-phone(s, "vaghinak", 0.55, 1.75, 4.9)
-phone(s, "vaghinak_rep", 3.15, 1.75, 4.9)
-text(s, 6.35, 1.85, 6.3, 0.3, "LIVE TODAY", size=12, bold=True, color=GREEN)
-for i, (ic, title, body) in enumerate([("vaghinak", "AI deputy director", "Watches the field day; assigns, chases and escalates tasks"),
-                                       ("sparkles", "AI analyst", "Answers management questions from the data, anonymised"),
-                                       ("tasks", "Self-closing tasks", "Debt, reorder and data tasks close when the fix lands")]):
-    y = 2.25 + i * 0.95
-    icon(s, ic, 6.35, y, 0.66)
-    text(s, 7.2, y, 5.4, 0.33, title, size=15.5, bold=True)
-    text(s, 7.2, y + 0.35, 5.4, 0.4, body, size=12.5, color=GREY)
-text(s, 6.35, 5.2, 6.3, 0.3, "NEXT", size=12, bold=True, color=GREY)
-box(s, 6.35, 5.55, 6.2, 0.95, fill=WHITE, line=GREY, radius=0.12, line_w=1.0, dash=True)
-text(s, 6.6, 5.55, 5.8, 0.95, "Expert AI agents for sales, finance and stock, led by the AI deputy director", size=13.5, color=DARK, anchor=MSO_ANCHOR.MIDDLE)
-text(s, 0.55, 6.72, 5.3, 0.22, "Demo data. Left: brief to management. Right: a rep's must-answer question.", size=9, color=GREY)
-footer(s, n)
-notes(s, """
-(60 seconds.) KAD OS is AI-first. Live today: an AI deputy director that watches the field day. It notices late starts, missing visits, a rep stuck in the office or skipping nearby planned shops, overdue debt, slow orders and missing data. It assigns a task to the right person with a deadline, chases it, and escalates to management only when the plan slips. A rep must answer some of its questions before carrying on.
-Also live: an AI analyst that answers management questions from the data, with customers and staff replaced by anonymous codes. And tasks close themselves when the fix lands, for example when a payment arrives.
-Next: expert AI agents for sales, finance and stock, led by the AI deputy director. That part is not live yet.
+feature_slide("Management", "Management sees the business live", ["dashboard", "reports"],
+    [("chart", "Live dashboard", "Sales against plan, by rep and channel"),
+     ("target", "Targets and bonuses", "Each rep sees plan, progress and points"),
+     ("team", "Team scorecards", "Visits, orders and payments per rep, each week"),
+     ("layers", "Reports", "Money and debt, sales and litres, team, stock"),
+     ("person", "Right data for each role", "A rep sees only own customers")],
+    """
+Management sees the business live. The dashboard shows sales against plan by rep and by channel. Every rep sees their own targets, progress and bonus points, and management gets a weekly scorecard per rep.
+Reports cover money and debt, sales and litres by product line, the team, and stock. And each person sees only what their role needs: a rep sees only their own customers.
 """)
 
-# ---------------------------------------------------------------- 12. 3 stages
-s = new_slide(); n = nxt()
-header(s, "Growing Castrol's share", "Three stages to win the shelf, each tracked by a KPI")
-stages = [("STAGE 1", "Presence", "70% of customers carry at least one Castrol product", "KPI: Castrol presence %\nToday: 46%", GREEN_TINT, DARK, GREY),
-          ("STAGE 2", "Full range", "Full Castrol product lines on the shelf", "KPI: full-range %\nToday: 10%", GREEN_MID, DARK, DARK),
-          ("STAGE 3", "Preference", "Customers sell mostly Castrol", "KPI: Castrol-only shelves %", GREEN, WHITE, WHITE)]
-for i, (k, title, target, kpi, fill, tc, mc) in enumerate(stages):
-    x = 0.6 + i * 2.72
-    h = 2.85 + i * 0.75
-    y = 6.45 - h
-    box(s, x, y, 2.58, h, fill=fill, radius=0.14)
-    text(s, x + 0.22, y + 0.22, 2.2, 0.3, k, size=11, bold=True, color=GREEN_DARK if i < 2 else WHITE)
-    text(s, x + 0.22, y + 0.5, 2.2, 0.45, title, size=20, bold=True, color=tc)
-    text(s, x + 0.22, y + 1.0, 2.15, 1.0, target, size=13.5, bold=True, color=tc)
-    text(s, x + 0.22, y + h - 0.75, 2.15, 0.6, kpi.split("\n"), size=11.5, bold=True, color=mc)
-w, h = pic(s, os.path.join(SHOTS, "shelf_audit.png"), 9.3, 1.85, h=4.05)
-text(s, 9.3 + w / 2 - 1.5, 5.95, 3.0, 0.5, "Recorded at every visit (demo)", size=11.5, color=GREY, align=PP_ALIGN.CENTER)
-footer(s, n)
-notes(s, """
-(60 seconds.) Here is how KAD OS grows Castrol's share, in three stages, each tracked by a KPI.
-Stage one, presence: 70% of our customers carry at least one Castrol product. The KPI is Castrol presence, measured outlet by outlet in the shelf audit; in the first 123 audited shops it is 46% today.
-Stage two, full range: complete Castrol product lines on the shelf. The KPI is the full-range share in the same audit, 10% today.
-Stage three, preference: our customers sell mostly Castrol. The KPI is the share of shelves where the audit finds Castrol and no competitor brand.
-Because every stage is measured per outlet, per rep and per region, the AI deputy director turns the gaps into tasks.
+feature_slide("Executive Assistant", "An evening report on the CEO's phone, every day", ["assistant"],
+    [("chart", "Sales and volume", "Today and month to date, against plan"),
+     ("wallet", "Cash and debt", "Collected today, overdue, oldest debts"),
+     ("box", "Stock risks", "Products about to run out"),
+     ("warning", "Unusual numbers", "Anything far from normal is flagged"),
+     ("calendar", "Weekly and monthly", "Longer summaries at the end of each period")],
+    """
+The KAD OS Executive Assistant sends the CEO a report every evening. It covers sales and volume, today and month to date against plan; cash collected and overdue debt; products about to run out; and any number that is far from normal. At the end of each week and month it sends a longer summary.
 """)
 
-# ---------------------------------------------------------------- 13. Why not SAP / Salesforce
-s = new_slide(); n = nxt()
-header(s, "Why not SAP or Salesforce?", "Built for distributor reality, at a fraction of the cost")
-rows = [("", "KAD OS", "Generic enterprise suites"),
-        ("Built for", "Castrol distribution: visits, shelf, credit, cash", "Any industry, configured by consultants"),
-        ("Device", "Mobile-first, any iPhone or Android, from a link", "Desktop-first, app-store installs"),
-        ("No signal", "Works offline, sends when back online", "Mostly needs a connection"),
-        ("Low-end phones", "Speed budgets tested on a slow phone", "Heavy clients"),
-        ("Time to live", "Live in weeks (August 2026), improved weekly", "Long projects with integrators"),
-        ("Cost", "No per-user licences; one cloud server", "Per-user licences plus integrator fees")]
-tbl = s.shapes.add_table(len(rows), 3, Inches(0.6), Inches(1.9), Inches(12.13), Inches(4.6)).table
-for i, wv in enumerate([2.3, 5.2, 4.63]):
-    tbl.columns[i].width = Inches(wv)
-for r, row in enumerate(rows):
-    for c, val in enumerate(row):
-        cell = tbl.cell(r, c)
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = (GREEN if c == 1 else DARK if c == 2 else WHITE) if r == 0 else (GREEN_TINT if c == 1 else (LIGHT if c == 2 else WHITE))
-        cell.margin_left = cell.margin_right = Inches(0.15)
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-        p = cell.text_frame.paragraphs[0]; p.text = ""
-        run = p.add_run(); run.text = val
-        run.font.name = FONT; run.font.size = Pt(14 if r == 0 else 13)
-        run.font.bold = r == 0 or c == 0 or c == 1
-        run.font.color.rgb = WHITE if r == 0 else (GREEN_DARK if c == 1 else (GREY if c == 2 else DARK))
-footer(s, n)
-notes(s, """
-(60 seconds.) A fair question is: why not SAP or Salesforce? Those are strong general systems, but they are built for any industry and configured by consultants. KAD OS is built for the reality of a Castrol distributor: visits, shelf, credit and cash.
-It is mobile-first and opens from a link on any phone; it works without signal and sends the data when the phone is back online; it is tested against speed budgets on a slow phone. It went live in weeks, in August 2026, and improves every week. And there are no per-user licences: it runs on one cloud server, at a fraction of the cost of an enterprise rollout.
+# ---------------------------------------------------------------- 12. AI deputy director
+feature_slide("AI deputy director", "An AI deputy director keeps everyone on plan", ["vaghinak", "vaghinak_rep"],
+    [("clock", "Watches the working day", "Late starts, missed visits, long office stays"),
+     ("route", "Keeps visits on route", "Reminds reps about planned shops nearby"),
+     ("wallet", "Chases money", "Overdue debt, down payments, broken promises"),
+     ("tasks", "Gives and closes tasks", "Right person, deadline; closes when done"),
+     ("warning", "Escalates only what slips", "Management hears only what needs them")],
+    """
+This is our AI deputy director. He watches the working day: late starts, missed visits and long stays in the office. He reminds reps about planned shops nearby, chases overdue debt, down payments and broken promises, and gives each task to the right person with a deadline. Tasks close themselves when the problem is solved, for example when the payment arrives.
+Management only hears about what slips. Some of his questions to reps must be answered before they carry on, as on the right-hand screen. He speaks to each person in their own tone, formal with management and friendly with reps.
 """)
 
-# ---------------------------------------------------------------- 14. The proposal
+# ---------------------------------------------------------------- 13. AI analyst & automation
 s = new_slide(); n = nxt()
-header(s, "The proposal", "KAD OS, powered by Castrol: your showcase digital distributor", size=28)
-pic(s, CASTROL_LOGO, SW - 0.6 - 0.45 * 594 / 140, 0.22, h=0.45)
-cols = [("WHAT KAD GIVES CASTROL", GREEN, WHITE, ["A live showcase market for Castrol's digital distributor model, with site visits and demos",
-                                                  "Regular anonymised sell-out, coverage and share-of-shelf reports",
-                                                  "A documented playbook and reference case for other distributors",
-                                                  "First-in-line testing of Castrol programmes and launches"]),
-        ("WHAT KAD ASKS FROM CASTROL", WHITE, DARK, ["Official “Digital Distributor Showcase” status and approval of the “powered by Castrol” co-brand",
-                                                    "Improved commercial terms: pricing tier, rebates, credit terms",
-                                                    "Co-investment and marketing support for the next KAD OS modules and market activation",
-                                                    "Priority supply and access to Castrol product data, training and digital programmes"])]
-for i, (title, fill, tc, items) in enumerate(cols):
-    x = 0.6 + i * 6.15
-    box(s, x, 1.85, 5.98, 4.15, fill=fill, line=None if fill == GREEN else GREEN, line_w=1.5, radius=0.16)
-    text(s, x + 0.35, 2.05, 5.3, 0.35, title, size=13, bold=True, color=tc if fill == GREEN else GREEN_DARK)
-    for j, it in enumerate(items):
-        yy = 2.55 + j * 0.85
-        icon(s, "checkCircle", x + 0.35, yy + 0.02, 0.32, bg=None, color="w" if fill == GREEN else "g", ratio=1.0)
-        text(s, x + 0.82, yy, 4.95, 0.8, it, size=13.5, color=tc)
-box(s, 0.6, 6.15, 12.13, 0.68, fill=DARK, radius=0.12)
-text(s, 0.95, 6.15, 11.6, 0.68, [[("Next step: ", {"bold": True}), ("a working session with the relevant Castrol teams within 30 days, to agree scope, KPIs and terms.", {})]], size=14.5, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+header(s, "AI and automation", "AI and automatic calculations do the routine work")
+box(s, 0.6, 1.95, 5.2, 4.8, fill=GREEN, radius=0.16)
+icon(s, "sparkles", 0.95, 2.25, 0.85, bg=WHITE)
+text(s, 2.0, 2.3, 3.6, 0.8, "AI analyst: ask your data", size=20, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+text(s, 0.95, 3.35, 4.6, 0.9, "Management asks a question in plain words and gets an answer with numbers:", size=13.5, color=WHITE)
+box(s, 0.95, 4.25, 4.5, 0.9, fill=GREEN_DARK, radius=0.1)
+text(s, 1.15, 4.25, 4.1, 0.9, "“Which customers bought less EDGE this quarter, and who is their rep?”", size=12.5, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
+text(s, 0.95, 5.4, 4.6, 1.2, ["Customers and staff are hidden behind codes", "Read-only, every question logged"], size=12, color=WHITE, spacing=4)
+text(s, 6.2, 1.95, 6.5, 0.3, "CALCULATED AUTOMATICALLY", size=12, bold=True, color=GREY)
+for i, c in enumerate(["Landing cost of every product", "True cost at the selling price, for each discount", "Debt age of every invoice", "Suggested credit limit per customer",
+                       "Each customer's usual basket and order rhythm", "Days of stock left and what to reorder", "Rep working hours and weekly scorecards", "Fuel allowance from the real GPS route"]):
+    y = 2.4 + i * 0.52
+    icon(s, "checkCircle", 6.2, y + 0.03, 0.32, bg=None, color="g", ratio=1.0)
+    text(s, 6.67, y, 6.0, 0.42, c, size=13.5)
 footer(s, n)
 notes(s, """
-(60 seconds.) Our proposal: KAD OS, powered by Castrol, as your showcase digital distributor.
-What KAD gives Castrol: a live showcase market for Castrol's digital distributor model, where Castrol teams can visit and see it working; regular anonymised sell-out, coverage and share-of-shelf reports; a documented playbook and reference case for other distributors; and first-in-line testing of Castrol programmes and launches.
-What we ask from Castrol: official Digital Distributor Showcase status and approval of the "powered by Castrol" co-brand; improved commercial terms on pricing tier, rebates and credit terms; co-investment and marketing support for the next KAD OS modules and market activation; and priority supply and access to Castrol product data, training and digital programmes.
-Please note: "powered by Castrol" is our PROPOSED co-brand under this partnership and is used only with Castrol's approval. We have deliberately put no figures on the asks; we would like to agree them together, tied to KPIs.
-Next step: a working session with the relevant Castrol teams within 30 days, to agree scope, KPIs and terms.
-""" + Q_TOUGH)
-
-# ---------------------------------------------------------------- Appendix A1: architecture
-s = new_slide(); n = nxt()
-header(s, "Appendix · Architecture", "One core system with a secure integration API")
-users = [("person", "Field reps"), ("team", "Managers"), ("box", "Warehouse"), ("wallet", "Accounting")]
-for i, (ic, lab) in enumerate(users):
-    y = 1.95 + i * 1.08
-    box(s, 0.6, y, 2.6, 0.9, fill=LIGHT, radius=0.12)
-    icon(s, ic, 0.75, y + 0.15, 0.6)
-    text(s, 1.5, y, 1.65, 0.9, lab, size=14, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-text(s, 0.6, 6.33, 2.6, 0.4, "Mobile web app, any phone or PC", size=11, color=GREY, align=PP_ALIGN.CENTER)
-for y in (2.4, 3.48, 4.56, 5.64):
-    a = s.shapes.add_shape(MSO_SHAPE.LEFT_RIGHT_ARROW, Inches(3.3), Inches(y - 0.15), Inches(0.75), Inches(0.3))
-    a.fill.solid(); a.fill.fore_color.rgb = GREEN_MID; a.line.fill.background()
-box(s, 4.15, 1.95, 4.6, 4.3, fill=GREEN, radius=0.18)
-text(s, 4.45, 2.15, 4.0, 0.35, "KAD OS CORE", size=13, bold=True, color=WHITE)
-for i, lab in enumerate(["Cloud database (PostgreSQL)", "Business rules: prices, credit, roles", "AI agents and AI analyst", "Reports and Executive Assistant", "Offline-ready mobile web app"]):
-    y = 2.65 + i * 0.68
-    box(s, 4.45, y, 4.0, 0.56, fill=GREEN_DARK, radius=0.1)
-    text(s, 4.65, y, 3.7, 0.56, lab, size=13, bold=True, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
-a = s.shapes.add_shape(MSO_SHAPE.LEFT_RIGHT_ARROW, Inches(8.85), Inches(3.95), Inches(0.75), Inches(0.3))
-a.fill.solid(); a.fill.fore_color.rgb = GREEN_MID; a.line.fill.background()
-box(s, 9.7, 1.95, 3.03, 4.3, fill=WHITE, line=GREEN, radius=0.16, line_w=1.5)
-text(s, 9.9, 2.15, 2.7, 0.35, "INTEGRATION API", size=13, bold=True, color=GREEN_DARK)
-for i, lab in enumerate(["Accounting systems", "AI accounting integration", "Partner data feeds", "Brand-owner reports (proposed)"]):
-    y = 2.65 + i * 0.85
-    icon(s, "link", 9.9, y + 0.07, 0.45, bg=GREEN_TINT)
-    text(s, 10.45, y, 2.2, 0.62, lab, size=12.5, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-footer(s, n)
-notes(s, """
-For digital and IT colleagues. KAD OS is one core system: a cloud PostgreSQL database with the business rules (prices, credit, roles), the AI agents and analyst, the reports and Executive Assistant, and an offline-ready mobile web app used by field reps, managers, warehouse and accounting on any phone or PC.
-Around the core, a secure Integration API connects accounting systems, the AI accounting integration and partner data feeds. Reports to Castrol would use the same API; that part is proposed, not live.
+Beyond the AI deputy director, KAD OS has an AI analyst: management asks a question in plain words, for example which customers bought less EDGE this quarter and who their rep is, and gets an answer with numbers. Customers and staff are hidden behind codes, and every question is logged.
+And many calculations happen automatically: the landing cost of every product, the true cost at the selling price for each discount, the age of every invoice, a suggested credit limit for each customer, each customer's usual basket and order rhythm, days of stock left and what to reorder, rep working hours and scorecards, and the fuel allowance from the real GPS route.
 """)
 
-# ---------------------------------------------------------------- Appendix A2: security & data ownership
+# ---------------------------------------------------------------- 14. Any phone, secure
 s = new_slide(); n = nxt()
-header(s, "Appendix · Security & data ownership", "Secure by design, and the data stays with the distributor")
-for i, (ic, title, body) in enumerate([("person", "Role-based access", "8 roles; every rule enforced on the server; a rep sees only own customers."),
-                                       ("lock", "Encrypted transport", "HTTPS only; signed sessions, CSRF protection, rate limits, lockout."),
-                                       ("shield", "Data ownership", "Data stays with the distributor; Castrol gets anonymised aggregates."),
-                                       ("history", "Audit trail", "Immutable audit logs; order, price and customer change history."),
-                                       ("sparkles", "AI privacy", "The AI analyst sees codes, never names, phones or tax IDs."),
-                                       ("wifioff", "Offline safety", "Offline work is queued once and never duplicated.")]):
+header(s, "Built for real field work", "Works on any phone, fast, offline and secure")
+for i, (ic, title, body) in enumerate([("smartphone", "Any phone or PC", "Opens from a link; no app store"),
+                                       ("wifioff", "Works offline", "Visits and orders wait on the phone and send later"),
+                                       ("gauge", "Fast on cheap phones", "Speed is tested on a slow phone"),
+                                       ("person", "Role-based access", "Everyone sees only what their role allows"),
+                                       ("lock", "Secure", "Encrypted connection, protected logins, audit trail"),
+                                       ("shield", "Data stays with us", "Our data lives in our own cloud system")]):
     x = 0.6 + (i % 3) * 4.1
-    y = 1.95 + (i // 3) * 2.15
-    box(s, x, y, 3.9, 1.95, fill=LIGHT)
-    icon(s, ic, x + 0.25, y + 0.28, 0.75)
-    text(s, x + 1.2, y + 0.3, 2.55, 0.5, title, size=15.5, bold=True)
-    text(s, x + 1.2, y + 0.8, 2.55, 1.05, body, size=12, color=GREY)
-text(s, 0.6, 6.4, 12.1, 0.4, "Quality: about 1,200 automated tests run on every change.", size=12.5, color=GREY)
+    y = 1.95 + (i // 3) * 2.2
+    box(s, x, y, 3.9, 2.0, fill=LIGHT)
+    icon(s, ic, x + 0.25, y + 0.3, 0.78)
+    text(s, x + 1.2, y + 0.32, 2.55, 0.45, title, size=16, bold=True)
+    text(s, x + 1.2, y + 0.85, 2.55, 1.05, body, size=13, color=GREY)
 footer(s, n)
 notes(s, """
-Security and data ownership. Access is role-based, with 8 roles, and every rule is enforced on the server: a rep only ever sees their own customers. All traffic is encrypted over HTTPS, with signed sessions, CSRF protection, rate limits and account lockout. Operational data stays with the distributor; Castrol would receive anonymised aggregates. There is a full audit trail: immutable audit logs and the change history of orders, prices and customers. The AI analyst only sees anonymous codes, never names, phones or tax IDs. Work done offline is queued once and never duplicated. About 1,200 automated tests run on every change.
+KAD OS is built for real field work. It opens from a link on any phone or PC. It works offline: visits and orders wait on the phone and are sent later. It is fast even on cheap phones; we test its speed on a slow phone. Everyone sees only what their role allows. The connection is encrypted, logins are protected, and every key change is kept in an audit trail. And our data stays in our own cloud system.
 """)
 
-# ---------------------------------------------------------------- Appendix A3: integration API
+# ---------------------------------------------------------------- 15. Built fast, adopted fast
 s = new_slide(); n = nxt()
-header(s, "Appendix · Integration API", "A secure API connects KAD OS to accounting and partners")
-for i, (ic, title, body, status) in enumerate([("wallet", "Accounting API", "Invoices and waybills for confirmed orders, with status back to KAD OS. Token per system, stored hashed; test tokens see test orders only.", "LIVE"),
-                                               ("database", "Accounting data feed", "Customers, debt, sales, prices, stock and plans flow in from the accounting system every day, matched by ID.", "LIVE"),
-                                               ("store", "Customer ordering", "Partner endpoints let customers' own systems order from KAD directly (pilot with one customer).", "PILOT"),
-                                               ("chart", "Brand-owner reports", "Anonymised coverage, presence and sell-out reports for Castrol.", "PROPOSED")]):
-    y = 1.95 + i * 1.18
-    box(s, 0.6, y, 12.13, 1.03, fill=LIGHT, radius=0.12)
-    icon(s, ic, 0.8, y + 0.18, 0.66)
-    text(s, 1.7, y + 0.12, 3.0, 0.8, title, size=15.5, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-    text(s, 4.6, y + 0.08, 6.4, 0.9, body, size=12.5, color=GREY, anchor=MSO_ANCHOR.MIDDLE)
-    col = GREEN if status == "LIVE" else (DARK if status == "PILOT" else GREY)
-    box(s, 11.35, y + 0.33, 1.2, 0.36, fill=col, radius=0.18)
-    text(s, 11.35, y + 0.33, 1.2, 0.36, status, size=10, bold=True, color=WHITE, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+header(s, "Built and adopted", "Live in 2 days, adopted in the first month")
+for i, (num, lab, sub) in enumerate([("2 days", "from first line of code to the first live version", "22 Aug → 24 Aug 2026"),
+                                     ("1st month", "the whole field team working in the app", "September 2026, the first full month after launch"),
+                                     ("10 weeks", "to the complete system shown today", "763 improvements, delivered every week")]):
+    x = 0.6 + i * 4.1
+    box(s, x, 1.95, 3.9, 2.6, fill=GREEN if i == 1 else LIGHT)
+    text(s, x + 0.3, 2.15, 3.4, 0.9, num, size=44, bold=True, color=WHITE if i == 1 else GREEN)
+    text(s, x + 0.3, 3.1, 3.4, 0.7, lab, size=15, bold=True, color=WHITE if i == 1 else DARK)
+    text(s, x + 0.3, 3.85, 3.4, 0.6, sub, size=12, color=WHITE if i == 1 else GREY)
+pts = [("22 Aug", "Work starts"), ("24 Aug", "First version live"), ("September", "Whole field team in the app"), ("Today", "Complete system, weekly updates")]
+ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(1.8), Inches(5.35), Inches(11.5), Inches(5.35)); ln.line.color.rgb = GREEN_MID; ln.line.width = Pt(3)
+for i, (d, lab) in enumerate(pts):
+    cx = 1.8 + i * (9.7 / 3)
+    c = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(cx - 0.14), Inches(5.21), Inches(0.28), Inches(0.28))
+    c.fill.solid(); c.fill.fore_color.rgb = GREEN; c.line.fill.background()
+    text(s, cx - 1.4, 5.6, 2.8, 0.35, d, size=14, bold=True, align=PP_ALIGN.CENTER)
+    text(s, cx - 1.4, 5.95, 2.8, 0.5, lab, size=12, color=GREY, align=PP_ALIGN.CENTER)
 footer(s, n)
 notes(s, """
-The Integration API. Live: an accounting API that receives confirmed orders and produces invoices and waybills, reporting the status back; each connected system has its own token, stored hashed, and test tokens only see test orders. Live: a daily accounting data feed that brings customers, debt, sales, prices, stock and plans into KAD OS, matched by ID. Pilot: partner endpoints that let a customer's own system order from KAD directly, running with one customer. Proposed: anonymised coverage, presence and sell-out reports for Castrol.
+How long did it take? Our team started building on 22 August 2026, and the first version was live two days later, on 24 August. The whole field team was working in the app in September, the first full month after launch. In ten weeks we reached the complete system you have just seen, with 763 improvements, delivered every week based on what the team asked for.
+The reason it was adopted so quickly is that our own people designed it: reps, the sales director, warehouse, accounting and management told us exactly what they needed.
+""")
+
+# ---------------------------------------------------------------- 16. Coming next
+s = new_slide(); n = nxt()
+header(s, "Coming next", "Next: delivery, warehouse and more AI")
+for i, (ic, title, items) in enumerate([("truck", "Delivery & Driver", ["Delivery routes for drivers", "Arrival detected automatically", "Customer signs on the phone"]),
+                                        ("box", "Warehouse", ["Picking and packing in the app", "Live stock behind every order", "Stock counts, even offline"]),
+                                        ("sparkles", "AI expert agents", ["Sales, finance and stock specialists", "Led by the AI deputy director", "Each finds, assigns and checks"])]):
+    x = 0.6 + i * 4.1
+    box(s, x, 1.95, 3.9, 4.1, fill=WHITE, line=GREY, radius=0.14, line_w=1.0, dash=True)
+    box(s, x + 2.3, 1.8, 1.45, 0.32, fill=DARK, radius=0.16)
+    text(s, x + 2.3, 1.8, 1.45, 0.32, "LAUNCHING NEXT", size=9, bold=True, color=WHITE, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+    icon(s, ic, x + 0.3, 2.3, 0.95)
+    text(s, x + 0.3, 3.45, 3.4, 0.45, title, size=20, bold=True)
+    for j, it in enumerate(items):
+        yy = 4.1 + j * 0.55
+        icon(s, "checkCircle", x + 0.3, yy + 0.02, 0.3, bg=None, color="g", ratio=1.0)
+        text(s, x + 0.75, yy, 3.0, 0.5, it, size=13.5)
+footer(s, n)
+notes(s, """
+What comes next. Delivery and Driver: delivery routes for drivers, automatic detection when the driver arrives, and the customer signs on the phone. Warehouse: picking and packing in the app, live stock behind every order, and stock counts even without signal. And more AI: expert agents for sales, finance and stock, led by the AI deputy director. These are not live yet; we build them on the same core, in small weekly steps.
+""")
+
+# ---------------------------------------------------------------- 17. Thank you
+s = new_slide(); n = nxt()
+pic(s, KAD_LOGO, 0.75, 0.9, h=0.5)
+ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(3.6), Inches(0.75), Inches(3.6), Inches(1.55)); ln.line.color.rgb = LINE; ln.line.width = Pt(1)
+pic(s, CASTROL_LOGO, 4.0, 0.86, h=0.58)
+lockup(s, 0.75, 2.4, size=54, w=8)
+text(s, 0.75, 4.05, 9, 0.6, "The operating system for a modern Castrol distributor.", size=22)
+text(s, 0.75, 5.0, 9, 0.6, "Thank you. Questions?", size=26, bold=True, color=GREEN)
+footer(s, n)
+notes(s, """
+Thank you. To sum up: KAD OS is one app for the whole distributor team; it checks every visit, order, price and payment; an AI deputy director keeps everyone on plan; and management sees everything live. Our team built it in weeks and adopted it in the first month. I am happy to answer questions or show the app live.
 """)
 
 # Flat look in every renderer: drop the theme style reference (LibreOffice draws its shadow even with an empty effect list).
