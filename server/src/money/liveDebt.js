@@ -74,12 +74,42 @@ export async function liveAdjustments(db, customerIds) {
 export async function liveDebtMap(db, rows, today) {
   // rows: [{ id, erp_customer_id, debt_amd (Excel), credit_term_days }]
   const withErp = rows.filter((r) => r.erp_customer_id && r.debt_amd != null);
-  const [adj, orders] = await Promise.all([liveAdjustments(db, withErp.map((r) => r.id)), loadOrdersNewestFirst(db, withErp.map((r) => r.erp_customer_id))]);
+  const adj = await liveAdjustments(db, withErp.map((r) => r.id));
+  // the Excel orders only for the customers who owe something live (a customer at zero or in advance has no unpaid order to age)
+  const liveOf = (r) => Math.round(Number(r.debt_amd) || 0) + (adj.get(r.id)?.orders_amd ?? 0) - (adj.get(r.id)?.payments_amd ?? 0);
+  const owing = withErp.filter((r) => liveOf(r) > 0);
+  const orders = await loadOrdersNewestFirst(db, owing.map((r) => r.erp_customer_id));
   const out = new Map();
   for (const r of withErp) {
     out.set(r.id, liveDebtOf({ excelDebt: r.debt_amd, excelOrders: orders.get(r.erp_customer_id) ?? [], adj: adj.get(r.id), today, termDays: r.credit_term_days ?? 45 }));
   }
   return out;
+}
+
+// A customer who may owe money on the live debt: the Excel says so, or a delivered app order the Excel does not have yet
+// (the exact window is applied by liveAdjustments; this only narrows the list cheaply). Aliases: c = customers, erp = erp_customer_data.
+export const LIVE_DEBT_CANDIDATE_SQL = `(COALESCE(erp.debt_amd, 0) > 0 OR EXISTS (
+  SELECT 1 FROM orders lo WHERE lo.customer_id = c.id AND lo.status = 'delivered' AND lo.erp_matched_order_id IS NULL))`;
+
+/**
+ * Every customer who owes money on the LIVE debt (release 5, owner 2026-11-03: reports, the weekly debt digest and Vaghinak's
+ * debt tasks on the live debt too), biggest first. One query over customers c JOIN erp_customer_data erp, plus the caller's
+ *   select  extra columns ("c.name AS name, ...")   join  extra joins   where  extra AND conditions   params  their values ($1..)
+ * Each row comes back with `live` (liveDebtOf's result: debt_amd, excel_amd, orders_not_in_excel_amd, payments_not_in_excel_amd,
+ * advance_amd, aging). A customer only in advance or at zero is left out.
+ */
+export async function liveDebtors(db, { select = "", join = "", where = "", params = [], today }) {
+  const { rows } = await db.query(
+    `SELECT c.id, c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS credit_term_days, COALESCE(erp.debt_amd, 0)::float8 AS debt_amd${select ? `, ${select}` : ""}
+     FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${join}
+     WHERE ${LIVE_DEBT_CANDIDATE_SQL} ${where ? `AND ${where}` : ""}`,
+    params
+  );
+  const live = await liveDebtMap(db, rows, today);
+  return rows
+    .map((r) => ({ ...r, live: live.get(r.id) }))
+    .filter((r) => r.live && r.live.debt_amd > 0)
+    .sort((a, b) => b.live.debt_amd - a.live.debt_amd);
 }
 
 /**

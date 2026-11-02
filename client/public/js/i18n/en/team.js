@@ -76,6 +76,7 @@ export const enTeam = {
     vg_at_has_open: "Already have an open task",
     vg_at_promise: "Payment promise still running",
     vg_at_cooling: "Task closed in the last days (pause)",
+    vg_at_paid_in_app: "Paid in the app or bank, not in Excel yet",
     vg_at_hold: "On hold by management",
     vg_at_channel: "Channels not chased (KF, CAS)",
     vg_at_no_rep: "No rep to give the task to",

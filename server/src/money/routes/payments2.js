@@ -21,7 +21,7 @@ import { IN_EXCEL_SQL } from "../paymentExcelMatch.js";
 import { getCutover, isLive, voidPayment } from "../payments2/service.js";
 import { runBridge } from "../payments2/bridge.js";
 import { runBooks, unrecordedCashRows } from "../payments2/books.js";
-import { changeCustomer, recordByHand, resolveLine } from "../payments2/bankPayments.js";
+import { changeCustomer, closeDebtTasksFor, recordByHand, resolveLine } from "../payments2/bankPayments.js";
 import { ensureAllRepDesks, listDesks, repsWithoutDesk, saveDesk } from "../payments2/desks.js";
 import { moneyBoard } from "../payments2/board.js";
 
@@ -135,12 +135,16 @@ payments2Router.get("/bank/payments", bankOnly, async (req, res) => {
 payments2Router.post("/bank/payments", bankOnly, async (req, res) => {
   const r = await recordByHand(pool, req.user, req.body);
   sendResult(res, r, r.existing ? 200 : 201);
+  if (r.payment && !r.existing) closeDebtTasksFor(pool, [r.payment.id], req.user.id);
 });
 
 payments2Router.post("/bank/lines/:id/resolve", bankOnly, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid id" });
-  sendResult(res, await resolveLine(pool, req.user, id, req.body));
+  const r = await resolveLine(pool, req.user, id, req.body);
+  sendResult(res, r);
+  // a new payment (not a typed one the line only confirmed) closes the customer's debt task
+  if (r.paymentId && !r.confirmed) closeDebtTasksFor(pool, [r.paymentId], req.user.id);
 });
 
 payments2Router.get("/desks", bankOnly, async (req, res) => {

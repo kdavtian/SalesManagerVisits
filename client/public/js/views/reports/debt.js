@@ -197,7 +197,10 @@ export async function renderCustomerDebtReport(root, navigate) {
     body.querySelector("#debt-customer-list").innerHTML = customers.length
       ? customers
           .map((c) => {
-            const collected = Number(c.collected_since_sync_amd);
+            // the gap to the Excel (release 5, live debt): + app orders it does not have yet, - app payments it does not have yet
+            const gapOrders = Number(c.not_in_excel_orders_amd) || 0;
+            const gapPayments = Number(c.collected_since_sync_amd) || 0;
+            const gap = [gapOrders ? `+${formatAmd(gapOrders)} ${t("debt_gap_orders")}` : "", gapPayments ? `−${formatAmd(gapPayments)} ${t("debt_gap_payments")}` : ""].filter(Boolean).join(", ");
             return `
         <div class="card report-row-multiline ${Number(c.estimated_debt_amd) > 0 && c.oldest_due_days != null ? (c.oldest_due_days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}">
           <div class="report-debt-customer-top">
@@ -207,9 +210,9 @@ export async function renderCustomerDebtReport(root, navigate) {
           ${c.oldest_due_days != null && Number(c.estimated_debt_amd) > 0 ? `<div class="debt-chip-line">${Number(c.overdue_amd) > 0 ? `<span class="muted">${t("debt_overdue_label")}${labelColon()}${formatAmd(Number(c.overdue_amd))}</span>` : ""}${dueChipHtml(c.oldest_due_days)}</div>` : ""}
           <span class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(c.erp_customer_id || "—")} · ${escapeHtml(channelDisplayLabel(c.assigned_sales_rep))}</span>
           <span class="muted">${t("debt_balances_last_payment")}${labelColon()}${c.last_payment_date ? escapeHtml(formatDateDMY(c.last_payment_date)) : t("report_customer_debt_no_payment")}</span>${
-              collected > 0
+              gap
                 ? `
-          <span class="muted sync-adjusted-note">${formatAmd(Number(c.debt_amd))} ${t("report_customer_debt_per_sync")} − ${formatAmd(collected)} ${t("report_customer_debt_collected_since")}</span>`
+          <span class="muted sync-adjusted-note">${t("debt_gap_excel")} ${formatAmd(Number(c.debt_amd) || 0)} (${gap})</span>`
                 : ""
             }
         </div>`;

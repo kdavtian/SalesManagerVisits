@@ -134,3 +134,13 @@ reports POST /money-board/posted; once a day, a failure is offered again up to 1
 tab became "Payments", one ledger of cash + bank + card (All / Cash / Bank / Card): a cash row shows where the money is (with the rep,
 counted by the director, at the office) and its desk; cash rows are changed on the Payments screen (the old engine), the ledger only
 shows them.
+R5 (1.496.0, owner 2026-11-03: "yes" to the live debt everywhere; the 20:00 Telegram time stays): the desktop Home debt figures, the
+weekly debt digest (Monday Telegram), the Customer debt report (live mode; "as of a date" stays on the Excel history), Unpaid invoices
+(an app order not in Excel yet is an unpaid invoice, shown by its order code), Ask KAD's debt answers, credit-limit suggestions,
+Operations control legacy balances, the debt CSV export (+ the Excel figure) and Debt balances (also an Excel-zero customer with an app
+order) read the LIVE debt (money/liveDebt.js liveDebtors / liveDebtMap). Vaghinak's debt tasks: the Excel picks the overdue debtors, the
+live debt has the last word (paid in the app / bank = no task, the task names the live amount; Vaghinak -> Auto tasks shows "paid in
+the app or bank, not in Excel yet"); the reorder follow-up checks the live overdue debt and the credit limit. A bank / card payment of
+Bank & cash desks closes the customer's "collect the debt" task like a rep's collection; "paid" = nothing left on the live debt.
+Still on the Excel figure: the customer's debt statement PDF and the order blank's "previous debt" (customer-facing documents, owner
+decision pending) and KAD OS partner data.

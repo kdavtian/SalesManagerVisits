@@ -1,12 +1,14 @@
 // Automatic tasks close themselves when the rep does what they ask (owner, 2026-10-12):
 //  - "Հավաքագրիր պարտքը" (debt_collection): money was collected for that customer (a check-in with
-//    "payment collected", or a payment recorded in the Payments tab). Any amount counts: the outcome is
-//    `paid` when it covers the Excel debt, else `partial` (the 14-day cooldown / next ERP sync decides
+//    "payment collected", a payment recorded in the Payments tab, or a bank / card payment of Bank & cash desks). Any amount
+//    counts: the outcome is `paid` when nothing is left on the live debt, else `partial` (the 14-day cooldown / next ERP sync decides
 //    whether a new task is needed for the rest);
 //  - "call or visit, he stopped ordering" (reorder_followup): an order was made for that customer.
 // The assignee is told ("task completed automatically"), also when they did it themselves.
 import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
+import { liveDebtMap } from "../money/liveDebt.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
 
@@ -43,12 +45,17 @@ async function closeTasks(kind, taskKind, { customerId, actorId, note, outcome =
 export async function autoCompleteCollectionTasks({ customerId, actorId, amountAmd }) {
   const amount = Number(amountAmd);
   if (!(amount > 0)) return 0;
+  // paid = nothing is left on the LIVE debt (release 5): the payment just recorded is already in it (an app payment the Excel does not
+  // have yet); with no Excel figure, the Excel rule (the amount against the debt)
   const { rows } = await pool.query(
-    "SELECT COALESCE(erp.debt_amd, 0) AS debt FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1",
+    `SELECT c.id, c.erp_customer_id, erp.debt_amd, COALESCE(c.credit_term_days, 45) AS credit_term_days
+     FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1`,
     [customerId]
   );
-  const debt = Number(rows[0]?.debt ?? 0);
-  const outcome = debt > 0 && amount < debt - 1 ? "partial" : "paid";
+  const row = rows[0];
+  const live = row?.erp_customer_id && row.debt_amd != null ? (await liveDebtMap(pool, [row], yerevanToday())).get(row.id) : null;
+  const debt = Number(row?.debt_amd ?? 0);
+  const outcome = live ? (live.debt_amd > 1 ? "partial" : "paid") : debt > 0 && amount < debt - 1 ? "partial" : "paid";
   return closeTasks("debt_collection", "collect_debt", {
     customerId,
     actorId,

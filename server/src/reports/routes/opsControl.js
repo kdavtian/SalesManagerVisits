@@ -7,6 +7,7 @@ import { canSetCreditTerms, seesOpsControl, decidesOpsControl, setsFxRate, decid
 import { creditLimitSuggestions } from "../../orders/creditLimitSuggest.js";
 import { DEBT_AGE_LATERAL, debtAgeDaysSql } from "../../money/debtAge.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
+import { liveDebtMap } from "../../money/liveDebt.js";
 import { priceRealization, fxStatus, setFxRate, fxReviewDone, deadStock, setStockAction, STOCK_ACTIONS, winback, orderFlow, dataScorecard } from "../opsReports.js";
 
 export const opsControlRouter = Router();
@@ -25,7 +26,7 @@ export const DEBT_DECISIONS = ["collect", "restructure", "dispute", "legal", "wr
 opsControlRouter.get("/legacy-balances", async (_req, res) => {
   const today = yerevanToday();
   const { rows } = await pool.query(
-    `SELECT c.id AS customer_id, COALESCE(c.name, erp.customer_name) AS name, c.sales_channel, u.name AS rep_name,
+    `SELECT c.id AS customer_id, c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS credit_term_days, COALESCE(c.name, erp.customer_name) AS name, c.sales_channel, u.name AS rep_name,
             erp.debt_amd::float8 AS debt_amd, COALESCE(erp.balance0_amd, 0)::float8 AS balance0_amd,
             to_char(erp.last_payment_date, 'YYYY-MM-DD') AS last_payment_date, erp.days_since_payment,
             ${debtAgeDaysSql("$1::date")} AS oldest_unpaid_days,
@@ -44,14 +45,20 @@ opsControlRouter.get("/legacy-balances", async (_req, res) => {
      LIMIT 300`,
     [today]
   );
-  const items = rows.map((r) => ({
-    ...r,
-    debt_amd: Math.round(r.debt_amd),
-    balance0_amd: Math.round(r.balance0_amd),
-    sales_90d_amd: Math.round(r.sales_90d_amd),
-    never_paid: r.last_payment_date === null,
-    still_buying: r.sales_90d_amd > 0,
-  }));
+  // the amount owed is the LIVE debt (release 5): an app / bank payment the Excel does not have yet already lowered it; a customer it
+  // paid off leaves the list (which accounts are "legacy" is still judged on the Excel history above)
+  const live = await liveDebtMap(pool, rows.map((r) => ({ id: r.customer_id, erp_customer_id: r.erp_customer_id, debt_amd: r.debt_amd, credit_term_days: r.credit_term_days })), today);
+  const items = rows
+    .map((r) => ({
+      ...r,
+      excel_debt_amd: Math.round(r.debt_amd),
+      debt_amd: Math.round(live.get(r.customer_id)?.debt_amd ?? r.debt_amd),
+      balance0_amd: Math.round(r.balance0_amd),
+      sales_90d_amd: Math.round(r.sales_90d_amd),
+      never_paid: r.last_payment_date === null,
+      still_buying: r.sales_90d_amd > 0,
+    }))
+    .filter((r) => r.debt_amd > 0);
   const total = items.reduce((s, r) => s + r.debt_amd, 0);
   const undecided = items.filter((r) => !r.decision);
   res.json({

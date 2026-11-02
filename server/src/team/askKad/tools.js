@@ -3,6 +3,7 @@
 // free-text note. The numbers come from the same sources the app's own screens use (ERP order lines =
 // the invoiced truth, ERP customer debt, field-rep check-ins), so the answer cannot disagree with the app.
 import { pool } from "../../db/pool.js";
+import { liveDebtors } from "../../money/liveDebt.js";
 import { customerCode, repCode } from "./anonymize.js";
 import { repVisitSql } from "../../field/visitCount.js";
 
@@ -59,7 +60,7 @@ export const TOOLS = [
   {
     name: "debt",
     description:
-      "Customers who owe money (ERP debt, AMD): total, split by aging bucket, and the biggest debtors with days since their last payment. Customers appear as CUST-<id> codes.",
+      "Customers who owe money (the live debt, AMD: the ERP/Excel debt + delivered app orders the Excel does not have yet - app and bank payments it does not have yet; the same figure the customer card shows): total, the late part, split by invoice aging bucket (oldest orders are paid first; current = within the payment term, d1_30 = 1-30 days past it, ..., opening = the opening balance), and the biggest debtors with days since their last payment (their aging_bucket is the Excel's own label). Customers appear as CUST-<id> codes.",
     input_schema: {
       type: "object",
       properties: {
@@ -149,34 +150,45 @@ const RUNNERS = {
     return out;
   },
 
-  async debt(input, { db }) {
+  async debt(input, { db, today }) {
     const params = [];
-    const conds = ["e.debt_amd > 0", "e.erp_customer_id <> '10000'"];
+    const conds = ["c.erp_customer_id <> '10000'"];
     if (input?.region) {
       params.push(String(input.region).trim());
       conds.push(eqCi("c.region", params.length));
     }
     if (input?.channel) {
       params.push(String(input.channel).trim());
-      conds.push(eqCi("e.assigned_sales_rep", params.length));
+      conds.push(eqCi("erp.assigned_sales_rep", params.length));
     }
-    const from = `FROM erp_customer_data e LEFT JOIN customers c ON c.erp_customer_id = e.erp_customer_id WHERE ${conds.join(" AND ")}`;
-    const [{ rows: tot }, { rows: buckets }, { rows: top }] = await Promise.all([
-      db.query(`SELECT COALESCE(sum(e.debt_amd), 0) AS total, count(*) AS customers ${from}`, params),
-      db.query(`SELECT COALESCE(e.aging_bucket, 'unknown') AS bucket, sum(e.debt_amd) AS amd, count(*) AS customers ${from} GROUP BY 1 ORDER BY 2 DESC`, params),
-      db.query(
-        `SELECT e.erp_customer_id, e.debt_amd, e.aging_bucket, e.days_since_payment, e.last_payment_date, e.assigned_sales_rep AS channel, c.region
-           ${from} ORDER BY e.debt_amd DESC LIMIT ${limitOf(input?.limit, 15)}`,
-        params
-      ),
-    ]);
+    // the LIVE debt (release 5, money/liveDebt.js), so the answer matches the customer card and the reports
+    const rows = await liveDebtors(db, {
+      select: "erp.aging_bucket, erp.days_since_payment, erp.last_payment_date, erp.assigned_sales_rep AS channel, c.region",
+      where: conds.join(" AND "),
+      params,
+      today,
+    });
+    const buckets = new Map();
+    for (const r of rows) {
+      for (const [b, amd] of Object.entries(r.live.aging.buckets)) {
+        if (!(amd > 0)) continue;
+        const cur = buckets.get(b) ?? { amd: 0, customers: 0 };
+        cur.amd += amd;
+        cur.customers += 1;
+        buckets.set(b, cur);
+      }
+    }
     return {
-      total_debt_amd: Math.round(num(tot[0].total)),
-      customers_with_debt: num(tot[0].customers),
-      by_aging_bucket: buckets.map((b) => ({ bucket: b.bucket, amd: Math.round(num(b.amd)), customers: num(b.customers) })),
-      biggest: top.map((r) => ({
+      total_debt_amd: Math.round(rows.reduce((t, r) => t + r.live.debt_amd, 0)),
+      overdue_amd: Math.round(rows.reduce((t, r) => t + r.live.aging.overdue_amd, 0)),
+      customers_with_debt: rows.length,
+      excel_debt_amd: Math.round(rows.reduce((t, r) => t + r.live.excel_amd, 0)),
+      by_aging_bucket: [...buckets].map(([bucket, v]) => ({ bucket, amd: Math.round(v.amd), customers: v.customers })).sort((a, b) => b.amd - a.amd),
+      biggest: rows.slice(0, limitOf(input?.limit, 15)).map((r) => ({
         customer: customerCode(r.erp_customer_id),
-        debt_amd: Math.round(num(r.debt_amd)),
+        debt_amd: Math.round(r.live.debt_amd),
+        overdue_amd: Math.round(r.live.aging.overdue_amd),
+        oldest_days_past_term: r.live.aging.oldest_due_days,
         aging_bucket: r.aging_bucket,
         days_since_payment: r.days_since_payment,
         last_payment_date: r.last_payment_date ? new Date(r.last_payment_date).toISOString().slice(0, 10) : null,

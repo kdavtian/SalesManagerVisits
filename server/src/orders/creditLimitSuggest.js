@@ -2,8 +2,11 @@
 // Suggestion = what the customer normally owes at any time if they pay on time, with a safety margin:
 //   average monthly purchases of the last 6 months (Excel order lines) x payment term / 30 x 1.25,
 //   rounded UP to 100,000 AMD, never below 300,000. Cash customers count a 7 day term.
-// Customers whose current debt already exceeds the suggestion are flagged (over_now): the limit would put every new
+// Customers whose current (live) debt already exceeds the suggestion are flagged (over_now): the limit would put every new
 // order of theirs into the director's approval queue straight away -- management decides, they start unticked.
+import { liveDebtMap } from "../money/liveDebt.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
+
 export const LIMIT_FLOOR_AMD = 300_000;
 export const LIMIT_SAFETY = 1.25;
 const ROUND_TO = 100_000;
@@ -16,7 +19,7 @@ export function suggestLimit({ monthlyAvg, termDays, cash }) {
 
 export async function creditLimitSuggestions(db) {
   const { rows } = await db.query(
-    `SELECT c.id AS customer_id, c.name, c.sales_channel, c.payment_method, COALESCE(c.credit_term_days, 45) AS term_days,
+    `SELECT c.id AS customer_id, c.erp_customer_id, c.name, c.sales_channel, c.payment_method, COALESCE(c.credit_term_days, 45) AS term_days,
             COALESCE(erp.debt_amd, 0)::float8 AS debt_amd, u.name AS rep_name,
             COALESCE((SELECT SUM(l.revenue_amd) FROM erp_order_lines l
                        WHERE l.erp_customer_id = c.erp_customer_id AND l.order_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date - 180), 0)::float8 / 6 AS monthly_avg
@@ -27,6 +30,10 @@ export async function creditLimitSuggestions(db) {
        AND NOT COALESCE(c.checkin_for_all, false)
      ORDER BY COALESCE(erp.debt_amd, 0) DESC, c.name`
   );
+  // the current debt is the LIVE one (release 5): what the order check compares the limit with (orders/creditLimit.js)
+  const live = await liveDebtMap(db, rows.map((r) => ({ id: r.customer_id, erp_customer_id: r.erp_customer_id, debt_amd: r.debt_amd, credit_term_days: r.term_days })), yerevanToday());
+  for (const r of rows) r.debt_amd = live.get(r.customer_id)?.debt_amd ?? r.debt_amd;
+  rows.sort((a, b) => b.debt_amd - a.debt_amd || String(a.name).localeCompare(String(b.name)));
   return rows.map((r) => {
     const suggested = suggestLimit({ monthlyAvg: r.monthly_avg, termDays: r.term_days, cash: r.payment_method === "cash" });
     return {
