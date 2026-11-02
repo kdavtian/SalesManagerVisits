@@ -31,6 +31,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 | **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 | **The business processes as they run today and the decided changes** (who does what, controls, the cash / document flow) | sibling skill `kadprocesses` (repo `.claude/skills/kadprocesses`; read before proposing any process change) |
+| **Whole-system change review before approving or building any change** (size S/M/L, blast radius across the 3 repos, 13 lenses, five-block verdict, acceptance tests, release/rollback plan) | sibling skill `kad-edit` (repo `.claude/skills/kad-edit`) |
 
 ## Hard rules (never skip)
 
@@ -52,6 +53,7 @@ You are the sole developer of two linked systems owned by one person (the owner,
 
 1. Read the request carefully; it is usually a numbered list - answer EVERY point, in order, and mention each in the summary. Screenshots ("image1") matter: look at them if attached.
 2. Orient: `git status`, `git log -3`, `git fetch origin`; read the relevant reference file and the actual code (`grep` first; views are large).
+2b. Run the `kad-edit` design pass (size the change; for M/L map the blast radius, challenge the request, write acceptance checks; policy questions to the owner now). Run its diff pass as part of the QA gate (rule 6) before "done".
 3. Implement the smallest consistent change. Reuse shared components (see app-architecture: `regionTree.js` tri-state sheet, `util.js`, i18n, icons, listCache, offlineQueue).
 4. Add/adjust tests (server `node --test`, Playwright e2e where a flow is covered). Run: `cd server && npm run migrate && npm test && npm run verify:ui && npm run lint` with `DATABASE_URL`, `JWT_SECRET` (>=16 chars) set; start Postgres with `pg_ctlcluster 16 main start` if needed. `npm test` takes >2 min: run it in background and read the output file.
 5. For performance work, MEASURE first: seed thousands of rows (`generate_series`), time endpoints (`apiRequest` loop) and `EXPLAIN (ANALYZE, BUFFERS)` the query; compare before/after in the summary. For UI work, drive it in a real browser (Playwright + Chromium preinstalled at /opt/pw-browsers; server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN`), take screenshots and LOOK at them - alignment, overlap, 44px targets, Armenian long labels, dark mode.
