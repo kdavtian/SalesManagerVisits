@@ -2,6 +2,15 @@
 
 export const hyCustomers = {
     place_to_review: "ստուգման մեջ է",
+    rp_auto_added: "Ավելացվեց երթուղային պլանին՝ {rep}, {day} ({area})",
+    rp_auto_in_area: "Արդեն երթուղային պլանում է՝ {rep}, {day} (ամբողջ տարածքը պլանավորված է)",
+    rp_auto_day_0: "Կիրակի",
+    rp_auto_day_1: "Երկուշաբթի",
+    rp_auto_day_2: "Երեքշաբթի",
+    rp_auto_day_3: "Չորեքշաբթի",
+    rp_auto_day_4: "Հինգշաբթի",
+    rp_auto_day_5: "Ուրբաթ",
+    rp_auto_day_6: "Շաբաթ",
     card_partial_load: "Էջի մի մասը չբեռնվեց։",
     zoom_in: "Մեծացնել",
     zoom_out: "Փոքրացնել",

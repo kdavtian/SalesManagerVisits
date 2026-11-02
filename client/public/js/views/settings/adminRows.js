@@ -24,6 +24,7 @@ export function wireAdminRows(ctx) {
     const askKadCapInput = askKadCapForm.querySelector('input[name="usd"]');
     const askKadCapSuccess = ctx.root.querySelector("#ask-kad-cap-success");
     const aiCheckToggle = ctx.root.querySelector("#toggle-ai-check");
+    const autoPlanToggle = ctx.root.querySelector("#toggle-auto-route-plan");
     const aiCheckCapForm = ctx.root.querySelector("#ai-check-cap-form");
     const aiCheckCapInput = aiCheckCapForm.querySelector('input[name="usd"]');
     const aiCheckCapSuccess = ctx.root.querySelector("#ai-check-cap-success");
@@ -86,6 +87,7 @@ export function wireAdminRows(ctx) {
       retailToggle.setAttribute("aria-checked", String(s.retail_from_excel === true));
       askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
       aiCheckToggle.setAttribute("aria-checked", String(Boolean(s.ai_blank_check_enabled)));
+      autoPlanToggle?.setAttribute("aria-checked", String(s.auto_route_plan_new_customers !== false));
       aiCheckCapInput.value = s.ai_blank_check_monthly_cap_usd ?? 10;
       ctx.root.querySelector("#ai-check-no-key").hidden = s.ai_blank_check_configured !== false;
       // Write-only field (see routes/settings.js) -- never pre-filled with
@@ -196,6 +198,19 @@ export function wireAdminRows(ctx) {
         alert(err.message);
       } finally {
         askKadToggle.disabled = false;
+      }
+    });
+    // New customers into their rep's route plan (field/autoRoutePlan.js): ON by default, one tap each way.
+    autoPlanToggle?.addEventListener("click", async () => {
+      const turningOn = autoPlanToggle.getAttribute("aria-checked") !== "true";
+      autoPlanToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ auto_route_plan_new_customers: turningOn });
+        autoPlanToggle.setAttribute("aria-checked", String(result.auto_route_plan_new_customers));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        autoPlanToggle.disabled = false;
       }
     });
     // The AI check of photographed order blanks: OFF by default, one tap each way.

@@ -67,4 +67,53 @@ test.describe("PWA update flow", () => {
     // genuine new-worker activation, not just that installation succeeded.
     await expect(page.locator("#update-refresh-btn")).toBeVisible({ timeout: 15000 });
   });
+
+  // Owner, 2026-11-03: "after updates the settings page is always stuck". A newer worker that took over while this page was still running
+  // its old code (the app sat in the background on an iPhone, or another window took the update) served the NEW files to the OLD page and
+  // the screens it opened kept spinning. Now: an idle page reloads onto the new version at once; a page with a sheet open keeps it and
+  // reloads on its next screen change instead of mixing the versions.
+  async function takeOverWithNewWorker(page) {
+    await page.evaluate(async () => {
+      const reg = await navigator.serviceWorker.register(`/sw.js?e2e-takeover=${Date.now()}`);
+      const worker = reg.installing || reg.waiting;
+      await new Promise((resolve) => {
+        if (!worker || worker.state === "installed" || worker.state === "activated") return resolve();
+        worker.addEventListener("statechange", () => worker.state === "installed" && resolve());
+      });
+      // taken over the way a frozen page used to be taken over: not by this page's own "Refresh"
+      (reg.waiting || worker)?.postMessage({ type: "skip-waiting" });
+    });
+  }
+  async function controlledPage(page, fixtures) {
+    const manager = await fixtures.createUser("sales_manager");
+    await loginViaUi(page, manager.email);
+    await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)), { timeout: 10000 }).toBe(true);
+    await page.reload();
+    await expect(page.locator("#app")).not.toBeEmpty({ timeout: 15000 });
+    await page.waitForTimeout(800);
+  }
+
+  test("a newer version that takes over an idle page: the app reloads onto it at once", async ({ page, fixtures }) => {
+    await controlledPage(page, fixtures);
+    await page.evaluate(() => (window.__oldPage = true));
+    await takeOverWithNewWorker(page);
+    await expect.poll(() => page.evaluate(() => window.__oldPage === true).catch(() => true), { timeout: 15000 }).toBe(false);
+    await expect(page.locator("#app")).not.toBeEmpty({ timeout: 15000 });
+  });
+
+  test("taken over while a sheet is open: nothing is lost, the next screen opens on a reload", async ({ page, fixtures }) => {
+    await controlledPage(page, fixtures);
+    await page.evaluate(() => {
+      window.__oldPage = true;
+      const sheet = document.createElement("div");
+      sheet.className = "sheet-overlay";
+      sheet.id = "e2e-open-sheet";
+      document.body.appendChild(sheet);
+    });
+    await takeOverWithNewWorker(page);
+    await expect(page.locator("#update-refresh-btn")).toBeVisible({ timeout: 15000 });
+    expect(await page.evaluate(() => window.__oldPage)).toBe(true);
+    await page.evaluate(() => (location.hash = "#/customers"));
+    await expect.poll(() => page.evaluate(() => window.__oldPage === true).catch(() => true), { timeout: 15000 }).toBe(false);
+  });
 });

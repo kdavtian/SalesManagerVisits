@@ -2,6 +2,15 @@
 
 export const enCustomers = {
     place_to_review: "to review",
+    rp_auto_added: "Added to the route plan: {rep}, {day} ({area})",
+    rp_auto_in_area: "Already in the route plan: {rep}, {day} (the whole area is planned)",
+    rp_auto_day_0: "Sunday",
+    rp_auto_day_1: "Monday",
+    rp_auto_day_2: "Tuesday",
+    rp_auto_day_3: "Wednesday",
+    rp_auto_day_4: "Thursday",
+    rp_auto_day_5: "Friday",
+    rp_auto_day_6: "Saturday",
     card_partial_load: "Some of this page could not load.",
     zoom_in: "Zoom in",
     zoom_out: "Zoom out",

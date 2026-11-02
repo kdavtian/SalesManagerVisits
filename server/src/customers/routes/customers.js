@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
 import { pool } from "../../db/pool.js";
+import { placeNewCustomer } from "../../field/autoRoutePlan.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
@@ -426,12 +427,15 @@ customersRouter.post("/", async (req, res) => {
   }
   await recordPlaceReviews(pool, rows[0].id, req.user.id, placeOutcome);
   const place_notice = placeNotice(placeOutcome);
+  let created = rows[0];
   if (wantsPotential) {
     await setPotential(rows[0].id, req.user.id, { level: req.body.potential_level, reasons: req.body.potential_reasons, reason_other: req.body.potential_reason_other, note: req.body.potential_note });
     const { rows: fresh } = await pool.query("SELECT * FROM customers WHERE id = $1", [rows[0].id]);
-    return res.status(201).json({ ...fresh[0], place_notice });
+    created = fresh[0];
   }
-  res.status(201).json({ ...rows[0], place_notice });
+  // the rep's route plan takes the new customer on the day that already holds its area (owner, 2026-11-03; field/autoRoutePlan.js)
+  const route_plan = await placeNewCustomer(created.id, req.user.id);
+  res.status(201).json({ ...created, place_notice, route_plan });
 });
 
 // Distinct region/subregion values already in use, for the Customers page

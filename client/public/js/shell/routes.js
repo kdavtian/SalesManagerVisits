@@ -9,7 +9,7 @@ import { shellAllows } from "../opsShell.js";
 import { canSeeCashflow, canRecordBankPayments } from "../shared/roles.js";
 import { mountInstallPrompt } from "../install.js";
 import { preloadArmeniaTiles, preloadCoreViews } from "./preload.js";
-import { applyUpdate, isUpdatePending } from "../updateBanner.js";
+import { applyUpdate, controllerChanged, isUpdatePending } from "../updateBanner.js";
 import { pruneParkedSheet, takeParkedSheet } from "../util.js";
 import { startLocationBroadcast } from "../locationBroadcast.js";
 import { startDriverArrival } from "../driverArrival.js";
@@ -22,6 +22,16 @@ function updateReloadAllowed() {
     const last = Number(sessionStorage.getItem("fv_update_reload") || 0);
     if (Date.now() - last < 60000) return false;
     sessionStorage.setItem("fv_update_reload", String(Date.now()));
+  } catch {
+    // no sessionStorage: reload as before
+  }
+  return true;
+}
+function controllerReloadAllowed() {
+  try {
+    const recent = JSON.parse(sessionStorage.getItem("fv_controller_reload") || "[]").filter((at) => Date.now() - at < 60000);
+    if (recent.length >= 3) return false;
+    sessionStorage.setItem("fv_controller_reload", JSON.stringify([...recent, Date.now()]));
   } catch {
     // no sessionStorage: reload as before
   }
@@ -115,6 +125,13 @@ export async function renderRoute(ctx) {
   // Bank & cash desks: the accountants, admin and CEO (server: canRecordBankPayments)
   if (/^#\/bank-desk(\?|$)/.test(location.hash) && !canRecordBankPayments(state.user.role)) {
     location.replace("#/dashboard");
+    return;
+  }
+  // A newer version already controls this page (it took over while the app was in the background, or another window took it): this page's
+  // code is the old one and every file it asks for now is new, so the screen (and the preloading of the others below) is opened by reloading onto it (at most 3 times a minute, so
+  // a worker that keeps changing can never reload the app in a loop).
+  if (controllerChanged() && controllerReloadAllowed()) {
+    location.reload();
     return;
   }
   ctx.renderNav();

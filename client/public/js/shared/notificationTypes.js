@@ -55,6 +55,8 @@ export const NOTIFICATION_GROUPS = [
       { type: "visit_reminder", roles: ["admin", "sales_manager"] },
       { type: "plan_submitted", roles: ["admin", "ceo", "operations_director", "sales_director"] },
       { type: "plan_reviewed", roles: ["admin", "sales_manager"] },
+      // a new customer was put into my route plan by someone else (field/autoRoutePlan.js)
+      { type: "route_plan_added", roles: ["admin", "sales_director", "sales_manager"] },
       { type: "perf_plan_submitted", roles: ["admin", "ceo", "operations_director", "accountant"] },
       { type: "perf_plan_reviewed", roles: ["admin", "sales_director", "accountant"] },
     ],

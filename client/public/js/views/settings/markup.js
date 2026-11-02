@@ -201,6 +201,10 @@ export function paintSettingsMarkup(ctx) {
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
         </div>
+        <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.calendar, label: t("auto_route_plan_label"), value: "", id: "toggle-auto-route-plan", checked: true, color: "green", hintBtnId: "auto-route-plan-hint", hintTextId: "auto-route-plan-help-text" })}
+          <p class="muted settings-hint-text" id="auto-route-plan-help-text" hidden>${t("auto_route_plan_help")}</p>
+        </div>
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.calendar, label: t("visit_types_title"), id: "row-visit-types", color: "green" })}
           ${settingsRow({ icon: ICON.book, label: t("doc_texts_title"), id: "row-doc-texts", color: "orange" })}
