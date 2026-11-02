@@ -121,3 +121,7 @@ more than owed = an advance. Used by the customer card (number + "Excel X (+orde
 order list (Excel orders' unpaid / days, app orders Paid / partly / unpaid) and Debt balances (main number live, Excel figure + gap per
 row; a rep now sees every rep's collections in the customer's debt). Reports, Vaghinak and visit priorities still read the Excel debt
 until the switch-over (R4).
+R4 (owner 2026-11-02): "finish + board", the old cash screens stay (they are the engine; no archive). R4a (server only): bank / card
+payments of Bank & cash desks (customer_payments, books still open) lower the live debt too; the credit-limit check subtracts the
+payments the Excel does not have yet; visit priorities use the overdue part of the live debt. Next (R4b): one Payments ledger (cash +
+bank + card, both tracks), a daily money board for admin / CEO / accountant + an evening Telegram summary to the accounting group.

@@ -25,6 +25,7 @@ test.before(async () => {
   );
 });
 test.after(async () => {
+  await pool.query("DELETE FROM customer_payments WHERE customer_id = $1", [customer.id]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [ERP]);
   await cleanupAll();
   await stopTestServer();
@@ -49,4 +50,22 @@ test("the app order is the newest, so it is unpaid; Debt balances shows the live
   assert.equal(Number(row.excel_balance), 100000);
   assert.equal(row.not_in_excel_orders_amd, 30000);
   assert.equal(row.unrecorded_amd, 20000);
+});
+
+test("release 4: a bank payment (Bank & cash desks) lowers the live debt and the credit exposure until the Excel has it", async () => {
+  const { evaluateCredit } = await import("../../src/orders/creditLimit.js");
+  const before = await evaluateCredit(pool, customer.id, 0);
+  const { rows: [bp] } = await pool.query(
+    `INSERT INTO customer_payments (customer_id, customer_name_snapshot, amount_amd, paid_at, pay_day, method, collected_by, source, created_by)
+     VALUES ($1, 'x', 15000, now(), (now() AT TIME ZONE 'Asia/Yerevan')::date, 'bank', $2, 'app', $2) RETURNING id`,
+    [customer.id, admin.id]
+  );
+  const card = await apiRequest(`/api/customers/${customer.id}`, { cookie });
+  assert.equal(card.data.live_debt.debt_amd, 95000, "110,000 - 15,000 by bank");
+  assert.equal(card.data.live_debt.payments_not_in_excel_amd, 35000);
+  const after = await evaluateCredit(pool, customer.id, 0);
+  assert.equal(before.exposure - after.exposure, 15000);
+  // booked in the Excel: no longer counted on top
+  await pool.query("UPDATE customer_payments SET books_state = 'matched' WHERE id = $1", [bp.id]);
+  assert.equal((await apiRequest(`/api/customers/${customer.id}`, { cookie })).data.live_debt.debt_amd, 110000);
 });
