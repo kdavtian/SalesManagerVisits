@@ -281,6 +281,7 @@ export async function renderVaghinak(root, navigate, query) {
         ${row("vg_at_has_open", d.has_open)}
         ${row("vg_at_promise", d.promise_running)}
         ${row("vg_at_cooling", d.cooling)}
+        ${d.paid_in_app ? row("vg_at_paid_in_app", d.paid_in_app) : ""}
         ${row("vg_at_hold", d.on_hold)}
         ${row("vg_at_channel", d.channel_skipped)}
         ${row("vg_at_no_rep", d.no_rep, d.no_rep ? "vg-warn" : "")}

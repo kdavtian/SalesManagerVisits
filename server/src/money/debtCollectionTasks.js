@@ -24,6 +24,24 @@ import { notifyUser } from "../shared/notifications.js";
 import { queueSyncNotice } from "../erp/syncNotifier.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "./debtAge.js";
+import { liveDebtMap } from "./liveDebt.js";
+
+// Release 5 (owner 2026-11-03: Vaghinak's debt tasks on the LIVE debt): the Excel picks the overdue debtors, then the live debt
+// (money/liveDebt.js: + app orders the Excel does not have yet - app payments it does not have yet, oldest orders paid first) has
+// the last word -- a customer whose app / bank payment already paid the overdue part gets no task, and the task names the live
+// amount. Rows need customer_id, erp_customer_id, debt_amd, term_days; returns the ones still overdue, live numbers in, biggest first.
+async function stillOverdueLive(rows, today) {
+  if (!rows.length) return rows;
+  const live = await liveDebtMap(pool, rows.map((r) => ({ id: r.customer_id, erp_customer_id: r.erp_customer_id, debt_amd: r.debt_amd, credit_term_days: r.term_days })), today);
+  return rows
+    .flatMap((r) => {
+      const l = live.get(r.customer_id);
+      if (!l) return [r];
+      if (!(l.aging.overdue_amd > 0)) return [];
+      return [{ ...r, debt_amd: l.debt_amd, days_open: l.aging.oldest_due_days != null ? l.aging.oldest_due_days + Number(r.term_days) : r.days_open }];
+    })
+    .sort((a, b) => Number(b.debt_amd) - Number(a.debt_amd));
+}
 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
 export const REORDER_TASK_TITLE = "Հաճախորդը վաղուց չի պատվիրել՝ զանգահարիր կամ այցելիր";
@@ -198,7 +216,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   // 2) New tasks: overdue debtors, no open task, no recent task, no promise still running.
   const director = await martinId(pool);
   const { rows: found } = await pool.query(
-    `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
+    `SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel, c.erp_customer_id,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
             fc.force_collect, erp.debt_amd, COALESCE(c.credit_term_days, 45) AS term_days, to_char(erp.last_payment_date, 'YYYY-MM-DD') AS last_payment_date, COALESCE(${debtAgeDaysSql("$2::date")}, erp.days_since_payment) AS days_open,
             (SELECT to_char(t.promise_date, 'YYYY-MM-DD') FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'debt_collection' AND t.outcome = 'promised'
@@ -221,7 +239,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   );
   // Customers without a sales manager only get a task if they are in a call channel (SM B2B / CVO / PCO / OEM) or are
   // forced -- then it goes to the sales director.
-  const candidates = found
+  const candidates = (await stillOverdueLive(found, today))
     .map((c) => ({ ...c, rep_id: c.rep_id ?? (isCallChannel(c.sales_channel) || c.force_collect ? director : null) }))
     .filter((c) => c.rep_id);
 
@@ -285,20 +303,18 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
               percentile_cont(0.5) WITHIN GROUP (ORDER BY gap) AS median_gap
        FROM gaps WHERE gap IS NOT NULL GROUP BY erp_customer_id
      )
-     SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel,
+     SELECT c.id AS customer_id, c.name AS customer_name, c.sales_channel, c.erp_customer_id, c.credit_limit_amd::float8 AS credit_limit_amd,
+            COALESCE(erp.debt_amd, 0)::float8 AS debt_amd, COALESCE(c.credit_term_days, 45) AS term_days,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
             ROUND(st.median_gap)::int AS usual_gap, ($1::date - st.last_order)::int AS days_since
      FROM customers c
      JOIN stats st ON st.erp_customer_id = c.erp_customer_id
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     ${DEBT_AGE_LATERAL}
      LEFT JOIN users u ON u.id = c.assigned_manager_id
      WHERE st.n_gaps >= 3 AND st.median_gap BETWEEN 7 AND 90
        AND ($1::date - st.last_order) > GREATEST(st.median_gap * 1.5, st.median_gap + 7)
        AND ($1::date - st.last_order) <= 365
        AND ${SKIPPED_CHANNELS_SQL}
-       AND NOT (erp.erp_customer_id IS NOT NULL AND ${overdueDebtSql("$1::date")})
-       AND (c.credit_limit_amd IS NULL OR COALESCE(erp.debt_amd, 0) <= c.credit_limit_amd)
        AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.created_at::date > st.last_order AND o.status <> 'draft')
        AND NOT EXISTS (
          SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'reorder_followup' OR t.task_kind = 'make_order')
@@ -306,7 +322,17 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
      ORDER BY ($1::date - st.last_order) - st.median_gap DESC`,
     [today, REORDER_COOLDOWN_DAYS]
   );
+  // no overdue debt and within the credit limit -- on the LIVE debt (release 5): an app payment the Excel lacks counts, an app order too
+  const live = found.length
+    ? await liveDebtMap(pool, found.filter((c) => c.erp_customer_id).map((c) => ({ id: c.customer_id, erp_customer_id: c.erp_customer_id, debt_amd: c.debt_amd, credit_term_days: c.term_days })), today)
+    : new Map();
   const candidates = found
+    .filter((c) => {
+      const l = live.get(c.customer_id);
+      const debt = l ? l.debt_amd : Number(c.debt_amd);
+      if (l && l.aging.overdue_amd > 0) return false;
+      return c.credit_limit_amd == null || debt <= Number(c.credit_limit_amd);
+    })
     .map((c) => ({ ...c, rep_id: c.rep_id ?? (isCallChannel(c.sales_channel) ? director : null) }))
     .filter((c) => c.rep_id);
   let created = 0;
@@ -361,7 +387,7 @@ export async function runAutoTasks(now = new Date(), { viaSync = false } = {}) {
 export async function autoTaskDiagnostics(now = new Date()) {
   const today = yerevanToday(now);
   const { rows } = await pool.query(
-    `SELECT c.sales_channel,
+    `SELECT c.id AS customer_id, c.erp_customer_id, erp.debt_amd, COALESCE(c.credit_term_days, 45) AS term_days, c.sales_channel,
             CASE WHEN u.role IN ('sales_manager', 'sales_director') AND u.status = 'active' THEN u.id END AS rep_id,
             fc.force_collect,
             EXISTS (SELECT 1 FROM debt_decisions dd WHERE dd.customer_id = c.id AND dd.decision IN ('dispute', 'legal', 'write_off')) AS on_hold,
@@ -377,10 +403,12 @@ export async function autoTaskDiagnostics(now = new Date()) {
      WHERE ${overdueDebtSql("$2::date")}`,
     [COOLDOWN_DAYS, today]
   );
-  const buckets = { channel_skipped: 0, on_hold: 0, has_open: 0, promise_running: 0, cooling: 0, no_rep: 0, ready: 0 };
+  const buckets = { paid_in_app: 0, channel_skipped: 0, on_hold: 0, has_open: 0, promise_running: 0, cooling: 0, no_rep: 0, ready: 0 };
   const perRep = new Map();
+  const live = new Set((await stillOverdueLive(rows, today)).map((r) => r.customer_id));
   for (const r of rows) {
-    if (!(r.sales_channel !== "KF" && r.sales_channel !== "CAS") && !r.force_collect) buckets.channel_skipped++;
+    if (!live.has(r.customer_id)) buckets.paid_in_app++;
+    else if (!(r.sales_channel !== "KF" && r.sales_channel !== "CAS") && !r.force_collect) buckets.channel_skipped++;
     else if (r.on_hold) buckets.on_hold++;
     else if (r.has_open) buckets.has_open++;
     else if (r.promise_running) buckets.promise_running++;

@@ -7,6 +7,7 @@ import { ROLES } from "../../shared/roles.js";
 import { REPORTS, findReport, canAccessReport } from "../reports.js";
 import { erpSyncFreshness } from "../../erp/erpSyncFreshness.js";
 import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { liveDebtMap } from "../../money/liveDebt.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { periodTimestampCondition, periodDateCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
 import { CASH_IN_HAND_SQL } from "../../money/cashCustody.js";
@@ -623,30 +624,14 @@ reportsRouter.get("/cash-reconciliation", requireReportAccess("cash_reconciliati
 // assigned_sales_rep, the same free-text rep-name space sales_channels.code
 // already matches for Team Performance.
 //
-// The Castrol Excel extract stays the trusted source of debt for as long as
-// the app and ERP run in parallel (expected: months, not days) -- this
-// never recomputes debt from app data wholesale, even though the app now
-// tracks collections of its own. Instead, estimated_debt_amd narrows the
-// gap between syncs the same way an individual customer's own card already
-// does (see routes/customers.js GET /:id, "estimated_debt_amd"): subtract
-// collections the app has recorded since the last sync, floored at zero.
-// Both the raw ERP figure and the adjusted one are returned so a reviewer
-// can see the gap, not just the result.
-const estimatedDebtJoin = `
-  LEFT JOIN LATERAL (
-    SELECT SUM(ch.amount_collected_amd) AS amount
-    FROM checkins ch
-    JOIN customers c ON c.id = ch.customer_id
-    WHERE c.erp_customer_id = erp.erp_customer_id
-      AND ch.amount_collected_amd IS NOT NULL
-      AND ch.timestamp > erp.synced_at
-  ) collected ON true`;
-const estimatedDebtExpr = "GREATEST(erp.debt_amd - COALESCE(collected.amount, 0), 0)";
+// Live mode shows the LIVE debt (release 5, owner 2026-11-03: "everywhere, show the gap"): the Excel debt + the app's delivered
+// orders the Excel does not have yet - the app's payments it does not have yet (money/liveDebt.js, the same figure as the customer
+// card and Debt balances). Both the Excel figure (debt_amd) and the live one (estimated_debt_amd) are returned so the gap shows.
 
 // Debt as of a past date D, computed from the customer's opening balance
 // plus full order/cashflow history -- see docs/erp-sync-contract.md's
 // cashflow_lines entry and migration 083's balance0_amd. Not floored at
-// zero like estimatedDebtExpr above: a customer who has paid ahead can
+// zero (unlike the live figure): a customer who has paid ahead can
 // genuinely show a negative (credit) balance as of a given date, and
 // that's real information, not noise.
 const asOfDebtJoin = `
@@ -683,8 +668,10 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     );
   }
 
-  let debtExpr = estimatedDebtExpr;
-  let debtJoin = estimatedDebtJoin;
+  // Live mode (release 5, owner 2026-11-03): the LIVE debt -- Excel + app orders it does not have yet - app payments it does not have yet
+  // (money/liveDebt.js), computed after the query; the SQL only narrows the list to the customers who may owe something.
+  let debtExpr = "erp.debt_amd";
+  let debtJoin = "";
   if (asOfDate) {
     params.push(asOfDate);
     debtJoin = asOfDebtJoin.replaceAll("$__AS_OF_DATE__", `$${params.length}`);
@@ -692,7 +679,12 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
   }
 
   if (debt_only === "1") {
-    conditions.push(`${debtExpr} > 0`);
+    conditions.push(
+      asOfDate
+        ? `${debtExpr} > 0`
+        : `(erp.debt_amd > 0 OR EXISTS (SELECT 1 FROM orders lo JOIN customers lc ON lc.id = lo.customer_id
+             WHERE lc.erp_customer_id = erp.erp_customer_id AND lo.status = 'delivered' AND lo.erp_matched_order_id IS NULL))`
+    );
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   // Aging filter (comma-separated bucket keys, see debtAging.js): narrows the customer list and the
@@ -734,7 +726,8 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     `SELECT erp.erp_customer_id, erp.customer_name, erp.assigned_sales_rep, erp.debt_amd,
             ${lastPaymentExpr} AS last_payment_date, erp.days_since_payment, erp.aging_bucket,
             (SELECT cc.credit_term_days FROM customers cc WHERE cc.erp_customer_id = erp.erp_customer_id LIMIT 1) AS credit_term_days,
-            ${asOfDate ? "0" : "COALESCE(collected.amount, 0)"} AS collected_since_sync_amd,
+            (SELECT cc.id FROM customers cc WHERE cc.erp_customer_id = erp.erp_customer_id ORDER BY cc.id LIMIT 1) AS internal_customer_id,
+            0 AS collected_since_sync_amd,
             ${debtExpr} AS estimated_debt_amd
      FROM erp_customer_data erp
      ${debtJoin}
@@ -744,20 +737,41 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
     params
   );
 
-  // Invoice-based aging (FIFO, credit term deducted -- see debtAging.js), as of the chosen date
-  // or today. The debt allocated is the same figure the list shows (estimated / as-of).
+  // Invoice-based aging (FIFO, credit term deducted -- see debtAging.js), as of the chosen date or today. The debt allocated is the
+  // figure the list shows: as of the date, or the live debt (whose app orders the Excel lacks are aged too).
   const today = asOfDate ?? yerevanToday();
-  const ordersByCustomer = await loadOrdersNewestFirst(pool, baseRows.filter((r) => Number(r.estimated_debt_amd) > 0).map((r) => r.erp_customer_id), { asOf: asOfDate });
   const bucketTotals = Object.fromEntries(AGING_BUCKETS.map((b) => [b, { total: 0, customers: 0 }]));
-  const withAging = baseRows.map((r) => {
-    const a = allocateFifo({ orders: ordersByCustomer.get(r.erp_customer_id) ?? [], debt: Number(r.estimated_debt_amd), today, termDays: r.credit_term_days ?? 45 });
+  let aged;
+  if (asOfDate) {
+    const ordersByCustomer = await loadOrdersNewestFirst(pool, baseRows.filter((r) => Number(r.estimated_debt_amd) > 0).map((r) => r.erp_customer_id), { asOf: asOfDate });
+    aged = baseRows.map((r) => ({ r, a: allocateFifo({ orders: ordersByCustomer.get(r.erp_customer_id) ?? [], debt: Number(r.estimated_debt_amd), today, termDays: r.credit_term_days ?? 45 }) }));
+  } else {
+    const live = await liveDebtMap(
+      pool,
+      baseRows.filter((r) => r.internal_customer_id).map((r) => ({ id: r.internal_customer_id, erp_customer_id: r.erp_customer_id, debt_amd: r.debt_amd ?? 0, credit_term_days: r.credit_term_days })),
+      today
+    );
+    aged = baseRows
+      .map((r) => {
+        const l = r.internal_customer_id ? live.get(r.internal_customer_id) : null;
+        if (!l) return { r, a: allocateFifo({ orders: [], debt: 0, today, termDays: 45 }) };
+        return {
+          r: { ...r, estimated_debt_amd: l.debt_amd, collected_since_sync_amd: l.payments_not_in_excel_amd, not_in_excel_orders_amd: l.orders_not_in_excel_amd, advance_amd: l.advance_amd },
+          a: l.aging,
+        };
+      })
+      .filter(({ r }) => debt_only !== "1" || Number(r.estimated_debt_amd) > 0)
+      .sort((x, y) => Number(y.r.estimated_debt_amd) - Number(x.r.estimated_debt_amd));
+  }
+  const withAging = aged.map(({ r, a }) => {
     for (const b of AGING_BUCKETS) {
       if (a.buckets[b] > 0) {
         bucketTotals[b].total += a.buckets[b];
         bucketTotals[b].customers += 1;
       }
     }
-    return { ...r, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, opening_amd: Math.round(a.buckets.opening), _buckets: a.buckets };
+    const { internal_customer_id, ...rest } = r;
+    return { ...rest, customer_id: internal_customer_id, oldest_due_days: a.oldest_due_days, overdue_amd: a.overdue_amd, opening_amd: Math.round(a.buckets.opening), _buckets: a.buckets };
   });
   const customerRows = (agingList.length ? withAging.filter((r) => agingList.some((b) => r._buckets[b] > 0)) : withAging).map(({ _buckets, ...r }) => r);
   const byBucket = AGING_BUCKETS.filter((b) => bucketTotals[b].customers > 0).map((b) => ({

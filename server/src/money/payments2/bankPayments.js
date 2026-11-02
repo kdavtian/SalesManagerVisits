@@ -8,6 +8,7 @@
 //   - typing a payment that looks like one already recorded is refused until the accountant says it is a separate payment.
 // Whatever the app cannot decide waits in "Unspecified" for the accountant (pick the customer / not a customer / separate / duplicate).
 import { pool } from "../../db/pool.js";
+import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { addEvent, getCutover } from "./service.js";
 import { buildPayerIndex, identifyPayer, payerKey } from "./payerMatch.js";
 
@@ -99,6 +100,21 @@ const LINE_SQL = `SELECT l.*, a.kind AS account_kind, i.user_id AS import_user_i
  * Look at every statement line not looked at yet: money in, AMD, from the cutover on, on a bank / card account. Runs right after an upload
  * and in the "payments-v2" job. Returns { recorded, confirmed, unspecified, skipped }.
  */
+/**
+ * New bank / card payments close the customer's "collect the debt" task, as a rep's collection does (release 5, team/taskAutoComplete.js).
+ * Runs after the payments are committed (the live debt then includes them); never throws.
+ */
+export async function closeDebtTasksFor(db, paymentIds, actorId = null) {
+  const ids = paymentIds.filter(Boolean);
+  if (!ids.length) return;
+  try {
+    const { rows } = await db.query("SELECT customer_id, amount_amd::float8 AS amount FROM customer_payments WHERE id = ANY($1) AND voided_at IS NULL", [ids]);
+    for (const p of rows) await autoCompleteCollectionTasks({ customerId: p.customer_id, actorId, amountAmd: p.amount });
+  } catch (err) {
+    console.error("Debt task auto-complete after a bank payment failed:", err.message);
+  }
+}
+
 export async function recordBankLines(db = pool, { actorId = null } = {}) {
   const cutover = await getCutover(db);
   const stats = { recorded: 0, confirmed: 0, unspecified: 0, skipped: 0 };
@@ -107,13 +123,16 @@ export async function recordBankLines(db = pool, { actorId = null } = {}) {
   const index = await payerIndex(db);
   // one line per transaction, locked: an upload and the job looking at the same new lines at once never record one twice
   const client = await db.connect();
+  const fresh = [];
   try {
     for (const { id } of todo) {
       await client.query("BEGIN");
       try {
         const { rows: [line] } = await client.query(`${LINE_SQL} WHERE l.id = $1 AND l.pay_checked_at IS NULL FOR UPDATE OF l SKIP LOCKED`, [id]);
-        if (line) stats[await checkLine(client, line, index, cutover, actorId)] += 1;
+        const key = line ? await checkLine(client, line, index, cutover, actorId) : null;
+        if (key) stats[key] += 1;
         await client.query("COMMIT");
+        if (key === "recorded") fresh.push(id);
       } catch (err) {
         await client.query("ROLLBACK").catch(() => {});
         throw err;
@@ -121,6 +140,10 @@ export async function recordBankLines(db = pool, { actorId = null } = {}) {
     }
   } finally {
     client.release();
+  }
+  if (fresh.length) {
+    const { rows } = await db.query("SELECT id FROM customer_payments WHERE bank_line_id = ANY($1)", [fresh]);
+    await closeDebtTasksFor(db, rows.map((r) => r.id), actorId);
   }
   return stats;
 }

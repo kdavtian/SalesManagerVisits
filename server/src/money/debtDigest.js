@@ -6,32 +6,28 @@ import { pool } from "../db/pool.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { notifyUser } from "../shared/notifications.js";
 import { notifyTelegram, escapeHtml } from "../shared/telegram.js";
-import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "./debtAging.js";
+import { AGING_BUCKETS } from "./debtAging.js";
+import { liveDebtors } from "./liveDebt.js";
 import { cleanCustomerName } from "../orders/orderBlankPdf.js";
 
 const DIGEST_ROLES = ["admin", "ceo", "sales_director"];
 const DIGEST_HOUR = 9;
 const MOVERS = 5;
 
-// Debt, overdue part and aging buckets of every customer that owes money right now.
+// Debt, overdue part and aging buckets of every customer that owes money right now -- on the LIVE debt (release 5, owner 2026-11-03):
+// the Excel debt + app orders the Excel does not have yet - app payments it does not have yet (money/liveDebt.js).
 export async function buildDebtSnapshot(db, today) {
-  const { rows } = await db.query(
-    `SELECT c.id, c.name, c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS term_days, erp.debt_amd
-     FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     WHERE erp.debt_amd > 0`
-  );
-  const orders = await loadOrdersNewestFirst(db, rows.map((r) => r.erp_customer_id));
+  const rows = await liveDebtors(db, { select: "c.name", today });
   const byBucket = Object.fromEntries(AGING_BUCKETS.map((b) => [b, 0]));
   const customers = {};
   let total = 0;
   let overdue = 0;
   for (const r of rows) {
-    const debt = Number(r.debt_amd);
-    const alloc = allocateFifo({ orders: orders.get(r.erp_customer_id) ?? [], debt, today, termDays: Number(r.term_days) });
+    const alloc = r.live.aging;
     for (const b of AGING_BUCKETS) byBucket[b] += alloc.buckets[b];
-    total += debt;
+    total += r.live.debt_amd;
     overdue += alloc.overdue_amd;
-    customers[r.id] = { name: cleanCustomerName(r.name), debt: Math.round(debt), overdue: alloc.overdue_amd };
+    customers[r.id] = { name: cleanCustomerName(r.name), debt: Math.round(r.live.debt_amd), overdue: alloc.overdue_amd };
   }
   for (const b of AGING_BUCKETS) byBucket[b] = Math.round(byBucket[b]);
   return { total_debt_amd: Math.round(total), overdue_amd: Math.round(overdue), by_bucket: byBucket, customers };

@@ -3,7 +3,7 @@
 // in the order flow, and open tasks. Every figure is a decision for a person (see the KADDev "data -> decision -> action" rule): each tile opens the page
 // where it is dealt with. One request, cached for a minute, so opening Home stays quick.
 import { pool } from "../db/pool.js";
-import { allocateFifo, loadOrdersNewestFirst } from "../money/debtAging.js";
+import { liveDebtors } from "../money/liveDebt.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { IN_EXCEL_SQL, DAYS_OLD_SQL, EXCEL_GRACE_DAYS } from "../money/paymentExcelMatch.js";
 import { rolesWhere, seesHomeKpis } from "../shared/roles.js";
@@ -31,22 +31,17 @@ async function salesFigures(today) {
   return { mtd_amd: Math.round(num(rows[0].mtd)), prev_mtd_amd: Math.round(num(rows[0].prev_mtd)), prev_month_amd: Math.round(num(rows[0].prev_month)), day: d, days_in_month: new Date(Date.UTC(y, m, 0)).getUTCDate() };
 }
 
+// What customers owe on the LIVE debt (release 5, owner 2026-11-03): the Excel debt + app orders the Excel does not have yet - app
+// payments it does not have yet (money/liveDebt.js); the late part from the same FIFO allocation as the customer card.
 async function debtFigures(today) {
-  const { rows } = await pool.query(
-    `SELECT c.erp_customer_id AS customer_id, ecd.debt_amd, c.credit_term_days
-       FROM erp_customer_data ecd JOIN customers c ON c.erp_customer_id = ecd.erp_customer_id
-      WHERE ecd.debt_amd > 0`
-  );
-  const orders = await loadOrdersNewestFirst(pool, rows.map((r) => r.customer_id), {});
+  const rows = await liveDebtors(pool, { today });
   let total = 0;
   let overdue = 0;
   let overdueCustomers = 0;
   for (const r of rows) {
-    const debt = num(r.debt_amd);
-    total += debt;
-    const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt, today, termDays: r.credit_term_days ?? 45 });
-    if (a.overdue_amd > 0) {
-      overdue += a.overdue_amd;
+    total += r.live.debt_amd;
+    if (r.live.aging.overdue_amd > 0) {
+      overdue += r.live.aging.overdue_amd;
       overdueCustomers += 1;
     }
   }

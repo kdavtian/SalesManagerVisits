@@ -6,7 +6,8 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canAccessReport } from "../reports.js";
 import { buildScorecard } from "../scorecard.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { AGING_BUCKETS } from "../../money/debtAging.js";
+import { liveDebtors } from "../../money/liveDebt.js";
 import { ERP_OPENING_DATE } from "../../money/debtAge.js";
 
 export const bizReportsRouter = Router();
@@ -110,24 +111,30 @@ bizReportsRouter.get("/unpaid-invoices", async (req, res) => {
     params.push(req.user.id);
     scope = `AND c.assigned_manager_id = $${params.length}`;
   }
-  const { rows: customers } = await pool.query(
-    `SELECT c.id AS customer_id, c.name AS customer_name, c.erp_customer_id, c.credit_term_days, am.name AS manager_name,
-            COALESCE(erp.assigned_sales_rep, c.sales_channel) AS channel, erp.debt_amd
-     FROM erp_customer_data erp
-     JOIN customers c ON c.erp_customer_id = erp.erp_customer_id
-     LEFT JOIN users am ON am.id = c.assigned_manager_id
-     WHERE erp.debt_amd > 0 ${scope}`,
-    params
-  );
+  // on the LIVE debt (release 5): app orders the Excel does not have yet are unpaid invoices too, app payments it lacks have paid the oldest
   const today = yerevanToday();
-  const orders = await loadOrdersNewestFirst(pool, customers.map((c) => c.erp_customer_id));
+  const customers = await liveDebtors(pool, {
+    select: "c.name AS customer_name, am.name AS manager_name, COALESCE(erp.assigned_sales_rep, c.sales_channel) AS channel",
+    join: "LEFT JOIN users am ON am.id = c.assigned_manager_id",
+    where: scope.replace(/^AND /, ""),
+    params,
+    today,
+  });
+  const appCodes = new Map();
+  if (customers.length) {
+    const { rows: codes } = await pool.query("SELECT id, order_code FROM orders WHERE customer_id = ANY($1) AND status = 'delivered' AND erp_matched_order_id IS NULL", [customers.map((c) => c.id)]);
+    for (const o of codes) appCodes.set(`app-${o.id}`, o.order_code);
+  }
   const q = String(req.query.q ?? "").trim().toLowerCase();
   const bucketFilter = String(req.query.bucket ?? "").split(",").filter((b) => AGING_BUCKETS.includes(b));
   const all = [];
   for (const c of customers) {
-    const a = allocateFifo({ orders: orders.get(c.erp_customer_id) ?? [], debt: Number(c.debt_amd), today, termDays: c.credit_term_days ?? 45 });
-    const base = { customer_id: c.customer_id, customer_name: c.customer_name, erp_customer_id: c.erp_customer_id, manager_name: c.manager_name, channel: c.channel };
-    for (const i of a.invoices) all.push({ ...base, order_id: i.order_id, order_date: i.date, total_amd: Math.round(i.total), unpaid_amd: Math.round(i.unpaid), due_days: i.due_days, bucket: i.bucket });
+    const a = c.live.aging;
+    const base = { customer_id: c.id, customer_name: c.customer_name, erp_customer_id: c.erp_customer_id, manager_name: c.manager_name, channel: c.channel };
+    for (const i of a.invoices) {
+      const app = String(i.order_id).startsWith("app-");
+      all.push({ ...base, order_id: app ? (appCodes.get(i.order_id) ?? i.order_id) : i.order_id, in_app: app || undefined, order_date: i.date, total_amd: Math.round(i.total), unpaid_amd: Math.round(i.unpaid), due_days: i.due_days, bucket: i.bucket });
+    }
     if (a.opening) all.push({ ...base, order_id: null, order_date: ERP_OPENING_DATE, total_amd: Math.round(a.opening.unpaid), unpaid_amd: Math.round(a.opening.unpaid), due_days: a.opening.due_days, bucket: "opening" });
   }
   const matching = q

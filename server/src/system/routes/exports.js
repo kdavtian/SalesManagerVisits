@@ -3,6 +3,8 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesFinancialExports } from "../../shared/roles.js";
 import { toCsv } from "../../utils/csv.js";
+import { liveDebtors } from "../../money/liveDebt.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 
 export const exportsRouter = Router();
 
@@ -65,27 +67,25 @@ exportsRouter.get("/payments.csv", async (req, res) => {
   );
 });
 
-// Current outstanding debt per ERP-linked customer, as of the last sync --
-// the same figures shown on each customer's detail page, in one sheet.
+// Current outstanding debt per ERP-linked customer -- the LIVE debt (release 5), the same figure each customer's card shows: the Excel
+// debt + app orders it does not have yet - app payments it does not have yet; the Excel figure next to it.
 exportsRouter.get("/debt.csv", async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT c.name AS customer_name, c.erp_customer_id, erp.assigned_sales_rep,
-            erp.debt_amd, erp.last_payment_date, erp.days_since_payment, erp.aging_bucket, erp.synced_at
-     FROM customers c
-     JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     WHERE erp.debt_amd IS NOT NULL AND erp.debt_amd > 0
-     ORDER BY erp.debt_amd DESC`
-  );
+  const rows = await liveDebtors(pool, {
+    select: "c.name AS customer_name, erp.assigned_sales_rep, erp.last_payment_date, erp.days_since_payment, erp.aging_bucket, erp.synced_at",
+    today: yerevanToday(),
+  });
 
   sendCsv(
     res,
     "debt.csv",
-    ["customer", "erp_customer_id", "assigned_sales_rep", "debt_amd", "last_payment_date", "days_since_payment", "aging_bucket", "synced_at"],
+    ["customer", "erp_customer_id", "assigned_sales_rep", "debt_amd", "excel_debt_amd", "overdue_amd", "last_payment_date", "days_since_payment", "aging_bucket", "synced_at"],
     rows.map((r) => ({
       customer: r.customer_name,
       erp_customer_id: r.erp_customer_id,
       assigned_sales_rep: r.assigned_sales_rep,
-      debt_amd: r.debt_amd,
+      debt_amd: r.live.debt_amd,
+      excel_debt_amd: r.live.excel_amd,
+      overdue_amd: r.live.aging.overdue_amd,
       last_payment_date: r.last_payment_date ? new Date(r.last_payment_date).toISOString().slice(0, 10) : "",
       days_since_payment: r.days_since_payment,
       aging_bucket: r.aging_bucket,
@@ -93,7 +93,8 @@ exportsRouter.get("/debt.csv", async (req, res) => {
     })),
     [
       ["Rows", rows.length],
-      ["Total debt_amd", rows.reduce((sum, r) => sum + Number(r.debt_amd || 0), 0)],
+      ["Total debt_amd", rows.reduce((sum, r) => sum + r.live.debt_amd, 0)],
+      ["Total excel_debt_amd", rows.reduce((sum, r) => sum + r.live.excel_amd, 0)],
     ]
   );
 });

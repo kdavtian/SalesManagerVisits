@@ -220,7 +220,10 @@ debtBalancesRouter.get("/", async (req, res) => {
   let fromClause = `
      FROM erp_customer_data ecd
      JOIN customers c ON c.erp_customer_id = ecd.erp_customer_id`;
-  let where = asOfDate ? "WHERE c.erp_customer_id IS NOT NULL" : "WHERE ecd.debt_amd IS NOT NULL AND ecd.debt_amd <> 0";
+  // live (release 5): also a customer at zero in the Excel with a delivered app order it does not have yet -- they owe on the live debt
+  let where = asOfDate
+    ? "WHERE c.erp_customer_id IS NOT NULL"
+    : `WHERE ecd.debt_amd IS NOT NULL AND (ecd.debt_amd <> 0 OR EXISTS (SELECT 1 FROM orders lo WHERE lo.customer_id = c.id AND lo.status = 'delivered' AND lo.erp_matched_order_id IS NULL))`;
   if (asOfDate) {
     fromClause = `
      FROM customers c
