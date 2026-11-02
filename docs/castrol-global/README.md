@@ -2,11 +2,11 @@
 
 ## KAD OS deck (current, November 2026)
 
-KAD OS explained feature by feature for Castrol Global, who asked for it so they can share it with other Castrol distributors: what each module solves, how it works step by step, real screens and embedded demo videos. The only statistics are build and adoption time (owner, 2026-11-02). Includes the owner's own edits from `KAD_OS_Castrol_Global_v4.pptx` (wording on slides 3, 4, 8, 9 and 18; "AI agent" naming; build timeline May -> Aug -> Sep -> 6th month).
+KAD OS explained feature by feature for Castrol Global, who asked for it so they can share it with other Castrol distributors: what each module solves, how it works step by step, real screens and embedded demo videos. The only statistics are build and adoption time (owner, 2026-11-02). Includes the owner's own edits from `KAD_OS_Castrol_Global_v4.pptx` and `_v5.pptx` (v5: no "about this deck" slide, A-to-Z headline, "Reporting", daily report to management, "IWS", shorter title notes) (wording on slides 3, 4, 8, 9 and 18; "AI agent" naming; build timeline May -> Aug -> Sep -> 6th month).
 
 | File | What it is |
 |---|---|
-| `KAD_OS_Castrol_Global.pptx` | 16:9, 29 slides, speaker notes on every slide. 4 embedded demo videos (click the phone to play). Outline: title, about this deck, what is KAD OS, problems solved, how it works, the home screen (annotated), a day in KAD OS, customers & map (2), customer card (2 + video), check-in (2 + video), orders (1 + video), credit & cash, warehouse (1 + video), delivery & driver, management, Executive Assistant, AI agent, AI & automation, built for field work, built and adopted, next: customer app, thank you. Font: Arial only. |
+| `KAD_OS_Castrol_Global.pptx` | 16:9, 33 slides, speaker notes on every slide, 4 embedded demo videos (click the phone to play). Outline: title, what is KAD OS, problems solved, how it works, the home screen, A to Z flow, customers & map (2), customer card (2 + video), check-in (2 + video), routes & fuel allowance, orders (+ video), accounting & invoicing, credit & cash, warehouse (+ video), delivery & driver, management, Executive Assistant, AI agent, how the AI agent decides, human approvals, AI & automation, built for field work, built and adopted, adoption (bonus + contest), next: customer app, thank you. Includes the owner's v4 and v5 edits. Font: Arial only. |
 | `KAD_OS_Castrol_Global.pdf` | PDF export for e-mail; video slides show a still. |
 | `KAD_OS_OnePager.pdf` | One-page A4 summary. |
 | `kados/videos/*.mp4` | The demo videos (H.264, 390x844): `checkin`, `order`, `customer`, `pack`, with poster frames. |
@@ -62,6 +62,14 @@ KAD OS explained feature by feature for Castrol Global, who asked for it so they
 | Warehouse: home, pick & pack, problem button, daily blind stock count, reorder list | Live | `server/src/orders/routes/warehouse.js`, `client/public/js/views/warehouseHome.js`, `client/public/js/views/warehousePack.js`, `client/public/js/views/stockCount.js`, `server/src/orders/stockCount.js` |
 | Potential customers with level, reasons, follow-up, expected volume; advanced filters | Live | `client/public/js/potential.js`, `client/public/js/potentialFilterSheet.js`, `client/public/js/views/customers.js` |
 | Wrong pins found from GPS evidence | Live | `server/src/customers/pinReview.js` |
+| Weekly route plans built automatically | Live | `server/src/field/routes/routePlanSets.js`, `server/src/orders/routePlanner.js` |
+| Fuel allowance from the day's check-ins: road km, home legs outside Yerevan, city/highway consumption, monthly price, flags and corrections | Live | `server/src/field/fuelRoute.js`, `server/src/field/fuelReport.js`, `server/src/field/routes/fuel.js` |
+| Invoice / waybill requested from the order, created by the AI accounting integration, documents attached back to the order | Live | `server/src/orders/routes/orders.js` (`/accounting-request`), `server/src/erp/routes/integration.js` (documents upload) |
+| Order form ready to print after saving; signed slip photo or e-signature with a payment | Live | `server/src/orders/orderBlankPdf.js`, Payments "+" sheet (1.493.0) |
+| Reorder reminder when a customer's usual order rhythm breaks; collection task closes itself when the payment is recorded | Live | `server/src/orders/orderRhythm.js`, `server/src/money/debtCollectionTasks.js`, `server/src/team/taskAutoComplete.js` |
+| Late arrival logged, rep asked for the reason; repeated lateness reported to management | Live (management sees it in the weekly digest) | `server/src/team/vaghinak/engine.js`, `server/src/team/vaghinak/digest.js` |
+| Human approvals: discounts, below-cost prices, credit limit, order confirmation, payments, customer edits, AI agent test mode | Live | `server/src/orders/discountPolicy.js`, `server/src/orders/creditLimit.js`, `client/public/js/shared/roles.js`, `server/src/team/vaghinak/settings.js` |
+| Bonus system and leaderboard; monthly check-in contest | Live (contest prize paid by the company) | `server/src/bonus/`, `client/public/js/views/repProgress.js` |
 | **Customer app (online orders, offers, balance, notifications)** | **Next** | not built for KAD Motors' customers yet |
 | **Expert AI agents for sales, finance, stock** | **Next** | not built |
 | **Brand-owner (Castrol) reports via the API** | **Proposed** | not built |
