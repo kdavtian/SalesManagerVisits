@@ -5,6 +5,7 @@
 //     packed, and delivered since the last sync)
 //   + this order.
 // No limit set (NULL) means no check. Pure SQL helpers take any pg client/pool.
+import { liveAdjustments } from "../money/liveDebt.js";
 
 export async function creditSnapshot(db, customerId, excludeOrderId = null) {
   const { rows } = await db.query(
@@ -20,9 +21,15 @@ export async function creditSnapshot(db, customerId, excludeOrderId = null) {
   );
   const row = rows[0];
   if (!row) return null;
+  // Release 4 (owner, 2026-11-02: the live debt everywhere): payments the Excel does not have yet (cash in the app, bank / card in Bank &
+  // cash desks) lower the exposure, so a customer who has just paid can order again before the accountant enters it.
+  const adj = (await liveAdjustments(db, [customerId])).get(Number(customerId));
+  const paid = adj?.payments_amd ?? 0;
   return {
     limit: row.credit_limit_amd === null ? null : Number(row.credit_limit_amd),
-    debt: Number(row.debt_amd),
+    debt: Number(row.debt_amd) - paid,
+    excelDebt: Number(row.debt_amd),
+    paymentsNotInExcel: paid,
     openOrders: Number(row.open_orders_amd),
   };
 }

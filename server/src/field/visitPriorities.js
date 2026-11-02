@@ -14,7 +14,8 @@
 import { pool } from "../db/pool.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "../customers/routes/customers.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
-import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql, loadUnpaidOrders, summarizeDebt } from "../money/debtAge.js";
+import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "../money/debtAge.js";
+import { liveDebtMap } from "../money/liveDebt.js";
 import { repVisitSql } from "./visitCount.js";
 
 export async function visitPriorities(userId, limit = 8, now = new Date()) {
@@ -41,20 +42,11 @@ export async function visitPriorities(userId, limit = 8, now = new Date()) {
       [erpIds, today]
     );
     for (const s of sales) monthly.set(s.erp_customer_id, Number(s.per_month));
+    // the overdue part of the LIVE debt (release 4): payments the Excel does not have yet already paid the oldest orders
     const owing = rows.filter((r) => r.erp_customer_id && Number(r.debt_amd) > 0 && r.debt_overdue);
     if (owing.length) {
-      const unpaid = await loadUnpaidOrders(pool, owing.map((r) => r.erp_customer_id));
-      // loadUnpaidOrders returns every customer's unpaid orders in one map ("erpId|orderId|date"): split per customer.
-      const perCustomer = new Map();
-      for (const [key, v] of unpaid.orders) {
-        const erpId = key.split("|")[0];
-        if (!perCustomer.has(erpId)) perCustomer.set(erpId, new Map());
-        perCustomer.get(erpId).set(key, v);
-      }
-      for (const r of owing) {
-        const sum = summarizeDebt({ unpaid: { orders: perCustomer.get(r.erp_customer_id) ?? new Map() }, opening: unpaid.opening.get(r.erp_customer_id), today, termDays: r.credit_term_days });
-        overdueAmounts.set(r.erp_customer_id, sum.overdue_amd);
-      }
+      const live = await liveDebtMap(pool, owing, today);
+      for (const r of owing) overdueAmounts.set(r.erp_customer_id, live.get(r.id)?.aging.overdue_amd ?? 0);
     }
     const { rows: stats } = await pool.query(
       `WITH days AS (

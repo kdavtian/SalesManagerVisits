@@ -5,7 +5,7 @@
 // an app payment of the last 60 days with no Excel cashflow line of the same amount within 5 days (one line per payment).
 // A payment pays the customer's OLDEST unpaid orders first (owner's answer 3), Excel and app orders alike (debtAging.js allocateFifo walks
 // the newest orders until they add up to the debt: the rest is paid). Paying more than the debt leaves an advance (answer 8).
-import { allocateFifo } from "./debtAging.js";
+import { allocateFifo, loadOrdersNewestFirst } from "./debtAging.js";
 import { pool } from "../db/pool.js";
 import { cashflowByCustomer } from "./cashflowCopy.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
@@ -51,7 +51,35 @@ export async function liveAdjustments(db, customerIds) {
     e.payments_amd = Math.round(p.amount);
     e.payments_count = p.count;
   }
+  // Release 4 (owner, 2026-11-02): bank / card payments (Bank & cash desks: typed by the accountant or read from a statement) lower the
+  // live debt too, until the Excel's books have them (books_state open). They live only in customer_payments (no old-module row), so they
+  // are never counted twice with the cash payments above.
+  const { rows: bank } = await db.query(
+    `SELECT customer_id, COALESCE(SUM(amount_amd), 0)::float8 AS amd, count(*)::int AS n FROM customer_payments
+     WHERE customer_id = ANY($1) AND legacy_payment_id IS NULL AND voided_at IS NULL AND method IN ('bank', 'card') AND books_state = 'open'
+       AND pay_day >= (now() AT TIME ZONE 'Asia/Yerevan')::date - 60
+     GROUP BY customer_id`,
+    [ids]
+  );
+  for (const b of bank) {
+    const e = entry(b.customer_id);
+    e.payments_amd += Math.round(b.amd);
+    e.payments_count += b.n;
+    e.bank_payments_amd = Math.round(b.amd);
+  }
   return result;
+}
+
+/** Map(customerId -> live numbers) for many customers at once (live view): what the debt-reading screens and jobs need. */
+export async function liveDebtMap(db, rows, today) {
+  // rows: [{ id, erp_customer_id, debt_amd (Excel), credit_term_days }]
+  const withErp = rows.filter((r) => r.erp_customer_id && r.debt_amd != null);
+  const [adj, orders] = await Promise.all([liveAdjustments(db, withErp.map((r) => r.id)), loadOrdersNewestFirst(db, withErp.map((r) => r.erp_customer_id))]);
+  const out = new Map();
+  for (const r of withErp) {
+    out.set(r.id, liveDebtOf({ excelDebt: r.debt_amd, excelOrders: orders.get(r.erp_customer_id) ?? [], adj: adj.get(r.id), today, termDays: r.credit_term_days ?? 45 }));
+  }
+  return out;
 }
 
 /**
