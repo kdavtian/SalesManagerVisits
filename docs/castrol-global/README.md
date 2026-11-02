@@ -2,18 +2,17 @@
 
 ## KAD OS deck (current, November 2026)
 
-A simple introduction to **KAD OS**, the app KAD Motors' team built to run a Castrol distributor: what it is, how it works, every function with screenshots, and the problems it solves. The only statistics are how long the app took to build and how long the team took to adopt it (owner, 2026-11-02).
+KAD OS explained feature by feature for Castrol Global, who asked for it so they can share it with other Castrol distributors: what each module solves, how it works step by step, real screens and embedded demo videos. The only statistics are build and adoption time (owner, 2026-11-02). Includes the owner's own edits from `KAD_OS_Castrol_Global_v4.pptx` (wording on slides 3, 4, 8, 9 and 18; "AI agent" naming; build timeline May -> Aug -> Sep -> 6th month).
 
 | File | What it is |
 |---|---|
-| `KAD_OS_Castrol_Global.pptx` | 16:9, 17 slides, speaker notes on every slide (what to say). Outline: title · what is KAD OS · problems it solves · how it works · a day in KAD OS · field visits · customers & map · orders · credit, debt & cash · management · Executive Assistant · AI deputy director · AI & automation · any phone, offline, secure · built and adopted · coming next · thank you. Font: Arial only. |
-| `KAD_OS_Castrol_Global.pdf` | PDF export of the deck, for e-mail. |
-| `KAD_OS_OnePager.pdf` | One-page A4 summary: what it is, problems it solves, how it works, what is inside, built and adopted. |
-| `kados/screenshots/*.png` | Framed iPhone screens used in the deck: `checkin`, `order`, `orders`, `assistant`, `map`, `customer`, `customers`, `tasks`, `reports`, `dashboard`, `vaghinak` (AI deputy director, management view), `vaghinak_rep` (a rep's must-answer question), `shelf_audit` (Castrol column of the shelf audit). |
-| `kados/screenshots/raw/*.png` | Unframed 390x844 @3x originals. |
-| `kados/source/` | Everything to rebuild: `shoot.mjs` (screens + automatic rejection), `assistant.html` / `assets.mjs` (Executive Assistant evening report, demo values), `frames.py`, `build_kados.py`, `onepager.html` / `onepager.mjs`. |
-| `assets/kad-logo.png` | Official KAD logo (supplied by the owner, 2026-11-02). |
-| `assets/castrol-logo.png` | Castrol logo file already used by the company's price lists (`server/assets/logos/castrol.png`), copied unchanged. Replace it with Castrol's official high-resolution file when available. |
+| `KAD_OS_Castrol_Global.pptx` | 16:9, 29 slides, speaker notes on every slide. 4 embedded demo videos (click the phone to play). Outline: title, about this deck, what is KAD OS, problems solved, how it works, the home screen (annotated), a day in KAD OS, customers & map (2), customer card (2 + video), check-in (2 + video), orders (1 + video), credit & cash, warehouse (1 + video), delivery & driver, management, Executive Assistant, AI agent, AI & automation, built for field work, built and adopted, next: customer app, thank you. Font: Arial only. |
+| `KAD_OS_Castrol_Global.pdf` | PDF export for e-mail; video slides show a still. |
+| `KAD_OS_OnePager.pdf` | One-page A4 summary. |
+| `kados/videos/*.mp4` | The demo videos (H.264, 390x844): `checkin`, `order`, `customer`, `pack`, with poster frames. |
+| `kados/screenshots/*.png` | Framed iPhone screens used in the deck (home, map, customer list, filters, customer card, last order, payments, potential customer, check-in steps, competitors, too-far refusal, order steps, warehouse, stock count, driver home, route, dashboard, reports, AI agent, Executive Assistant). |
+| `kados/source/` | `shoot.mjs` (screens + automatic rejection), `record.mjs` (videos), `frames.py`, `build_kados.py`, `onepager.html` / `onepager.mjs`, `assistant.html` / `assets.mjs`. |
+| `assets/` | Official KAD logo; Castrol logo file used by the company's price lists (replace with Castrol's official high-resolution file). |
 
 ### Branding
 - Name "KAD OS"; lockup = "KAD OS" with "powered by Castrol" directly under it (text only, never mixed into a logo file). Tagline: "The operating system for a modern Castrol distributor."
@@ -59,17 +58,20 @@ A simple introduction to **KAD OS**, the app KAD Motors' team built to run a Cas
 | Payments tracked to the accountant (cash handover) | Live | `server/src/money/routes/cashHandoffs.js` |
 | Debt statement PDF | Live | `server/src/money/debtStatementPdf.js` |
 | Automatic calculations: landing cost, cost at price, credit-limit suggestion, order rhythm, days of stock, working hours, fuel | Live | `server/src/products/landingCalc.js`, `server/src/orders/discountPolicy.js`, `server/src/orders/creditLimitSuggest.js`, `server/src/orders/orderRhythm.js`, `server/src/products/stockForecast.js`, `server/src/field/repProgress.js`, `server/src/field/fuelRoute.js` |
-| **Delivery & Driver** | **Launching next** | partial pieces exist (`server/src/orders/routes/delivery.js`, `client/public/js/views/deliveryRoute.js`) but the module is not presented as live |
-| **Warehouse** | **Launching next** | partial pieces exist (`server/src/orders/routes/warehouse.js`, `client/public/js/views/warehousePack.js`, `client/public/js/views/stockCount.js`) but the module is not presented as live |
+| Delivery & Driver: route planning, next stop, arrival detection, customer signature, failed delivery | Live | `server/src/orders/routes/delivery.js`, `client/public/js/views/driverHome.js`, `client/public/js/views/deliveryRoute.js`, `client/public/js/views/deliveryArrivalAdmin.js` |
+| Warehouse: home, pick & pack, problem button, daily blind stock count, reorder list | Live | `server/src/orders/routes/warehouse.js`, `client/public/js/views/warehouseHome.js`, `client/public/js/views/warehousePack.js`, `client/public/js/views/stockCount.js`, `server/src/orders/stockCount.js` |
+| Potential customers with level, reasons, follow-up, expected volume; advanced filters | Live | `client/public/js/potential.js`, `client/public/js/potentialFilterSheet.js`, `client/public/js/views/customers.js` |
+| Wrong pins found from GPS evidence | Live | `server/src/customers/pinReview.js` |
+| **Customer app (online orders, offers, balance, notifications)** | **Next** | not built for KAD Motors' customers yet |
 | **Expert AI agents for sales, finance, stock** | **Next** | not built |
 | **Brand-owner (Castrol) reports via the API** | **Proposed** | not built |
 
 ### Where every number comes from
 | Number | Source |
 |---|---|
-| 2 days to the first live version (22 -> 24 Aug 2026) | git history of this repo: first commit 2026-08-22 23:11 UTC; "Verify application after deployment" 2026-08-24 |
+| 3 months to the first live version (May -> Aug 2026); 4th month whole team; 6th month complete system | owner's figures (edited in v4, 2026-11-02): work started in May 2026; first production deploy 2026-08-24 (git history) |
 | Whole field team in the app in September 2026, the first full month | live system, read-only query run by the owner on 2026-11-02: rep check-ins were 1 in August and 398 in September, by all 3 field reps |
-| 10 weeks to the complete system; 763 improvements | 22 Aug -> 2 Nov 2026; 763 commits on `main` on 2026-11-02 |
+| 763 improvements | 763 commits on `main` on 2026-11-02 |
 | 300 m check-in allowance; 3 % automatic discount | `server/migrations/111_checkin_allowance.sql`; `AUTO_APPROVE_PCT` in `server/src/orders/discountPolicy.js` |
 | Values on the app screens and in the Executive Assistant report | made-up demo data |
 
@@ -90,10 +92,12 @@ No business statistics (sales, customers, debt, visits) are shown, by the owner'
 2. Screens, mock, frames, deck, PDFs:
    ```bash
    cd docs/castrol-global/kados/source
-   DECK_BYPASS=deck DECK_PASSWORD=pick-any-demo-password node shoot.mjs   # rejects Armenian text, keys, banned words, empty screens
+   DECK_BYPASS=deck DECK_PASSWORD=pick-any-demo-password node shoot.mjs    # rejects Armenian text, keys, banned words, empty screens
+   DECK_BYPASS=deck DECK_PASSWORD=pick-any-demo-password node record.mjs   # demo videos (needs ffmpeg)
    node assets.mjs && python3 frames.py
    python3 build_kados.py && node onepager.mjs
-   cd ../.. && soffice --headless --convert-to pdf --outdir . KAD_OS_Castrol_Global.pptx
+   NO_VIDEO=1 DECK_OUT=/tmp/deck_stills.pptx python3 build_kados.py && soffice --headless --convert-to pdf --outdir /tmp /tmp/deck_stills.pptx
+   cp /tmp/deck_stills.pdf ../../KAD_OS_Castrol_Global.pdf
    ```
 3. QA: render the PDF to PNGs (`pdftoppm -r 80 -png KAD_OS_Castrol_Global.pdf s`), look at every page, and search all slide text, notes and both PDFs for the banned words listed in the owner's brief (must be zero).
 
