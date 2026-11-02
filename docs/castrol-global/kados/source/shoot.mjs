@@ -118,10 +118,28 @@ const SCENES = {
     await go(page, "#/delivery"); await shot(page, "route", { wait: 2500 });
   },
 };
-const USERS = { ceo: "ceo@kad.demo", rep: "aram@kad.demo", wh: "wh@kad.demo", driver: "driver@kad.demo" };
+SCENES.extra = async (page) => {
+  await go(page, "#/reports?r=fuel_allowance"); await page.waitForTimeout(3000); await go(page, "#/reports?r=fuel_allowance"); await shot(page, "fuel", { wait: 2500 });
+  await tap(page, 'summary:has-text("How is this calculated")'); await scrollDown(page, 1500); await shot(page, "fuel_how");
+  await go(page, "#/route-plan-sets/1"); await shot(page, "route_plan");
+  await go(page, "#/team-progress"); await tap(page, 'button:has-text("This month")'); await shot(page, "team_progress");
+  await go(page, "#/orders?open=47"); await page.waitForTimeout(2000);
+  // the manual "link to the accounting record" button is an internal fallback; hide it for the deck
+  await page.evaluate(() => document.querySelectorAll("button").forEach((b) => { if (/excel/i.test(b.textContent)) b.style.visibility = "hidden"; }));
+  await shot(page, "order_accounting");
+  await go(page, "#/orders?open=136"); await shot(page, "order_approval", { wait: 2000 });
+};
+SCENES.repextra = async (page) => {
+  await go(page, "#/orders/new/14"); await page.waitForTimeout(2000); await tap(page, 'button:has-text("Castrol")');
+  { const add = page.locator('button:text-is("Add")'); for (let i = 0; i < 2; i++) { await add.nth(i).click(); await page.waitForTimeout(400); } }
+  await tap(page, "#order-cart-bar"); await tap(page, "#save-order-btn"); await shot(page, "order_saved", { wait: 2500, allowSparse: true });
+  await go(page, "#/bonuses"); await shot(page, "bonuses");
+  await go(page, "#/payments"); await tap(page, 'button[aria-label*="Add"], button:has-text("+"), .page-header button:last-child'); await shot(page, "payment_add", { wait: 1500 });
+};
+const USERS = { extra: "ceo@kad.demo", repextra: "aram@kad.demo", ceo: "ceo@kad.demo", rep: "aram@kad.demo", wh: "wh@kad.demo", driver: "driver@kad.demo" };
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
   for (const [key, run] of Object.entries(SCENES)) {
-    if (only && only !== key) continue;
+    if (only ? only !== key : key.endsWith("extra") && false) continue;
     const { ctx, page } = await session(USERS[key]);
     try { await run(page); } catch (e) { console.log("FAILED", key, e.message); }
     await ctx.close();

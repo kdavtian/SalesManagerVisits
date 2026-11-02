@@ -73,7 +73,7 @@ def frame(name, bar=(255, 255, 255), fg=(0, 0, 0), out=None, scale=0.5):
 SHOTS_LIST = ["home_ceo", "home_rep", "map", "map_popup", "customers", "filter_assignment", "filter_region", "customer", "customer_more",
               "last_order", "debt_sheet", "potential_card", "checkin", "checkin_outcome", "competitors", "checkin_far", "order_frequent", "order",
               "order_sheet", "orders", "tasks", "dashboard", "reports", "vaghinak", "vaghinak_rep", "assistant", "wh_home", "wh_pack", "stock_count",
-              "driver_home", "route"]
+              "driver_home", "route", "fuel", "fuel_how", "route_plan", "team_progress", "order_accounting", "order_approval", "bonuses", "payment_add", "order_saved"]
 for n in SHOTS_LIST:
     if os.path.exists(os.path.join(RAW, n + ".png")):
         frame(n)

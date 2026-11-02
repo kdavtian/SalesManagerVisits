@@ -269,37 +269,9 @@ phone(s, "assistant", 10.6, 1.25, 5.3)
 phone(s, "home_ceo", 8.95, 0.75, 6.1)
 demo_tag(s, 9.25, 7.0)
 notes(s, """
-Thank you for your time. This presentation introduces KAD OS, the app our team built to run the daily work of a Castrol distributor.
-Castrol's team reviewed the app and asked us to describe it in detail, so that other Castrol distributors can use these ideas to improve their own systems. So we go feature by feature: what each part does, how it works step by step, the real screens, and short demo videos.
-All screens use demo data. "Powered by Castrol" is our proposed co-brand; we would use it only with Castrol's approval.
-""")
-
-# ================================================================ 2. About this presentation
-s = new_slide(); n = nxt()
-header(s, "About this presentation", "Built by a distributor, shared to help other distributors")
-for i, (ic, title, body) in enumerate([("store", "Built inside a real distributor", "Our sales, warehouse, accounting and management teams designed every screen around their daily work."),
-                                       ("eye", "Shared at Castrol's request", "Castrol's team saw the app and asked us to share its best ideas with other distributors."),
-                                       ("layers", "How to read it", "Each module: what it solves, how it works step by step, real screens, and a demo video.")]):
-    x = 0.6 + i * 4.1
-    box(s, x, 1.95, 3.9, 3.0, fill=LIGHT)
-    icon(s, ic, x + 0.3, 2.2, 0.85)
-    text(s, x + 0.3, 3.2, 3.4, 0.45, title, size=17, bold=True)
-    text(s, x + 0.3, 3.7, 3.35, 1.2, body, size=13, color=GREY)
-text(s, 0.6, 5.2, 12.1, 0.3, "MODULES IN THIS DECK", size=12, bold=True, color=GREY)
-mods = ["Home screen", "Customers & map", "Check-in", "Orders", "Credit & cash", "Warehouse", "Delivery & driver", "Management", "Executive Assistant", "AI agent", "Next: customer app"]
-x, y = 0.6, 5.65
-for m in mods:
-    w = 0.4 + len(m) * 0.1
-    if x + w > SW - 0.6:
-        x, y = 0.6, y + 0.55
-    box(s, x, y, w, 0.42, fill=GREEN_TINT, radius=0.21)
-    text(s, x, y, w, 0.42, m, size=11.5, bold=True, color=GREEN_DARK, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    x += w + 0.12
-footer(s, n)
-notes(s, """
-A few words about why this deck exists. KAD OS was built inside a real distributor: our sales reps, warehouse, accounting and management designed every screen around their daily work.
-Castrol's team saw the app, liked what it does, and asked us to share it so that other Castrol distributors, many of whom already run their own ERP systems, can take the best ideas and improve their tools.
-So each module follows the same pattern: the problem it solves, how it works step by step, the real screens, and where useful a short demo video you can play.
+Thank you for your time. This presentation introduces KAD OS, the app our team built to run the daily work of a Castrol distributor in Armenia.
+So we will go feature by feature: what each part does, how it works step by step, the real screens, and short demo videos.
+All screens use demo data.
 """)
 
 # ================================================================ 3. What is KAD OS (owner's v4 version: no green bar)
@@ -344,7 +316,7 @@ for i, (ic, prob, sol) in enumerate(pairs):
     text(s, x + 1.6, y + 0.72, 4.25, 0.5, sol, size=14, bold=True, color=GREEN_DARK)
 footer(s, n)
 notes(s, """
-Six everyday problems of a distributor, and the answer KAD OS gives to each. Visits that are hard to monitor become GPS check-ins with a photo. Orders by phone become orders in the app at fixed price lists. Overdue debt found late becomes debt per invoice with automatic collection tasks. No view of the shelf becomes a Castrol shelf check at every visit. Reports that take days become live dashboards and daily evening reports. And problems noticed too late are picked up by an AI agent that gives and chases tasks.
+Six everyday problems of a distributor, and the answer we gave to each. Visits that are hard to monitor become GPS check-ins with a photo. Orders by phone become orders in the app at fixed price lists. Overdue debt found late becomes debt per invoice with automatic collection tasks. No view of the shelf becomes a Castrol shelf check at every visit. Reports that take days become live dashboards and daily evening reports. And problems noticed too late are picked up by an AI agent that gives and chases tasks.
 """)
 
 # ================================================================ 5. How it works
@@ -412,10 +384,10 @@ Each role sees its own home: a rep starts the day with today's tasks, the wareho
 
 # ================================================================ 7. A day in KAD OS
 s = new_slide(); n = nxt()
-header(s, "A day in KAD OS", "From the shop counter to the CEO's phone, in one flow")
+header(s, "A day in KAD OS", "The entire process from A to Z, in one flow")
 day = [("checkin", "09:40", "Rep checks in", "GPS + photo at the customer"), ("order", "09:52", "Takes the order", "Right prices, usual basket"),
        ("wh_pack", "11:30", "Warehouse packs", "Tick lines, press Packed"), ("driver_home", "15:10", "Driver delivers", "Next stop, customer signs"),
-       ("assistant", "19:00", "CEO gets the report", "Sales, cash, debt, risks")]
+       ("assistant", "19:00", "Reporting", "Sales, cash, debt, risks")]
 for i, (shot_, t, title, body) in enumerate(day):
     x = 0.55 + i * 2.5
     w, h = phone(s, shot_, x, 1.75, 3.85)
@@ -512,17 +484,34 @@ video_slide("Check-in", "Demo: a complete check-in", "checkin",
      ("Note and submit", "Then the order menu opens: new, usual or repeat")],
     "This video shows a complete check-in: the location is verified, the rep selects the visit outcome, ticks the competitor brands on the shelf, writes a note and submits. Because an order was placed, the order menu opens straight away.")
 
+# ================================================================ ROUTES & FUEL (new, owner 2026-11-02)
+steps_slide("Routes & fuel", "Weekly routes for every rep, and a fair fuel allowance", ["route_plan", "fuel", "fuel_how"],
+    [("Weekly route plan", "Built automatically: each rep's customers spread over the week, nearby shops on the same day"),
+     ("The real route of the day", "The day's check-ins in time order; the road distance between them is added up"),
+     ("Only real visits count", "A check-in far from its customer is left out; check-ins at one place count once"),
+     ("Home legs outside Yerevan", "If the day starts or ends outside the city, the way from and back home is added"),
+     ("City and highway", "Km inside the city at the rep's city consumption, the rest at the lower highway rate"),
+     ("Amount", "Litres x the month's fuel price; unusual days are flagged and management can correct them")],
+    """
+Our sales reps drive their own cars, so we pay a fuel allowance, and KAD OS calculates it from the work they really did.
+First, every rep has a weekly route plan, built automatically: the rep's customers are spread over the working days, with nearby shops on the same day.
+For the allowance, the app takes the rep's check-ins of each day in time order and adds up the road distance between them. A check-in made far from its customer is left out, and several check-ins at the same place count once. If the day starts or ends outside Yerevan, the way from home and back home is added.
+Kilometres inside the city are paid at the rep's city consumption, the rest at the lower highway consumption, and the litres are multiplied by that month's fuel price. Days that look unusual, for example a very long leg, are flagged, and management can correct a day by hand.
+""", phone_h=4.4, caps=["Weekly route plan", "Fuel allowance", "How it is calculated"])
+
 # ================================================================ ORDERS
-steps_slide("Orders", "An order in a few taps, at the right price", ["order", "order_sheet", "orders"],
+steps_slide("Orders", "An order in a few taps, at the right price", ["order", "order_sheet", "order_saved"],
     [("Start the way you want", "New order, the customer's usual basket, or repeat a past order"),
      ("Pick products", "Frequent products first; brand chips and search; stock shown"),
      ("Review the order", "Payment method, due days, discount and down payment"),
      ("Rules are checked", "Customer-level prices, discount approval, credit limit, price floor"),
-     ("Live status", "Submitted, confirmed, packed, delivered; everyone sees it")],
+     ("Live status", "Submitted, confirmed, packed, delivered; everyone sees it"),
+     ("Print, sign, photo", "The order form is ready at once: print it, the customer signs, the rep uploads a photo of it")],
     """
 Orders in a few taps. The rep starts a new order, the customer's usual basket, or a repeat of any past order. Products the customer buys often come first, with brand chips and search, and the available stock is shown. In the review sheet the rep sets the payment method, due days, discount and down payment.
 KAD OS checks the rules: prices by customer level (Bronze, Silver, Gold), discounts up to 3% automatic and more only with approval, the customer's credit limit, and a price floor that only the CEO can override. After saving, everyone sees the status live: submitted, confirmed, packed, delivered, and the delivery form can be printed for the customer to sign.
-""", phone_h=4.4, caps=["Pick products", "Review", "Orders list"])
+The paperwork is created automatically too: as soon as the order is saved, the order form is ready, so the rep just taps Print. When the customer signs it, at delivery or when paying, the rep takes a photo of the signed copy and uploads it to the app, so the signed document is always attached to the order.
+""", phone_h=4.4, caps=["Pick products", "Review", "Saved: print"])
 
 video_slide("Orders", "Demo: an order from start to saved", "order",
     [("Choose products", "Tap Castrol, then Add; adjust quantities"),
@@ -530,6 +519,22 @@ video_slide("Orders", "Demo: an order from start to saved", "order",
      ("Invoice or cash", "One tap sets the payment method"),
      ("Save", "Order saved: print or share the order form")],
     "This video shows an order from start to finish: choosing products, reviewing the order with its payment terms, choosing invoice and saving. The saved order can be printed or shared at once.")
+
+# ================================================================ ACCOUNTING & INVOICING (new, owner 2026-11-02)
+steps_slide("Accounting & invoicing", "Invoices and delivery documents are created by themselves", ["order_accounting", "payment_add"],
+    [("Rep chooses the payment", "Invoice or cash, while making the order"),
+     ("Sales director approves", "One tap confirms the order"),
+     ("Invoice: created automatically", "Our invoicing system is connected; the chief accountant only approves and signs"),
+     ("Cash: delivery document ready", "The driver cannot load goods without it; he gets a notification to download and print"),
+     ("Signed copies come back", "Customer signs on paper or on the phone; the rep uploads the photo"),
+     ("Customer updates", "Today we send them by hand; the customer app will show them automatically")],
+    """
+Accounting and invoicing are automatic. While making the order, the rep chooses how the customer pays: by invoice or in cash. The sales director approves the order with one tap.
+If it is an invoice, the invoice is created automatically, because KAD OS is connected to our local invoicing system; the chief accountant only has to approve and sign it.
+If it is cash, the products cannot leave the warehouse without proper documents, so the delivery document is also created automatically, and the driver gets a notification that he can download and print it.
+Signatures come back into the app: when the goods are delivered or a payment is received, the customer signs, on paper or directly on the phone, and the rep uploads the photo.
+Today we still send customers updates about their orders and payments by hand. Once the customer app is live, this step disappears: customers will see their orders and payments on their own dashboard.
+""", caps=["Accounting document", "Payment: sign or photo"])
 
 # ================================================================ CREDIT & CASH
 steps_slide("Credit, debt & cash", "Credit and cash under control, without chasing", ["debt_sheet", "tasks"],
@@ -587,7 +592,7 @@ steps_slide("Management", "Management sees the business live", ["dashboard", "re
 Management sees the business live. The dashboard shows sales against plan by rep and by channel. Every rep sees their own targets, progress and bonus points, and management gets a weekly scorecard per rep. Reports cover money and debt, sales and litres by product line, the team and stock. And each person sees only what their role needs: a rep sees only their own customers.
 """, caps=["Dashboard", "Reports"])
 
-steps_slide("Executive Assistant", "An evening report on the CEO's phone, every day", ["assistant"],
+steps_slide("Executive Assistant", "A daily report sent directly to management", ["assistant"],
     [("Sales and volume", "Today and month to date, against plan"),
      ("Cash and debt", "Collected today, overdue, oldest debts"),
      ("Stock risks", "Products about to run out"),
@@ -607,6 +612,67 @@ steps_slide("AI Agent", "An AI agent keeps everyone on plan", ["vaghinak", "vagh
     """
 This is our AI agent; in the app we call him Vaghinak. He watches the working day: late starts, missed visits and long stays in the office. He reminds reps about planned shops nearby, chases overdue debt, down payments and broken promises, and gives each task to the right person with a deadline. Tasks close themselves when the problem is solved, for example when the payment arrives. Some of his questions must be answered before the rep carries on, and management only hears about what slips. He speaks to each person in their own tone, formal with management and friendly with reps.
 """, caps=["Management view", "Rep view"])
+
+# ================================================================ AI agent: how it works (new, owner 2026-11-02)
+s = new_slide(); n = nxt()
+header(s, "AI Agent", "How the AI agent decides, assigns and checks")
+loop = [("eye", "Watches", "Orders, payments, visits and check-ins, all day"),
+        ("sparkles", "Notices", "Something differs from the customer's or rep's usual pattern"),
+        ("tasks", "Assigns", "A task to the right person, with a deadline"),
+        ("checkCircle", "Checks", "Closes the task by itself when the data shows it is done"),
+        ("warning", "Escalates", "Tells management only when it keeps slipping")]
+for i, (ic, title, body) in enumerate(loop):
+    x = 0.6 + i * 2.45
+    box(s, x, 1.8, 2.28, 1.55, fill=GREEN if i in (2, 3) else LIGHT, radius=0.12)
+    icon(s, ic, x + 0.15, 1.95, 0.55, bg=WHITE if i in (2, 3) else GREEN_TINT)
+    text(s, x + 0.8, 1.97, 1.4, 0.45, title, size=15, bold=True, color=WHITE if i in (2, 3) else DARK, anchor=MSO_ANCHOR.MIDDLE)
+    text(s, x + 0.15, 2.58, 2.0, 0.75, body, size=11, color=WHITE if i in (2, 3) else GREY)
+ex = [("cart", "Customer stopped ordering", "A customer usually orders every 2 weeks. This time no order came.",
+       "Task for the rep: go and remind the customer.", "Closes when the next order arrives."),
+      ("wallet", "Weekly payment missed", "A customer pays every week. This week there is no payment.",
+       "Task for the rep: collect the payment.", "Closes by itself when the rep records the money on the customer card; no double work in Tasks."),
+      ("clock", "Late arrival at the office", "The team starts at the office and checks in there. Arrival is late.",
+       "The agent notifies the rep and asks for the reason.", "After the 3rd time, management is notified automatically.")]
+for i, (ic, title, when, then, close) in enumerate(ex):
+    x = 0.6 + i * 4.1
+    y = 3.6
+    box(s, x, y, 3.9, 3.15, fill=WHITE, line=GREEN, radius=0.14, line_w=1.25)
+    icon(s, ic, x + 0.22, y + 0.2, 0.6)
+    text(s, x + 0.95, y + 0.2, 2.85, 0.6, title, size=15, bold=True, anchor=MSO_ANCHOR.MIDDLE, line=0.95)
+    text(s, x + 0.25, y + 0.95, 3.45, 2.15, [[("Notices: ", {"bold": True, "color": DARK}), (when, {})], [("Does: ", {"bold": True, "color": DARK}), (then, {})], [("Checks: ", {"bold": True, "color": GREEN_DARK}), (close, {})]], size=11.5, color=GREY, spacing=5)
+footer(s, n)
+notes(s, """
+How does the AI agent decide what to do? It watches all the data the app collects: orders, payments, visits and check-ins. It learns each customer's and each rep's usual pattern, and when something differs from that pattern, it gives a task to the right person with a deadline. Then it checks the data to see whether the task was done, and closes the task by itself. Management only hears about it when the problem keeps slipping.
+Three examples. A customer usually orders every two weeks, and this time no order came: the agent creates a task for the rep to visit and remind the customer, and the task closes when the next order arrives.
+A customer pays every week, and this week there is no payment: the agent creates a task to collect it. When the rep collects the money and records it on the customer card, the task closes by itself, so nobody has to open Tasks and tick it as done.
+And the team starts the day at the office and checks in there. When the agent sees a late arrival, it sends the rep a notification and asks for the reason; after the third time, it notifies management automatically.
+""")
+
+# ================================================================ Human approvals (new, owner 2026-11-02)
+s = new_slide(); n = nxt()
+header(s, "Human approvals", "Automation does the work; people approve")
+phone(s, "order_approval", 0.55, 1.75, 4.9)
+text(s, 0.55, 6.72, 2.4, 0.25, "Order waiting for approval (demo)", size=9, color=GREY)
+apps = [("tag", "Discounts above 3%", "Management approves"),
+        ("warning", "Price below our cost", "Only the CEO approves"),
+        ("wallet", "Over the credit limit", "Sales director or accountant approves"),
+        ("cart", "New orders", "The sales director confirms"),
+        ("sheet", "Invoices", "The chief accountant approves and signs"),
+        ("payment", "Cash and payments", "The accountant confirms what was received"),
+        ("customers", "Customer data changes by reps", "Management reviews them"),
+        ("sparkles", "The AI agent itself", "Starts in test mode; management tunes it, then switches it on")]
+for i, (ic, title, body) in enumerate(apps):
+    x = 3.35 + (i % 2) * 4.7
+    y = 1.8 + (i // 2) * 1.2
+    box(s, x, y, 4.5, 1.05, fill=LIGHT, radius=0.12)
+    icon(s, ic, x + 0.15, y + 0.22, 0.6)
+    text(s, x + 0.9, y + 0.12, 3.5, 0.4, title, size=14, bold=True)
+    text(s, x + 0.9, y + 0.52, 3.5, 0.45, body, size=11.5, color=GREY)
+footer(s, n)
+notes(s, """
+The system and the AI agent can make mistakes, so we keep people in charge of the key decisions. The automation prepares everything; a person approves.
+Discounts above 3% need management approval, and any price below our cost needs the CEO. An order over the customer's credit limit waits for the sales director or the accountant. New orders are confirmed by the sales director. Every invoice is approved and signed by the chief accountant. Cash and payments are confirmed by the accountant when they are received. Changes that reps make to customer data are reviewed by management. And the AI agent itself started in test mode: management saw what it would say, tuned its rules, and only then switched it on.
+""")
 
 # ================================================================ AI & automation
 s = new_slide(); n = nxt()
@@ -638,7 +704,7 @@ for i, (ic, title, body) in enumerate([("smartphone", "Any phone or PC", "Opens 
                                        ("gauge", "Fast on cheap phones", "Speed is tested on a slow phone"),
                                        ("person", "Role-based access", "Everyone sees only what their role allows"),
                                        ("lock", "Secure", "Encrypted connection, protected logins, audit trail"),
-                                       ("shield", "Data stays with us", "Our data lives in our own cloud system")]):
+                                       ("shield", "Data stays with us", "Our data lives in a cloud system")]):
     x = 0.6 + (i % 3) * 4.1
     y = 1.95 + (i // 3) * 2.2
     box(s, x, y, 3.9, 2.0, fill=LIGHT)
@@ -675,10 +741,23 @@ How long did it take? Our team started in May 2026, and the first version was li
 It was adopted so quickly because our own people designed it: reps, the sales director, warehouse, accounting and management told us exactly what they needed.
 """)
 
+# ================================================================ Adoption (new, owner 2026-11-02)
+steps_slide("Adoption", "How we got the whole team to use it", ["bonuses", "team_progress"],
+    [("The hardest part", "A new app means new habits; at first not every visit was logged"),
+     ("A bonus system", "Points for visits, collected payments, delivered orders, attendance and challenges"),
+     ("A monthly contest", "The rep with the most check-ins in the month wins a fixed bonus"),
+     ("Visible to everyone", "Leaderboard and progress by rep, updated live"),
+     ("Still running today", "Everything is logged in the app, and the team works more actively")],
+    """
+Getting the whole team to work in the app is one of the hardest parts. A new app means new habits, and at first not every visit was logged.
+We solved it with a bonus system and a contest. Reps earn points for their work in the app: visits, collected payments, delivered orders, attendance and challenges. And every month the rep with the most check-ins wins a fixed bonus. The leaderboard and the progress by rep are visible to everyone and update live.
+We are still running the contest. It pushes the team to log all their work in the app, and it also benefits the company, because the reps work more actively.
+""", caps=["Bonuses and leaderboard", "Progress by rep"])
+
 # ================================================================ Next: customer app
 s = new_slide(); n = nxt()
 header(s, "Coming next", "Next: KAD OS for our customers")
-text(s, 0.6, 1.75, 12.1, 0.6, "We are opening the app to our customers, so shops and garages can work with us directly.", size=17)
+text(s, 0.6, 1.75, 12.1, 0.6, "We are opening the app to our customers, so IWS can work with us directly.", size=17)
 for i, (ic, title, body) in enumerate([("cart", "Online orders", "Order any time, at the customer's own prices"),
                                        ("tag", "Offers and discounts", "Promotions shown on the customer's dashboard"),
                                        ("history", "Orders and balance", "Every order, its status, and the current balance"),
@@ -689,11 +768,11 @@ for i, (ic, title, body) in enumerate([("cart", "Online orders", "Order any time
     text(s, x + 0.3, 4.0, 2.4, 0.5, title, size=17, bold=True)
     text(s, x + 0.3, 4.55, 2.35, 1.3, body, size=13, color=GREY)
 box(s, 0.6, 6.2, 12.13, 0.55, fill=GREEN_TINT, radius=0.1)
-text(s, 0.9, 6.2, 11.6, 0.55, [[("Why it matters: ", {"bold": True, "color": GREEN_DARK}), ("fewer calls and errors, faster payments, and customers who order Castrol more often.", {})]], size=13.5, anchor=MSO_ANCHOR.MIDDLE)
+text(s, 0.9, 6.2, 11.6, 0.55, [[("Why it matters: ", {"bold": True, "color": GREEN_DARK}), ("no more manual updates to customers, fewer calls and errors, faster payments, and more frequent Castrol orders.", {})]], size=13.5, anchor=MSO_ANCHOR.MIDDLE)
 footer(s, n)
 notes(s, """
 What comes next: we are opening KAD OS to our customers. Shops and garages will order online at their own prices, see offers and discounts on their dashboard, follow their orders and see their balance. They will get a notification automatically when an order is placed and when a payment arrives, whether they paid in cash or by bank transfer.
-For a distributor this means fewer calls and errors and faster payments; for Castrol, customers who order more often.
+Today we still send customers updates about their orders and payments by hand; with the customer app this disappears, because they see everything on their own dashboard. For a distributor this means fewer calls and errors and faster payments; for Castrol, customers who order more often.
 """)
 
 # ================================================================ Thank you
