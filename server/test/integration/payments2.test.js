@@ -42,7 +42,8 @@ test.before(async () => {
   shop.erp_customer_id = ERP;
   shopNoErp = await createCustomer({ created_by: users.rep.id });
   await pool.query("UPDATE app_settings SET payments_cutover = $1::date - 10 WHERE id = 1", [today]);
-  account = (await pool.query("INSERT INTO cash_accounts (name, kind, holder_user_id) VALUES ($1, 'cash', $2) RETURNING id", [`Cash ${ERP}`, users.rep.id])).rows[0].id;
+  account = (await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'cash') RETURNING id", [`Cash ${ERP}`])).rows[0].id;
+  await pool.query("INSERT INTO cash_desk_holders (account_id, user_id) VALUES ($1, $2)", [account, users.rep.id]);
   category = (await pool.query("SELECT id FROM cash_categories WHERE name = 'Oil order'")).rows[0].id;
 });
 

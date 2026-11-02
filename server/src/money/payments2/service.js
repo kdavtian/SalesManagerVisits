@@ -16,13 +16,6 @@ export function addEvent(db, paymentId, actorId, kind, detail = {}) {
   return db.query("INSERT INTO customer_payment_events (payment_id, actor_id, kind, detail) VALUES ($1, $2, $3, $4)", [paymentId, actorId, kind, JSON.stringify(detail)]);
 }
 
-/** The cash desk (cash account) a person holds, or null. */
-export async function cashDeskOf(db, userId) {
-  if (!userId) return null;
-  const { rows } = await db.query("SELECT id FROM cash_accounts WHERE holder_user_id = $1 AND kind = 'cash' AND active ORDER BY sort_order, id LIMIT 1", [userId]);
-  return rows[0]?.id ?? null;
-}
-
 /**
  * Void a payment (a mistake): it stays in the history with the reason, it no longer counts anywhere, and the Excel rows it used are free
  * again. Owner's answer 7: once the cash is counted (or for a card / bank payment), only admin and CEO; before that, the person who took
@@ -53,10 +46,14 @@ export async function voidPayment(db, user, paymentId, reasonRaw) {
     await client.query("DELETE FROM payment_book_links WHERE payment_id = $1", [p.id]);
     await client.query("DELETE FROM payment_allocations WHERE payment_id = $1", [p.id]);
     const { rows: done } = await client.query(
-      `UPDATE customer_payments SET voided_at = now(), voided_by = $2, void_reason = $3, books_state = 'open', books_note = NULL, updated_at = now()
+      `UPDATE customer_payments SET voided_at = now(), voided_by = $2, void_reason = $3, books_state = 'open', books_note = NULL, bank_line_id = NULL, updated_at = now()
        WHERE id = $1 RETURNING *`,
       [p.id, user.id, reason]
     );
+    // the bank statement line it held is money that still arrived: it waits in Unspecified for the accountant's answer again
+    if (p.bank_line_id) {
+      await client.query("UPDATE bank_statement_lines SET pay_state = 'unspecified', pay_reason = 'unknown_payer', pay_decided_by = NULL WHERE id = $1", [p.bank_line_id]);
+    }
     await addEvent(client, p.id, user.id, "voided", { reason });
     await client.query("COMMIT");
     return { payment: done[0] };

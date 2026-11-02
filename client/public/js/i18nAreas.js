@@ -13,6 +13,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/wh-home": ["orders"],
   "#/driver-home": [],
   "#/cashflow": ["money"],
+  "#/bank-desk": ["money", "settings"],
   "#/returns": ["orders"],
   "#/staff": ["team"],
   "#/wh-pack": ["customers", "money", "orders"],

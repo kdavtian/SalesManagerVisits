@@ -10,7 +10,8 @@
 //   deleted in the old module                         -> voided ("Deleted in the old module")
 // A copy someone voided by hand is never brought back.
 import { pool } from "../../db/pool.js";
-import { addEvent, cashDeskOf, getCutover } from "./service.js";
+import { addEvent, getCutover } from "./service.js";
+import { deskMap } from "./desks.js";
 
 const COUNTED_ROLES = new Set(["sales_director", "ceo", "operations_director", "admin"]);
 
@@ -32,6 +33,8 @@ export async function runBridge(db = pool) {
   );
   const { rows: copies } = await db.query("SELECT * FROM customer_payments WHERE source = 'bridge'");
   const copyOf = new Map(copies.filter((c) => c.legacy_payment_id).map((c) => [c.legacy_payment_id, c]));
+  const desks = await deskMap(db);
+  const deskOf = (userId) => desks.get(userId) ?? null;
 
   for (const o of old) {
     const state = cashStateFromOld(o);
@@ -45,7 +48,7 @@ export async function runBridge(db = pool) {
          VALUES ($1, $2, $3, round($4), $5, $6, 'cash', $7, $8, $8, $9, $10, $11, $12, $13, 'bridge', $14, $15, $16) RETURNING id`,
         [
           o.customer_id, o.customer_name_snapshot, o.erp_customer_id_snapshot ?? o.customer_erp ?? null, o.amount_amd, o.payment_date, o.day,
-          await cashDeskOf(db, holder), o.sales_manager_id, state, holder,
+          deskOf(holder), o.sales_manager_id, state, holder,
           rejected ? o.rejected_at ?? new Date() : null, rejected ? `Rejected in the old module${o.rejection_reason ? `: ${o.rejection_reason}` : ""}` : null,
           o.note, o.id, o.created_by, o.created_at,
         ]
@@ -63,8 +66,12 @@ export async function runBridge(db = pool) {
       continue;
     }
     if (!rejected && (copy.cash_state !== state || copy.holder_id !== holder)) {
-      await db.query("UPDATE customer_payments SET cash_state = $2, holder_id = $3, account_id = $4, updated_at = now() WHERE id = $1", [copy.id, state, holder, await cashDeskOf(db, holder)]);
+      await db.query("UPDATE customer_payments SET cash_state = $2, holder_id = $3, account_id = $4, updated_at = now() WHERE id = $1", [copy.id, state, holder, deskOf(holder)]);
       await addEvent(db, copy.id, null, "cash_moved", { from: copy.cash_state, to: state, holder_id: holder });
+      stats.updated += 1;
+    } else if (!rejected && !copy.voided_at && copy.account_id !== deskOf(holder) && deskOf(holder)) {
+      // the holder got a desk (or another one) since: the cash is on it
+      await db.query("UPDATE customer_payments SET account_id = $2, updated_at = now() WHERE id = $1", [copy.id, deskOf(holder)]);
       stats.updated += 1;
     }
   }

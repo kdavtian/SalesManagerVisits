@@ -13,6 +13,7 @@ import { sendDeadlineReminders, runAutoTasksOnceADay } from "../team/taskReminde
 import { closeOpenDays } from "../orders/stockCount.js";
 import { runBridge } from "../money/payments2/bridge.js";
 import { runBooks } from "../money/payments2/books.js";
+import { recordBankLines } from "../money/payments2/bankPayments.js";
 import { sendWeeklyScorecards } from "../reports/scorecard.js";
 import { sendWeeklyDebtDigest } from "../money/debtDigest.js";
 import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
@@ -37,7 +38,7 @@ export const JOBS = [
   { name: "auto-tasks", everyMs: MINUTE, run: (now) => runAutoTasksOnceADay(now) },
   { name: "stock-count-close", everyMs: 15 * MINUTE, run: (now) => closeOpenDays(now) },
   // the redesigned payments: copy what the old module recorded since the cutover, then match with the Excel (money/payments2)
-  { name: "payments-v2", everyMs: 10 * MINUTE, run: async () => ({ bridge: await runBridge(), books: await runBooks() }) },
+  { name: "payments-v2", everyMs: 10 * MINUTE, run: async () => ({ bridge: await runBridge(), bank: await recordBankLines(), books: await runBooks() }) },
   { name: "daily-summary", everyMs: 5 * MINUTE, run: () => checkDailySummary(), ...needsPush },
   { name: "ops-control", everyMs: 30 * MINUTE, run: () => runOpsJobs() },
   { name: "cash-sheets", everyMs: 30 * MINUTE, run: () => runCashSheetJobs() },

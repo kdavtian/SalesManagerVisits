@@ -6,7 +6,7 @@ import { dropTabTrails, noteScreen } from "./tabs.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
-import { canSeeCashflow } from "../shared/roles.js";
+import { canSeeCashflow, canRecordBankPayments } from "../shared/roles.js";
 import { mountInstallPrompt } from "../install.js";
 import { preloadArmeniaTiles, preloadCoreViews } from "./preload.js";
 import { applyUpdate, isUpdatePending } from "../updateBanner.js";
@@ -109,6 +109,11 @@ export async function renderRoute(ctx) {
   // Cashflow holds salaries and every money movement: only the owner's own roles open it (server: canSeeCashflow); anyone else who types or follows the
   // address lands on Home instead of an empty page with an error (a deep link from an old notification, a bookmark).
   if (/^#\/cashflow(\?|$)/.test(location.hash) && !canSeeCashflow(state.user.role)) {
+    location.replace("#/dashboard");
+    return;
+  }
+  // Bank & cash desks: the accountants, admin and CEO (server: canRecordBankPayments)
+  if (/^#\/bank-desk(\?|$)/.test(location.hash) && !canRecordBankPayments(state.user.role)) {
     location.replace("#/dashboard");
     return;
   }
@@ -294,6 +299,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/returns.js"))).renderReturns(ctx.app, ctx.navigate);
   } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {
     (await fresh(import("../views/staff.js"))).renderStaff(ctx.app, ctx.navigate, path.split("/")[2] ?? null, query);
+  } else if (path === "#/bank-desk") {
+    ctx.currentCleanup = await (await fresh(import("../views/bankDesk.js"))).renderBankDesk(ctx.app, ctx.navigate, query);
   } else if (path === "#/stock-count") {
     ctx.currentCleanup = await (await fresh(import("../views/stockCount.js"))).renderStockCount(ctx.app, ctx.navigate, query);
   } else if (path === "#/wh-pack") {

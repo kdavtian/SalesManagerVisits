@@ -119,7 +119,10 @@ export async function openBankSheet(meta, onChanged) {
         changed = true;
         $("#bk-file").value = "";
         $("#bk-file-name").textContent = t("bk_choose_file");
-        $("#bk-preview").innerHTML = `<p class="bk-result">${escapeHtml(t("bk_result").replace("{new}", r.new_lines).replace("{matched}", r.matched).replace("{open}", r.unmatched))}</p>`;
+        const pay = r.payments && r.payments.recorded + r.payments.confirmed + r.payments.unspecified > 0
+          ? `<p class="bk-result">${escapeHtml(t("bk_result_payments").replace("{recorded}", r.payments.recorded).replace("{confirmed}", r.payments.confirmed).replace("{unspecified}", r.payments.unspecified))}</p>`
+          : "";
+        $("#bk-preview").innerHTML = `<p class="bk-result">${escapeHtml(t("bk_result").replace("{new}", r.new_lines).replace("{matched}", r.matched).replace("{open}", r.unmatched))}</p>${pay}`;
         state = "unmatched";
         await load();
         onChanged?.();

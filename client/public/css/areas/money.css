@@ -1633,3 +1633,58 @@ label.cf-f-row { flex-direction: column; align-items: stretch; gap: 4px; font-si
   .cf-side .cf-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
   .cf-main { min-width: 0; }
 }
+/* ===== Bank & cash desks (payments redesign, release 2, owner 2026-11-02) ===== */
+.bd-view { max-width: 1100px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.bd-view .cf-head-actions .btn { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.bd-view .cf-head-actions .btn svg { width: 18px; height: 18px; }
+.bd-body { display: flex; flex-direction: column; gap: 8px; }
+.bd-line-text { min-width: 0; flex: 1 1 auto; }
+.bd-line-text strong { overflow-wrap: anywhere; }
+.bd-reason { display: inline-block; margin-top: 6px; white-space: normal; text-align: left; }
+.bd-actions { flex-wrap: wrap; }
+.bd-actions .btn { flex: 1 1 140px; white-space: normal; line-height: 1.2; }
+.bd-suggest { overflow-wrap: anywhere; }
+.bd-nodesk { border-color: var(--warning, #b26a00); }
+button.bk-line { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.bd-pay.is-voided .bk-line-amt { text-decoration: line-through; color: var(--text-dim); }
+.bd-chips { display: inline-flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.bd-search input[type="search"] { width: 100%; min-height: 44px; box-sizing: border-box; }
+.bd-nowrap { white-space: nowrap; }
+.bd-total { margin: 0; font-size: 0.85rem; }
+.bd-holders { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.bd-holder { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft, rgba(10, 132, 255, 0.12)); font-size: 0.8rem; }
+.bd-desk-cash { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 0.8rem; white-space: nowrap; }
+.bd-desk-off { opacity: 0.6; }
+.bd-sheet { max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.bd-sheet h2 { margin: 0; overflow-wrap: anywhere; }
+.bd-sheet p { margin: 0; }
+.bd-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); min-width: 0; }
+.bd-field input, .bd-field select, .bd-inline input { font: inherit; min-height: 44px; padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); box-sizing: border-box; width: 100%; }
+.bd-field-label { font-size: 0.85rem; color: var(--text-dim); }
+.bd-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 379px) { .bd-two { grid-template-columns: 1fr; } }
+.bd-pick { min-height: 48px; font-weight: 700; overflow-wrap: anywhere; white-space: normal; }
+.bd-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 0.9rem; }
+.bd-check input { width: 22px; height: 22px; flex: none; }
+.bd-cust-list, .bd-people { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.bd-cust { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.bd-cust strong { overflow-wrap: anywhere; }
+.bd-person { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; padding: 0 4px; }
+.bd-person input { width: 20px; height: 20px; }
+.bd-person span { overflow-wrap: anywhere; }
+.bd-person .muted { font-size: 0.8rem; }
+.bd-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 0.9rem; }
+.bd-facts dt { color: var(--text-dim); }
+.bd-facts dd { margin: 0; overflow-wrap: anywhere; }
+.bd-events { margin: 0; padding-left: 18px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
+.bd-inline { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.bd-inline label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.bd-dup-title { font-weight: 700; color: var(--warning-text, var(--warning, #b26a00)); }
+.bd-dup { font-size: 0.85rem; padding: 6px 10px; border-radius: 10px; background: var(--bg-subtle, rgba(0, 0, 0, 0.04)); }
+.bd-aliases { font-size: 0.8rem; }
+/* Wide screens: the lists in two columns (desktop is a main device for the accountants) */
+@media (min-width: 900px) {
+  .bd-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .bd-body > .empty-state, .bd-body > .loading-state, .bd-body > .bd-search, .bd-body > .bd-total, .bd-body > #bd-new-desk { grid-column: 1 / -1; }
+  .bd-body > .bk-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
