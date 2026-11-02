@@ -34,6 +34,27 @@ LINE = RGBColor(0xD9, 0xDE, 0xDB)
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 FONT = "Arial"
 
+# Armenian version: DECK_LANG=hy python3 build_kados.py -> Armenian screens/videos, every string through hy/translations.json.
+import json, re, sys
+HY = os.environ.get("DECK_LANG") == "hy"
+TR_PATH = os.path.join(HERE, "hy", "translations.json")
+TR = json.load(open(TR_PATH, encoding="utf-8")) if HY and os.path.exists(TR_PATH) else {}
+MISSING = {}
+if HY:
+    SHOTS = os.path.join(HERE, "..", "screenshots_hy")
+    OUT = os.path.join(HERE, "..", "..", "KAD_OS_Castrol_Global_HY.pptx")
+    FONT = "Segoe UI"   # has Armenian letters on Windows; Arial does not
+
+
+def T(s):
+    """English -> Armenian (hy build only). Strings already Armenian, or without Latin letters, pass through."""
+    if not HY or not s or re.search(r"[\u0530-\u058F]", s) or not re.search(r"[A-Za-z]", s):
+        return s
+    if TR.get(s):
+        return TR[s]
+    MISSING[s] = ""
+    return s
+
 prs = Presentation()
 prs.slide_width = Inches(13.333)
 prs.slide_height = Inches(7.5)
@@ -58,10 +79,10 @@ def text(slide, x, y, w, h, content, size=14, bold=False, color=DARK, align=PP_A
         runs = para if isinstance(para, list) else [(para, {})]
         for t, st in runs:
             r = p.add_run()
-            r.text = t
+            r.text = T(t)
             f = r.font
             f.name = FONT
-            f.size = Pt(st.get("size", size))
+            f.size = Pt(st.get("size", size) * (0.9 if HY else 1))   # Armenian words run longer
             f.bold = st.get("bold", bold)
             f.color.rgb = st.get("color", color)
     return tb
@@ -123,14 +144,14 @@ def stripe(slide, x, y, w=0.9):
 
 def header(slide, kicker, headline, size=30):
     stripe(slide, 0.6, 0.38)
-    text(slide, 0.6, 0.55, 10, 0.3, kicker.upper(), size=12, bold=True, color=GREEN)
+    text(slide, 0.6, 0.55, 10, 0.3, T(kicker).upper(), size=12, bold=True, color=GREEN)
     text(slide, 0.6, 0.85, 12.1, 1.0, headline, size=size, bold=True, color=DARK, line=0.95)
 
 
 
 
 def notes(slide, body):
-    slide.notes_slide.notes_text_frame.text = body.strip()
+    slide.notes_slide.notes_text_frame.text = "\n".join(T(l) for l in body.strip().split("\n"))
 
 
 def logo_spot(slide, x, y, w, h, on_dark=False):
@@ -184,7 +205,7 @@ def demo_tag(slide, x, y, w=1.6):
 
 
 
-VIDEOS = os.path.join(HERE, "..", "videos")
+VIDEOS = os.path.join(HERE, "..", "videos_hy" if HY else "videos")
 NO_VIDEO = os.environ.get("NO_VIDEO") == "1"   # the PDF export is built from a copy with stills instead of videos
 FW, FH = 750.0, 1539.0          # framed phone image size (px)
 SX, SY, SW_, SH_ = 82.5, 157.5, 585.0, 1266.0   # screenshot area inside the framed image (px)
@@ -289,7 +310,7 @@ for i, (ic, title, body) in enumerate(roles):
     box(s, x, 2.95, 1.9, 2.75, fill=LIGHT)
     icon(s, ic, x + 0.55, 3.15, 0.8)
     text(s, x + 0.1, 4.08, 1.7, 0.4, title, size=14.5, bold=True, align=PP_ALIGN.CENTER)
-    text(s, x + 0.12, 4.48, 1.66, 1.1, body, size=11.5, color=GREY, align=PP_ALIGN.CENTER)
+    text(s, x + 0.12, 4.48 + (0.3 if HY else 0), 1.66, 1.1, body, size=11.5, color=GREY, align=PP_ALIGN.CENTER)   # hy titles take 2 lines
 footer(s, n)
 notes(s, """
 KAD OS is one app for everyone in a distributor. Sales reps visit customers, check in, take orders and collect payments. The sales director plans routes and approves prices and credit. The warehouse packs confirmed orders and counts stock. The driver delivers on an optimised route and the customer signs on the phone. The accountant handles invoices, payments and cash. And the CEO sees live dashboards and gets an evening report.
@@ -795,6 +816,9 @@ for sl in prs.slides:
             st = el.find(qn("p:style"))
             if st is not None:
                 el.remove(st)
+if MISSING:
+    json.dump(MISSING, open(os.path.join(HERE, "hy", "missing.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    sys.exit(f"{len(MISSING)} strings have no Armenian translation: see hy/missing.json")
 OUT = os.environ.get("DECK_OUT", OUT)
 prs.save(OUT)
 print("saved", OUT, len(prs.slides._sldIdLst), "slides")

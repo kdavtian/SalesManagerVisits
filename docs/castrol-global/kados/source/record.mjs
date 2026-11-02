@@ -3,8 +3,8 @@
 //   DECK_BYPASS=deck DECK_PASSWORD=... node record.mjs [name]
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
-import { session, go, browser } from "./shoot.mjs";
-const OUT = new URL("../videos/", import.meta.url).pathname;
+import { session, go, browser, L, LANG } from "./shoot.mjs";
+const OUT = new URL(LANG === "hy" ? "../videos_hy/" : "../videos/", import.meta.url).pathname;
 const TMP = OUT + "_raw/";
 mkdirSync(TMP, { recursive: true });
 const only = process.argv[2];
@@ -21,30 +21,30 @@ async function tapIt(page, sel, ms = 900) { await page.locator(sel).first().clic
 const FLOWS = {
   "checkin": { user: "aram@kad.demo", run: async (page) => {
     await go(page, "#/customers/16"); await pause(page, 1500);
-    await tapIt(page, 'button:has-text("Check In")', 3500);
+    await tapIt(page, `button:has-text("${L("Check In")}")`, 3500);
     await tapIt(page, 'label.outcome-chip:has(input[value="order_placed"])');
     await tapIt(page, 'label.outcome-chip:has(input[value="assortment_check"])');
-    await tapIt(page, 'button:has-text("Competitors")');
-    await tapIt(page, '.sheet label:has-text("Mobil")', 700); await tapIt(page, '.sheet label:has-text("Shell")', 700);
-    await tapIt(page, '.sheet button:has-text("Done")');
-    await page.locator("textarea").first().click(); await page.keyboard.type("Owner wants the EDGE range on the front shelf.", { delay: 35 }); await pause(page, 800);
+    await tapIt(page, `button:has-text("${L("Competitors")}")`);
+    await tapIt(page, `.sheet label:has-text("${L("Mobil")}")`, 700); await tapIt(page, `.sheet label:has-text("${L("Shell")}")`, 700);
+    await tapIt(page, `.sheet button:has-text("${L("Done")}")`);
+    await page.locator("textarea").first().click(); await page.keyboard.type(LANG === "hy" ? "Տերը ուզում է EDGE-ը առջևի դարակին։" : "Owner wants the EDGE range on the front shelf.", { delay: 35 }); await pause(page, 800);
     await page.evaluate(() => document.activeElement?.blur()); await pause(page, 600);
-    await tapIt(page, 'button:has-text("Submit check-in")', 3500);
+    await tapIt(page, `button:has-text("${L("Submit check-in")}")`, 3500);
   } },
   "order": { user: "aram@kad.demo", run: async (page) => {
     await go(page, "#/orders/new/16"); await pause(page, 1500);
-    await tapIt(page, 'button:has-text("Castrol")', 1200);
-    const add = page.locator('button:text-is("Add")');
+    await tapIt(page, `button:has-text("${L("Castrol")}")`, 1200);
+    const add = page.locator(`button:text-is("${L("Add")}")`);
     for (let i = 0; i < 3; i++) { await add.nth(i).click(); await pause(page, 700); }
-    await page.locator('button[aria-label*="Increase"], .oc-plus, button:has-text("+")').first().click().catch(() => {}); await pause(page, 700);
+    await page.locator(`button[aria-label*="Increase"], .oc-plus, button:has-text("${L("+")}")`).first().click().catch(() => {}); await pause(page, 700);
     await tapIt(page, "#order-cart-bar", 1800);
-    await tapIt(page, '.sheet button:has-text("Invoice"), button:has-text("Invoice")', 1200);
+    await tapIt(page, `.sheet button:has-text("${L("Invoice")}"), button:has-text("${L("Invoice")}")`, 1200);
     await tapIt(page, '#save-order-btn', 3500);
   } },
   "customer": { user: "ceo@kad.demo", run: async (page) => {
     await go(page, "#/customers"); await pause(page, 1200);
-    await page.locator('input[type="search"], .search-input input, input[placeholder*="Name"]').first().click(); await page.keyboard.type("Erebuni Auto", { delay: 60 }); await pause(page, 1200);
-    await tapIt(page, 'a:has-text("Erebuni Auto Parts"), button:has-text("Erebuni Auto Parts"), .cl-card:has-text("Erebuni Auto Parts"), :text("Erebuni Auto Parts")', 2500);
+    await page.locator('input[type="search"], .search-input input, input[placeholder*="Name"]').first().click(); await page.keyboard.type(L("Erebuni Auto"), { delay: 60 }); await pause(page, 1200);
+    await tapIt(page, `a:has-text("${L("Erebuni Auto Parts")}"), button:has-text("${L("Erebuni Auto Parts")}"), .cl-card:has-text("${L("Erebuni Auto Parts")}")`, 2500);
     await page.mouse.wheel(0, 500); await pause(page, 1500);
     await tapIt(page, '[data-stat="last-order"]', 2500);
     await page.keyboard.press("Escape"); await pause(page, 900);
@@ -54,10 +54,10 @@ const FLOWS = {
   } },
   "pack": { user: "wh@kad.demo", run: async (page) => {
     await go(page, "#/wh-home"); await pause(page, 1500);
-    await tapIt(page, 'button:has-text("Start packing"), a:has-text("Start packing")', 2000);
+    await tapIt(page, `button:has-text("${L("Start packing")}"), a:has-text("${L("Start packing")}")`, 2000);
     const boxes = page.locator('.wp-line input[type="checkbox"], input[type="checkbox"]');
     for (let i = 0; i < 3; i++) { await boxes.nth(i).click({ force: true }).catch(() => {}); await pause(page, 700); }
-    await tapIt(page, 'button:has-text("Packed")', 2500);
+    await tapIt(page, `button:has-text("${L("Packed")}")`, 2500);
   } },
 };
 
