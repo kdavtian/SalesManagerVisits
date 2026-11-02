@@ -50,6 +50,11 @@ test.describe("phone", () => {
       await expect(page.locator("#bk-preview")).toContainText("Customer payments: 1 recorded", { timeout: 10000 });
       await shot(page, "bd-1-import");
       await page.locator("#bk-close").click();
+      // Today (release 4): the money board opens first; the statement's bank payment is on it, the stranger waits to be checked
+      await expect(page.locator(".bd-tile", { hasText: "Bank and card" })).toContainText("50,000", { timeout: 10000 });
+      await expect(page.locator(".bd-alert", { hasText: "Bank lines to check" })).toBeVisible();
+      await shot(page, "bd-0-board");
+      await page.locator(".bd-alert", { hasText: "Bank lines to check" }).click();
       // To check: the stranger
       const line = page.locator(".bd-line", { hasText: `Stranger ${stamp}` });
       await expect(line).toContainText("Unknown payer", { timeout: 10000 });
@@ -66,6 +71,10 @@ test.describe("phone", () => {
       await expect(page.locator(".bd-pay", { hasText: `E2E Tin Shop ${stamp}` })).toContainText("found by TIN", { timeout: 10000 });
       await expect(page.locator(".bd-pay", { hasText: `E2E Picked Shop ${stamp}` })).toContainText("chosen by hand");
       await shot(page, "bd-4-bank");
+      // one ledger: the method chips filter it
+      await page.locator('.bd-methods [data-method="cash"]').click();
+      await expect(page.locator(".bd-pay", { hasText: `E2E Tin Shop ${stamp}` })).toHaveCount(0);
+      await page.locator('.bd-methods [data-method="all"]').click();
       await page.locator(".bd-pay", { hasText: `E2E Tin Shop ${stamp}` }).click();
       await expect(page.locator(".bd-events")).toContainText("Recorded from the statement", { timeout: 10000 });
       await shot(page, "bd-5-detail");
@@ -122,8 +131,8 @@ test.describe("narrow Armenian", () => {
     await page.addInitScript(() => localStorage.setItem("fieldvisits_lang", "hy"));
     await loginViaUi(page, admin.email);
     const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-    for (const tab of ["todo", "bank", "desks"]) {
-      await page.goto(`/#/bank-desk${tab === "todo" ? "" : `?tab=${tab}`}`);
+    for (const tab of ["today", "todo", "bank", "desks"]) {
+      await page.goto(`/#/bank-desk${tab === "today" ? "" : `?tab=${tab}`}`);
       await expect(page.locator(".bd-view h1")).toContainText("Բանկ", { timeout: 15000 });
       await expect(page.locator("#bd-body .loading-state")).toHaveCount(0, { timeout: 10000 });
       expect(await fits(), tab).toBe(true);

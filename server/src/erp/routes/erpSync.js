@@ -20,6 +20,7 @@ import { applyCashLedger } from "../../money/cashflow.js";
 import { snapshotTierPrices, logTierPriceChanges } from "../../products/priceSyncLog.js";
 import { applyLandingCosts, applyExcelRetail, getLandingSettings } from "../../products/landingCalc.js";
 import { syncProductsAndWholesaleCustomersToPlatform } from "../platformSync.js";
+import { pendingBoardPost, markBoardPosted } from "../../money/payments2/board.js";
 import {
   transformErpCustomers,
   transformErpCustomerLegal,
@@ -614,6 +615,19 @@ erpSyncRouter.post("/cash-sheets/:id/posted", syncKeyLimiter, requireSyncKey, as
     ok ? [Number(req.params.id)] : [Number(req.params.id), String(req.body?.error ?? "failed")]
   );
   if (!rows[0]) return res.status(404).json({ error: "Cash sheet not found" });
+  res.json({ ok: true });
+});
+
+// The daily money board's evening summary (payments redesign, release 4, owner 2026-11-02): from 20:00 Yerevan the bot gets today's text
+// once, posts it to the same accounting group as the cash sheets and says whether it worked (a failure is offered again, 10 times).
+erpSyncRouter.get("/money-board/pending", syncKeyLimiter, requireSyncKey, async (_req, res) => {
+  res.json({ board: await pendingBoardPost(pool) });
+});
+
+erpSyncRouter.post("/money-board/posted", syncKeyLimiter, requireSyncKey, async (req, res) => {
+  const day = String(req.body?.day ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: "day is required" });
+  await markBoardPosted(pool, day, req.body?.ok !== false, req.body?.error);
   res.json({ ok: true });
 });
 

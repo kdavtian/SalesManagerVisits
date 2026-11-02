@@ -33,6 +33,7 @@ export const moneyApi = {
   reopenBankLine: (id) => request(`/cashflow/bank/lines/${id}/reopen`, { method: "POST" }),
   // Payments redesign, release 2: bank payments and cash desks (see server/src/money/routes/payments2.js)
   getPay2Setup: () => request("/payments2/setup", { fresh: true }),
+  getPay2Board: (day) => request(`/payments2/board?day=${encodeURIComponent(day)}`, { fresh: true }),
   getPay2Unspecified: () => request("/payments2/bank/unspecified", { fresh: true }),
   getPay2BankPayments: (params = {}) => request(`/payments2/bank/payments?${new URLSearchParams(params)}`, { fresh: true }),
   recordPay2BankPayment: (data) => json("/payments2/bank/payments", "POST", data),
