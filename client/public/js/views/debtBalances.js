@@ -252,7 +252,6 @@ export function renderDebtBalances(root, navigate) {
         dueHtml = `<div class="debt-due-line">${days === 0 ? dayChip(0, "due-chip-soon", t("debt_due_today")) : dayChip(-days, "due-chip-ok", `${t("debt_left_word")}${-days}${t("debt_days_short")}`)}</div>`;
       }
     }
-    const unrecorded = Number(r.unrecorded_amd) || 0;
     return `
       <button type="button" class="card debt-balance-card ${owes && days != null ? (days > 0 ? "unpaid-row-overdue" : "unpaid-row-due") : ""}" data-customer-id="${r.internal_customer_id}">
         <div class="debt-top"><div class="debt-name-line"><span class="debt-id">ID: ${escapeHtml(r.customer_id || "")}</span> <span class="debt-dot">•</span> <strong class="debt-name">${escapeHtml(nameWithoutId(r.customer_name, r.customer_id))}</strong></div>
@@ -264,7 +263,8 @@ export function renderDebtBalances(root, navigate) {
         </div>
         <div class="debt-card-right">
           ${dueHtml}
-          ${owes && unrecorded > 0 ? `<div class="debt-unrecorded-line"><span class="muted">${t("debt_balances_unrecorded_row")}</span> <strong>${formatAmd(unrecorded)}</strong></div>` : ""}
+          ${gapText(r) ? `<div class="debt-unrecorded-line"><span class="muted">${gapText(r)}</span></div>` : ""}
+          ${Number(r.advance_amd) > 0 ? `<div class="debt-unrecorded-line"><strong>${t("debt_advance")} ${formatAmd(Number(r.advance_amd))}</strong></div>` : ""}
         </div></div>
       </button>`;
   }
@@ -295,18 +295,26 @@ export function renderDebtBalances(root, navigate) {
     bucket: (r) => (Number(r.remaining_balance) > 0 && r.oldest_due_days != null ? r.oldest_due_days : -9999),
   };
   const twoLine = (main, sub, cls = "") => `<div class="debt-desk-cell ${cls}"><span class="debt-desk-main">${main}</span>${sub ? `<span class="debt-desk-sub muted">${sub}</span>` : ""}</div>`;
+  // Release 3c (owner, 2026-11-02: "everywhere, show the gap"): the number above is the live debt; this says how far the Excel is behind.
+  function gapText(r) {
+    const excel = r.excel_balance;
+    const orders = Number(r.not_in_excel_orders_amd) || 0;
+    const payments = Number(r.unrecorded_amd) || 0;
+    if (excel == null || (!orders && !payments)) return "";
+    const parts = [orders ? `+${formatAmd(orders)} ${t("debt_gap_orders")}` : "", payments ? `−${formatAmd(payments)} ${t("debt_gap_payments")}` : ""].filter(Boolean).join(", ");
+    return `${t("debt_gap_excel")} ${formatAmd(Number(excel))} (${parts})`;
+  }
   function deskRowHtml(r) {
     const owes = Number(r.remaining_balance) > 0;
     const days = r.oldest_due_days;
     const overdueAmount = Number(r.overdue_amd) || 0;
     const owner = [mode === "flat" || !canGroup ? escapeHtml(r.assigned_manager_name || t("unassigned")) : "", r.sales_channel ? escapeHtml(channelDisplayLabel(r.sales_channel)) : ""].filter(Boolean).join(" · ");
-    const unrecorded = Number(r.unrecorded_amd) || 0;
     const share = r.debt_pct_of_orders;
     const bucket = owes ? r.bucket : "current";
     const bucketLabel = t(BUCKETS.find(([k]) => k === bucket)?.[1] ?? "debt_bucket_not_due");
     return `<div class="list-row debt-desk-row ${owes && days != null && days > 0 ? "debt-desk-row-overdue" : ""}" role="button" tabindex="0" data-customer-id="${r.internal_customer_id}">
       <span></span>
-      ${twoLine(`<strong>${escapeHtml(nameWithoutId(r.customer_name, r.customer_id))}</strong>`, `ID ${escapeHtml(r.customer_id || "")}${owner ? ` · ${owner}` : ""}${unrecorded > 0 ? ` · <span class="debt-desk-unrec">${t("debt_balances_unrecorded_row")} ${formatAmd(unrecorded)}</span>` : ""}`, "debt-desk-name")}
+      ${twoLine(`<strong>${escapeHtml(nameWithoutId(r.customer_name, r.customer_id))}</strong>`, `ID ${escapeHtml(r.customer_id || "")}${owner ? ` · ${owner}` : ""}${gapText(r) ? ` · <span class="debt-desk-unrec">${gapText(r)}</span>` : ""}${Number(r.advance_amd) > 0 ? ` · <span class="debt-desk-unrec">${t("debt_advance")} ${formatAmd(Number(r.advance_amd))}</span>` : ""}`, "debt-desk-name")}
       ${twoLine(`<strong class="text-amount">${formatAmd(Number(r.remaining_balance))}</strong>`, "", "debt-desk-end")}
       ${twoLine(overdueAmount > 0 ? `<strong class="debt-amount-overdue">${formatAmd(overdueAmount)}</strong>` : `<span class="muted">—</span>`, owes && days != null ? (days > 0 ? dayChip(days, "due-chip-overdue") : days === 0 ? dayChip(0, "due-chip-soon", t("debt_due_today")) : dayChip(-days, "due-chip-ok", `${t("debt_left_word")}${-days}${t("debt_days_short")}`)) : "", "debt-desk-end")}
       ${twoLine(share == null ? `<span class="muted">—</span>` : `<strong class="${share >= 100 ? "debt-amount-overdue" : share >= 50 ? "debt-desk-warn" : ""}">${share}%</strong>`, r.orders_12m_amd > 0 ? `${t("debt_of_orders_12m")} ${formatAmd(Number(r.orders_12m_amd))}` : "", "debt-desk-end")}

@@ -156,7 +156,7 @@ export const enMoney = {
     debt_balances_overdue_total: "Of it overdue",
     debt_balances_unrecorded_total: "Collected, not in Excel",
     debt_balances_unrecorded_row: "Not in the Excel yet",
-    debt_balances_unrecorded_hint: "Payments the reps recorded in the app (pending or approved, last 60 days) that the Excel does not show yet -- the accountant has not entered them. They are NOT subtracted from the debt above: the Excel stays the truth, the debt drops after the next sync. Not shown for a past date.",
+    debt_balances_unrecorded_hint: "The debt above already counts what the app knows and the Excel does not have yet: delivered app orders are added, app payments (not rejected) are subtracted -- the same rule as the 'previous debt' on the signed documents. Each row shows the Excel figure and the gap, so it can be checked against the Excel. Not shown for a past date.",
     debt_due_overdue_prefix: "Due: ",
     debt_due_in_prefix: "Due in ",
     debt_days_suffix: " days",

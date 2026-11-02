@@ -46,6 +46,23 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     .then((r) => {
       const open = (r.rows ?? []).filter((o) => !o.erp_matched_order_id && !o.cancelled_at && !o.delivered_from_erp);
       if (!open.length || !appEl.isConnected) return;
+      // release 3c: a delivered app order is Paid / Partly paid / Unpaid by the live debt (the oldest orders are paid first)
+      api
+        .getAppOrdersPaid(customerId)
+        .then((paid) => {
+          for (const [id, p] of Object.entries(paid.orders ?? {})) {
+            const row = appEl.querySelector(`[data-app-order="${id}"]`);
+            if (!row || row.querySelector(".erp-order-due, .erp-order-partial")) continue;
+            const chip =
+              Number(p.unpaid_amd) <= 0
+                ? `<span class="due-chip due-chip-ok">${t("app_order_paid")}</span>`
+                : Number(p.unpaid_amd) < Number(p.total_amd)
+                  ? `${dueChipHtml(p.due_days)} <span class="muted">${formatAmd(Number(p.unpaid_amd))}</span>`
+                  : dueChipHtml(p.due_days);
+            row.insertAdjacentHTML("beforeend", `<div class="erp-order-due">${chip}</div>`);
+          }
+        })
+        .catch(() => {});
       appEl.innerHTML = `
         <div class="sales-heading-with-hint">
           <h2 class="section-title section-title-tight">${t("app_orders_title")}</h2>
