@@ -7,6 +7,7 @@ import { applyDeliveryBadge, applyNotificationBadge, applyOrderBadge, applyPlanA
 import { opsShellFor } from "../opsShell.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { escapeHtml } from "../util.js";
+import { canRecordBankPayments } from "../shared/roles.js";
 
 // Icons for the sidebar's role-visible quick-action items that aren't
 // already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below).
@@ -50,11 +51,17 @@ export const SIDEBAR_ITEM_ICON = {
 // and a stray Driver item (owner, 2026-10-27: roadmap step 5), so the sidebar leaves them out.
 export const EXCLUDED_FROM_SIDEBAR = new Set(["qa_check_in", "qa_add_customer", "qa_tasks", "qa_wh_home", "qa_driver_home"]);
 
+// Screens the desktop sidebar lists that are not a Home tile (no tile on the phone's Home grid; one click on the computer).
+// Bank & cash desks (owner, 2026-11-02): the accountants work on the computer; on the phone it stays inside "Payments & expenses".
+export const SIDEBAR_ONLY_ITEMS = [
+  { id: "qa_bank_desk", hash: "#/bank-desk", icon: icons.wallet, colorClass: "quick-action-icon-payments", allowed: canRecordBankPayments },
+];
+
 // The sidebar's MORE list in groups (docs/desktop-roadmap.md, step 5). A tile not named here lands in a last "More" group,
 // so a new Home tile is never lost from the sidebar. A group folds; the folded groups are remembered on this device.
 export const SIDEBAR_GROUPS = [
   { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
-  { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
+  { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_bank_desk", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
   { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_returns", "qa_documents", "qa_pricelist"] },
   { key: "admin", label: "sidebar_group_admin", ids: ["qa_staff", "qa_ask_kad", "qa_company_dashboard"] },
 ];
@@ -163,6 +170,11 @@ export function rebuildSidebarMarkup(ctx, hash) {
       colorClass: entry?.colorClass,
     };
   });
+  if (!shell) {
+    for (const extra of SIDEBAR_ONLY_ITEMS) {
+      if (extra.allowed(state.user.role)) moreItems.push({ id: extra.id, hash: extra.hash, label: t(extra.id), icon: extra.icon, colorClass: extra.colorClass });
+    }
+  }
   // MORE in groups; a group with nothing this person may open is not shown
   const grouped = new Set(SIDEBAR_GROUPS.flatMap((g) => g.ids));
   const groups = [
