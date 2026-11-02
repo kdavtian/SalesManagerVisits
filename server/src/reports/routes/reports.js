@@ -9,6 +9,7 @@ import { erpSyncFreshness } from "../../erp/erpSyncFreshness.js";
 import { AGING_BUCKETS, allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { periodTimestampCondition, periodDateCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
+import { CASH_IN_HAND_SQL } from "../../money/cashCustody.js";
 
 export const reportsRouter = Router();
 
@@ -519,18 +520,18 @@ reportsRouter.get("/cash-custody", requireReportAccess("cash_custody"), async (r
             count(*) FILTER (WHERE p.pending_handoff_id IS NOT NULL)::int AS in_transit_count
      FROM payments p
      JOIN users u ON u.id = p.current_holder_id
-     WHERE p.status = 'pending'
+     WHERE ${CASH_IN_HAND_SQL}
      GROUP BY p.current_holder_id, u.name, u.role
      ORDER BY amount_amd DESC`
   );
 
   const { rows: totalsRows } = await pool.query(
-    `SELECT COALESCE(sum(amount_amd), 0) AS total_unreconciled_amd,
+    `SELECT COALESCE(sum(p.amount_amd), 0) AS total_unreconciled_amd,
             count(*)::int AS total_unreconciled_count,
-            COALESCE(sum(amount_amd) FILTER (WHERE pending_handoff_id IS NOT NULL), 0) AS in_transit_amd,
-            count(*) FILTER (WHERE pending_handoff_id IS NOT NULL)::int AS in_transit_count
-     FROM payments
-     WHERE status = 'pending'`
+            COALESCE(sum(p.amount_amd) FILTER (WHERE p.pending_handoff_id IS NOT NULL), 0) AS in_transit_amd,
+            count(*) FILTER (WHERE p.pending_handoff_id IS NOT NULL)::int AS in_transit_count
+     FROM payments p
+     WHERE ${CASH_IN_HAND_SQL}`
   );
 
   // In-flight handoffs -- declared by the sender, awaiting the receiver's

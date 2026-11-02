@@ -68,6 +68,8 @@ export const moneyApi = {
   getHandoffAvailable: (asUserId) =>
     request(`/cash-handoffs/available${asUserId ? `?as_user_id=${asUserId}` : ""}`),
   getHandoffSenders: () => request("/cash-handoffs/senders"),
+  getCashShortfalls: () => request("/cash-handoffs/shortfalls", { fresh: true }),
+  closeCashShortfall: (id, how, note) => json(`/cash-handoffs/shortfalls/${id}/close`, "POST", { how, note }),
   listCashHandoffs: (offset = 0) => request(`/cash-handoffs?offset=${offset}`),
   getCashHandoff: (id) => request(`/cash-handoffs/${id}`),
   createCashHandoff: (data) => json("/cash-handoffs", "POST", data),

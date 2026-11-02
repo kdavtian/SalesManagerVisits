@@ -9988,6 +9988,9 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   display: block;
   font-size: 0.85rem;
 }
+/* a counting shortfall on the rep's line (payments redesign, release 3) */
+.home-shortfall { display: block; margin-top: 4px; font-size: 0.85rem; font-weight: 700; color: var(--danger, #b3261e); }
+.home-shortfall-amt { white-space: nowrap; }
 .home-handover-card .btn {
   flex: 0 0 auto;
   min-height: 44px;

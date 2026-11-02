@@ -274,6 +274,7 @@ export const hyCommon = {
     no_payments_found: "Վճարումներ չեն գտնվել։",
     handover_today_title: "Հանձնել այսօրվա կանխիկը",
     handover_today_meta: "{amount} · {n} վճարում",
+    shortfall_on_you: "Հաշվարկի պակասորդ՝ {amount}",
     handover_today_btn: "Հանձնել",
     handoff_confirm_receipt_prompt: "Հաստատու՞մ եք, որ ֆիզիկապես ստացել եք {amount}։",
     reject_payment_reason_required: "Անհրաժեշտ է նշել պատճառը",

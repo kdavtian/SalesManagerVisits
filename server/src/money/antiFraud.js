@@ -16,6 +16,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { IN_EXCEL_SQL, DAYS_OLD_SQL, PAYMENT_DAY } from "./paymentExcelMatch.js";
 import { bulletNames } from "../utils/bullets.js";
 import { rolesWhere, seesFraudAlerts, editsFraudSettings } from "../shared/roles.js";
+import { CASH_IN_HAND_SQL } from "./cashCustody.js";
 
 export const FRAUD_VIEW_ROLES = rolesWhere(seesFraudAlerts);
 export const FRAUD_SETTINGS_ROLES = rolesWhere(editsFraudSettings);
@@ -187,7 +188,7 @@ async function detectCustody(db, s, created) {
     `SELECT p.current_holder_id AS holder_id, COALESCE(u.name_hy, u.name) AS holder_name,
             count(*)::int AS n, sum(p.amount_amd) AS total, max(${DAYS_OLD_SQL})::int AS oldest_days
        FROM payments p JOIN users u ON u.id = p.current_holder_id
-      WHERE p.status = 'pending' AND p.pending_handoff_id IS NULL AND u.role IN ('sales_manager', 'sales_director') AND u.status = 'active'
+      WHERE ${CASH_IN_HAND_SQL} AND p.pending_handoff_id IS NULL AND u.role IN ('sales_manager', 'sales_director') AND u.status = 'active'
       GROUP BY p.current_holder_id, u.name_hy, u.name`
   );
   const longKeys = [];

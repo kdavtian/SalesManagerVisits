@@ -274,6 +274,7 @@ export const enCommon = {
     no_payments_found: "No payments found.",
     handover_today_title: "Hand over today's cash",
     handover_today_meta: "{amount} · {n} payments",
+    shortfall_on_you: "Short at counting: {amount}",
     handover_today_btn: "Hand over",
     handoff_confirm_receipt_prompt: "Confirm you physically received {amount}?",
     reject_payment_reason_required: "A reason is required",

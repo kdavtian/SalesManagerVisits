@@ -76,6 +76,11 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
         <div class="card-list" id="handoff-incoming"></div>
       </section>
 
+      <section id="shortfalls-section" hidden>
+        <h2 class="list-group-heading">${t("shortfall_title")}</h2>
+        <div class="card-list" id="shortfalls"></div>
+      </section>
+
       <section id="cash-sheets-section" hidden>
         <h2 class="list-group-heading">${t("cash_sheets_title")}</h2>
         <div class="card-list" id="cash-sheets"></div>
@@ -102,6 +107,81 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
   const historyEl = container.querySelector("#handoff-history");
   const sheetsSection = container.querySelector("#cash-sheets-section");
   const sheetsEl = container.querySelector("#cash-sheets");
+
+  // Counting shortfalls (payments redesign, release 3; owner's answer 6): counted less than handed over -> on the sender's line until
+  // the missing notes are paid in (director / accountant / admin / CEO) or written off with a reason (admin / CEO). A rep sees his own.
+  const shortfallsSection = container.querySelector("#shortfalls-section");
+  const shortfallsEl = container.querySelector("#shortfalls");
+  async function loadShortfalls() {
+    let data;
+    try {
+      data = await api.getCashShortfalls();
+    } catch {
+      return;
+    }
+    if (!root.isConnected) return;
+    shortfallsSection.hidden = !data.open.length && !data.closed.length;
+    const when = (s) => formatDateDMY(s.confirmed_at || s.created_at);
+    const openHtml = data.open
+      .map(
+        (s) => `<div class="card shortfall-card" data-id="${s.id}">
+          <div class="shortfall-main"><div><strong>${escapeHtml(s.user_name)}</strong>
+            <div class="muted">${escapeHtml(t("shortfall_meta").replace("{date}", when(s)).replace("{name}", s.counted_by_name || ""))}${s.note ? ` · ${escapeHtml(s.note)}` : ""}</div></div>
+            <span class="text-amount shortfall-amount">−${escapeHtml(formatAmd(s.amount_amd))}</span></div>
+          ${
+            data.can_close || data.can_write_off
+              ? `<div class="shortfall-actions">${data.can_close ? `<button type="button" class="btn" data-sf="paid">${t("shortfall_paid_in")}</button>` : ""}${data.can_write_off ? `<button type="button" class="btn" data-sf="written_off">${t("shortfall_write_off")}</button>` : ""}</div>
+                 <div class="shortfall-confirm" hidden><input class="shortfall-note" maxlength="300" autocomplete="off" /><button type="button" class="btn btn-primary" data-sf-save>${t("save")}</button></div>
+                 <p class="form-error" hidden></p>`
+              : ""
+          }
+        </div>`
+      )
+      .join("");
+    const closedHtml = data.closed.length
+      ? `<details class="shortfall-closed"><summary>${escapeHtml(t("shortfall_closed").replace("{n}", data.closed.length))}</summary>${data.closed
+          .map((s) => `<div class="card shortfall-card shortfall-card-closed"><div class="shortfall-main"><div><strong>${escapeHtml(s.user_name)}</strong>
+            <div class="muted">${escapeHtml(t(s.status === "paid" ? "shortfall_status_paid" : "shortfall_status_written_off"))} · ${escapeHtml(formatDateDMY(s.closed_at))}${s.closed_by_name ? ` · ${escapeHtml(s.closed_by_name)}` : ""}${s.close_note ? ` · ${escapeHtml(s.close_note)}` : ""}</div></div>
+            <span class="text-amount">${escapeHtml(formatAmd(s.amount_amd))}</span></div></div>`)
+          .join("")}</details>`
+      : "";
+    shortfallsEl.innerHTML = openHtml + closedHtml;
+  }
+  // Paid in / Write off: one tap opens the note field (a write-off needs the reason), Save closes it -- no "are you sure?" dialog.
+  shortfallsEl.addEventListener("click", async (e) => {
+    const card = e.target.closest(".shortfall-card[data-id]");
+    if (!card) return;
+    const confirmBox = card.querySelector(".shortfall-confirm");
+    const errEl = card.querySelector(".form-error");
+    const pick = e.target.closest("[data-sf]");
+    if (pick) {
+      card.dataset.how = pick.dataset.sf;
+      card.querySelectorAll("[data-sf]").forEach((b) => b.classList.toggle("btn-primary", b === pick));
+      confirmBox.hidden = false;
+      const note = confirmBox.querySelector(".shortfall-note");
+      note.placeholder = t(pick.dataset.sf === "paid" ? "shortfall_note_paid" : "shortfall_note_write_off");
+      note.focus();
+      return;
+    }
+    if (e.target.closest("[data-sf-save]")) {
+      const note = confirmBox.querySelector(".shortfall-note").value.trim();
+      if (card.dataset.how === "written_off" && note.length < 3) {
+        errEl.textContent = t("shortfall_reason_needed");
+        errEl.hidden = false;
+        return;
+      }
+      e.target.disabled = true;
+      try {
+        await api.closeCashShortfall(Number(card.dataset.id), card.dataset.how, note);
+        showToast(t("cf_saved"));
+        await loadShortfalls();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.hidden = false;
+        e.target.disabled = false;
+      }
+    }
+  });
 
   // Daily cash sheets (1.453.0): made when the director confirms a rep's cash; the bot posts each to the accounting Telegram group, the
   // accountant marks it "Recorded in Excel" (or the sync closes it when the Excel has every payment). Open ones first.
@@ -537,7 +617,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
         await fn();
         overlay.remove();
         window.dispatchEvent(new Event("payments-changed"));
-        await Promise.all([loadInbox(), loadAvailable(), loadSheets()]);
+        await Promise.all([loadInbox(), loadAvailable(), loadSheets(), loadShortfalls()]);
       } catch (err) {
         errorEl.textContent = err.message;
         errorEl.hidden = false;
@@ -587,6 +667,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
   await loadInbox();
   await loadAvailable();
   loadSheets();
+  loadShortfalls();
   if (focusHandoffId) openHandoffSheet(Number(focusHandoffId));
   // From the Home card "Hand over today's cash": straight to the one confirm step when there is cash and one place to give it.
   else if (handover) availableEl.querySelector("#handoff-submit-all:not([disabled])")?.click();
