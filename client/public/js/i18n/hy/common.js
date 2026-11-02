@@ -248,6 +248,7 @@ export const hyCommon = {
     qa_team_performance: "Թիմի կատարողական",
     qa_pricelist: "Ապրանքներ",
     qa_payments: "Վճարումներ",
+    qa_bank_desk: "Բանկ և դրամարկղեր",
     qa_warehouse: "Պահեստ",
     qa_delivery: "Առաքում",
     qa_recorded: "Հաշվառված",

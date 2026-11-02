@@ -17,6 +17,7 @@ test/integration/excelBalance.test.js
 test/integration/lockdownEngage.test.js
 test/integration/opsHome.test.js
 test/integration/payments2.test.js
+test/integration/payments2Bank.test.js
 test/integration/routePlanScopes.test.js
 test/integration/routePlanSets.test.js
 test/integration/speedBudget.test.js

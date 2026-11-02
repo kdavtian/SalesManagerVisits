@@ -7,6 +7,17 @@ import { passwordChangeLimiter } from "../../system/routes/auth.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { isTestUser, previewPurge, purgeUser } from "../userPurge.js";
 import { handOverTasks } from "../taskHandover.js";
+import { ensureRepDesk } from "../../money/payments2/desks.js";
+
+// Every sales rep has a cash desk of his own (owner, 2026-11-02): made when he is created or becomes a rep. A failure here must not undo
+// the account itself -- the desk can still be made from Bank & cash desks.
+async function giveRepDesk(userId) {
+  try {
+    await ensureRepDesk(pool, userId);
+  } catch (err) {
+    console.error("[users] cash desk for a new rep", err.message);
+  }
+}
 
 export const usersRouter = Router();
 
@@ -140,6 +151,7 @@ usersRouter.post("/", async (req, res) => {
        RETURNING id, email, name, role, role_title, position, created_at`,
       [String(email).toLowerCase(), passwordHash, name, picked.role, picked.role_title, position || null]
     );
+    await giveRepDesk(rows[0].id);
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === "23505") {
@@ -282,6 +294,7 @@ usersRouter.patch("/:id/role", async (req, res) => {
     [picked.role, req.params.id, picked.role_title]
   );
   if (!rows[0]) return res.status(404).json({ error: "User not found" });
+  await giveRepDesk(rows[0].id);
   res.json(rows[0]);
 });
 

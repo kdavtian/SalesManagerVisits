@@ -114,7 +114,8 @@ export async function readCashWorkbook(buffer) {
   return rows;
 }
 
-const guessKind = (name) => (/^cash\b/i.test(name) ? "cash" : /credit/i.test(name) ? "credit" : "bank");
+// "Cash YVN", "Office desk", "SM YVN desk" are cash desks (payments2/desks.js); the rest is a bank account unless it says credit.
+const guessKind = (name) => (/^cash\b|\bdesk\b|դրամարկղ/i.test(name) ? "cash" : /credit/i.test(name) ? "credit" : "bank");
 
 // Replaces every Excel-origin ledger row with `rawRows` (raw = CASH_COLUMNS keys). Atomic. Returns { rows, skipped, accounts_added, categories_added }.
 export async function applyCashLedger(rawRows, { via, userId = null, fileName = null, note = null } = {}) {
@@ -129,7 +130,11 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const accounts = new Map((await client.query("SELECT id, name FROM cash_accounts")).rows.map((a) => [a.name.toLowerCase(), a.id]));
+    // an account renamed in the app keeps its old name as an Excel alias (payments2/desks.js): the sheet still lands on it
+    const { rows: accountRows } = await client.query("SELECT id, name, excel_aliases FROM cash_accounts ORDER BY id");
+    const accounts = new Map();
+    for (const a of accountRows) for (const alias of a.excel_aliases ?? []) accounts.set(alias.toLowerCase(), a.id);
+    for (const a of accountRows) accounts.set(a.name.toLowerCase(), a.id);
     const categories = new Map((await client.query("SELECT id, name FROM cash_categories")).rows.map((c) => [c.name.toLowerCase(), c.id]));
     let accountsAdded = 0;
     let categoriesAdded = 0;

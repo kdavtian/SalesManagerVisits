@@ -34,6 +34,8 @@ import {
   canCountStock,
   canVoidCountedPayment,
   seesPaymentBooks,
+  canRecordBankPayments,
+  canManageCashDesks,
   canViewStockCount,
   seesStockCountExpected,
   canPlanRoutes,
@@ -227,6 +229,8 @@ test("payments: only admin and CEO void a counted payment; admin, CEO and the ac
   for (const role of ROLES) {
     assert.equal(canVoidCountedPayment(role), role === "admin" || role === "ceo", role);
     assert.equal(seesPaymentBooks(role), ["admin", "ceo", "accountant"].includes(role), role);
+    assert.equal(canRecordBankPayments(role), ["admin", "ceo", "accountant"].includes(role), role);
+    assert.equal(canManageCashDesks(role), role === "admin", role);
   }
 });
 

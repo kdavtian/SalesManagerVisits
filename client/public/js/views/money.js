@@ -1,9 +1,10 @@
 // "Payments & expenses" (owner, 2026-10-26): the Home tiles Payments and Cash expense became one tile; it opens this page with the two
 // as big buttons. Roles that never had the Payments tile (warehouse, delivery) only get Cash expense.
 import { t } from "../i18n.js";
+import { api } from "../api.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
-import { seesPaymentsOnMoney } from "../shared/roles.js";
+import { canRecordBankPayments, seesPaymentsOnMoney } from "../shared/roles.js";
 import { applyPaymentBadge } from "../badges.js";
 
 
@@ -27,6 +28,15 @@ export function renderMoney(root, navigate) {
                </button>`
             : ""
         }
+        ${
+          canRecordBankPayments(state.user.role)
+            ? `<button type="button" class="money-action" id="money-bank">
+                 <span class="quick-action-icon quick-action-icon-payments">${icons.wallet}<span class="nav-badge count-badge" id="qa-bank-badge" hidden></span></span>
+                 <span class="money-action-label">${t("qa_bank_desk")}</span>
+                 <span class="chevron" aria-hidden="true">&#8250;</span>
+               </button>`
+            : ""
+        }
         <button type="button" class="money-action" id="money-expenses">
           <span class="quick-action-icon quick-action-icon-cash">${icons.wallet}</span>
           <span class="money-action-label">${t("qa_cash_expense")}</span>
@@ -39,4 +49,16 @@ export function renderMoney(root, navigate) {
   root.querySelector("#money-payments")?.addEventListener("click", () => navigate("#/payments"));
   root.querySelector("#money-expenses").addEventListener("click", () => navigate("#/expenses"));
   applyPaymentBadge();
+  // Bank & cash desks: what waits in "To check" (accountant, admin, CEO)
+  const bank = root.querySelector("#money-bank");
+  if (bank) {
+    bank.addEventListener("click", () => navigate("#/bank-desk"));
+    api.getPay2Setup().then(
+      (s) => {
+        const badge = root.querySelector("#qa-bank-badge");
+        if (badge && s.unspecified) Object.assign(badge, { textContent: String(s.unspecified), hidden: false });
+      },
+      () => {}
+    );
+  }
 }

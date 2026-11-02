@@ -74,9 +74,23 @@ Owner's answers:
 7. After counting (and for card / bank), only admin and CEO may void a payment, with a reason.
 8. Partial payments and advances (more than the debt) are allowed; an advance is a credit on the customer.
 9. Where money is received: bank accounts, the card terminal, and the cash desks of each rep, the sales director and the CEO
-   (= cash_accounts, the Excel "Source"; a cash desk has a holder_user_id).
+   (= cash_accounts, the Excel "Source"; since R2 a desk has one or more holders in cash_desk_holders).
 10. Depth: Recommended (R1-R4) + Later (customer confirms each payment in KAD OS / SMS receipt).
 R1 (1.488.0): migration 174 (customer_payments, payment_book_links, payment_allocations, customer_payment_events, cash_accounts.holder_user_id
 + kind 'card', app_settings.payments_cutover / payments_v2_live), server/src/money/payments2/ (matching.js pure rule, books.js, bridge.js copy
 from the old module since the cutover, service.js void), /api/payments2 (status, one payment, run, void), job "payments-v2" every 10 min.
 Excel rows are matched from cash_entries by a STABLE key (customer|date|amount|account|n) because the sheet is reloaded with new ids.
+R2 (1.489.0, owner 2026-11-02): cash desks + bank payments. Owner's answers:
+- Cash desks = the Excel "Source" names: Office desk (both accountants + CEO), Sales director desk, SM YVN desk, SM Davtashen desk (one
+  rep each). A desk may have SEVERAL holders (cash_desk_holders). Admin adds / edits desks (Money -> Bank & cash desks -> Cash desks); a
+  renamed desk keeps its old name as an Excel alias (cash_accounts.excel_aliases), so the Excel import still lands on it.
+- Every sales rep automatically gets his own desk "SM <name> desk" when created or made a rep (desks.js ensureRepDesk); the one-time
+  setup command (server/scripts/setup-cash-desks.mjs, names passed in the command, never in the repo) also covers existing reps.
+- Card payments go through the bank: the accountants handle bank payments, typed by hand or read from an uploaded statement (the
+  Cashflow statement upload, one upload for both). A credit line (AMD, from the cutover, bank account) is recorded automatically when
+  the payer is recognised: a payer the accountant confirmed before -> the customer's TIN in the line -> a payer name equal to exactly one
+  customer's name / legal name (owner chose "also automatic on exact name"). Otherwise it waits in "To check" ("Unspecified"): choose the
+  customer (payer remembered by default), not a customer payment (remembered), and for a possible second copy: same money / separate.
+- Never twice: a statement line is imported once (hash), holds at most one payment; a line equal to a payment typed by hand (customer,
+  amount, +-5 days) confirms it; typing a payment that looks recorded is refused until "separate payment"; a voided bank payment puts its
+  line back in To check. Bank payments do not change debts until R4 (Excel stays the truth; the accountant keeps typing Excel rows).

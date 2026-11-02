@@ -9,6 +9,7 @@ import { pool } from "../../db/pool.js";
 import { canEditCashflow } from "../../shared/roles.js";
 import { cleanEntry } from "../cashflow.js";
 import { readStatement, hashLines, matchLines, FIELDS } from "../bankStatement.js";
+import { recordBankLines } from "../payments2/bankPayments.js";
 
 export const bankRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 1 } });
@@ -104,7 +105,9 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
     await client.query("UPDATE bank_imports SET rows_new = $2, rows_duplicate = $3 WHERE id = $1", [imp.id, added, statement.lines.length - added]);
     await client.query("COMMIT");
     const recon = await reconcile({ accountId: account.id, from: statement.lines.reduce((m, l) => (l.line_date < m ? l.line_date : m), "9999-12-31"), to: statement.lines.reduce((m, l) => (l.line_date > m ? l.line_date : m), "0000-01-01") });
-    res.status(201).json({ import_id: imp.id, new_lines: added, duplicate_lines: statement.lines.length - added, skipped: statement.skipped.length, ...recon.counts });
+    // customer payments from the new money-in lines (payments redesign, release 2): recorded, or waiting in Unspecified
+    const payments = await recordBankLines(pool, { actorId: req.user.id });
+    res.status(201).json({ import_id: imp.id, new_lines: added, duplicate_lines: statement.lines.length - added, skipped: statement.skipped.length, ...recon.counts, payments });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

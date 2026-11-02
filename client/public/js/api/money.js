@@ -31,6 +31,19 @@ export const moneyApi = {
   addBankLine: (id, data) => json(`/cashflow/bank/lines/${id}/add`, "POST", data),
   ignoreBankLine: (id) => request(`/cashflow/bank/lines/${id}/ignore`, { method: "POST" }),
   reopenBankLine: (id) => request(`/cashflow/bank/lines/${id}/reopen`, { method: "POST" }),
+  // Payments redesign, release 2: bank payments and cash desks (see server/src/money/routes/payments2.js)
+  getPay2Setup: () => request("/payments2/setup", { fresh: true }),
+  getPay2Unspecified: () => request("/payments2/bank/unspecified", { fresh: true }),
+  getPay2BankPayments: (params = {}) => request(`/payments2/bank/payments?${new URLSearchParams(params)}`, { fresh: true }),
+  recordPay2BankPayment: (data) => json("/payments2/bank/payments", "POST", data),
+  resolvePay2Line: (id, data) => json(`/payments2/bank/lines/${id}/resolve`, "POST", data),
+  getPay2Payment: (id) => request(`/payments2/${id}`, { fresh: true }),
+  changePay2Customer: (id, data) => json(`/payments2/${id}/customer`, "POST", data),
+  voidPay2Payment: (id, reason) => json(`/payments2/${id}/void`, "POST", { reason }),
+  getCashDesks: () => request("/payments2/desks", { fresh: true }),
+  addCashDesk: (data) => json("/payments2/desks", "POST", data),
+  updateCashDesk: (id, data) => json(`/payments2/desks/${id}`, "PATCH", data),
+  autoRepDesks: () => json("/payments2/desks/auto", "POST", {}),
   importCashWorkbook: (file) => {
     const form = new FormData();
     form.set("file", file);

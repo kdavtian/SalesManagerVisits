@@ -248,6 +248,7 @@ export const enCommon = {
     qa_team_performance: "Team Performance",
     qa_pricelist: "Products",
     qa_payments: "Payments",
+    qa_bank_desk: "Bank & cash desks",
     qa_warehouse: "Warehouse",
     qa_delivery: "Delivery",
     qa_recorded: "Recorded",

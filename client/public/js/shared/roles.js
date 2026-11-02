@@ -330,6 +330,15 @@ export function canVoidCountedPayment(role) {
 export function seesPaymentBooks(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
+// Release 2 (owner, 2026-11-02): card payments go through the bank, and the accountants handle bank payments -- typed by hand or read
+// from an uploaded statement, with the "Unspecified" list for what the app cannot decide. Admin and CEO can do the same. The cash desks
+// (which desk exists, who holds it) are set by admin.
+export function canRecordBankPayments(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+export function canManageCashDesks(role) {
+  return role === "admin";
+}
 
 // Stock count (Գույքագրում, owner 2026-10-30): the warehouse manager counts the day's plan; admin, CEO and the operations director can
 // count too (they cover for him) and see the Excel numbers; the accountant, who gets the differences as a task, sees the results.
