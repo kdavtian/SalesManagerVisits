@@ -94,3 +94,6 @@ R2 (1.489.0, owner 2026-11-02): cash desks + bank payments. Owner's answers:
 - Never twice: a statement line is imported once (hash), holds at most one payment; a line equal to a payment typed by hand (customer,
   amount, +-5 days) confirms it; typing a payment that looks recorded is refused until "separate payment"; a voided bank payment puts its
   line back in To check. Bank payments do not change debts until R4 (Excel stays the truth; the accountant keeps typing Excel rows).
+- Owner, later the same day: the Office desk is held by the accountants, Ilona (a second user with the CEO role, who handles the CEO's
+  cash) and admin; admin can do everything in every desk (release 3's cash steps treat admin as a holder of all desks); the CEO role may
+  add / edit desks too (canManageCashDesks = admin, CEO).
