@@ -64,7 +64,7 @@ test.after(async () => {
   }
 });
 
-test("cash desks: admin adds a desk with several holders, a rename keeps the Excel name, only admin edits", async () => {
+test("cash desks: admin adds a desk with several holders, a rename keeps the Excel name, only admin and CEO edit", async () => {
   const made = await apiRequest("/api/payments2/desks", { method: "POST", cookie: cookies.admin, body: { name: `ITest Office desk ${RUN}`, holder_ids: [users.accountant.id, users.ceo.id] } });
   assert.equal(made.status, 201, JSON.stringify(made.data));
   desks.push(made.data.desk.id);
@@ -82,6 +82,8 @@ test("cash desks: admin adds a desk with several holders, a rename keeps the Exc
   assert.equal((await apiRequest("/api/payments2/desks", { cookie: cookies.accountant })).status, 200);
   assert.equal((await apiRequest(`/api/payments2/desks/${made.data.desk.id}`, { method: "PATCH", cookie: cookies.accountant, body: { name: "x y" } })).status, 403);
   assert.equal((await apiRequest("/api/payments2/desks", { cookie: cookies.sales_manager })).status, 403);
+  // the CEO edits desks too (owner, 2026-11-02)
+  assert.equal((await apiRequest(`/api/payments2/desks/${made.data.desk.id}`, { method: "PATCH", cookie: cookies.ceo, body: { holder_ids: [users.accountant.id, users.ceo.id, users.admin.id] } })).status, 200);
 });
 
 test("every new sales rep gets his own desk, and so does a person made a rep", async () => {

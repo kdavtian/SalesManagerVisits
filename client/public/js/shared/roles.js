@@ -332,12 +332,13 @@ export function seesPaymentBooks(role) {
 }
 // Release 2 (owner, 2026-11-02): card payments go through the bank, and the accountants handle bank payments -- typed by hand or read
 // from an uploaded statement, with the "Unspecified" list for what the app cannot decide. Admin and CEO can do the same. The cash desks
-// (which desk exists, who holds it) are set by admin.
+// (which desk exists, who holds it) are set by admin and the CEO (owner, 2026-11-02: "yes ceo too"). Admin can do everything in every
+// desk (owner, same day): the cash steps of release 3 treat admin as a holder of all desks.
 export function canRecordBankPayments(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
 export function canManageCashDesks(role) {
-  return role === "admin";
+  return role === "admin" || role === "ceo";
 }
 
 // Stock count (Գույքագրում, owner 2026-10-30): the warehouse manager counts the day's plan; admin, CEO and the operations director can
