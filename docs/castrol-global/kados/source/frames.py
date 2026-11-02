@@ -70,7 +70,7 @@ def frame(name, bar=(255, 255, 255), fg=(0, 0, 0), out=None, scale=0.5):
     canvas = canvas.resize((int(W * scale), int(H * scale)), Image.LANCZOS)
     canvas.save(os.path.join(OUT, (out or name) + ".png"), optimize=True)
 
-for n in ["map", "checkin", "customer", "order", "orders", "dashboard", "vaghinak", "vaghinak_rep", "tasks", "assistant"]:
+for n in ["map", "checkin", "customer", "customers", "order", "orders", "dashboard", "reports", "vaghinak", "vaghinak_rep", "tasks", "assistant"]:
     frame(n)
 # shelf audit callout: the Castrol column of the check-in "KAD products" sheet
 sh = Image.open(os.path.join(RAW, "shelf.png")).convert("RGB")

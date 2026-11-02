@@ -72,6 +72,8 @@ async function shot(page, name, wait = 1500) {
   if (run("customer")) { await go(page, "#/customers/16"); await shot(page, "customer", 3000); }
   if (run("orders")) { await go(page, "#/orders"); await shot(page, "orders", 3000); }
   if (run("dashboard")) { await go(page, "#/company-dashboard"); await page.waitForTimeout(2000); await page.locator('button:has-text("This quarter")').first().click().catch(() => {}); await shot(page, "dashboard", 2500); }
+  if (run("reports")) { await go(page, "#/reports"); await shot(page, "reports", 3000); }
+  if (run("customers")) { await go(page, "#/customers"); await shot(page, "customers", 3500); }
   if (run("vaghinak")) { await go(page, "#/vaghinak"); await page.waitForTimeout(3000); await page.evaluate(() => { const a = document.querySelector(".vg-avatar"); let el = a?.parentElement; while (el) { if (el.scrollHeight > el.clientHeight + 10 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) { el.scrollTop = 112; break; } el = el.parentElement; } scrollTo(0, 112); }); await shot(page, "vaghinak", 800); }
 }
 { // field rep "Rep A", standing at demo customer 16
