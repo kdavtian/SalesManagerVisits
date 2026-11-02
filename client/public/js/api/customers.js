@@ -6,6 +6,7 @@ import { competitorNotDue, getCsrfToken, json, normalizeCustomer, rememberCompet
 
 export const customersApi = {
   getCustomerRegions: () => request("/customers/regions"),
+  getAppOrdersPaid: (customerId) => request(`/customers/${customerId}/app-orders-paid`, { fresh: true }),
   getBrandStatusByCustomer: () => request("/customers/brand-status"),
   getBrandSummary: (params = {}) => request(`/customers/brand-summary${params.customer_id ? `?customer_id=${encodeURIComponent(params.customer_id)}` : ""}`),
   lookupTin: (tin) => request(`/customers/tin-lookup?tin=${encodeURIComponent(tin)}`),

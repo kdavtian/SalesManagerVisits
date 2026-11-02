@@ -6,11 +6,12 @@ import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
 import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
-import { loadUnpaidOrders, summarizeDebt, dueDays, debtHoldInfo } from "../../money/debtAge.js";
+import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
 import { buildReorderProfile, recentOrdersFor } from "../customerReorder.js";
 import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../../orders/orderRhythm.js";
 import { allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { liveAdjustments, liveDebtOf, liveSummary } from "../../money/liveDebt.js";
 import { buildDebtStatementPdf } from "../../money/debtStatementPdf.js";
 import { getDefaultVisitFrequencyDays, getCheckinRadiusMeters } from "../../shared/settings.js";
 import { haversineMeters } from "../../utils/geo.js";
@@ -773,13 +774,19 @@ customersRouter.get("/:id", async (req, res) => {
   // Opening balance and how overdue the unpaid invoices are (FIFO, see debtAge.js) for the debt
   // chip on the customer card.
   if (customer.erp_customer_id && customer.erp_debt_amd != null && seesCustomerErpData(req.user.role, customer.assigned_manager_id, req.user.id)) {
-    const unpaid = await loadUnpaidOrders(pool, [customer.erp_customer_id]);
-    customer.debt_summary = summarizeDebt({
-      unpaid,
-      opening: unpaid.opening.get(customer.erp_customer_id),
+    // The live debt (payments redesign, release 3c, owner 2026-11-02: "everywhere, show the gap"): the Excel debt + the app's delivered
+    // orders - the app's payments the Excel does not have yet; the oldest orders are paid first; the gap is shown under the number.
+    const [orders, adj] = await Promise.all([loadOrdersNewestFirst(pool, [customer.erp_customer_id]), liveAdjustments(pool, [customer.id])]);
+    const live = liveDebtOf({
+      excelDebt: customer.erp_debt_amd,
+      excelOrders: orders.get(customer.erp_customer_id) ?? [],
+      adj: adj.get(customer.id),
       today: yerevanToday(),
       termDays: customer.credit_term_days ?? 45,
     });
+    customer.debt_summary = liveSummary(live);
+    const { aging, ...rest } = live;
+    customer.live_debt = rest;
   }
 
   // ERP commercial data (debt, payment/order history) is withheld from a
@@ -1107,17 +1114,49 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
      LIMIT 10000`,
     [erpCustomerId]
   );
-  // FIFO: which of these orders are still (partly) unpaid and how many days past due they are.
-  const unpaid = await loadUnpaidOrders(pool, [erpCustomerId]);
-  const today = yerevanToday();
-  const termDays = (await pool.query("SELECT credit_term_days FROM customers WHERE id = $1", [req.params.id])).rows[0]?.credit_term_days ?? 45;
+  // FIFO on the live debt (release 3c): the oldest orders, Excel and app alike, are paid first; which of these are still (partly) unpaid.
+  const unpaid = await liveUnpaid(Number(req.params.id), erpCustomerId);
   res.json(
     rows.map((r) => {
       const { date_key: date, ...row } = r;
-      const u = unpaid.orders.get(`${erpCustomerId}|${r.order_id}|${date}`);
-      return u ? { ...row, unpaid_amd: u.unpaid_amd, due_days: dueDays(date, today, termDays) } : { ...row, unpaid_amd: 0, due_days: null };
+      const u = unpaid?.byOrder.get(`${r.order_id}|${date}`);
+      return u ? { ...row, unpaid_amd: u.unpaid, due_days: u.due_days } : { ...row, unpaid_amd: 0, due_days: null };
     })
   );
+});
+
+// One customer's live allocation (liveDebt.js): Map("orderId|date" -> invoice) for the Excel orders, Map(app order id -> invoice) for the
+// app orders the Excel does not have yet, and the live numbers. null without an Excel debt figure.
+async function liveUnpaid(customerId, erpCustomerId) {
+  const [{ rows: [c] }, orders, adj] = await Promise.all([
+    pool.query("SELECT c.credit_term_days, erp.debt_amd FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1", [customerId]),
+    loadOrdersNewestFirst(pool, [erpCustomerId]),
+    liveAdjustments(pool, [customerId]),
+  ]);
+  if (!c || c.debt_amd == null) return null;
+  const live = liveDebtOf({ excelDebt: c.debt_amd, excelOrders: orders.get(erpCustomerId) ?? [], adj: adj.get(customerId), today: yerevanToday(), termDays: c.credit_term_days ?? 45 });
+  const byOrder = new Map();
+  const byApp = new Map();
+  for (const inv of live.aging.invoices) {
+    if (String(inv.order_id).startsWith("app-")) byApp.set(Number(String(inv.order_id).slice(4)), inv);
+    else byOrder.set(`${inv.order_id}|${inv.date}`, inv);
+  }
+  const { aging, ...numbers } = live;
+  return { byOrder, byApp, numbers, appOrders: adj.get(customerId)?.orders ?? [] };
+}
+
+// The app's delivered orders the Excel does not have yet, each Paid / Partly paid / Unpaid by the live debt, and the advance (release 3c).
+customersRouter.get("/:id/app-orders-paid", async (req, res) => {
+  const { rows: [c] } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [req.params.id]);
+  if (!c?.erp_customer_id || !seesCustomerErpData(req.user.role, c.assigned_manager_id, req.user.id)) return res.json({ orders: {}, live: null });
+  const unpaid = await liveUnpaid(Number(req.params.id), c.erp_customer_id);
+  if (!unpaid) return res.json({ orders: {}, live: null });
+  const orders = {};
+  for (const o of unpaid.appOrders) {
+    const inv = unpaid.byApp.get(o.app_order_id);
+    orders[o.app_order_id] = inv ? { unpaid_amd: inv.unpaid, due_days: inv.due_days, total_amd: o.total } : { unpaid_amd: 0, due_days: null, total_amd: o.total };
+  }
+  res.json({ orders, live: unpaid.numbers });
 });
 
 // Payments received from one customer, newest first: the Excel Cashflow

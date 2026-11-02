@@ -3,9 +3,10 @@ import { cashflowByCustomer, lastPayment } from "../cashflowCopy.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { erpSyncFreshness } from "../../erp/erpSyncFreshness.js";
-import { allocateFifo, loadOrdersNewestFirst } from "../debtAging.js";
+import { loadOrdersNewestFirst } from "../debtAging.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { repVisitSql } from "../../field/visitCount.js";
+import { liveAdjustments, liveDebtOf } from "../liveDebt.js";
 
 export const debtBalancesRouter = Router();
 
@@ -123,68 +124,8 @@ const asOfBalanceJoin = `
   ) cashflow_asof ON true`;
 const asOfBalanceExpr = "(COALESCE(ecd.balance0_amd, 0) + COALESCE(orders_asof.amount, 0) - COALESCE(cashflow_asof.amount, 0))";
 
-// App payments (pending or approved, not rejected) of the last 60 days that the Excel cashflow does not show yet: the
-// accountant has not entered them. Matched the same way the customer card's "Payments received" sheet does it: same
-// amount, within 5 days, one ERP line per payment. A payment the ERP sync already settled ("From ERP") is recorded.
-// A sales manager only counts their own collections.
-const UNRECORDED_DAYS = 60;
-const MATCH_DAYS = 5;
-export async function loadUnrecordedPayments(rows, user, db = pool) {
-  const result = new Map();
-  const internalIds = rows.map((r) => r.internal_customer_id);
-  const erpIds = rows.map((r) => r.customer_id).filter(Boolean);
-  if (!internalIds.length) return result;
-  const params = [internalIds, UNRECORDED_DAYS];
-  let scope = "";
-  if (user?.role === "sales_manager") {
-    params.push(user.id);
-    scope = `AND p.sales_manager_id = $${params.length}`;
-  }
-  const { rows: appRows } = await db.query(
-    `SELECT p.id, p.customer_id, p.amount_amd,
-            to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date
-       FROM payments p
-      WHERE p.customer_id = ANY($1) AND p.status IN ('pending', 'approved') AND NOT COALESCE(p.approved_from_erp, false)
-        AND p.payment_date >= now() - ($2 || ' days')::interval ${scope}
-      ORDER BY p.payment_date, p.id`,
-    params
-  );
-  if (!appRows.length) return result;
-  // the Excel payments of the same weeks: from the server's copy of the cashflow lines (cashflowCopy.js), else from the table
-  const copy = await cashflowByCustomer(db);
-  const since = new Date(Date.parse(`${yerevanToday()}T00:00:00Z`) - (UNRECORDED_DAYS + MATCH_DAYS) * 86400000).toISOString().slice(0, 10);
-  const erpRows = copy
-    ? erpIds.flatMap((id) => (copy.get(id) ?? []).filter((l) => l.amount > 0 && l.date >= since).map((l) => ({ erp_customer_id: id, amount_amd: l.amount, date: l.date })))
-    : (
-        await db.query(
-          `SELECT erp_customer_id, amount_amd, to_char(cashflow_date, 'YYYY-MM-DD') AS date
-             FROM erp_cashflow_lines
-            WHERE erp_customer_id = ANY($1) AND amount_amd > 0 AND cashflow_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date - ($2::int + $3::int)`,
-          [erpIds, UNRECORDED_DAYS, MATCH_DAYS]
-        )
-      ).rows;
-  const erpByCustomer = new Map();
-  for (const l of erpRows) {
-    if (!erpByCustomer.has(l.erp_customer_id)) erpByCustomer.set(l.erp_customer_id, []);
-    erpByCustomer.get(l.erp_customer_id).push({ ts: new Date(l.date).getTime(), amount: Number(l.amount_amd), used: false });
-  }
-  const erpIdOf = new Map(rows.map((r) => [r.internal_customer_id, r.customer_id]));
-  const DAY = 24 * 3600 * 1000;
-  for (const p of appRows) {
-    const lines = erpByCustomer.get(erpIdOf.get(p.customer_id)) ?? [];
-    const ts = new Date(p.date).getTime();
-    const hit = lines.find((l) => !l.used && l.amount === Number(p.amount_amd) && Math.abs(l.ts - ts) <= MATCH_DAYS * DAY);
-    if (hit) {
-      hit.used = true;
-      continue;
-    }
-    const cur = result.get(p.customer_id) ?? { amount: 0, count: 0 };
-    cur.amount += Number(p.amount_amd);
-    cur.count += 1;
-    result.set(p.customer_id, cur);
-  }
-  return result;
-}
+// moved to liveDebt.js (release 3c: it is also the payments part of the live debt); kept exported here for its callers
+export { loadUnrecordedPayments } from "../liveDebt.js";
 
 // Aging bucket of a balance, by the days its oldest unpaid invoice is past the credit term.
 export function agingBucket(debt, oldestDueDays) {
@@ -347,24 +288,32 @@ debtBalancesRouter.get("/", async (req, res) => {
   // debtAging.js): the oldest unpaid invoice's days past due and the overdue part of the balance.
   const today = asOfDate ?? yerevanToday();
   // The four follow-up reads depend only on the rows: they run at the same time (owner, 2026-10-29: the slowest screen to load).
-  const [orders, unrecorded, history, sync] = await Promise.all([
+  const [orders, adjustments, history, sync] = await Promise.all([
     loadOrdersNewestFirst(pool, rows.filter((r) => Number(r.remaining_balance) > 0).map((r) => r.customer_id), { asOf: asOfDate }),
-    // Money the reps collected in the app that the Excel (ERP) does not hold yet (live view only -- a past date has no "yet").
-    asOfDate ? new Map() : loadUnrecordedPayments(rows, req.user),
+    // The app's delivered orders and payments the Excel (ERP) does not hold yet (live view only -- a past date has no "yet"): the live
+    // debt of release 3c (owner, 2026-11-02: "everywhere, show the gap"), the same rule as the customer card and the signed acts.
+    asOfDate ? new Map() : liveAdjustments(pool, rows.map((r) => r.internal_customer_id)),
     loadCustomerHistory(rows, today, asOfDate),
     erpSyncFreshness("erp_customer_data"),
   ]);
   const withAging = rows.map(({ credit_term_days, ...r }) => {
-    const a = allocateFifo({ orders: orders.get(r.customer_id) ?? [], debt: Number(r.remaining_balance), today, termDays: credit_term_days ?? 45 });
-    const u = unrecorded.get(r.internal_customer_id);
+    const excel = Number(r.remaining_balance);
+    const adj = adjustments.get(r.internal_customer_id);
+    const live = liveDebtOf({ excelDebt: excel, excelOrders: orders.get(r.customer_id) ?? [], adj, today, termDays: credit_term_days ?? 45 });
+    const a = live.aging;
     const h = history.get(r.customer_id) ?? {};
-    const debt = Number(r.remaining_balance);
+    const debt = live.debt_amd;
     return {
       ...r,
+      // the main number is the live debt; the Excel figure and the gap stay visible (excel_balance, not_in_excel_*)
+      remaining_balance: debt,
+      excel_balance: excel,
+      not_in_excel_orders_amd: live.orders_not_in_excel_amd,
+      advance_amd: live.advance_amd,
       oldest_due_days: a.oldest_due_days,
       overdue_amd: a.overdue_amd,
-      unrecorded_amd: u?.amount ?? 0,
-      unrecorded_count: u?.count ?? 0,
+      unrecorded_amd: live.payments_not_in_excel_amd,
+      unrecorded_count: adj?.payments_count ?? 0,
       last_payment_amount: lastPaymentAmount(r, h, history.appPayments.get(r.internal_customer_id)),
       last_order_date: h.last_order_date ?? null,
       last_order_amount: h.last_order_amount ?? null,
@@ -374,5 +323,7 @@ debtBalancesRouter.get("/", async (req, res) => {
       bucket: agingBucket(debt, a.oldest_due_days),
     };
   });
+  // sorted by the live debt now (the list used to follow the Excel number)
+  withAging.sort((x, y) => y.remaining_balance - x.remaining_balance);
   res.json({ rows: withAging, as_of_date: asOfDate, sync });
 });
