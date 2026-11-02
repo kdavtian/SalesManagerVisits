@@ -70,8 +70,20 @@ def frame(name, bar=(255, 255, 255), fg=(0, 0, 0), out=None, scale=0.5):
     canvas = canvas.resize((int(W * scale), int(H * scale)), Image.LANCZOS)
     canvas.save(os.path.join(OUT, (out or name) + ".png"), optimize=True)
 
-for n in ["map", "checkin", "customer", "customers", "order", "orders", "dashboard", "reports", "vaghinak", "vaghinak_rep", "tasks", "assistant"]:
-    frame(n)
+SHOTS_LIST = ["home_ceo", "home_rep", "map", "map_popup", "customers", "filter_assignment", "filter_region", "customer", "customer_more",
+              "last_order", "debt_sheet", "potential_card", "checkin", "checkin_outcome", "competitors", "checkin_far", "order_frequent", "order",
+              "order_sheet", "orders", "tasks", "dashboard", "reports", "vaghinak", "vaghinak_rep", "assistant", "wh_home", "wh_pack", "stock_count",
+              "driver_home", "route"]
+for n in SHOTS_LIST:
+    if os.path.exists(os.path.join(RAW, n + ".png")):
+        frame(n)
+# video posters: the first frame of each demo video, upscaled to the screenshot size and framed the same way (the video plays on top of it)
+VID = os.path.join(HERE, "..", "videos")
+for f in sorted(os.listdir(VID)) if os.path.isdir(VID) else []:
+    if f.endswith(".jpg"):
+        name = "video_" + f[:-4]
+        Image.open(os.path.join(VID, f)).convert("RGB").resize((390 * S, 844 * S), Image.LANCZOS).save(os.path.join(RAW, name + ".png"))
+        frame(name)
 # shelf audit callout: the Castrol column of the check-in "KAD products" sheet
 sh = Image.open(os.path.join(RAW, "shelf.png")).convert("RGB")
 crop = sh.crop((0, 292 * S, 196 * S, 556 * S))
