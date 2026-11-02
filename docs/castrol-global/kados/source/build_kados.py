@@ -214,15 +214,21 @@ A note on the name: "powered by Castrol" is our PROPOSED co-brand under the show
 # ---------------------------------------------------------------- 2. Executive summary
 s = new_slide(); n = nxt()
 header(s, "Executive summary", "KAD already runs on a complete, AI-first distributor system")
-for i, lab in enumerate(["GPS-verified visits per month, before vs after", "Active customers, before vs after", "Castrol presence on audited shelves"]):
-    pending(s, 0.6 + i * 4.1, 1.95, 3.9, 1.9, lab)
+for i, (num, lab, sub) in enumerate([("690", "GPS-verified visits in October", "from 0 before KAD OS"),
+                                     ("+23%", "cash collected per month", "Sep–Oct vs Mar–Aug average"),
+                                     ("291", "outlets visited in October", "each with GPS and shelf data")]):
+    x = 0.6 + i * 4.1
+    box(s, x, 1.95, 3.9, 1.95, fill=LIGHT)
+    text(s, x + 0.3, 2.1, 3.4, 0.85, num, size=46, bold=True, color=GREEN)
+    text(s, x + 0.3, 2.98, 3.4, 0.4, lab, size=14.5, bold=True)
+    text(s, x + 0.3, 3.38, 3.4, 0.4, sub, size=12, color=GREY)
 text(s, 0.6, 4.2, 12.1, 0.9, "Since August 2026 every visit, order, credit decision and payment at KAD runs through one system, with AI that finds problems and drives them to closure.", size=19, color=DARK, line=1.1)
 box(s, 0.6, 5.45, 12.13, 1.05, fill=GREEN, radius=0.14)
 text(s, 0.95, 5.45, 11.5, 1.05, [[("The ask: ", {"bold": True}), ("make KAD Castrol's showcase digital distributor.", {})]], size=22, color=WHITE, anchor=MSO_ANCHOR.MIDDLE)
 footer(s, n)
 notes(s, """
 (60 seconds.) The short version. Since August 2026, KAD runs its whole commercial operation on one system, KAD OS: every visit is GPS-verified, every order, credit decision and payment is in one place, and an AI layer finds problems and drives them to closure.
-[The three numbers on this slide will be filled from our live system before the meeting: visits per month before and after, active customers before and after, and Castrol presence on audited shelves.]
+Three numbers from our live system. 690 GPS-verified visits in October, from zero before KAD OS. Cash collected up 23% per month, September and October against the March to August average. And 291 different outlets visited in October, each with GPS and shelf data.
 And the ask, in one line: make KAD Castrol's showcase digital distributor. The rest of the deck shows why that is a good decision for Castrol.
 """)
 
@@ -396,14 +402,66 @@ On top of that, the KAD OS Executive Assistant sends the CEO a daily, weekly and
 
 # ---------------------------------------------------------------- 10. Results
 s = new_slide(); n = nxt()
-header(s, "Results", "Results since KAD OS went live")
-for i, lab in enumerate(["Verified visits per month: before → after", "Active customers: before → after", "Castrol presence on audited shelves (%)", "Monthly orders and collections trend, in % and USD/EUR"]):
-    pending(s, 0.6 + (i % 2) * 6.15, 1.95 + (i // 2) * 2.1, 5.95, 1.85, lab, size=14)
-text(s, 0.6, 6.3, 12.1, 0.5, "Numbers come only from KAD OS data (aggregated, no customer detail). Exchange rate to be stated with the figures.", size=12, color=GREY)
+header(s, "Results", "Two months live: more visits, more customers, more cash")
+RATE = 370  # AMD per USD, the rate set in KAD OS on 15 Oct 2026
+months = ["Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct"]
+sales_amd = [23118450, 32158600, 18235475, 28758000, 31391450, 32672250, 32255400, 32585050]
+coll_amd = [24831300, 35976200, 23870250, 21510700, 34896050, 25960400, 31043400, 37563100]
+res = [("0 → 690", "verified visits per month", "Sep 398 → Oct 690 (+73%)"),
+       ("+13%", "buying customers per month", "77 → 87 (Mar–Aug vs Sep–Oct avg)"),
+       ("+17%", "sales per month", "$74.9k → $87.6k"),
+       ("46%", "audited shops carry Castrol", "57 of 123 shops; full range 10%")]
+for i, (num, lab, sub) in enumerate(res):
+    x = 0.6 + (i % 2) * 3.25
+    y = 1.85 + (i // 2) * 2.05
+    box(s, x, y, 3.05, 1.88, fill=GREEN_TINT if i == 3 else LIGHT)
+    text(s, x + 0.25, y + 0.15, 2.7, 0.75, num, size=34, bold=True, color=GREEN)
+    text(s, x + 0.25, y + 0.9, 2.7, 0.4, lab, size=13, bold=True)
+    text(s, x + 0.25, y + 1.3, 2.75, 0.5, sub, size=11, color=GREY)
+text(s, 7.2, 1.85, 5.5, 0.35, "Sales and cash collected per month, USD thousand", size=13.5, bold=True)
+cd = CategoryChartData()
+cd.categories = months
+cd.add_series("Sales", [round(v / RATE / 1000, 1) for v in sales_amd])
+cd.add_series("Cash collected", [round(v / RATE / 1000, 1) for v in coll_amd])
+gf = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(7.1), Inches(2.25), Inches(5.65), Inches(3.55), cd)
+ch = gf.chart
+ch.has_title = False
+ch.has_legend = True
+ch.legend.include_in_layout = False
+from pptx.enum.chart import XL_LEGEND_POSITION
+ch.legend.position = XL_LEGEND_POSITION.TOP
+ch.legend.font.size = Pt(11)
+ch.font.name = FONT
+ch.font.size = Pt(11)
+plot = ch.plots[0]
+plot.gap_width = 60
+plot.overlap = -10
+for ser, col in zip(plot.series, (GREEN, GREEN_MID)):
+    ser.format.fill.solid(); ser.format.fill.fore_color.rgb = col
+va = ch.value_axis
+va.minimum_scale = 0; va.maximum_scale = 110
+va.has_major_gridlines = True
+va.major_gridlines.format.line.color.rgb = LINE
+va.tick_labels.font.size = Pt(10); va.tick_labels.font.color.rgb = GREY
+va.format.line.fill.background()
+ca = ch.category_axis
+ca.tick_labels.font.size = Pt(11)
+ca.format.line.color.rgb = LINE
+# go-live marker between Aug and Sep
+plot_left, plot_w = 7.1 + 0.55, 5.65 - 0.7
+xm = plot_left + plot_w * 6 / 8
+ln = s.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, Inches(xm), Inches(2.6), Inches(xm), Inches(5.45))
+ln.line.color.rgb = RED; ln.line.width = Pt(1.5); ln.line.dash_style = MSO_LINE_DASH_STYLE.DASH
+text(s, xm + 0.06, 2.55, 1.6, 0.3, "KAD OS live", size=10, bold=True, color=RED)
+text(s, 0.6, 6.05, 12.1, 0.7, "Before = Mar–Aug 2026 monthly average; after = Sep–Oct 2026; November excluded (partial). USD at 370 AMD (KAD OS rate, 15 Oct 2026). Aggregates only; no seasonal adjustment.", size=10.5, color=GREY)
 footer(s, n)
 notes(s, """
-(60 seconds.) [To be completed with verified figures from the live system before the meeting: verified visits per month before and after, active customers before and after, Castrol presence on audited shelves, and the monthly order and collection trend in percent and in US dollars or euros, with the exchange rate stated.]
-Speaking guidance: give each number with its period, and be precise about cause and effect. KAD OS went live in August 2026, so the "after" period is short; say so openly.
+(60 seconds.) Two full months since go-live, from our live system, aggregated.
+Field work: we went from zero verified visits to 398 in September and 690 in October, up 73% in one month. In October our reps visited 291 different outlets.
+Customers: on average 87 customers bought from us each month in September and October, against 77 from March to August, up 13%.
+Money: average monthly sales rose 17%, from about 74,900 to 87,600 US dollars, and cash collected rose 23%, to about 92,700 dollars a month. We convert at 370 drams per dollar, the rate set in KAD OS.
+Shelf: in the first audits, 46% of shops carry at least one Castrol product and 10% carry the full range. That is our baseline for the 70% stage-1 target.
+If asked "Isn't this seasonality?": partly, and we say so. July and August were already strong months, so the sales gain is mostly against a weaker spring, and we have only two months of data. The visit and coverage numbers are new information that did not exist before; collections at 106% of sales show the credit discipline working. We will report the same KPIs every month.
 """)
 
 # ---------------------------------------------------------------- 11. AI-first
@@ -433,8 +491,8 @@ Next: expert AI agents for sales, finance and stock, led by the AI deputy direct
 # ---------------------------------------------------------------- 12. 3 stages
 s = new_slide(); n = nxt()
 header(s, "Growing Castrol's share", "Three stages to win the shelf, each tracked by a KPI")
-stages = [("STAGE 1", "Presence", "70% of customers carry at least one Castrol product", "KPI: Castrol presence %", GREEN_TINT, DARK, GREY),
-          ("STAGE 2", "Full range", "Full Castrol product lines on the shelf", "KPI: full-range %", GREEN_MID, DARK, DARK),
+stages = [("STAGE 1", "Presence", "70% of customers carry at least one Castrol product", "KPI: Castrol presence %\nToday: 46%", GREEN_TINT, DARK, GREY),
+          ("STAGE 2", "Full range", "Full Castrol product lines on the shelf", "KPI: full-range %\nToday: 10%", GREEN_MID, DARK, DARK),
           ("STAGE 3", "Preference", "Customers sell mostly Castrol", "KPI: Castrol-only shelves %", GREEN, WHITE, WHITE)]
 for i, (k, title, target, kpi, fill, tc, mc) in enumerate(stages):
     x = 0.6 + i * 2.72
@@ -444,14 +502,14 @@ for i, (k, title, target, kpi, fill, tc, mc) in enumerate(stages):
     text(s, x + 0.22, y + 0.22, 2.2, 0.3, k, size=11, bold=True, color=GREEN_DARK if i < 2 else WHITE)
     text(s, x + 0.22, y + 0.5, 2.2, 0.45, title, size=20, bold=True, color=tc)
     text(s, x + 0.22, y + 1.0, 2.15, 1.0, target, size=13.5, bold=True, color=tc)
-    text(s, x + 0.22, y + h - 0.7, 2.15, 0.5, kpi, size=11.5, bold=True, color=mc)
+    text(s, x + 0.22, y + h - 0.75, 2.15, 0.6, kpi.split("\n"), size=11.5, bold=True, color=mc)
 w, h = pic(s, os.path.join(SHOTS, "shelf_audit.png"), 9.3, 1.85, h=4.05)
 text(s, 9.3 + w / 2 - 1.5, 5.95, 3.0, 0.5, "Recorded at every visit (demo)", size=11.5, color=GREY, align=PP_ALIGN.CENTER)
 footer(s, n)
 notes(s, """
 (60 seconds.) Here is how KAD OS grows Castrol's share, in three stages, each tracked by a KPI.
-Stage one, presence: 70% of our customers carry at least one Castrol product. The KPI is Castrol presence, measured outlet by outlet in the shelf audit.
-Stage two, full range: complete Castrol product lines on the shelf. The KPI is the full-range share in the same audit.
+Stage one, presence: 70% of our customers carry at least one Castrol product. The KPI is Castrol presence, measured outlet by outlet in the shelf audit; in the first 123 audited shops it is 46% today.
+Stage two, full range: complete Castrol product lines on the shelf. The KPI is the full-range share in the same audit, 10% today.
 Stage three, preference: our customers sell mostly Castrol. The KPI is the share of shelves where the audit finds Castrol and no competitor brand.
 Because every stage is measured per outlet, per rep and per region, the AI deputy director turns the gaps into tasks.
 """)

@@ -67,7 +67,11 @@ An executive deck for Castrol Global that presents **KAD OS**, KAD Motors' distr
 | 9 live modules, 2 launching next | the module map above |
 | 70 % (stage 1) | owner's market-plan target |
 | Values in screens and in the Executive Assistant report | made-up demo data (local demo database; USD values in the report mock) |
-| **Slides 2 and 10, one-pager results row** | **PENDING: verified numbers from the live system** (visits per month before/after, active customers before/after, Castrol shelf presence, orders and collections trend, with the exchange rate) |
+| 690 / 398 verified visits (Oct / Sep 2026), 0 before; 291 outlets visited in October; +73 % | live KAD OS database, read-only query `kados/source/results.sql`, run by the owner on 2026-11-02: rep check-ins counted once per customer per day, office excluded |
+| +13 % buying customers per month (77 -> 87) | same query: distinct buying customers per month, Mar-Aug 2026 average vs Sep-Oct 2026 average (internal stock account excluded) |
+| +17 % sales per month ($74.9k -> $87.6k); +23 % cash collected per month (-> $92.7k) | same query: monthly sales and customer payments, same periods; converted at 370 AMD per USD (the rate set in KAD OS on 2026-10-15). Monthly USD values in the slide-10 chart come from the same rows |
+| 46 % of audited shops carry Castrol (57 of 123); 10 % full range (12 of 123) | same query: each shop's latest Castrol shelf audit |
+| Caveats stated on slide 10 and in its notes | November excluded (partial); only two months after go-live; no seasonal adjustment; July-August were already strong months |
 
 ### How to regenerate
 1. A throwaway demo database with the app's demo seed, made deck-ready (never production):
