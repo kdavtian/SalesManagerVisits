@@ -60,3 +60,23 @@ Owner's answers (2026-10-28):
 - Checks (every 30 min, working days): a rep's hand-off still pending at 20:00 -> task for the receiver; a sheet not recorded after 2 days
   -> task for the accountant(s); a discrepancy -> task + notification for admin and CEO.
 - Paper slips: kept for the transition month (until ~2026-11-28), then dropped (owner's decision; no code involved).
+
+## Payments redesign (owner, 2026-11-02) -- decided, built in releases R1..R4
+Proposal: artifact "Payments Redesign". Every payment has TWO tracks: cash (collected -> counted -> received) and books (open -> matched
+automatically / linked by hand). Card and bank payments have no cash track. A mistake is voided with a reason, never deleted.
+Owner's answers:
+1. Cutover 2026-11-01: the new records start that day; older payments stay in the old module as the archive (fresh start).
+2. Bank transfers come into the app (from the bank statement import).
+3. A payment pays the customer's oldest unpaid orders first, automatically.
+4. The accountant receives the cash at the end; a rep may ALWAYS hand cash straight to the accountant.
+5. Matching accepts sums: several payments = one Excel row, one payment = several rows (same customer, +-5 days, exact amounts).
+6. A counting difference: note + task + notice to admin/CEO, and the shortfall stays on the rep's line until closed.
+7. After counting (and for card / bank), only admin and CEO may void a payment, with a reason.
+8. Partial payments and advances (more than the debt) are allowed; an advance is a credit on the customer.
+9. Where money is received: bank accounts, the card terminal, and the cash desks of each rep, the sales director and the CEO
+   (= cash_accounts, the Excel "Source"; a cash desk has a holder_user_id).
+10. Depth: Recommended (R1-R4) + Later (customer confirms each payment in KAD OS / SMS receipt).
+R1 (1.488.0): migration 174 (customer_payments, payment_book_links, payment_allocations, customer_payment_events, cash_accounts.holder_user_id
++ kind 'card', app_settings.payments_cutover / payments_v2_live), server/src/money/payments2/ (matching.js pure rule, books.js, bridge.js copy
+from the old module since the cutover, service.js void), /api/payments2 (status, one payment, run, void), job "payments-v2" every 10 min.
+Excel rows are matched from cash_entries by a STABLE key (customer|date|amount|account|n) because the sheet is reloaded with new ids.

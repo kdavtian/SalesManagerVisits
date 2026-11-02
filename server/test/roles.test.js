@@ -32,6 +32,8 @@ import {
   canSubmitHandoffForOthers,
   canManageWarehouse,
   canCountStock,
+  canVoidCountedPayment,
+  seesPaymentBooks,
   canViewStockCount,
   seesStockCountExpected,
   canPlanRoutes,
@@ -218,6 +220,13 @@ test("stock count: warehouse_manager/admin/ceo/operations_director count, the ac
     assert.equal(canCountStock(role), counts, role);
     assert.equal(canViewStockCount(role), counts || role === "accountant", role);
     assert.equal(seesStockCountExpected(role), (counts || role === "accountant") && role !== "warehouse_manager", role);
+  }
+});
+
+test("payments: only admin and CEO void a counted payment; admin, CEO and the accountant read the books track", () => {
+  for (const role of ROLES) {
+    assert.equal(canVoidCountedPayment(role), role === "admin" || role === "ceo", role);
+    assert.equal(seesPaymentBooks(role), ["admin", "ceo", "accountant"].includes(role), role);
   }
 });
 

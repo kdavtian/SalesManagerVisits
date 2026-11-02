@@ -322,6 +322,15 @@ export function canManageWarehouse(role) {
   );
 }
 
+// Payments, redesigned (owner, 2026-11-02, answer 7): once a payment's cash is counted (or for a card / bank payment) only admin and CEO
+// may void it, with a reason; the books track (Excel matching, payments the Excel does not have) is read by admin, CEO and the accountant.
+export function canVoidCountedPayment(role) {
+  return role === "admin" || role === "ceo";
+}
+export function seesPaymentBooks(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+
 // Stock count (Գույքագրում, owner 2026-10-30): the warehouse manager counts the day's plan; admin, CEO and the operations director can
 // count too (they cover for him) and see the Excel numbers; the accountant, who gets the differences as a task, sees the results.
 // The warehouse manager counts blind: he does not see the Excel stock of a product before its count is closed.

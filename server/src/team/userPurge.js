@@ -84,6 +84,8 @@ export async function purgeUser(client, userId, adminId) {
   await run("DELETE FROM cash_handoffs WHERE from_user_id = $1 OR to_user_id = $1 OR submitted_by = $1", [userId]);
   await run("UPDATE cash_handoffs SET confirmed_by = NULL WHERE confirmed_by = $1", [userId]);
   await run("UPDATE cash_handoffs SET rejected_by = NULL WHERE rejected_by = $1", [userId]);
+  // the redesigned payments (customer_payments, RESTRICT-linked too): the same person's records go with the old ones
+  await run("DELETE FROM customer_payments WHERE collected_by = $1 OR created_by = $1 OR customer_id = ANY($2) OR legacy_payment_id = ANY($3)", [userId, customers, payments]);
   await run("DELETE FROM payments WHERE id = ANY($1)", [payments]);
 
   // deliveries and orders

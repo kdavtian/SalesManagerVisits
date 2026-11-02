@@ -1472,5 +1472,6 @@ export const enCommon = {
     ops_age_days: "{n}d",
     qa_stock_count: "Stock count",
     notification_type_stock_count_diff: "Stock count differences",
+    job_payments_v2: "Payments: copy and match with Excel (every 10 min)",
     job_stock_count_close: "Stock count: close the day (20:00)",
 };

@@ -1472,5 +1472,6 @@ export const hyCommon = {
     ops_age_days: "{n} օր",
     qa_stock_count: "Գույքագրում",
     notification_type_stock_count_diff: "Գույքագրման տարբերություններ",
+    job_payments_v2: "Վճարումներ․ պատճենում և համեմատում Excel-ի հետ (10 րոպեն մեկ)",
     job_stock_count_close: "Գույքագրում․ օրվա ավտոմատ փակում (20:00)",
 };
