@@ -8,7 +8,10 @@ import { icons } from "../../icons.js";
 export function renderErpCard(customer, erpOrders) {
   if (!customer.erp_synced_at) return customer.erp_customer_id && customer.erp_last_order_date ? renderErpOrdersOnlyCard(customer, erpOrders) : "";
 
-  const debt = Number(customer.erp_debt_amd) || 0;
+  // Release 3c (owner, 2026-11-02: "everywhere, show the gap"): the live debt (Excel + the app's orders - the app's payments the Excel does
+  // not have yet) is the number; the Excel figure and the gap are under it.
+  const live = customer.live_debt ?? null;
+  const debt = live ? Number(live.debt_amd) || 0 : Number(customer.erp_debt_amd) || 0;
   const collectedSinceSync = Number(customer.collected_since_sync_amd) || 0;
   const estimatedDebt = customer.estimated_debt_amd != null ? Number(customer.estimated_debt_amd) : null;
   const isDataError = customer.erp_aging_bucket === "Data error - review";
@@ -52,7 +55,8 @@ export function renderErpCard(customer, erpOrders) {
     debtDanger: isDataError || (debt > 0 && (customer.debt_summary?.oldest_due_days ?? 0) > 0),
     // A return the customer is owed but Excel has not booked yet (migration 143): shown at once, it lowers the debt once the accountant records it.
     debtSub: [
-      !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}${labelColon()}${formatAmd(estimatedDebt)}` : "",
+      live ? liveGapText(live) : !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}${labelColon()}${formatAmd(estimatedDebt)}` : "",
+      live && Number(live.advance_amd) > 0 ? `<strong>${t("debt_advance")} ${formatAmd(Number(live.advance_amd))}</strong>` : "",
       returnCreditText(customer),
     ]
       .filter(Boolean)
@@ -61,6 +65,15 @@ export function renderErpCard(customer, erpOrders) {
     debtChip: !isDataError && debt > 0 ? dueChipHtml(customer.debt_summary?.oldest_due_days) : "",
     lastOrderDate,
   });
+}
+
+// "Excel 120,000 (+30,000 orders, −50,000 payments)": how far the Excel is behind the live debt (empty when it is not).
+function liveGapText(live) {
+  const orders = Number(live.orders_not_in_excel_amd) || 0;
+  const payments = Number(live.payments_not_in_excel_amd) || 0;
+  if (!orders && !payments) return "";
+  const parts = [orders ? `+${formatAmd(orders)} ${t("debt_gap_orders")}` : "", payments ? `−${formatAmd(payments)} ${t("debt_gap_payments")}` : ""].filter(Boolean).join(", ");
+  return `${t("debt_gap_excel")} ${formatAmd(Number(live.excel_amd))} (${parts})`;
 }
 
 // The four stat tiles under the customer's facts. Each is a button: Sales ->

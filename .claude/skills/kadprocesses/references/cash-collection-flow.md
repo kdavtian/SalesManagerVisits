@@ -114,3 +114,14 @@ signed paper slip (as at a check-in; a signature makes the signed payment-slip P
 customer_confirmation (signed / photo / none), one inline "no proof" warning instead of a pop-up, the duplicate warning inline (no
 confirm()), and without signal the payment waits in the phone's queue (offlineQueue type "payment", files kept as bytes) and is sent
 when the signal is back (client_ref: one payment however often it is retried).
+R3c (1.494.0, owner 2026-11-02: "everywhere, show the gap"): the LIVE debt = Excel debt + the app's delivered orders the Excel does not
+have yet - the app's payments the Excel does not have yet (server/src/money/liveDebt.js; orders: the signed-acts rule, payments: matched
+one by one against the Excel cashflow within 5 days, last 60 days, every rep's). The oldest orders (Excel and app alike) are paid first;
+more than owed = an advance. Used by the customer card (number + "Excel X (+orders, -payments)" under it + advance), the customer's
+order list (Excel orders' unpaid / days, app orders Paid / partly / unpaid) and Debt balances (main number live, Excel figure + gap per
+row; a rep now sees every rep's collections in the customer's debt). Reports, Vaghinak and visit priorities still read the Excel debt
+until the switch-over (R4).
+R4 (owner 2026-11-02): "finish + board", the old cash screens stay (they are the engine; no archive). R4a (server only): bank / card
+payments of Bank & cash desks (customer_payments, books still open) lower the live debt too; the credit-limit check subtracts the
+payments the Excel does not have yet; visit priorities use the overdue part of the live debt. Next (R4b): one Payments ledger (cash +
+bank + card, both tracks), a daily money board for admin / CEO / accountant + an evening Telegram summary to the accounting group.

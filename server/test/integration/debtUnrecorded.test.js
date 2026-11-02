@@ -53,9 +53,13 @@ test("overdue amount rides along, and payments with no Excel line are summed as 
 
   const row = await rowOf(adminCookie);
   assert.ok(row, "customer listed");
-  assert.equal(Number(row.overdue_amd), 900000, "the whole 100-day-old invoice is past its 45-day term");
   assert.equal(Number(row.unrecorded_amd), 250000);
   assert.equal(row.unrecorded_count, 2);
+  // release 3c (owner, 2026-11-02: "everywhere, show the gap"): the debt is the live one -- the 250,000 not in the Excel yet already pays
+  // the 100-day-old invoice (still past its 45-day term); the Excel figure stays on the row
+  assert.equal(Number(row.excel_balance), 900000);
+  assert.equal(Number(row.remaining_balance), 650000);
+  assert.equal(Number(row.overdue_amd), 650000, "what is left of the 100-day-old invoice is past its 45-day term");
 });
 
 test("one Excel line settles only one app payment of the same amount", async () => {
@@ -65,12 +69,14 @@ test("one Excel line settles only one app payment of the same amount", async () 
   assert.equal(row.unrecorded_count, 3);
 });
 
-test("a sales manager counts only their own collections; a past date has no 'not yet' amount", async () => {
+test("every rep's collection lowers the customer's debt (the same number for everyone); a past date has no 'not yet' amount", async () => {
   await addPayment({ amount: 15000, daysAgo: 1, user: other });
+  // release 3c: the 'not yet in the Excel' payments are part of the customer's live debt, so the rep sees the other rep's 15,000 too
   const mine = await rowOf(repCookie);
-  assert.equal(Number(mine.unrecorded_amd), 370000, "the other rep's 15,000 is not mine");
+  assert.equal(Number(mine.unrecorded_amd), 385000);
   const all = await rowOf(adminCookie);
   assert.equal(Number(all.unrecorded_amd), 385000);
+  assert.equal(Number(all.remaining_balance), Number(mine.remaining_balance));
   const asOf = await rowOf(adminCookie, `?date=${new Date().toISOString().slice(0, 10)}`);
   assert.equal(Number(asOf.unrecorded_amd), 0);
   assert.equal(await rowOf(otherCookie), undefined, "not their customer");

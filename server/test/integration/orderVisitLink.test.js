@@ -18,10 +18,12 @@ test("an order typed later from Orders links to today's 'Order placed' visit; on
   const customer = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
   const product = await createProduct({ unit_price_amd: 1000 });
   const cookie = await loginAs(rep.email);
-  const checkin = async (userId, outcomes, hoursAgo = 1) => {
+  // seconds, not hours: "today's visit" is the Yerevan day, and a visit backdated by hours fell on yesterday when CI ran just after
+  // midnight in Yerevan (CI 2026-11-02 20:35 UTC = 00:35 Yerevan); the order of the visits is all the test needs
+  const checkin = async (userId, outcomes, secondsAgo = 1) => {
     const { rows } = await pool.query(
-      "INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, timestamp) VALUES ($1, $2, 40.18, 44.5, 5, true, $3, now() - ($4 || ' hours')::interval) RETURNING id",
-      [customer.id, userId, outcomes, hoursAgo]
+      "INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, timestamp) VALUES ($1, $2, 40.18, 44.5, 5, true, $3, now() - ($4 || ' seconds')::interval) RETURNING id",
+      [customer.id, userId, outcomes, secondsAgo]
     );
     trackCheckin(rows[0].id);
     return rows[0].id;
