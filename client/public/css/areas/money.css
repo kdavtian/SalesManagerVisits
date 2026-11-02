@@ -1701,3 +1701,8 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .shortfall-confirm .btn { min-height: 44px; }
 .shortfall-closed summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--text-dim); }
 .shortfall-card-closed { opacity: 0.75; }
+/* Payments "+" sheet: the customer's proof and the inline warnings (release 3b) */
+.pay-proof { margin-top: 4px; }
+.pay-warn { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--warning, #b26a00) 12%, var(--bg-card)); }
+.pay-warn p { margin: 0; font-size: 0.9rem; }
+.pay-warn .btn { min-height: 44px; }

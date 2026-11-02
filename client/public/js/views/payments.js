@@ -1,5 +1,14 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon, formatDateDMY } from "../util.js";
+import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon, formatDateDMY, compressImage, showToast } from "../util.js";
+import { openSignaturePad, ensureOwnSignature, clearPendingOwnSignature } from "../signaturePad.js";
+import { customerSignStatement } from "../signStatement.js";
+import { enqueuePayment, paymentForm, fileBytes } from "../offlineQueue.js";
+
+// the same camera as the check-in's photo buttons (checkin.js)
+const CAMERA_ICON = `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M4 8a2 2 0 0 1 2-2h1.5l1-1.5h7l1 1.5H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
+  <circle cx="12" cy="13" r="3.5"/>
+</svg>`;
 import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
@@ -701,6 +710,83 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     let selectedManager = canSubmitPaymentsForOthers(state.user.role) ? null : { id: state.user.id, name: state.user.name, position: state.user.position };
     let managers = null;
     let pendingSubmit = null; // holds payload while a duplicate-warning confirm is showing
+    const typed = { amount: "", date: "", note: "" };
+    const slipPhotos = []; // { blob, url }
+    let customerSignature = null; // { blob, url, amount }
+    let repSignaturePending = null; // the rep's own signature drawn without signal (travels with the payment)
+    let warnedNoProof = false;
+
+    // ---- the customer's proof: slip photos + signature (as in checkin.js) ----
+    function wireProof() {
+      const grid = overlay.querySelector("#pay-slip-grid");
+      const input = overlay.querySelector("#pay-slip-input");
+      const paintThumbs = () => {
+        grid.innerHTML = slipPhotos
+          .map((ph, i) => `<div class="photo-thumb"><img src="${ph.url}" alt="${t("slip_photo_button")}" /><button type="button" class="photo-remove-btn" data-index="${i}" aria-label="${t("remove_photo")}">&times;</button></div>`)
+          .join("");
+        overlay.querySelector("#pay-slip-btn span").textContent = slipPhotos.length ? t("add_another_photo") : t("slip_photo_button");
+      };
+      const paintSign = () => {
+        overlay.querySelector("#pay-sign-chip").hidden = !customerSignature;
+        overlay.querySelector("#pay-sign-btn").hidden = Boolean(customerSignature);
+        if (customerSignature) overlay.querySelector("#pay-sign-img").src = customerSignature.url;
+      };
+      grid.addEventListener("click", (e) => {
+        const btn = e.target.closest(".photo-remove-btn");
+        if (!btn) return;
+        URL.revokeObjectURL(slipPhotos[Number(btn.dataset.index)].url);
+        slipPhotos.splice(Number(btn.dataset.index), 1);
+        paintThumbs();
+      });
+      overlay.querySelector("#pay-slip-btn").addEventListener("click", () => input.click());
+      input.addEventListener("change", async () => {
+        const file = input.files[0];
+        input.value = "";
+        if (!file) return;
+        try {
+          const compressed = await compressImage(file, { maxDimension: 2400, quality: 0.9 });
+          slipPhotos.push({ blob: compressed, bytes: await fileBytes(compressed), url: URL.createObjectURL(compressed) });
+          overlay.querySelector("#payment-add-warn").hidden = true;
+          paintThumbs();
+        } catch (err) {
+          showError(err.message);
+        }
+      });
+      overlay.querySelector("#pay-sign-btn").addEventListener("click", async (e) => {
+        const amount = Math.round(Number(overlay.querySelector("#payment-amount-input").value));
+        // the customer reads the amount he signs for: customer and amount first
+        if (!selectedCustomer) return showError(t("payment_customer_required"));
+        if (!(amount > 0)) return showError(t("payment_amount_required"));
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const own = await ensureOwnSignature();
+          if (!own.ok) return;
+          repSignaturePending = own.pending ? await fileBytes(own.pending) : null;
+          const statement = await customerSignStatement(selectedCustomer.id, { paymentAmd: amount });
+          const blob = await openSignaturePad({ title: t("signature_customer_title"), hint: t("signature_slip_hint"), doneLabel: t("signature_sign"), statement });
+          if (!blob) return;
+          customerSignature = { blob, bytes: await fileBytes(blob), url: URL.createObjectURL(blob), amount };
+          overlay.querySelector("#payment-add-warn").hidden = true;
+          paintSign();
+        } catch (err) {
+          showError(err.message);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+      overlay.querySelector("#pay-sign-remove").addEventListener("click", () => {
+        customerSignature = null;
+        paintSign();
+      });
+      paintThumbs();
+      paintSign();
+    }
+    function showError(message) {
+      const errorEl = overlay.querySelector("#payment-add-error");
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+    }
 
     async function ensureManagers() {
       if (managers || !canSubmitPaymentsForOthers(state.user.role)) return;
@@ -741,14 +827,39 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           <label for="payment-note-input">${t("payment_note_label")}
             <textarea id="payment-note-input" rows="2"></textarea>
           </label>
+          <!-- The customer's proof (release 3b, owner 2026-11-02: "keep both, upgrade +"): signature on the phone or a photo of the signed
+               paper slip, the same as at a check-in; neither is forced -- without it the payment shows "Not confirmed". -->
+          <div class="slip-sign-block pay-proof">
+            <span class="delivered-orders-title">${t("slip_sign_hint")}</span>
+            <div class="photo-thumb-grid" id="pay-slip-grid"></div>
+            <input type="file" id="pay-slip-input" accept="image/*" capture="environment" class="visually-hidden" />
+            <div class="blank-actions">
+              <button type="button" class="camera-btn" id="pay-slip-btn">${CAMERA_ICON}<span>${t("slip_photo_button")}</span></button>
+              <button type="button" class="camera-btn" id="pay-sign-btn">${icons.pencil}<span>${t("signature_button")}</span></button>
+            </div>
+            <div class="sign-chip" id="pay-sign-chip" hidden>
+              <img id="pay-sign-img" alt="" />
+              <span>${t("slip_signed")}</span>
+              <button type="button" class="photo-remove-btn sign-chip-remove" id="pay-sign-remove" aria-label="${t("remove_photo")}">&times;</button>
+            </div>
+          </div>
+          <div class="pay-warn" id="payment-add-warn" hidden></div>
           <p class="form-error" id="payment-add-error" hidden></p>
-          <div class="sheet-actions">
+          <div class="sheet-actions sheet-actions-floating">
             <button type="button" class="btn" id="payment-add-cancel">${t("cancel")}</button>
             <button type="submit" class="btn btn-primary" id="payment-add-submit">${t("submit_payment")}</button>
           </div>
           </form>
         </div>
       `;
+      // what was typed survives the repaint after a customer is picked
+      if (typed.amount) overlay.querySelector("#payment-amount-input").value = typed.amount;
+      if (typed.date) overlay.querySelector("#payment-date-input").value = typed.date;
+      if (typed.note) overlay.querySelector("#payment-note-input").value = typed.note;
+      ["#payment-amount-input", "#payment-date-input", "#payment-note-input"].forEach((sel, i) =>
+        overlay.querySelector(sel).addEventListener("input", (e) => (typed[["amount", "date", "note"][i]] = e.target.value))
+      );
+      wireProof();
 
       overlay.querySelector("#payment-add-cancel").addEventListener("click", () => overlay.remove());
       overlay.querySelector("#payment-pick-customer").addEventListener("click", openCustomerPicker);
@@ -839,8 +950,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       search("");
     }
 
-    async function submit(confirmDuplicate) {
+    async function submit(confirmDuplicate, { noProofOk = false } = {}) {
       const errorEl = overlay.querySelector("#payment-add-error");
+      const warnEl = overlay.querySelector("#payment-add-warn");
       errorEl.hidden = true;
       if (!selectedCustomer) {
         errorEl.textContent = t("payment_customer_required");
@@ -861,35 +973,84 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         errorEl.hidden = false;
         return;
       }
+      // the signature is for the amount the customer saw: a changed amount needs a new signature
+      if (customerSignature && customerSignature.amount !== amount) {
+        customerSignature = null;
+        wireProof();
+        errorEl.textContent = t("pay_sign_again");
+        errorEl.hidden = false;
+        return;
+      }
+      // A rep without the customer's proof: one inline warning (no pop-up), then "Save anyway" (the check-in rule).
+      const isRep = state.user.role === "sales_manager";
+      if (isRep && !customerSignature && !slipPhotos.length && !noProofOk && !warnedNoProof) {
+        warnedNoProof = true;
+        warnEl.innerHTML = `<p>${t("pay_no_proof_warning")}</p><button type="button" class="btn btn-block" id="pay-save-anyway">${t("pay_save_anyway")}</button>`;
+        warnEl.hidden = false;
+        warnEl.querySelector("#pay-save-anyway").addEventListener("click", () => submit(confirmDuplicate, { noProofOk: true }));
+        return;
+      }
       const submitBtn = overlay.querySelector("#payment-add-submit");
       submitBtn.disabled = true;
 
-      const payload = {
-        customer_id: selectedCustomer.id,
-        amount_amd: amount,
-        payment_date: overlay.querySelector("#payment-date-input").value || formatDateInput(new Date()),
+      const entry = {
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        amount,
+        paymentDate: overlay.querySelector("#payment-date-input").value || formatDateInput(new Date()),
         note: overlay.querySelector("#payment-note-input").value.trim() || undefined,
-        client_ref: pendingSubmit?.client_ref || `${state.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        confirm_duplicate: confirmDuplicate,
+        salesManagerId: canSubmitPaymentsForOthers(state.user.role) && selectedManager ? selectedManager.id : undefined,
+        clientRef: pendingSubmit?.clientRef || `${state.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        confirmDuplicate,
+        slipPhotos: slipPhotos.map((p) => p.bytes),
+        customerSignature: customerSignature?.bytes ?? null,
+        repSignature: repSignaturePending,
       };
-      if (canSubmitPaymentsForOthers(state.user.role) && selectedManager) {
-        payload.sales_manager_id = selectedManager.id;
-      }
-      pendingSubmit = payload;
+      pendingSubmit = entry;
+      const withProof = entry.slipPhotos.length || entry.customerSignature || entry.repSignature;
 
-      try {
-        await api.createPayment(payload);
+      const done = () => {
         overlay.remove();
+        if (repSignaturePending) clearPendingOwnSignature();
+        // without signal the list keeps what it shows (a reload would only fail); it refreshes once the payment is sent
+        if (!navigator.onLine) return;
         notifyPaymentsChanged();
         refreshPendingSummary();
         load();
+      };
+      try {
+        if (!navigator.onLine) throw new TypeError("offline");
+        if (withProof) await api.createPaymentForm(paymentForm(entry));
+        else
+          await api.createPayment({
+            customer_id: entry.customerId,
+            amount_amd: entry.amount,
+            payment_date: entry.paymentDate,
+            note: entry.note,
+            client_ref: entry.clientRef,
+            confirm_duplicate: confirmDuplicate,
+            ...(entry.salesManagerId ? { sales_manager_id: entry.salesManagerId } : {}),
+          });
+        done();
       } catch (err) {
         if (err.status === 409 && err.body?.error === "duplicate_warning") {
-          if (confirm(`${t("duplicate_payment_warning")}\n${t("duplicate_payment_warning_body")}`)) {
-            submit(true);
-            return;
-          }
+          // inline, no confirm() (owner: no "are you sure?" pop-ups)
+          warnEl.innerHTML = `<p><strong>${t("duplicate_payment_warning")}</strong> ${t("duplicate_payment_warning_body")}</p><button type="button" class="btn btn-block" id="pay-dup-anyway">${t("pay_record_anyway")}</button>`;
+          warnEl.hidden = false;
+          warnEl.querySelector("#pay-dup-anyway").addEventListener("click", () => submit(true, { noProofOk: true }));
           submitBtn.disabled = false;
+          return;
+        }
+        // no signal: the payment waits on the phone (with its photos and signature) and is sent when the signal is back
+        if (err instanceof TypeError) {
+          try {
+            await enqueuePayment(entry);
+            showToast(t("pay_saved_offline"));
+            done();
+          } catch (queueErr) {
+            showError(queueErr.message);
+            submitBtn.disabled = false;
+          }
           return;
         }
         errorEl.textContent = err.message;

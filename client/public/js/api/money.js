@@ -50,6 +50,8 @@ export const moneyApi = {
     return request("/cashflow/import", { method: "POST", body: form });
   },
   createPayment: (data) => json("/payments", "POST", data),
+  // with the customer's proof (slip photo / signature): multipart, same endpoint (payments redesign, release 3b)
+  createPaymentForm: (form) => request("/payments", { method: "POST", body: form }),
   listPayments: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/payments${qs ? `?${qs}` : ""}`);

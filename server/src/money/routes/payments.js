@@ -12,6 +12,11 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
+import fs from "node:fs";
+import { photoUpload, uploadDirPath } from "../../shared/upload.js";
+import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
+import { warmUploadCopies } from "../../utils/imageThumbs.js";
+import { createPaymentSlip, saveOwnSignature } from "../../orders/signedActs.js";
 
 export const paymentsRouter = Router();
 paymentsRouter.use(requireAuth);
@@ -164,15 +169,47 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
   return paymentId;
 }
 
-paymentsRouter.post("/", async (req, res) => {
-  const { customer_id, amount_amd, payment_date, note, sales_manager_id, client_ref, confirm_duplicate } = req.body ?? {};
+// The "+" sheet can send the customer's proof with the payment (payments redesign, release 3b, owner 2026-11-02: "keep both, upgrade +"):
+// a photo of the signed paper slip and / or the customer's signature on the phone, the same as at a check-in. It then arrives as
+// multipart (also when it waited in the phone's queue without signal); without proof it stays the old JSON request.
+const MAX_SLIP_PHOTOS = 6;
+function proofUpload(req, res, next) {
+  if (!req.is("multipart/form-data")) return next();
+  photoUpload.fields([
+    { name: "payment_slip_photos", maxCount: MAX_SLIP_PHOTOS },
+    { name: "customer_signature", maxCount: 1 },
+    { name: "rep_signature", maxCount: 1 },
+  ])(req, res, (err) => (err ? res.status(400).json({ error: err.message }) : next()));
+}
+
+paymentsRouter.post("/", proofUpload, async (req, res) => {
+  const { customer_id, payment_date, note, sales_manager_id, client_ref } = req.body ?? {};
+  // the phone's queued payment sends "amount" (offlineQueue.js paymentForm), the JSON request amount_amd
+  const amount_amd = req.body?.amount_amd ?? req.body?.amount;
+  // multipart sends every field as text
+  const confirm_duplicate = req.body?.confirm_duplicate === true || req.body?.confirm_duplicate === "true";
+  const slipFiles = req.files?.payment_slip_photos ?? [];
+  const customerSignature = req.files?.customer_signature?.[0] ?? null;
+  // the rep's own signature when it was not on his profile yet (signed without signal), as at a check-in
+  const repSignature = req.files?.rep_signature?.[0] ?? null;
+  const proofFiles = [...slipFiles, ...[customerSignature, repSignature].filter(Boolean)];
+  const dropFiles = () => proofFiles.forEach((f) => fs.unlink(f.path, () => {}));
+  if (proofFiles.some((f) => !matchesDeclaredImageType(f.path, f.mimetype))) {
+    dropFiles();
+    return res.status(400).json({ error: "One or more uploaded files are not valid images" });
+  }
+  // A rep's payment always says how the customer confirmed it (the check-in rule): signed, a photo of the slip, or none.
+  const withProof = Boolean(proofFiles.length) || req.user.role === "sales_manager";
+  const confirmation = customerSignature ? "signed" : slipFiles.length ? "photo" : "none";
 
   const amount = Number(amount_amd);
   if (!customer_id || !Number.isFinite(amount) || amount <= 0 || amount >= MAX_AMOUNT) {
+    dropFiles();
     return res.status(400).json({ error: "A valid customer and a positive amount are required" });
   }
   const paymentDateObj = payment_date ? new Date(payment_date) : new Date();
   if (Number.isNaN(paymentDateObj.getTime())) {
+    dropFiles();
     return res.status(400).json({ error: "Invalid payment date" });
   }
 
@@ -182,23 +219,31 @@ paymentsRouter.post("/", async (req, res) => {
     salesManagerId = req.user.id;
   } else if (sales_manager_id) {
     if (!canSubmitPaymentsForOthers(req.user.role)) {
+      dropFiles();
       return res.status(403).json({ error: "Not allowed to submit a payment for another sales manager" });
     }
     salesManagerId = Number(sales_manager_id);
   } else if (!canSubmitPaymentsForOthers(req.user.role)) {
+    dropFiles();
     return res.status(403).json({ error: "Not allowed to submit payments" });
   }
 
   const { rows: managerRows } = await pool.query("SELECT id, name, position, role FROM users WHERE id = $1", [salesManagerId]);
   const manager = managerRows[0];
-  if (!manager) return res.status(400).json({ error: "Sales manager not found" });
+  if (!manager) {
+    dropFiles();
+    return res.status(400).json({ error: "Sales manager not found" });
+  }
 
   const { rows: customerRows } = await pool.query(
     "SELECT id, name, erp_customer_id FROM customers WHERE id = $1",
     [customer_id]
   );
   const customer = customerRows[0];
-  if (!customer) return res.status(400).json({ error: "Customer not found" });
+  if (!customer) {
+    dropFiles();
+    return res.status(400).json({ error: "Customer not found" });
+  }
 
   // findLikelyDuplicate() below is a plain SELECT -- on its own, two
   // near-simultaneous submissions of the same customer/manager/amount
@@ -230,6 +275,7 @@ paymentsRouter.post("/", async (req, res) => {
         // Same client retried (e.g. after a flaky connection) -- return
         // the already-created payment instead of creating a second one.
         await client.query("COMMIT");
+        dropFiles();
         return res.status(201).json(await loadPaymentRow(existing[0].id));
       }
     }
@@ -244,6 +290,7 @@ paymentsRouter.post("/", async (req, res) => {
       });
       if (duplicate) {
         await client.query("COMMIT");
+        dropFiles();
         return res.status(409).json({
           error: "duplicate_warning",
           message: "Possible duplicate payment",
@@ -263,12 +310,35 @@ paymentsRouter.post("/", async (req, res) => {
       clientRef: client_ref,
       db: client,
     });
+    if (withProof) await client.query("UPDATE payments SET customer_confirmation = $2 WHERE id = $1", [paymentId, confirmation]);
+    // the paper slip(s): customer documents of the payment (Files > Documents, the Payment slips filter), as at a check-in
+    for (const file of slipFiles) {
+      await client.query(
+        "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, payment_id, created_by) VALUES ($1, 'payment_slip', $2, $3, $4, $5, $6)",
+        [customer.id, file.filename, file.mimetype, file.size, paymentId, req.user.id]
+      );
+    }
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
+    dropFiles();
     throw err;
   } finally {
     client.release();
+  }
+  for (const file of slipFiles) warmUploadCopies(uploadDirPath, file.filename, file.mimetype);
+  if (repSignature) {
+    const { rows: own } = await pool.query("SELECT signature_path FROM users WHERE id = $1", [req.user.id]);
+    if (own[0]?.signature_path) fs.unlink(repSignature.path, () => {});
+    else await saveOwnSignature(req.user.id, repSignature);
+  }
+  // signed on the phone: the payment slip PDF, signed by the customer (the same document as a check-in payment makes)
+  if (customerSignature) {
+    try {
+      await createPaymentSlip({ paymentId, customerId: customer.id, amountAmd: amount, paidAt: paymentDateObj, customerSignaturePath: customerSignature.filename, signerId: req.user.id });
+    } catch (err) {
+      console.error("Payment slip PDF failed:", err);
+    }
   }
 
   const payment = await loadPaymentRow(paymentId);
