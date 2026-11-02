@@ -16,3 +16,9 @@ insert into vaghinak_messages(user_id,kind,day,level,severity,body,needs_answer,
  '[{"key":"lunch","label":"Lunch break"},{"key":"customer","label":"At a customer / waiting"},{"key":"car","label":"Car problem"},{"key":"done","label":"Finished the day"},{"key":"other","label":"Other"}]',false, now());
 -- automatic tasks: English titles for the screenshots
 update tasks set title = regexp_replace(title, '^Հավաքագրիր ([0-9,]+) դր պարտքը.*$', 'Collect the overdue debt (oldest invoice past due)') where auto_kind='debt_collection';
+-- more rep messages (so the page scrolls past the header), then pause the engine so it cannot add Armenian text before the screenshots
+insert into vaghinak_messages(user_id,kind,day,level,severity,body,shadow,created_at) values
+(2,'reorder_hint',current_date,1,'info',E'Kentron Auto usually orders every 14 days; it has been 21. Call or drop in today?',false, now()-interval '3 hours'),
+(2,'debt_promise_today',current_date,1,'info',E'Garni Lube promised to pay today. Please ask for it at your visit; the task closes by itself when the payment arrives.',false, now()-interval '5 hours'),
+(2,'praise',current_date - 1,1,'info',E'Yesterday: 9 of 9 planned visits and 4 orders. Great work!',false, now()-interval '20 hours');
+insert into vaghinak_settings(key,value) values ('mode','"off"') on conflict (key) do update set value='"off"';
