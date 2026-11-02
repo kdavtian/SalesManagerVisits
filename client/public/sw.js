@@ -1,4 +1,4 @@
-const CACHE_VERSION = "field-visits-v512";
+const CACHE_VERSION = "field-visits-v513";
 // Map tiles are kept in IndexedDB (TILE_DB below), not in Cache Storage (1.468.0). On iPhone, Safari's Cache Storage costs every launch
 // time for EVERY entry stored in ANY of the app's caches, even when the launch only reads the start page from another cache: measured on
 // WebKit, 5,000 stored tiles delayed the start page by ~0.16 s on a fast computer (a phone is several times slower), before the white
@@ -315,10 +315,15 @@ const APP_SHELL = [
 // 2026-10-30). Now the new worker WAITS: the open page keeps working on its own version until the person takes the update (the page sends
 // "skip-waiting"), and the app is reloaded onto the new version in one step. A page of an older version of the app does not know this and
 // would never offer the update: the worker takes over at once when any open page does not answer the "update-ping" (the way it always did).
+// A page in the background does not answer at all: an iPhone freezes an app it is not showing. Taking over then (the old rule) deleted
+// the old files under a page that was still open; back on screen it ran its old code against the new files, and Settings / Orders kept
+// spinning or "A file did not load" came up (owner, 2026-11-03: "after updates the settings page is always stuck"). A hidden page is
+// therefore taken to be one that waits: it offers the update itself when it is back on screen (updateBanner.js).
 const PING_WAIT_MS = 1500;
 async function everyPageKnowsTheWait() {
-  const pages = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  if (!pages.length) return true; // nothing open: the new worker simply takes over
+  const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const pages = all.filter((page) => page.visibilityState !== "hidden");
+  if (!pages.length) return true; // nothing on screen: the new worker waits for the next start (or simply takes over when nothing is open)
   const answers = pages.map(
     (page) =>
       new Promise((resolve) => {
@@ -544,7 +549,7 @@ self.addEventListener("fetch", (event) => {
         launch.found = Date.now();
         const network = fetch(request)
           .then((res) => {
-            if (res.ok) caches.open(CACHE_VERSION).then((cache) => cache.put("/index.html", res.clone()));
+            if (res.ok) keepStartPage(res.clone());
             return res;
           })
           .catch(() => cached);
@@ -565,6 +570,21 @@ self.addEventListener("fetch", (event) => {
       .then((hit) => hit || runtimeFetch(request))
   );
 });
+
+// The start page fetched in the background is kept only when it belongs to THIS worker's version (its <meta name="fv-cache">, written by
+// the server from sw.js). Right after a deploy the server already sends the NEW start page while this (old) worker still serves the old
+// files: kept, it would have started the next launch with the new page's preload list over the old scripts.
+async function keepStartPage(res) {
+  try {
+    const html = await res.text();
+    const version = html.match(/<meta name="fv-cache" content="([^"]+)"/)?.[1];
+    if (version && version !== CACHE_VERSION) return;
+    const cache = await caches.open(CACHE_VERSION);
+    await cache.put("/index.html", new Response(html, { status: res.status, statusText: res.statusText, headers: res.headers }));
+  } catch {
+    // the copy already kept stays
+  }
+}
 
 // Everything else from this origin (not in APP_SHELL): cache, then revalidate in the background.
 // A file that does not answer must not hold a screen for ever: the cached copy (or an error) after this long.

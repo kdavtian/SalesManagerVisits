@@ -323,6 +323,10 @@ const indexHtmlPath = path.join(clientDir, "index.html");
 const indexHtmlTemplate = fs.readFileSync(indexHtmlPath, "utf8");
 // Computed once at start-up from the client files themselves (see modulePreload.js).
 const modulePreloadHtml = modulePreloadTags(clientDir, clientBuild);
+// The version of the files this server sends (sw.js CACHE_VERSION), written into the start page: the service worker keeps a freshly
+// fetched start page only when it is its own version (owner, 2026-11-03: after an update Settings / Orders stayed stuck).
+const swSource = fs.readFileSync(clientBuild ? path.join(CLIENT_DIST_DIR, "sw.js") : path.join(clientDir, "sw.js"), "utf8");
+const cacheVersionMeta = `<meta name="fv-cache" content="${(swSource.match(/CACHE_VERSION\s*=\s*"([^"]+)"/) ?? [])[1] ?? ""}" />`;
 const BOOT_SPLASH_HTML = '<div class="boot-splash" role="status" aria-label="Loading"><span class="boot-splash-spin"></span></div>';
 
 const CALCULATOR_BRANDING = {
@@ -400,7 +404,7 @@ app.get(/.*/, async (req, res) => {
   // document.querySelector instead.
   const html = indexHtmlTemplate
     .replace("<!--CALCULATOR_MODE_HEAD-->", head)
-    .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />`)
+    .replace("<!--CALCULATOR_MODE_FLAG-->", `<meta name="calc-mode" content="${calculatorModeEnabled}" />${calculatorModeEnabled ? "" : `\n    ${cacheVersionMeta}`}`)
     // Calculator Mode promises that nothing of the real app is fetched or
     // shown before the unlock code is entered, so neither the preload hints
     // nor the spinner are emitted for it.

@@ -57,3 +57,17 @@ test("Calculator Mode: no preload hints and no spinner before unlock", async () 
     await setCalculatorModeEnabled(false);
   }
 });
+
+// Owner, 2026-11-03 (after updates Settings / Orders stayed stuck): the start page says which version of the files it belongs to, so the
+// service worker of an older version never keeps it (sw.js keepStartPage). Not in Calculator Mode: nothing of the real app shows there.
+test("the start page names its files' version (sw.js CACHE_VERSION); Calculator Mode leaves it out", async () => {
+  const fs = await import("node:fs");
+  const version = fs.readFileSync(path.join(clientDir, "sw.js"), "utf8").match(/CACHE_VERSION\s*=\s*"([^"]+)"/)[1];
+  assert.ok((await getIndex()).includes(`<meta name="fv-cache" content="${version}" />`));
+  await setCalculatorModeEnabled(true);
+  try {
+    assert.ok(!(await getIndex()).includes("fv-cache"));
+  } finally {
+    await setCalculatorModeEnabled(false);
+  }
+});

@@ -224,6 +224,7 @@ export const enCommon = {
     vs_last_month: "vs last month",
     notification_type_plan_submitted: "A plan is submitted for review",
     notification_type_plan_reviewed: "My plan is approved or rejected",
+    notification_type_route_plan_added: "A new customer was added to my route plan",
     notification_type_perf_plan_submitted: "A performance plan is submitted for review",
     notification_type_perf_plan_reviewed: "My performance plan is approved, rejected, or revised",
     notification_type_order_status_changed: "My order's status changes",

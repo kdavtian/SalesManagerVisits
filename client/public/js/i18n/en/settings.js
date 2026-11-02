@@ -194,6 +194,8 @@ export const enSettings = {
     visit_types_title: "Visit frequency by customer type",
     visit_types_hint: "Days between visits for each type. A customer follows the most frequent of its types; an empty field uses the general default ({n} days). A frequency set on a customer's card always wins.",
     visit_types_unit: "days",
+    auto_route_plan_help: "A new customer goes into its rep's route plan by itself: on the weekday that already holds most of the rep's customers of the same subregion (else region), after the nearest one. The rep is told. Customers of channels nobody visits are left out.",
+    auto_route_plan_label: "Add new customers to route plans",
     visit_type_group_channels: "Channels",
     visit_type_group_potential: "Potential customers",
     visit_type_group_tiers: "Levels",

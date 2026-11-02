@@ -10,6 +10,15 @@ import { placeNoticeText, wirePlaceInput } from "../../places.js";
 import { installInlineClearButton } from "../../searchBar.js";
 import { textMatches } from "../../shared/searchKey.js";
 
+function routePlanText(r) {
+  if (!r || (r.status !== "added" && r.status !== "in_area")) return "";
+  const area = r.by === "subregion" ? subregionLabelHy(r.area) : regionLabelHy(r.area);
+  return t(r.status === "added" ? "rp_auto_added" : "rp_auto_in_area")
+    .replace("{rep}", r.rep_name || "")
+    .replace("{day}", t(`rp_auto_day_${r.day_of_week}`))
+    .replace("{area}", area || "");
+}
+
 export function onMapTouchEnd(ctx, e) {
   if (e.touches.length > 0 || e.changedTouches.length !== 1) {
     ctx.lastTapTime = 0;
@@ -718,7 +727,9 @@ export function openNewCustomerForm(ctx, latlng) {
       });
       overlay.remove();
       const placeText = placeNoticeText(created?.place_notice);
-      if (placeText) showToast(placeText, { ms: 6500 });
+      // the rep's route plan took the new customer on the day that holds its area (server: field/autoRoutePlan.js)
+      const planText = routePlanText(created?.route_plan);
+      if (placeText || planText) showToast([planText, placeText].filter(Boolean).join(" · "), { ms: 7000 });
       if (ctx.placingMarker) {
         ctx.map.removeLayer(ctx.placingMarker);
         ctx.placingMarker = null;

@@ -21,10 +21,25 @@ let container = null;
 let registration = null;
 let updateReady = false;
 let refreshing = false;
+let tookUpdate = false; // applyUpdate() asked the worker to take over: it reloads by itself
+
+// Nothing on screen the person could lose by a reload: no sheet open, no field being typed in.
+function pageIsIdle() {
+  if (document.querySelector(".sheet-overlay")) return false;
+  return !document.activeElement?.matches?.("input, textarea, select, [contenteditable='true']");
+}
 
 // True once a newer version has taken over the service worker but this page still runs the old scripts (the person tapped "Later").
 export function isUpdatePending() {
   return updateReady;
+}
+
+// The worker that served this page when it started. When another one controls the page now (the update took over while the app was in
+// the background, or another window of the app took it), every file this page asks for from here on comes from the NEW version while its
+// own code is the old one: a screen opened now would mix the two and keep spinning (owner, 2026-11-03). The router reloads first.
+const bootController = typeof navigator !== "undefined" ? (navigator.serviceWorker?.controller ?? null) : null;
+export function controllerChanged() {
+  return Boolean(bootController) && navigator.serviceWorker.controller !== bootController;
 }
 
 export function mountUpdateBanner(el) {
@@ -41,6 +56,7 @@ export async function applyUpdate() {
     else location.reload();
     return;
   }
+  tookUpdate = true;
   let reloaded = false;
   const reloadOnce = () => {
     if (reloaded) return;
@@ -149,6 +165,12 @@ export function initServiceWorkerUpdates() {
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController) return;
     updateReady = true;
+    // a newer version took over by itself (another window of the app took the update): when nothing is being typed or edited here, the
+    // page moves to it at once -- staying on the old code with the new files is what made screens spin (owner, 2026-11-03)
+    if (!tookUpdate && pageIsIdle()) {
+      location.reload();
+      return;
+    }
     renderBanner();
   });
   // sw.js asks every open page before it decides to wait: a page that answers is one that offers the update itself.
@@ -202,6 +224,8 @@ export function initServiceWorkerUpdates() {
         // the foreground.
         document.addEventListener("visibilitychange", () => {
           if (document.visibilityState !== "visible") return;
+          // a version that installed while the app was in the background is waiting now (sw.js never takes over a hidden page)
+          if (reg.waiting && navigator.serviceWorker.controller) updateReady = true;
           reg.update().catch(() => {});
           maybeShowBanner();
         });

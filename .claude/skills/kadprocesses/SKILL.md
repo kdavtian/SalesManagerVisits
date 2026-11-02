@@ -112,6 +112,10 @@ forecast, "needs attention" recommendations. Route plans: recurring rules + day 
 - 2026-10-28 (document flow answers): Mane fills the Castrol Excel **Cashflow and Sales sheets**; the director counts **per rep**; the daily
   cash sheet is posted to the **existing accounting Telegram group by the bot**; paper slips are kept for a **transition month**, then dropped.
   Build: V1 + V2 of `references/cash-collection-flow.md`.
+- 2026-11-03: a new customer joins its rep's route plan by itself: the weekday that already holds most of the rep's customers of the
+  same subregion (else region), after the nearest one; a day planning the whole area already includes it; the rep is told (notification
+  "route_plan_added"), the person who added it sees it on screen; never for KF/CAS/CVO/PCO/OEM or the office. Switch in App
+  configuration (ON by default). Code: server/src/field/autoRoutePlan.js.
 
 ## 6. How to propose a process change (what the owner expects)
 1. Describe the process as it runs today in 3-5 steps naming the person and the paper / screen at each step.
