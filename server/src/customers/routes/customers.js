@@ -11,8 +11,8 @@ import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
 import { buildReorderProfile, recentOrdersFor } from "../customerReorder.js";
 import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../../orders/orderRhythm.js";
-import { allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
-import { liveAdjustments, liveDebtOf, liveSummary } from "../../money/liveDebt.js";
+import { loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { liveAdjustments, liveDebtMap, liveDebtOf, liveSummary } from "../../money/liveDebt.js";
 import { buildDebtStatementPdf } from "../../money/debtStatementPdf.js";
 import { getDefaultVisitFrequencyDays, getCheckinRadiusMeters } from "../../shared/settings.js";
 import { haversineMeters } from "../../utils/geo.js";
@@ -1651,19 +1651,24 @@ customersRouter.get("/:id/debt-statement", async (req, res) => {
   const c = rows[0];
   if (!c) return res.status(404).json({ error: "Customer not found" });
   if (!seesCustomerErpData(req.user.role, c.assigned_manager_id, req.user.id)) return res.status(403).json({ error: "Not allowed" });
-  const debt = Number(c.debt_amd) || 0;
-  if (!c.erp_customer_id || debt <= 0) return res.status(400).json({ error: "This customer has no outstanding debt" });
+  // the LIVE debt (owner, 2026-11-03): the Excel debt + delivered app orders the Excel does not have yet - app payments it does not have
+  // yet, so the paper the customer gets matches the customer card; the unpaid list holds those app orders too (oldest paid first)
   const today = yerevanToday();
-  const orders = (await loadOrdersNewestFirst(pool, [c.erp_customer_id])).get(c.erp_customer_id) ?? [];
   const termDays = Number(c.term_days);
+  const live = c.erp_customer_id && c.debt_amd != null
+    ? (await liveDebtMap(pool, [{ id: customerId, erp_customer_id: c.erp_customer_id, debt_amd: c.debt_amd, credit_term_days: termDays }], today)).get(customerId)
+    : null;
+  const debt = live?.debt_amd ?? 0;
+  if (debt <= 0) return res.status(400).json({ error: "This customer has no outstanding debt" });
   const pdf = await buildDebtStatementPdf({
     today,
     termDays,
     customer: { name: c.name, erp_customer_id: c.erp_customer_id, legal_name: c.legal_name, tin: c.tin },
     rep: { name: c.rep_name_hy || c.rep_name, phone: c.rep_phone },
-    alloc: allocateFifo({ orders, debt, today, termDays }),
+    alloc: live.aging,
     debt_amd: debt,
     synced_at: c.synced_on,
+    app_part: live.orders_not_in_excel_amd > 0 || live.payments_not_in_excel_amd > 0,
   });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="Debt-statement-${String(c.erp_customer_id).replace(/[^A-Za-z0-9_-]/g, "")}-${today}.pdf"`);

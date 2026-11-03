@@ -40,7 +40,7 @@ export function lateLabel(dueDays) {
 }
 
 // data: { today, termDays, customer: { name, erp_customer_id, legal_name, tin }, rep: { name, phone },
-//         alloc: allocateFifo() result, debt_amd, synced_at }
+//         alloc: allocateFifo() result (the live debt's aging), debt_amd, synced_at, app_part (true: app rows the Excel lacks are in it) }
 export function buildDebtStatementPdf(data) {
   const doc = new PDFDocument({ size: "A4", margin: 0, bufferPages: true, info: { Title: "Debt statement", Author: "KAD Motors" } });
   doc.registerFont("R", path.join(ASSET_DIR, "fonts", "DejaVuSans.ttf"));
@@ -67,7 +67,8 @@ export function buildDebtStatementPdf(data) {
     rows.push({ label: "Նախկին մնացորդ", date: null, due: addDays("2025-05-01", data.termDays), total: data.alloc.opening.unpaid, unpaid: data.alloc.opening.unpaid, days: data.alloc.opening.due_days });
   }
   for (const inv of [...data.alloc.invoices].reverse()) {
-    rows.push({ label: String(inv.order_id), date: inv.date, due: addDays(inv.date, data.termDays), total: inv.total, unpaid: inv.unpaid, days: inv.due_days });
+    // an app order the Excel does not have yet prints its own order code (its id is "app-<id>")
+    rows.push({ label: String(inv.code ?? inv.order_id), date: inv.date, due: addDays(inv.date, data.termDays), total: inv.total, unpaid: inv.unpaid, days: inv.due_days });
   }
   const pages = [rows.slice(0, FIRST_PAGE_ROWS)];
   for (let i = FIRST_PAGE_ROWS; i < rows.length; i += NEXT_PAGE_ROWS) pages.push(rows.slice(i, i + NEXT_PAGE_ROWS));
@@ -146,8 +147,11 @@ export function buildDebtStatementPdf(data) {
     total("Ընդհանուր չվճարված պարտք՝", amd(unpaidTotal), true);
     if (overdueTotal > 0) total("որից ժամկետանց՝", amd(overdueTotal), false, RED);
     y += 6;
-    text("Գումարները հաշվարկված են ըստ ընկերության տվյալների (Excel)՝ վճարումները փակում են ամենահին հաշիվները։", X0, y, { size: 7.5, color: "#555555" });
-    if (data.synced_at) text(`Տվյալները թարմացվել են՝ ${dmy(data.synced_at)}`, X0, y + 11, { size: 7.5, color: "#555555" });
+    const notes = data.app_part
+      ? ["Գումարները հաշվարկված են ըստ ընկերության տվյալների (Excel) և դեռ չգրանցված առաքումների ու վճարումների։", "Վճարումները փակում են ամենահին հաշիվները։"]
+      : ["Գումարները հաշվարկված են ըստ ընկերության տվյալների (Excel)՝ վճարումները փակում են ամենահին հաշիվները։"];
+    if (data.synced_at) notes.push(`Տվյալները թարմացվել են՝ ${dmy(data.synced_at)}`);
+    notes.forEach((line, i) => text(line, X0, y + i * 11, { size: 7.5, color: "#555555" }));
   });
   if (pages.length > 1) {
     const range = doc.bufferedPageRange();

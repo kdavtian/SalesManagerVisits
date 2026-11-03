@@ -7,39 +7,18 @@ import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { uploadDirPath } from "../shared/upload.js";
 import { loadBlankOrders } from "./orderBlankData.js";
+import { liveBalance } from "../money/liveDebt.js";
 import { buildOrderBlanksPdf, buildPaymentSlipsPdf } from "./orderBlankPdf.js";
 import { OFFICE_PHONE } from "../products/pricelistPdf.js";
 import { warmPdfPreview } from "../shared/pdfPreview.js";
 import { getDocumentTexts } from "../shared/documentTexts.js";
 
-// The customer's debt before this visit: the Excel debt (the trusted source) plus what the app knows that Excel does not show yet
-// (owner, 2026-10-27: "Excel includes only ALREADY DELIVERED orders ... if the order is included, included, if no - no. Same for collected
-// payments"):
-//   + delivered app orders no Excel order was matched to (erpAutoMatch.markAppRowsInExcel links them after every sync)
-//   - collected app payments (not rejected) no Excel payment row was matched to
-// The orders and the payment of THIS visit are left out (they are written on the blank as this visit's own amounts). An app row older than
-// two weeks before Excel's latest record and still unmatched is taken as already in Excel under a slightly different amount or date, so an
-// old mismatch never inflates the debt for ever. null when the customer has no Excel debt figure.
-const EXCEL_GRACE_DAYS = 14;
-export async function balanceBeforeVisit(db, customerId, { excludeOrderIds = [], excludePaymentIds = [], checkinId = null } = {}) {
-  const day = (col) => `((${col} AT TIME ZONE 'Asia/Yerevan')::date)`;
-  const { rows } = await db.query(
-    `WITH c AS (SELECT c.id, c.erp_customer_id FROM customers c WHERE c.id = $1),
-          lim AS (SELECT COALESCE((SELECT MAX(order_date) FROM erp_order_lines), (SELECT ${day("MAX(synced_at)")} FROM erp_customer_data)) - ${EXCEL_GRACE_DAYS} AS orders_from,
-                         COALESCE((SELECT MAX(cashflow_date) FROM erp_cashflow_lines), (SELECT ${day("MAX(synced_at)")} FROM erp_customer_data)) - ${EXCEL_GRACE_DAYS} AS payments_from)
-     SELECT erp.debt_amd::float8 AS debt,
-            (SELECT COALESCE(SUM(o.total_amd), 0)::float8 FROM orders o, lim
-              WHERE o.customer_id = c.id AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT (o.id = ANY($2::int[]))
-                AND ${day(`COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`)} >= COALESCE(lim.orders_from, DATE '1900-01-01')) AS orders_not_in_excel,
-            (SELECT COALESCE(SUM(p.amount_amd), 0)::float8 FROM payments p, lim
-              WHERE p.customer_id = c.id AND p.status <> 'rejected' AND p.erp_match_key IS NULL AND NOT (p.id = ANY($3::int[]))
-                AND ($4::text IS NULL OR p.client_ref IS DISTINCT FROM $4)
-                AND ${day("p.payment_date")} >= COALESCE(lim.payments_from, DATE '1900-01-01')) AS payments_not_in_excel
-     FROM c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id`,
-    [customerId, excludeOrderIds.map(Number), excludePaymentIds.filter(Boolean).map(Number), checkinId ? `checkin-${checkinId}` : null]
-  );
-  const r = rows[0];
-  return r?.debt == null ? null : Math.round(r.debt + r.orders_not_in_excel - r.payments_not_in_excel);
+// The customer's debt before this visit, written on the signed act and the payment slip as "previous debt": the LIVE debt (owner,
+// 2026-11-03), the same number the customer card shows -- the Excel debt + delivered app orders the Excel does not have yet - app payments
+// the Excel does not have yet (money/liveDebt.js has the exact rules). The orders and the payment of THIS visit are left out (they are
+// written on the paper as this visit's own amounts). null when the customer has no Excel debt figure.
+export function balanceBeforeVisit(db, customerId, options = {}) {
+  return liveBalance(db, customerId, options);
 }
 
 // admin and CEO keep the right to change a signed order.

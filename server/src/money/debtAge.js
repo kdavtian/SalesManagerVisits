@@ -111,21 +111,25 @@ export function summarizeDebt({ unpaid, opening, today, termDays }) {
 // PAST its due date is flagged when a new order is made for them. Warning only -- nothing is blocked.
 export const DEBT_HOLD_DAYS = 90;
 
-// { ...summarizeDebt, debt_amd, hold_days, on_hold } for a customer with debt; null when none.
+// { ...summarizeDebt, debt_amd, hold_days, on_hold } for a customer with debt; null when none. On the LIVE debt (owner, 2026-11-03: the
+// order form's warning shows the customer card's number): the Excel debt + delivered app orders - app payments the Excel lacks, oldest paid
+// first. liveDebt.js is loaded on use: it imports this module's neighbour debtAging.js, which imports this file.
 export async function debtHoldInfo(db, customerId, today) {
   const { rows } = await db.query(
-    `SELECT c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS term_days, erp.debt_amd
+    `SELECT c.id, c.erp_customer_id, COALESCE(c.credit_term_days, 45) AS credit_term_days, erp.debt_amd
      FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
-     WHERE c.id = $1 AND erp.debt_amd > 0`,
+     WHERE c.id = $1 AND erp.debt_amd IS NOT NULL`,
     [customerId]
   );
   const row = rows[0];
   if (!row) return null;
-  const unpaid = await loadUnpaidOrders(db, [row.erp_customer_id]);
-  const summary = summarizeDebt({ unpaid, opening: unpaid.opening.get(row.erp_customer_id), today, termDays: Number(row.term_days) });
+  const { liveDebtMap, liveSummary } = await import("./liveDebt.js");
+  const live = (await liveDebtMap(db, [row], today)).get(row.id);
+  if (!live || live.debt_amd <= 0) return null;
+  const summary = liveSummary(live);
   return {
     ...summary,
-    debt_amd: Math.round(Number(row.debt_amd)),
+    debt_amd: live.debt_amd,
     hold_days: DEBT_HOLD_DAYS,
     on_hold: summary.oldest_due_days != null && summary.oldest_due_days > DEBT_HOLD_DAYS,
   };

@@ -29,7 +29,7 @@ export function allocateFifo({ orders, debt, today, termDays }) {
     remaining -= unpaid;
     const days = dueDays(o.date, today, termDays);
     const bucket = bucketOfDueDays(days);
-    result.invoices.push({ order_id: o.order_id, date: o.date, total, unpaid, due_days: days, bucket });
+    result.invoices.push({ order_id: o.order_id, ...(o.code ? { code: o.code } : {}), date: o.date, total, unpaid, due_days: days, bucket });
     result.buckets[bucket] += unpaid;
   }
   if (remaining > AMOUNT_EPSILON) {

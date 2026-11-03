@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { balanceBeforeVisit } from "../../src/orders/signedActs.js";
+import { loadBlankOrders, previousDebts } from "../../src/orders/orderBlankData.js";
 import { markAppRowsInExcel } from "../../src/erp/erpAutoMatch.js";
 
 const ERP = `ITX${process.pid}`;
@@ -74,10 +75,27 @@ test("Excel debt + delivered app orders not in Excel - app payments not in Excel
   assert.deepEqual(await markAppRowsInExcel(pool), { orders: 0, payments: 0 });
 });
 
-test("an unmatched app row older than two weeks before Excel's newest record is taken as already in Excel", async () => {
+// The papers use the live debt, the customer card's number (owner, 2026-11-03): an old unmatched order is taken as in the Excel, an app
+// payment of the last 60 days with no Excel cashflow line of the same amount still lowers the debt, an older one does not.
+test("an unmatched app order older than two weeks before Excel's newest record is taken as already in Excel; payments follow the card's 60-day rule", async () => {
   await deliveredOrder(33333, 40); // a 40-day-old delivered order that never matched (different amount in Excel)
-  await payment(4444, "approved", 40);
-  assert.equal(await balanceBeforeVisit(pool, customer.id), 118000, "unchanged");
+  await payment(4444, "approved", 40); // 40 days, no Excel line of 4,444: still not in the Excel
+  await payment(5555, "approved", 70); // older than 60 days: taken as in the Excel
+  assert.equal(await balanceBeforeVisit(pool, customer.id), 118000 - 4444);
+});
+
+test("printed blanks: previous debt = the live debt without the printed orders, chained across one customer's blanks", async () => {
+  const live = 118000 - 4444;
+  const delivered = await deliveredOrder(2000, 0); // delivered today, not in Excel: its own blank does not count it twice
+  const { rows: [{ id: next }] } = await pool.query(
+    "INSERT INTO orders (customer_id, user_id, status, total_amd) VALUES ($1, $2, 'confirmed', 5000) RETURNING id",
+    [customer.id, rep.id]
+  );
+  const { orders } = await loadBlankOrders([delivered, next]);
+  const previous = await previousDebts(orders, [delivered, next]);
+  assert.equal(previous.get(delivered), live);
+  assert.equal(previous.get(next), live + 2000, "the second blank starts where the first ended");
+  assert.equal(await balanceBeforeVisit(pool, customer.id), live + 2000, "the card's live debt counts the delivered order");
 });
 
 test("no Excel debt for the customer: no previous debt", async () => {
