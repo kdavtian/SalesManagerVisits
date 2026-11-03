@@ -1071,6 +1071,7 @@ export const enCommon = {
     job_vaghinak_wrap_up: "Vaghinak: end of the day",
     job_vaghinak_full_digest: "Vaghinak: full daily summary for the CEO and admin",
     job_vaghinak_weekly_digest: "Vaghinak: weekly digest",
+    job_vaghinak_route_plan_analysis: "Vaghinak: route-plan suggestions (weekly)",
     job_task_deadline_reminders: "Task deadline reminders",
     job_weekly_scorecard: "Weekly scorecard (Monday)",
     job_weekly_debt_digest: "Weekly debt digest (Monday)",
