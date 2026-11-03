@@ -40,6 +40,11 @@ export const fieldApi = {
   // undefined = replace the whole day (the Map's quick planner)
   saveVisitPlanRule: (dayOfWeek, areas, userId, customerIds, planChannel) =>
     json(`/visit-plans/rules/${dayOfWeek}`, "PUT", { areas, user_id: userId, customer_ids: stripCompetitorIds(customerIds), ...(planChannel === undefined ? {} : { plan_channel: planChannel }) }),
+  listRoutePlanSuggestions: () => request("/route-plan-suggestions"),
+  analyzeRoutePlans: () => json("/route-plan-suggestions/analyze", "POST", {}),
+  acceptRoutePlanSuggestion: (id) => json(`/route-plan-suggestions/${id}/accept`, "POST", {}),
+  dismissRoutePlanSuggestion: (id) => json(`/route-plan-suggestions/${id}/dismiss`, "POST", {}),
+  acceptAllRoutePlanSuggestions: () => json("/route-plan-suggestions/accept-all", "POST", {}),
   listRoutePlanSets: () => request("/route-plan-sets"),
   autoRoutePlanSet: (data) => json("/route-plan-sets/auto", "POST", data),
   snapshotRoutePlanSet: (name) => json("/route-plan-sets/snapshot", "POST", { name }),

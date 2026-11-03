@@ -10285,3 +10285,38 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   gap: 10px;
   min-height: 44px;
 }
+
+/* Vaghinak's route-plan suggestions (owner, 2026-11-03) */
+.rps-actions {
+  margin: 8px 0;
+}
+.rps-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rps-card p {
+  margin: 0;
+}
+.rps-buttons {
+  display: flex;
+  gap: 8px;
+}
+.rps-buttons .btn {
+  flex: 1;
+  min-height: 44px;
+}
+.rps-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rps-count {
+  margin-left: 8px;
+}

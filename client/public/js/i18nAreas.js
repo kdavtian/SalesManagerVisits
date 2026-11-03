@@ -29,6 +29,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/reports": ["money", "reports"],
   "#/route-distribution": ["field"],
   "#/route-plans": ["field"],
+  "#/route-plan-suggestions": ["field"],
   "#/ops-control": ["team"],
   "#/ask-kad": ["team"],
   "#/vaghinak": ["team"],

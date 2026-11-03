@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, activateDialog, planTitle, neverVisitedMarkHtml, overdueMarkHtml } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canPlanForOthers, canViewAllRoutePlans } from "../state.js";
+import { canReviewRoutePlanSuggestions } from "../shared/roles.js";
 import { buildCustomerTree, renderTriStateTree } from "../regionTree.js";
 import { icons } from "../icons.js";
 
@@ -43,6 +44,7 @@ export async function renderRoutePlans(root, navigate) {
       </div>
       ${canManage ? `<div class="rps-top-row"><button type="button" class="btn btn-primary" id="new-route-plan-btn">+ ${t("new_route_plan")}</button><button type="button" class="btn rps-auto-btn" id="auto-route-plan-btn">${t("auto_route_plan")}</button></div>` : ""}
       ${canManage ? `<button type="button" class="btn btn-block desk-inline" id="route-distribution-btn" style="margin-top:8px;">${t("route_distribution_title")}</button>` : ""}
+      ${canReviewRoutePlanSuggestions(state.user?.role) ? `<button type="button" class="btn btn-block" id="route-plan-suggestions-btn" style="margin-top:8px;">${t("rps_open")}<span class="badge rps-count" id="rps-count" hidden></span></button>` : ""}
       ${canViewAll ? `<div id="route-plan-sets-card" style="margin-top:12px;"></div>` : ""}
       <p class="form-error" id="route-plans-error" hidden></p>
       <div id="route-plans-body" style="margin-top:12px;"><p class="loading-state" role="status">${t("loading")}</p></div>
@@ -50,6 +52,21 @@ export async function renderRoutePlans(root, navigate) {
   `;
   const container = root.querySelector(".detail-view");
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+  const suggestionsBtn = container.querySelector("#route-plan-suggestions-btn");
+  if (suggestionsBtn) {
+    suggestionsBtn.addEventListener("click", () => navigate("#/route-plan-suggestions"));
+    // the waiting number on the button (never blocks the screen)
+    api
+      .listRoutePlanSuggestions()
+      .then((r) => {
+        const badge = container.querySelector("#rps-count");
+        if (badge && r.pending.length) {
+          badge.textContent = String(r.pending.length);
+          badge.hidden = false;
+        }
+      })
+      .catch(() => {});
+  }
   const bodyEl = container.querySelector("#route-plans-body");
   const errorEl = container.querySelector("#route-plans-error");
 

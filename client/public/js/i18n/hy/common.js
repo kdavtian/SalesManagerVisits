@@ -237,6 +237,7 @@ export const hyCommon = {
     notification_type_plan_submitted: "Երթուղու պլան է ներկայացվել վերանայման համար",
     notification_type_plan_reviewed: "Իմ պլանը հաստատվել կամ մերժվել է",
     notification_type_route_plan_added: "Նոր հաճախորդ է ավելացվել իմ երթուղային պլանին",
+    notification_type_route_plan_suggestions: "Վաղինակի երթուղային պլանի առաջարկներ են սպասում ինձ",
     notification_type_perf_plan_submitted: "Կատարողականի պլան է ներկայացվել վերանայման համար",
     notification_type_perf_plan_reviewed: "Իմ կատարողականի պլանը հաստատվել, մերժվել կամ փոփոխվել է",
     notification_type_order_status_changed: "Իմ պատվերի կարգավիճակը փոխվել է",

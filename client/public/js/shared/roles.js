@@ -130,6 +130,11 @@ export function canPlanForOthers(role) {
   return role === "admin" || role === "sales_director" || role === "ceo" || role === "operations_director";
 }
 
+// Who accepts or dismisses Vaghinak's route-plan suggestions (owner, 2026-11-03: the CEO decides; the admin is the owner's own account).
+export function canReviewRoutePlanSuggestions(role) {
+  return role === "admin" || role === "ceo";
+}
+
 // Who can LOOK at every rep's route plans (the overview grid and each rep's
 // customers per weekday). The accountant gets this read-only view; creating
 // or editing someone else's plan stays with canPlanForOthers.
