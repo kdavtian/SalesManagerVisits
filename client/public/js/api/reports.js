@@ -1,7 +1,29 @@
 // Part of the `api` object of ../api.js (docs/architecture-roadmap.md, step 8): joined back there with ...reportsApi.
-import { json, request } from "./core.js";
+import { getCsrfToken, json, request } from "./core.js";
+import { APP_VERSION } from "../version.js";
 
 export const reportsApi = {
+  // The Pivot report (admin and CEO): sources, results, filter values, saved views, Excel / PDF files
+  pivotSources: () => request("/pivot/sources"),
+  pivotRun: (spec) => json("/pivot/run", "POST", { spec }),
+  pivotValues: (spec, field, q = "", bucket = null) => json("/pivot/values", "POST", { spec, field, q, bucket }),
+  pivotViews: () => request("/pivot/views", { fresh: true }),
+  pivotSaveView: (data) => json("/pivot/views", "POST", data),
+  pivotUpdateView: (id, data) => json(`/pivot/views/${id}`, "PATCH", data),
+  pivotDeleteView: (id) => json(`/pivot/views/${id}`, "DELETE", {}),
+  pivotExport: async (payload) => {
+    const res = await fetch("/api/pivot/export", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", "X-App-Version": APP_VERSION, ...(getCsrfToken() ? { "X-CSRF-Token": getCsrfToken() } : {}) },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `HTTP ${res.status}`);
+    }
+    return res.blob();
+  },
   getVolumeReport: (params) => request(`/volume-report?${new URLSearchParams(params).toString()}`),
   // Operations control
   opsLegacyBalances: () => request("/ops/legacy-balances"),

@@ -53,6 +53,7 @@ import { cashExpensesRouter } from "./money/routes/cashExpenses.js";
 import { reportsRouter } from "./reports/routes/reports.js";
 import { fuelRouter } from "./field/routes/fuel.js";
 import { bizReportsRouter } from "./reports/routes/bizReports.js";
+import { pivotRouter } from "./reports/routes/pivot.js";
 import { paymentsRouter } from "./money/routes/payments.js";
 import { payments2Router } from "./money/routes/payments2.js";
 import { cashHandoffsRouter } from "./money/routes/cashHandoffs.js";
@@ -231,6 +232,8 @@ app.use("/api/cash-expenses", express.json(), cashExpensesRouter);
 app.use("/api/reports", express.json(), reportsRouter);
 app.use("/api/fuel", express.json(), fuelRouter);
 app.use("/api/biz-reports", express.json(), bizReportsRouter);
+// the Pivot report: an export carries the whole table the screen shows
+app.use("/api/pivot", express.json({ limit: "25mb" }), pivotRouter);
 app.use("/api/payments2", express.json(), payments2Router);
 app.use("/api/payments", express.json(), paymentsRouter);
 app.use("/api/cash-handoffs", express.json(), cashHandoffsRouter);

@@ -46,6 +46,8 @@ if (typeof document !== "undefined" && !window.__reportPeriodTabs) {
 // `r` is set in the query string. Kept in one file since the views share
 // the same header/back-button chrome and filter-building conventions.
 export async function renderReports(root, navigate, reportKey, { inPane = false } = {}) {
+  // The Pivot report takes the whole screen on a computer too (its builder sits beside a wide table), never the narrow report pane.
+  if (reportKey === "pivot") return (await import("./pivot.js")).renderPivot(root, navigate);
   // Desktop: the list on the left, the report on the right (reportsDesk.js draws the report through this same function).
   if (!inPane && window.matchMedia?.("(min-width: 1024px)").matches) {
     const { renderReportsDesk } = await import("../reportsDesk.js");
@@ -192,7 +194,7 @@ async function renderReportsList(root, navigate) {
 // Grouped by the decision they support (owner: fewer rows, less scrolling);
 // the server already hides what a role may not see, empty groups vanish.
 const REPORT_GROUPS = [
-  { id: "management", keys: ["daily_management", "weekly_scorecard", "sales_budget", "product_liters", "brand_volume"] },
+  { id: "management", keys: ["pivot", "daily_management", "weekly_scorecard", "sales_budget", "product_liters", "brand_volume"] },
   { id: "money", keys: ["customer_debt", "unpaid_invoices", "payments", "cash_custody", "cash_reconciliation"] },
   { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability", "product_wishes"] },
   { id: "team", keys: ["checkins", "fuel_allowance"] },

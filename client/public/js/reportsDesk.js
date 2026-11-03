@@ -67,7 +67,9 @@ export async function renderReportsDesk(root, navigate, reportKey, { groups, ren
   sections.push({ id: "other", items: reports.filter((r) => !placed.has(r.key)) });
   sections.forEach((g) => ordered.push(...g.items));
   const last = read(localStorage, LAST_KEY, "");
-  const key = allowed.has(reportKey) ? reportKey : allowed.has(last) ? last : ordered[0].key;
+  // the Pivot report opens as a page of its own (reports.js), never in this pane: it is never the report shown by default here
+  const inPane = (k) => allowed.has(k) && k !== "pivot";
+  const key = inPane(reportKey) ? reportKey : inPane(last) ? last : (ordered.find((r) => r.key !== "pivot") ?? ordered[0]).key;
   // #/reports (or a report this person may not open) is renamed to the report it shows (no second drawing), so the address,
   // Back and the app's back-cache (which files a screen under the address it was drawn with) all agree.
   if (reportKey !== key) (navigate.rewrite ?? navigate.replace)(`#/reports?r=${key}`);

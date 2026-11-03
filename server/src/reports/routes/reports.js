@@ -36,7 +36,8 @@ reportsRouter.get("/", async (req, res) => {
 reportsRouter.get("/access", requireAdmin, async (req, res) => {
   const { rows } = await pool.query("SELECT report_key, role, enabled FROM report_access");
   const overrides = new Map(rows.map((r) => [`${r.report_key}:${r.role}`, r.enabled]));
-  const matrix = REPORTS.map((report) => ({
+  // a report with fixed roles (the Pivot report) is not offered here: nobody can widen it
+  const matrix = REPORTS.filter((report) => !report.fixedRoles).map((report) => ({
     key: report.key,
     nameKey: report.nameKey,
     roles: ROLES.filter((role) => role !== "admin").map((role) => ({

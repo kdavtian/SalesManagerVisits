@@ -592,6 +592,10 @@ export function decidesDeadStock(role) {
 export function seesHomeKpis(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
+// The Pivot report over every data source (reports/pivot): admin and CEO only (owner, 2026-11-03), never widened by the per-role report settings.
+export function usesPivot(role) {
+  return role === "admin" || role === "ceo";
+}
 // Who reviews a region / subregion the app could not place with confidence (placeReviews.js).
 export function reviewsPlaces(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
