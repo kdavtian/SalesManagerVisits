@@ -5,7 +5,7 @@ import { currentChips, chipHtml, chipSections } from "../brandChips.js";
 import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { state, canCreateTasks, sendsRequests, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports } from "../state.js";
+import { state, isAdmin, canCreateTasks, sendsRequests, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports } from "../state.js";
 import { reviewsPlaces } from "../shared/roles.js";
 import { openVisitDetailSheet, checkinOutcomeLabels } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
@@ -29,6 +29,18 @@ const headerTierBadge = (c) => (c.customer_tier === "potential" && potentialBadg
 // The card: a saved copy from the last visit draws at once while a fresh copy is fetched (and replaces it only when something changed); a
 // first-ever visit shows the loading line. A finger landing on the customer's row already started this same fetch (prefetch.js), so it is
 // usually finished by the time the card opens. { fresh: true } (after the rep changed something here) skips the saved copy.
+// The region / subregion of this customer could not be matched to the list of places and waits in Settings > Places to review
+// (placeReviews.js). A small label at the end of the address, never a column of its own (owner, 2026-11-03: it stretched into a tall
+// yellow block beside a long address); admin opens the review list from it.
+function placeReviewChip(customer) {
+  if (!customer.place_review_pending || !reviewsPlaces(state.user.role)) return "";
+  const label = escapeHtml(t("place_to_review"));
+  const hint = escapeHtml(t("place_to_review_hint"));
+  return isAdmin()
+    ? ` <a class="badge badge-warning detail-review-chip" href="#/settings?section=places" title="${hint}">${label}</a>`
+    : ` <span class="badge badge-warning detail-review-chip" title="${hint}">${label}</span>`;
+}
+
 export async function renderCustomerDetail(root, navigate, customerId, { fresh = false } = {}) {
   root.innerHTML = `<div class="detail-view customer-detail-view"></div>`;
   const container = root.querySelector(".detail-view");
@@ -178,7 +190,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
             ]
               .filter(Boolean)
               .map(escapeHtml)
-              .join(" &middot; ")}</span>${customer.place_review_pending && reviewsPlaces(state.user.role) ? ` <span class="badge badge-warning">${t("place_to_review")}</span>` : ""}</div>`
+              .join(" &middot; ")}${placeReviewChip(customer)}</span></div>`
           : ""
       }
       ${customer.phone ? `<div class="detail-fact"><span class="detail-fact-icon">${icons.phone}</span><a href="tel:${escapeHtml(customer.phone)}">${escapeHtml(formatPhoneDisplay(customer.phone))}</a></div>` : ""}

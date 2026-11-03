@@ -209,7 +209,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   const TAB_KEY = "settings.tab";
 
   // A route like #/settings?section=a-team (or an old notification link) decides the starting point.
-  const SECTION_ALIASES = { "plan-approvals": "a-sales", "system-health": "a-system" };
+  const SECTION_ALIASES = { "plan-approvals": "a-sales", "system-health": "a-system", places: "a-system" };
   const wantedPage = pageById(SECTION_ALIASES[section] || section);
   let storedTab = null;
   try {
@@ -424,6 +424,10 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   }
   if (section === "system-health" && hasAdminWorkspace) {
     requestAnimationFrame(() => root.querySelector("#row-system-health")?.click());
+  }
+  // the "to review" label on a customer card opens the places waiting for review
+  if (section === "places" && hasAdminWorkspace) {
+    requestAnimationFrame(() => root.querySelector("#row-places")?.click());
   }
 
   // --- Avatar ---

@@ -2,6 +2,7 @@
 
 export const enCustomers = {
     place_to_review: "to review",
+    place_to_review_hint: "The region or subregion is not in the list of places: it waits in Settings > Places (spelling) for a check",
     rp_auto_added: "Added to the route plan: {rep}, {day} ({area})",
     rp_auto_in_area: "Already in the route plan: {rep}, {day} (the whole area is planned)",
     rp_auto_day_0: "Sunday",
