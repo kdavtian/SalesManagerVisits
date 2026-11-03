@@ -277,4 +277,8 @@ export const enCustomers = {
   attn_no_visit: "No visit for {n} days",
   chips_show_more: "Show {n} more",
   orders_total_3m: "Total, 3 mo.",
+  desk_col_address: "Address",
+  desk_col_last_payment: "Last payment",
+  desk_col_last_payment_amount: "Last payment amount",
+  customers_only_ours: "Only our customers (with an ERP ID)",
 };

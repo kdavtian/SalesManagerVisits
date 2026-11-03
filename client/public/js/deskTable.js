@@ -78,53 +78,208 @@ export function applyDensity() {
 }
 
 // columns: [{ key, label, width, sort?, align?, narrow?, cell(row) -> text, csv?(row) -> text }]
-// Returns the visible set for this page: the saved choice, or `defaults` the first time.
-export function deskColumns(pageKey, columns, defaults) {
-  const storageKey = `fieldvisits_desk_cols_${pageKey}`;
-  const known = new Set(columns.map((c) => c.key));
-  let visible;
-  const saved = readPref(storageKey);
-  if (saved) {
-    try {
-      visible = new Set(JSON.parse(saved).filter((k) => known.has(k)));
-    } catch {
-      visible = null;
-    }
+// The person's choice of columns for one page: which are shown, in which order, and whether the widths follow the content. Kept in this
+// browser at once and saved on the server (per person, so the MacBook and the Windows PC show the same table; migration 180).
+const COLS_PREFIX = "fieldvisits_desk_cols_";
+export const DESK_PREFS_EVENT = "fv:desk-prefs";
+
+// A saved choice: { order: [keys], on: [keys], fit } -- or the old form, a plain list of the visible keys.
+function parseSaved(raw) {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw);
+    if (Array.isArray(v)) return { order: [], on: v.filter((k) => typeof k === "string"), fit: true };
+    if (v && typeof v === "object") return { order: Array.isArray(v.order) ? v.order : [], on: Array.isArray(v.on) ? v.on : null, fit: v.fit !== false };
+  } catch {
+    /* an unreadable copy is the same as none */
   }
-  if (!visible) visible = new Set(defaults);
+  return null;
+}
+
+const pending = new Map(); // page -> timer of the save to the server (one save after the last change)
+function pushPrefs(pageKey, config) {
+  clearTimeout(pending.get(pageKey));
+  pending.set(
+    pageKey,
+    setTimeout(() => {
+      pending.delete(pageKey);
+      import("./api.js").then(({ api }) => api.saveTablePrefs(pageKey, config)).catch(() => {});
+    }, 700)
+  );
+}
+
+export function deskColumns(pageKey, columns, defaults) {
+  const storageKey = `${COLS_PREFIX}${pageKey}`;
+  const known = columns.map((c) => c.key);
+  const byKey = new Map(columns.map((c) => [c.key, c]));
+  let order = known.slice();
+  let visible = new Set(defaults);
+  let fit = true;
+  const load = () => {
+    const saved = parseSaved(readPref(storageKey));
+    const knownSet = new Set(known);
+    order = (saved?.order ?? []).filter((k) => knownSet.has(k));
+    for (const k of known) if (!order.includes(k)) order.push(k); // a column added in a later release goes last
+    visible = new Set(saved?.on ? saved.on.filter((k) => knownSet.has(k)) : defaults);
+    fit = saved ? saved.fit : true;
+  };
+  load();
+  const save = () => {
+    const config = { order: order.slice(), on: [...visible], fit };
+    writePref(storageKey, JSON.stringify(config));
+    pushPrefs(pageKey, config);
+  };
   const api = {
     isOn: (key) => visible.has(key),
-    // the columns in their fixed order, only the visible ones
-    list: () => columns.filter((c) => visible.has(c.key)),
+    // the visible columns, in the person's order
+    list: () => order.map((k) => byKey.get(k)).filter((c) => c && visible.has(c.key)),
+    // every column in the person's order (the column menu lists them all)
+    allInOrder: () => order.map((k) => byKey.get(k)).filter(Boolean),
     set(key, on) {
       if (on) visible.add(key);
       else visible.delete(key);
-      writePref(storageKey, JSON.stringify([...visible]));
+      save();
     },
     toggle(key) {
       api.set(key, !visible.has(key));
     },
+    // one place earlier (-1) or later (+1) among all the columns
+    move(key, delta) {
+      const i = order.indexOf(key);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      save();
+    },
+    // dragged in front of another column (or to the end when beforeKey is null)
+    moveBefore(key, beforeKey) {
+      if (key === beforeKey) return;
+      order = order.filter((k) => k !== key);
+      const at = beforeKey ? order.indexOf(beforeKey) : -1;
+      if (at < 0) order.push(key);
+      else order.splice(at, 0, key);
+      save();
+    },
+    fits: () => fit,
+    setFit(on) {
+      fit = Boolean(on);
+      save();
+    },
+    reset() {
+      order = known.slice();
+      visible = new Set(defaults);
+      fit = true;
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        /* storage blocked */
+      }
+      clearTimeout(pending.get(pageKey));
+      pending.delete(pageKey);
+      import("./api.js").then(({ api: server }) => server.resetTablePrefs(pageKey)).catch(() => {});
+    },
+    // read the saved copy again (the server's choice arrived)
+    reload: load,
   };
   return api;
 }
 
-// The gear menu: one checkbox per column, then the density switch. Closes on an outside click or Esc.
+// The server's choices for this person, once a session: they replace this browser's copy, and a choice that only exists here (made
+// before the server kept them) is sent up. Tables already on screen redraw (DESK_PREFS_EVENT).
+let prefsSync = null;
+export function syncDeskPrefs() {
+  prefsSync ||= import("./api.js")
+    .then(({ api }) => api.getTablePrefs())
+    .then(({ prefs }) => {
+      let changed = false;
+      const server = prefs ?? {};
+      for (const [page, cfg] of Object.entries(server)) {
+        const raw = JSON.stringify({ order: cfg.order ?? [], on: cfg.on ?? [], fit: cfg.fit !== false });
+        if (readPref(`${COLS_PREFIX}${page}`) !== raw) {
+          writePref(`${COLS_PREFIX}${page}`, raw);
+          changed = true;
+        }
+      }
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          const page = key?.startsWith(COLS_PREFIX) ? key.slice(COLS_PREFIX.length) : null;
+          const saved = page && !server[page] ? parseSaved(localStorage.getItem(key)) : null;
+          if (saved?.on) pushPrefs(page, { order: saved.order, on: saved.on, fit: saved.fit });
+        }
+      } catch {
+        /* storage blocked */
+      }
+      if (changed) window.dispatchEvent(new Event(DESK_PREFS_EVENT));
+    })
+    .catch(() => {});
+  return prefsSync;
+}
+
+// A column's width that fits its content (owner, 2026-11-03: "narrow to fit more columns, fit the info accurately"): the longest of
+// the heading and the texts of the rows shown, in the table's own font, between a small minimum and a generous maximum.
+let measureCtx = null;
+function textWidth(text, font) {
+  measureCtx ||= document.createElement("canvas").getContext("2d");
+  measureCtx.font = font;
+  return measureCtx.measureText(String(text ?? "")).width;
+}
+export function fitWidth(column, rows) {
+  const declared = parseFloat(column.width) || 100;
+  if (column.html || !rows.length) return declared;
+  const family = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif";
+  const font = `13.5px ${family}`;
+  let widest = textWidth(column.label, `600 12px ${family}`) + (column.sort ? 18 : 0);
+  for (const row of rows.slice(0, 300)) {
+    let text = "";
+    try {
+      text = column.cell(row);
+    } catch {
+      continue;
+    }
+    if (text) widest = Math.max(widest, textWidth(text, font));
+  }
+  const min = column.align === "end" ? 64 : 56;
+  const max = Math.max(declared * 1.6, 220);
+  return Math.round(Math.min(max, Math.max(min, widest + 28)));
+}
+
+// The gear menu: the columns in the person's order (tick to show, drag or use the arrows to move), then the fit and density switches
+// and "Back to the standard columns". Closes on an outside click or Esc.
 export function openDeskColumnMenu(anchor, columns, cols, onChange) {
   document.querySelector(".desk-col-menu")?.remove();
   const menu = document.createElement("div");
   menu.className = "desk-col-menu";
   menu.setAttribute("role", "menu");
-  menu.innerHTML = `
+  const paint = (focusKey = "") => {
+    const all = cols.allInOrder();
+    menu.innerHTML = `
     <div class="desk-col-menu-title">${escapeHtml(t("desk_columns"))}</div>
-    ${columns
+    <p class="desk-col-menu-hint">${escapeHtml(t("desk_cols_hint"))}</p>
+    ${all
       .map(
-        (c) => `<label class="desk-col-menu-item"><input type="checkbox" data-col="${c.key}" ${cols.isOn(c.key) ? "checked" : ""} /><span>${escapeHtml(c.label)}</span></label>`
+        (c, i) => `<div class="desk-col-menu-row" draggable="true" data-row="${c.key}">
+          <span class="desk-col-grip" aria-hidden="true">⠿</span>
+          <label class="desk-col-menu-item"><input type="checkbox" data-col="${c.key}" ${cols.isOn(c.key) ? "checked" : ""} /><span>${escapeHtml(c.label)}</span></label>
+          <button type="button" class="desk-col-move" data-move="${c.key}" data-delta="-1" ${i === 0 ? "disabled" : ""} aria-label="${escapeHtml(t("desk_cols_move_up"))}" title="${escapeHtml(t("desk_cols_move_up"))}">↑</button>
+          <button type="button" class="desk-col-move" data-move="${c.key}" data-delta="1" ${i === all.length - 1 ? "disabled" : ""} aria-label="${escapeHtml(t("desk_cols_move_down"))}" title="${escapeHtml(t("desk_cols_move_down"))}">↓</button>
+        </div>`
       )
       .join("")}
     <div class="desk-col-menu-sep"></div>
-    <label class="desk-col-menu-item"><input type="checkbox" data-density ${isCompact() ? "checked" : ""} /><span>${escapeHtml(t("desk_density_compact"))}</span></label>`;
+    <label class="desk-col-menu-item"><input type="checkbox" data-fit ${cols.fits() ? "checked" : ""} /><span>${escapeHtml(t("desk_cols_fit"))}</span></label>
+    <label class="desk-col-menu-item"><input type="checkbox" data-density ${isCompact() ? "checked" : ""} /><span>${escapeHtml(t("desk_density_compact"))}</span></label>
+    <div class="desk-col-menu-sep"></div>
+    <button type="button" class="desk-col-reset" data-reset>${escapeHtml(t("desk_cols_reset"))}</button>`;
+    if (focusKey) menu.querySelector(`[data-move="${focusKey}"]:not(:disabled), [data-col="${focusKey}"]`)?.focus();
+  };
+  paint();
   const rect = anchor.getBoundingClientRect();
-  menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+  // the list is long: it scrolls inside the window, never past its bottom edge (a menu this tall opened from the top of a table is lifted)
+  let top = Math.round(rect.bottom + 4);
+  if (window.innerHeight - top - 12 < 360) top = Math.max(8, window.innerHeight - 372);
+  menu.style.top = `${top}px`;
+  menu.style.maxHeight = `${window.innerHeight - top - 12}px`;
   menu.style.right = `${Math.max(8, Math.round(window.innerWidth - rect.right))}px`;
   document.body.appendChild(menu);
   const close = () => {
@@ -147,11 +302,54 @@ export function openDeskColumnMenu(anchor, columns, cols, onChange) {
   menu.addEventListener("change", (e) => {
     const input = e.target;
     if (input.dataset.col) cols.set(input.dataset.col, input.checked);
+    else if (input.hasAttribute("data-fit")) cols.setFit(input.checked);
     else if (input.hasAttribute("data-density")) {
       writePref(DENSITY_KEY, input.checked ? "compact" : "comfortable");
       applyDensity();
     }
     onChange(input.dataset.col || "");
+  });
+  menu.addEventListener("click", (e) => {
+    const move = e.target.closest("[data-move]");
+    if (move) {
+      cols.move(move.dataset.move, Number(move.dataset.delta));
+      paint(move.dataset.move);
+      onChange("");
+      return;
+    }
+    if (e.target.closest("[data-reset]")) {
+      cols.reset();
+      applyDensity();
+      paint();
+      onChange("*");
+    }
+  });
+  // dragging a column row in front of another
+  let dragKey = null;
+  menu.addEventListener("dragstart", (e) => {
+    const row = e.target.closest?.("[data-row]");
+    if (!row) return;
+    dragKey = row.dataset.row;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", dragKey);
+    row.classList.add("desk-col-dragging");
+  });
+  menu.addEventListener("dragover", (e) => {
+    if (dragKey && e.target.closest?.("[data-row]")) e.preventDefault();
+  });
+  menu.addEventListener("drop", (e) => {
+    const target = e.target.closest?.("[data-row]");
+    if (!dragKey || !target) return;
+    e.preventDefault();
+    cols.moveBefore(dragKey, target.dataset.row === dragKey ? null : target.dataset.row);
+    const moved = dragKey;
+    dragKey = null;
+    paint(moved);
+    onChange("");
+  });
+  menu.addEventListener("dragend", () => {
+    dragKey = null;
+    menu.querySelectorAll(".desk-col-dragging").forEach((r) => r.classList.remove("desk-col-dragging"));
   });
   menu.querySelector("input")?.focus();
   return close;
@@ -233,7 +431,7 @@ export function wireDeskKeys(listEl, { rowSelector, onToggle, onEscape } = {}) {
    painted. Elements may be given as functions when the page rebuilds its shell (Activity, Tasks). */
 const el = (x) => (typeof x === "function" ? x() : x);
 // the smallest width of the name cell and of the chips cell (any further lead cell): below that the table scrolls sideways
-const LEAD_MIN = [200, 120];
+const LEAD_MIN = [200, 140];
 const scrollSynced = new WeakSet();
 
 export function createDeskTable(opts) {
@@ -259,6 +457,21 @@ export function createDeskTable(opts) {
     root,
   } = opts;
   const cols = deskColumns(pageKey, columns(), defaults);
+  // the person's saved columns (same on every computer): fetched once a session; a table already on screen redraws when they arrive
+  if (isDesktop()) {
+    syncDeskPrefs();
+    const onPrefs = () => {
+      if (!root?.isConnected) {
+        window.removeEventListener(DESK_PREFS_EVENT, onPrefs);
+        return;
+      }
+      cols.reload();
+      if (opts.onColumnsChange?.("*") === false) return;
+      renderHead();
+      opts.onRepaint?.();
+    };
+    window.addEventListener(DESK_PREFS_EVENT, onPrefs);
+  }
   const internal = new Set();
   const selection = opts.selection || {
     isOn: (id) => internal.has(id),
@@ -278,6 +491,67 @@ export function createDeskTable(opts) {
   };
   // grid column of the first optional cell: [checkbox] | icon | the fixed cells (only the first one beside a docked panel)
   const firstCell = () => 2 + (withSelection ? 1 : 0) + (docked() ? 1 : lead.length);
+
+  // A small card with the row's main facts after the mouse rests on it (owner, 2026-11-03): opts.preview(row) -> html or "" (none).
+  // Only with a mouse; one listener on the list, nothing drawn until the pause is over, hidden on leaving, clicking or scrolling.
+  const hasMouse = typeof matchMedia === "function" && matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const previewWired = new WeakSet();
+  function wirePreview() {
+    const host = el(opts.listEl);
+    if (!opts.preview || !hasMouse || !host || previewWired.has(host)) return;
+    previewWired.add(host);
+    let timer = null;
+    let card = null;
+    let current = null;
+    const hide = () => {
+      clearTimeout(timer);
+      card?.remove();
+      card = null;
+      current = null;
+    };
+    host.addEventListener("mouseover", (e) => {
+      if (!isDesktop()) return;
+      const row = e.target.closest?.(rowSelector);
+      if (!row || row === current) return;
+      hide();
+      current = row;
+      timer = setTimeout(() => {
+        const data = rows().find((r) => String(idOf(r)) === String(row.dataset.id));
+        const html = data ? opts.preview(data) : "";
+        if (!html || !row.isConnected || current !== row) return;
+        card = document.createElement("div");
+        card.className = "desk-preview";
+        card.setAttribute("role", "tooltip");
+        card.innerHTML = html;
+        document.body.appendChild(card);
+        const box = row.getBoundingClientRect();
+        const w = card.offsetWidth;
+        const h = card.offsetHeight;
+        const left = Math.max(8, Math.min(box.left + box.width * 0.45, window.innerWidth - w - 16));
+        const below = box.bottom + 6 + h <= window.innerHeight - 8;
+        card.style.left = `${Math.round(left)}px`;
+        card.style.top = `${Math.round(below ? box.bottom + 6 : Math.max(8, box.top - h - 6))}px`;
+      }, 550);
+    });
+    host.addEventListener("mouseleave", hide);
+    host.addEventListener("click", hide, true);
+    host.addEventListener("scroll", hide, { passive: true, capture: true });
+  }
+
+  // Widths in px: the declared ones, or -- with "fit columns to content" on -- what the rows shown need (never beside a docked panel,
+  // where the narrow widths are used so the list stays readable).
+  let lastWidths = "";
+  const columnWidths = (list, d) => {
+    if (d) return list.map((c) => c.narrowWidth || c.width);
+    if (!cols.fits()) return list.map((c) => c.width);
+    const sample = rows?.() ?? [];
+    return list.map((c) => `${fitWidth(c, sample)}px`);
+  };
+  // the rows changed (a search, new data): the head is drawn again only when a width really changes
+  const refit = () => {
+    if (!headEl || !cols.fits() || docked() || !isDesktop()) return;
+    if (columnWidths(visibleColumns(), false).join(" ") !== lastWidths) renderHead();
+  };
 
   function renderHead() {
     const slot = el(opts.headSlot);
@@ -299,7 +573,8 @@ export function createDeskTable(opts) {
     // scrolls sideways inside its own box (heading row in step) instead of pushing columns out of sight (owner, 2026-10-29).
     let leadIndex = 0;
     const leadTracks = (d ? leadColsDocked : leadCols).replace(/minmax\(0,/g, () => `minmax(${LEAD_MIN[Math.min(leadIndex++, 1)]}px,`);
-    const widths = list.map((c) => (d ? c.narrowWidth || c.width : c.width));
+    const widths = columnWidths(list, d);
+    lastWidths = widths.join(" ");
     view.style.setProperty("--desk-cols", `${withSelection ? "24px " : ""}36px ${leadTracks} ${widths.join(" ")} 28px`.replace(/\s+/g, " "));
     const leadMins = LEAD_MIN.slice(0, leadIndex).reduce((a, b) => a + b, 0) + Math.max(0, leadIndex - LEAD_MIN.length) * LEAD_MIN[1];
     const tracks = (withSelection ? 1 : 0) + 2 + leadIndex + widths.length;
@@ -326,6 +601,7 @@ export function createDeskTable(opts) {
       );
     }
     wireDeskHead(headEl, (key) => onSort?.(key));
+    wirePreview();
     headEl.querySelector(".desk-col-gear").addEventListener("click", (e) => {
       openDeskColumnMenu(e.currentTarget, columns(), cols, (changedKey) => {
         if (onColumnsChange?.(changedKey) === false) return;
@@ -367,6 +643,7 @@ export function createDeskTable(opts) {
       foot.innerHTML = "";
       return;
     }
+    refit();
     foot.innerHTML = deskFootHtml(count);
     foot.querySelector("[data-desk-export]").addEventListener("click", () => {
       const list = rows();

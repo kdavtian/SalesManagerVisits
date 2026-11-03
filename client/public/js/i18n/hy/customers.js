@@ -277,4 +277,8 @@ export const hyCustomers = {
   attn_no_visit: "{n} օր այց չի եղել",
   chips_show_more: "Ցույց տալ ևս {n}",
   orders_total_3m: "Ընդամենը (3 ամիս)",
+  desk_col_address: "Հասցե",
+  desk_col_last_payment: "Վերջին վճարում",
+  desk_col_last_payment_amount: "Վերջին վճարման գումար",
+  customers_only_ours: "Միայն մեր հաճախորդները (ERP կոդով)",
 };

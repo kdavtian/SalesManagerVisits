@@ -7,6 +7,10 @@ export const systemApi = {
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),
   setHomeTileOrder: (order) => json("/me/home-order", "PUT", { order }),
+  // a person's desktop table settings (columns, their order, fit-to-content), the same on every computer (server/src/system/routes/tablePrefs.js)
+  getTablePrefs: () => request("/table-prefs", { fresh: true }),
+  saveTablePrefs: (page, config) => json(`/table-prefs/${encodeURIComponent(page)}`, "PUT", { config }),
+  resetTablePrefs: (page) => request(`/table-prefs/${encodeURIComponent(page)}`, { method: "DELETE" }),
   // Backs app.js's periodic (every-60s) badge poll -- one request for all
   // seven Home-tab/nav counts instead of seven separate ones. Event-driven
   // refreshes right after a specific action still use each badge's own

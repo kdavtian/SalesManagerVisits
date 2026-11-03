@@ -54,6 +54,7 @@ import { reportsRouter } from "./reports/routes/reports.js";
 import { fuelRouter } from "./field/routes/fuel.js";
 import { bizReportsRouter } from "./reports/routes/bizReports.js";
 import { pivotRouter } from "./reports/routes/pivot.js";
+import { tablePrefsRouter } from "./system/routes/tablePrefs.js";
 import { paymentsRouter } from "./money/routes/payments.js";
 import { payments2Router } from "./money/routes/payments2.js";
 import { cashHandoffsRouter } from "./money/routes/cashHandoffs.js";
@@ -198,6 +199,7 @@ app.use(requireCsrf);
 
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);
+app.use("/api/table-prefs", express.json(), tablePrefsRouter);
 app.use("/api/users", express.json(), usersRouter);
 app.post("/api/customers", express.json(), requireAuth, autoAssignSalesChannel, normalizeCustomerPortfolio);
 app.use("/api/customers", express.json(), customersRouter);
