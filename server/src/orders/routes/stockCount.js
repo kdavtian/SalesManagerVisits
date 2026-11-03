@@ -5,7 +5,10 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canCountStock, canViewStockCount, seesStockCountExpected } from "../../shared/roles.js";
 import { yerevanToday, yerevanMonthStart } from "../../utils/yerevanDate.js";
-import { dayList, saveCount, clearCount, closeDay, monthReport } from "../stockCount.js";
+import path from "node:path";
+import fs from "node:fs";
+import { dayList, saveCount, clearCount, closeDay, monthReport, savePdf } from "../stockCount.js";
+import { stockCountUpload, stockCountDirPath } from "../../shared/upload.js";
 
 export const stockCountRouter = Router();
 stockCountRouter.use(requireAuth);
@@ -40,11 +43,62 @@ stockCountRouter.delete("/items/:productId", counter, async (req, res) => {
   res.json(r);
 });
 
-stockCountRouter.post("/finish", counter, async (req, res) => {
+// "Finish the day": the counter's drawn signature is mandatory (field `signature`, a PNG); a photo or PDF of the paper count (`attachment`) is
+// optional. Both are kept with the day and go into its PDF report.
+const finishUpload = stockCountUpload.fields([{ name: "signature", maxCount: 1 }, { name: "attachment", maxCount: 1 }]);
+stockCountRouter.post("/finish", counter, (req, res, next) => finishUpload(req, res, (err) => (err ? res.status(400).json({ error: err.message }) : next())), async (req, res) => {
   const today = yerevanToday();
-  const r = await closeDay(pool, today, req.user.id);
+  const signature = req.files?.signature?.[0];
+  const attachment = req.files?.attachment?.[0];
+  const discard = () => [signature, attachment].filter(Boolean).forEach((f) => fs.promises.unlink(f.path).catch(() => {}));
+  if (!signature) {
+    discard();
+    return res.status(400).json({ error: "Sign the stock count to finish the day", code: "signature_required" });
+  }
+  const r = await closeDay(pool, today, req.user.id, {
+    signaturePath: signature.filename,
+    attachmentPath: attachment?.filename ?? null,
+    attachmentMime: attachment?.mimetype ?? null,
+  });
+  if (r.empty || r.already) discard(); // nothing was closed by this call: the files are not kept
   if (r.empty) return res.status(400).json({ error: "Nothing to count today" });
   res.json(await dayList(pool, today, { showExpected: true }));
+});
+
+// The day's report (PDF) -- made again when the file is missing. Everyone who may open the stock count: the counter, the accountants, the bosses.
+stockCountRouter.get("/day/:day/pdf", async (req, res) => {
+  const day = String(req.params.day);
+  if (!DAY.test(day)) return res.status(400).json({ error: "Invalid day" });
+  const { rows: [d] } = await pool.query("SELECT pdf_path FROM stock_count_days WHERE day = $1", [day]);
+  if (!d) return res.status(404).json({ error: "This day is not finished yet" });
+  let file = d.pdf_path;
+  if (!file || !fs.existsSync(path.join(stockCountDirPath, path.basename(file)))) file = await savePdf(pool, day);
+  if (!file) return res.status(404).json({ error: "No report" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="Stock-count-${day}.pdf"`);
+  res.sendFile(path.join(stockCountDirPath, path.basename(file)));
+});
+
+// The photo / PDF of the paper count that came with the day, when there is one.
+stockCountRouter.get("/day/:day/attachment", async (req, res) => {
+  const day = String(req.params.day);
+  if (!DAY.test(day)) return res.status(400).json({ error: "Invalid day" });
+  const { rows: [d] } = await pool.query("SELECT attachment_path, attachment_mime FROM stock_count_days WHERE day = $1", [day]);
+  if (!d?.attachment_path) return res.status(404).json({ error: "No attachment" });
+  res.setHeader("Content-Type", d.attachment_mime || "application/octet-stream");
+  res.sendFile(path.join(stockCountDirPath, path.basename(d.attachment_path)));
+});
+
+// The finished days with their reports, newest first: the Documents page lists them for the accountants and the bosses.
+stockCountRouter.get("/documents", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT to_char(s.day, 'YYYY-MM-DD') AS day, s.counted, s.planned, s.differences, s.left_over, s.finished_at,
+            (s.signature_path IS NOT NULL) AS signed, (s.attachment_path IS NOT NULL) AS has_attachment,
+            COALESCE(u.name_hy, u.name) AS counter
+       FROM stock_count_days s LEFT JOIN users u ON u.id = s.finished_by
+      ORDER BY s.day DESC LIMIT 60`
+  );
+  res.json(rows);
 });
 
 // ?month=YYYY-MM

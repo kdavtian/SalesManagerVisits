@@ -5,7 +5,8 @@
 // "Month": every working day with its result and every difference found (management, and the counter for his own history).
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, activateDialog } from "../util.js";
+import { openFileReadySheet } from "../fileReadySheet.js";
 import { prepareSearchText, matchKind } from "../shared/searchKey.js";
 import { installInlineClearButton } from "../searchBar.js";
 import { enqueueStockCount, discardEntry, flushQueue, getQueue, onQueueChange } from "../offlineQueue.js";
@@ -83,6 +84,49 @@ function dayHtml(data, query) {
     .join("");
 }
 
+// After signing: "add a photo / PDF of the paper count" or "finish without". Resolves with a File, null (without) or undefined (back).
+function askAttachment() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet">
+      <h2>${t("stock_count_attach_title")}</h2>
+      <p class="muted">${t("stock_count_attach_hint")}</p>
+      <input type="file" id="sc-attach-input" accept="image/*,application/pdf" hidden />
+      <p class="form-error" id="sc-attach-error" hidden></p>
+      <div class="sheet-actions sheet-actions-floating">
+        <button type="button" class="btn" data-act="back">${t("back")}</button>
+        <button type="button" class="btn" data-act="skip">${t("stock_count_attach_skip")}</button>
+        <button type="button" class="btn btn-primary" data-act="add">${t("stock_count_attach_add")}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const input = overlay.querySelector("#sc-attach-input");
+    const close = (value) => {
+      overlay.remove();
+      resolve(value);
+    };
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        const err = overlay.querySelector("#sc-attach-error");
+        err.textContent = t("stock_count_attach_big");
+        err.hidden = false;
+        return;
+      }
+      close(file);
+    });
+    overlay.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-act]")?.dataset.act;
+      if (act === "add") input.click();
+      else if (act === "skip") close(null);
+      else if (act === "back" || e.target === overlay) close(undefined);
+    });
+  });
+}
+
 function headHtml(data) {
   const n = data.numbers;
   const pct = n.due ? Math.round((Math.min(n.counted, n.due) / n.due) * 100) : 100;
@@ -102,6 +146,7 @@ function headHtml(data) {
       <span class="sc-track" aria-hidden="true"><span class="sc-track-fill" style="width:${pct}%"></span></span>
       ${f && f.differences ? `<p class="sc-result">${fill(f.task_id ? "stock_count_result_diffs" : "stock_count_result_diffs_only", { n: f.differences })}</p>` : ""}
       ${f && !f.differences && f.counted ? `<p class="sc-result">${t("stock_count_result_clean")}</p>` : ""}
+      ${f?.has_pdf ? `<button type="button" class="btn btn-block sc-report-btn" data-sc-pdf="${data.day}">${t("stock_count_report_pdf")}${f.signed ? ` · ${t("stock_count_signed")}` : ""}</button>` : ""}
     </div>`;
 }
 
@@ -203,6 +248,17 @@ export async function renderStockCount(root, navigate, query) {
   }
   function paintDay() {
     head.innerHTML = headHtml(data);
+    head.querySelector("[data-sc-pdf]")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget;
+      b.disabled = true;
+      try {
+        openFileReadySheet(await api.getStockCountPdf(b.dataset.scPdf), `Stock-count-${b.dataset.scPdf}.pdf`);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        b.disabled = false;
+      }
+    });
     // keep the field being typed in when the list is redrawn
     const focused = document.activeElement?.closest?.(".sc-row")?.dataset.id;
     body.innerHTML = dayHtml(data, search.value);
@@ -374,7 +430,19 @@ export async function renderStockCount(root, navigate, query) {
           return;
         }
       }
-      data = await api.finishStockCountDay();
+      // 1. the counter signs (mandatory: the day is his evidence)  2. a photo / PDF of the paper count may come with it (optional)
+      const { openSignaturePad } = await import("../signaturePad.js");
+      const signature = await openSignaturePad({ title: t("stock_count_sign_title"), statement: t("stock_count_sign_statement"), doneLabel: t("stock_count_sign_done") });
+      if (!signature) {
+        finishBtn.disabled = false;
+        return;
+      }
+      const attachment = await askAttachment();
+      if (attachment === undefined) {
+        finishBtn.disabled = false;
+        return;
+      }
+      data = await api.finishStockCountDay(signature, attachment);
       armed = false;
       showError("");
       paintDay();

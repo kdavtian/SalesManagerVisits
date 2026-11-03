@@ -58,3 +58,22 @@ export const signatureUpload = multer({
     cb(null, true);
   },
 });
+
+// The stock count's signature (a PNG drawn on the phone) and the optional photo / PDF of the paper count (owner, 2026-11-03).
+const stockCountDir = path.join(uploadDir, "stock-count");
+fs.mkdirSync(stockCountDir, { recursive: true });
+const STOCK_COUNT_MIME = { ...ALLOWED_MIME_TO_EXT, "application/pdf": "pdf" };
+export const stockCountDirPath = stockCountDir;
+export const stockCountUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, stockCountDir),
+    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}.${STOCK_COUNT_MIME[file.mimetype] || "bin"}`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024, files: 2 },
+  fileFilter: (req, file, cb) => {
+    // the signature is an image; the attachment may also be a PDF
+    const ok = file.fieldname === "attachment" ? STOCK_COUNT_MIME[file.mimetype] : ALLOWED_MIME_TO_EXT[file.mimetype];
+    if (!ok) return cb(new Error("Only JPEG, PNG or WebP images (and a PDF for the attachment) are allowed"));
+    cb(null, true);
+  },
+});

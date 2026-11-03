@@ -176,3 +176,51 @@ test("migration 173: the Stock count tile is added to customized lists of its ro
     await pool.query("UPDATE app_settings SET quick_action_visibility = $1::jsonb WHERE id = 1", [before?.v == null ? null : JSON.stringify(before.v)]);
   }
 });
+
+// Owner, 2026-11-03: the warehouse manager SIGNS the day (mandatory), may add a photo, the day's report is a PDF, Vaghinak gives him a task to
+// recheck what differs and tells the accountants the result.
+test("finishing the day needs the drawn signature; with it the day is signed, its PDF exists, the counter gets a recheck task and the accountant a notice", async () => {
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const day = (await apiRequest("/api/stock-count/day", { cookie: cookies.admin })).data;
+  const first = day.items.slice(0, 2);
+  assert.ok(first.length === 2, "today has products to count");
+  for (const it of first) {
+    const r = await apiRequest(`/api/stock-count/items/${it.product_id}`, { method: "PUT", cookie: cookies.warehouse_manager, body: { qty: Number(it.expected_qty ?? 0) + 5 } });
+    assert.equal(r.status, 200);
+  }
+  const { apiFormRequest } = await import("./helpers.js");
+  // without a signature: refused, nothing closed
+  const none = new FormData();
+  const refused = await apiFormRequest("/api/stock-count/finish", { form: none, cookie: cookies.warehouse_manager });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.data.code, "signature_required");
+  assert.equal((await pool.query("SELECT 1 FROM stock_count_days WHERE day = $1", [day.day])).rowCount, 0);
+  // a signature + a photo of the paper count
+  const form = new FormData();
+  form.set("signature", new Blob([PNG], { type: "image/png" }), "sig.png");
+  form.set("attachment", new Blob([PNG], { type: "image/png" }), "paper.png");
+  const ok = await apiFormRequest("/api/stock-count/finish", { form, cookie: cookies.warehouse_manager });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  const { rows: [closed] } = await pool.query("SELECT signature_path, signed_at, attachment_path, pdf_path, finished_by, differences FROM stock_count_days WHERE day = $1", [day.day]);
+  assert.ok(closed.signature_path && closed.signed_at && closed.attachment_path, "signature and photo are kept");
+  assert.ok(closed.pdf_path, "the PDF report is saved");
+  assert.equal(closed.finished_by, users.warehouse_manager.id);
+  assert.ok(closed.differences >= 2);
+  // the report opens for the counter and for the accountant, not for a rep
+  for (const who of ["warehouse_manager", "accountant"]) {
+    const r = await apiRequest(`/api/stock-count/day/${day.day}/pdf`, { cookie: cookies[who] });
+    assert.equal(r.status, 200, who);
+  }
+  const viaApi = await apiRequest(`/api/stock-count/day/${day.day}/pdf`, { cookie: cookies.accountant });
+  assert.equal(viaApi.status, 200);
+  assert.ok(String(viaApi.data).startsWith("%PDF"));
+  assert.equal((await apiRequest(`/api/stock-count/day/${day.day}/pdf`, { cookie: cookies.sales_manager })).status, 403);
+  // Vaghinak: a recheck task for the counter (one line per product that differs), the accountant's own task, a list in Documents
+  const { rows: tasks } = await pool.query("SELECT id, assignee_id, title FROM tasks WHERE title LIKE $1 AND assignee_id = ANY($2)", [`%Գույքագրում ${day.day.slice(8, 10)}.${day.day.slice(5, 7)}%`, [users.warehouse_manager.id, users.accountant.id]]);
+  const recheck = tasks.find((t) => t.assignee_id === users.warehouse_manager.id);
+  assert.ok(recheck, "the counter has a task to recheck");
+  assert.equal((await pool.query("SELECT 1 FROM task_items WHERE task_id = $1", [recheck.id])).rowCount, closed.differences);
+  assert.ok(tasks.some((t) => t.assignee_id === users.accountant.id), "the accountant has the differences as a task");
+  const docs = await apiRequest("/api/stock-count/documents", { cookie: cookies.accountant });
+  assert.ok(docs.data.some((d) => d.day === day.day && d.signed === true && d.has_attachment === true));
+});
