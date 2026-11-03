@@ -1,3 +1,5 @@
+import { state } from "../state.js";
+import { seesTierPrices } from "../shared/roles.js";
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
@@ -246,7 +248,7 @@ export async function renderWarehouse(root, navigate) {
         <div class="card-list" style="margin:8px 0;">
           ${o.items.map((i) => `<div class="order-product-row"><span>${i.brand ? `${escapeHtml(i.brand)} · ` : ""}${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(normalizeUnitLabel(i.size))}` : ""} × ${i.quantity}</span></div>`).join("")}
         </div>
-        <p>${t("total")}${labelColon()}<span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>
+        ${o.total_amd != null ? `<p>${t("total")}${labelColon()}<span class="text-amount">${formatAmd(Number(o.total_amd))}</span></p>` : ""}
         <div class="sheet-actions">
           <button type="button" class="btn btn-primary" data-mark-packed="${o.id}">${t("mark_packed")}</button>
           <button type="button" class="btn btn-danger" data-flag-issue="${o.id}">${t("flag_stock_issue")}</button>
@@ -274,7 +276,7 @@ export async function renderWarehouse(root, navigate) {
           ${icons.wallet}
         </button>
       </div>
-      ${firstUseHintHtml("warehouse_icons", t("hint_warehouse_icons"))}
+      ${seesTierPrices(state.user?.role) ? firstUseHintHtml("warehouse_icons", t("hint_warehouse_icons")) : ""}
       <div id="inventory-list" class="card-list"></div>
     `;
     activateFirstUseHints(contentEl);
@@ -690,6 +692,15 @@ export async function renderWarehouse(root, navigate) {
       daysBtn.setAttribute("aria-pressed", String(showDaysLeft));
       render();
     });
+
+    // The warehouse manager's inventory is just name, size, stock and the days left (owner, 2026-11-03): no price or cost switches, and the
+    // days-left badge is always on (the server sends him no prices anyway).
+    if (!seesTierPrices(state.user?.role)) {
+      landingBtn.hidden = true;
+      wholesaleBtn.hidden = true;
+      daysBtn.hidden = true;
+      showDaysLeft = true;
+    }
 
     const STOCK_FILTER_OPTIONS = [
       { value: "on_stock", label: t("warehouse_in_stock") },

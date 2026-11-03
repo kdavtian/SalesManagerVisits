@@ -6,29 +6,13 @@ import { state } from "../state.js";
 import { icons } from "../icons.js";
 import { escapeHtml } from "../util.js";
 import { formatAge } from "../opsShell.js";
+import { attentionItems } from "../warehouseAttention.js";
 
 const REFRESH_MS = 30000;
 let lastHome = null; // stale-then-live: the previous numbers paint at once
 
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), t(key));
 const hoursText = (h) => formatAge(Math.round(h * 60));
-
-export function attentionItems(h) {
-  const items = [];
-  if (h.to_pack.over_sla > 0) items.push({ level: "red", text: fill("ops_att_over_sla", { n: h.to_pack.over_sla }), to: "#/wh-pack" });
-  if (h.to_pack.app > 0) items.push({ level: "amber", text: fill("ops_att_app", { n: h.to_pack.app }), to: "#/wh-pack" });
-  if (h.shortage.products > 0) {
-    const names = h.shortage.sample.map((r) => `${r.product_name} (${r.need}/${r.have})`).join(", ");
-    items.push({ level: "red", text: fill("ops_att_shortage", { n: h.shortage.products, names }), to: "#/wh-pack?tab=product" });
-  }
-  if (h.packed.unrouted > 0) items.push({ level: "amber", text: fill("ops_att_unrouted", { n: h.packed.unrouted }), to: "#/wh-pack?tab=packed" });
-  if (h.packed.over_sla > 0) items.push({ level: "red", text: fill("ops_att_deliver_over", { n: h.packed.over_sla }), to: "#/wh-pack?tab=packed" });
-  if (h.stale_stops > 0) items.push({ level: "amber", text: fill("ops_att_stale", { n: h.stale_stops }), to: "#/delivery" });
-  const sc = h.stock_count;
-  if (sc && !sc.finished && sc.due > sc.counted) items.push({ level: "amber", text: fill("ops_att_stock_count", { n: sc.due - sc.counted }), to: "#/stock-count" });
-  if (h.tasks.overdue > 0) items.push({ level: "amber", text: fill("ops_att_tasks", { n: h.tasks.overdue }), to: "#/tasks" });
-  return items;
-}
 
 function stockCountCard(sc) {
   if (!sc || (!sc.due && !sc.finished)) return "";
@@ -55,6 +39,8 @@ function paint(box, h) {
       ${h.to_pack.count ? `<span class="ops-hero-cta">${t("ops_start_packing")} ›</span>` : ""}
     </button>
 
+    ${stockCountCard(h.stock_count)}
+
     <div class="ops-pair">
       <button type="button" class="ops-stat" data-go="#/wh-pack?tab=packed">
         <span class="ops-stat-number">${h.packed.count}</span>
@@ -65,7 +51,6 @@ function paint(box, h) {
         <span class="ops-stat-label">${t("ops_deliveries_today")}</span>
       </button>
     </div>
-    ${stockCountCard(h.stock_count)}
 
     <h2 class="section-title">${t("ops_attention")}</h2>
     ${
@@ -76,12 +61,8 @@ function paint(box, h) {
         : `<p class="ops-clear">✓ ${t("ops_all_clear")}</p>`
     }
 
+    <!-- Orders, Tasks, Stock count and Packing are the bottom tabs; here only what has no tab (owner, 2026-11-03: hyper simple) -->
     <div class="ops-grid">
-      <button type="button" class="ops-tile" data-go="#/orders"><span class="ops-tile-icon">${icons.cart}</span><span>${t("nav_orders")}</span></button>
-      <button type="button" class="ops-tile" data-go="#/pricelist"><span class="ops-tile-icon">${icons.tag}</span><span>${t("ops_tab_products")}</span></button>
-      <button type="button" class="ops-tile" data-go="#/tasks"><span class="ops-tile-icon">${icons.tasks}</span><span>${t("qa_tasks")}</span>${h.tasks.open ? `<span class="count-badge ops-tile-badge">${h.tasks.open}</span>` : ""}</button>
-      <button type="button" class="ops-tile" data-go="#/delivery"><span class="ops-tile-icon">${icons.truck}</span><span>${t("ops_shortcut_delivery")}</span></button>
-      <button type="button" class="ops-tile" data-go="#/stock-count"><span class="ops-tile-icon">${icons.clipboardCheck}</span><span>${t("qa_stock_count")}</span></button>
       <button type="button" class="ops-tile ops-tile-wide" data-go="#/warehouse"><span class="ops-tile-icon">${icons.box}</span><span>${t("ops_shortcut_inventory")}</span></button>
       <button type="button" class="ops-tile" data-go="#/returns"><span class="ops-tile-icon">${icons.undo}</span><span>${t("qa_returns")}</span>${h.returns_to_receive ? `<span class="count-badge ops-tile-badge">${h.returns_to_receive}</span>` : ""}</button>
       <button type="button" class="ops-tile" data-go="#/staff"><span class="ops-tile-icon">${icons.person}</span><span>${t("qa_staff")}</span></button>

@@ -11,7 +11,9 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canManageWarehouse } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
-import { computeStockForecast, computeReorderSuggestion } from "../../products/stockForecast.js";
+import { computeReorderSuggestion } from "../../products/stockForecast.js";
+import { computeDemandForecast } from "../../products/demandModel.js";
+import { loadDemandInputs } from "../../products/demandInputs.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
@@ -208,7 +210,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
        WHERE product_id IS NOT NULL
        GROUP BY product_id
      )
-     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd, p.silver_price_amd,
+     SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd, p.silver_price_amd,
             COALESCE(NULLIF(p.silver_price_amd, 0), NULLIF(p.bronze_price_amd, 0)) AS wholesale_price_amd,
             p.landing_cost_amd, p.net_cost_amd, p.created_at,
             d.qty_30d, d.qty_90d, d.last_sale_date
@@ -233,17 +235,20 @@ warehouseRouter.get("/inventory", async (req, res) => {
   const bucketMatches = STOCK_FILTER_BUCKETS[stock];
 
   const annotated = [];
+  // the company's demand model (products/demandModel.js; the method is on the Products and Documents pages): weighted weekly sales,
+  // outliers damped, lumpy sales by Croston, safety stock and reorder point, stock already promised to open orders left out
+  const { weekly, reserved } = await loadDemandInputs(pool, today);
   for (const row of rows) {
-    const forecast = computeStockForecast({
+    const forecast = computeDemandForecast({
+      weeklyQty: weekly.get(row.erp_product_id) ?? [],
       stockQty: row.stock_qty,
-      qty30d: row.qty_30d,
-      qty90d: row.qty_90d,
+      reservedQty: reserved.get(row.id) ?? 0,
       lastSaleDate: row.last_sale_date,
       createdAt: row.created_at,
       today,
     });
     if (bucketMatches && !bucketMatches(forecast.status)) continue;
-    const { qty_30d, qty_90d, last_sale_date, ...rest } = row;
+    const { qty_30d, qty_90d, last_sale_date, erp_product_id, ...rest } = row;
     // Net cost per pack at the wholesale price (the workbook's own number is off for packs over 1 L): discountPolicy.js
     if (rest.net_cost_amd != null) rest.net_cost_amd = Math.round(displayNetCost({ ...rest, unit_price_amd: rest.bronze_price_amd }));
     annotated.push({
@@ -252,6 +257,12 @@ warehouseRouter.get("/inventory", async (req, res) => {
       daily_demand: forecast.dailyDemand,
       days_of_stock: forecast.daysOfStock,
       demand_trend: forecast.trend,
+      free_stock: forecast.freeStock,
+      reorder_point: forecast.reorderPoint,
+      safety_stock: forecast.safetyStock,
+      days_to_reorder: forecast.daysToReorder,
+      demand_method: forecast.method,
+      demand_variability: forecast.variability,
     });
   }
   // Capped after filtering, not before -- filtering by stock status on a
@@ -274,7 +285,7 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
               MAX(order_date) AS last_sale_date
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
-     SELECT p.id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
+     SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
             COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
                       WHERE oi.product_id = p.id AND o.status IN ('submitted', 'confirmed', 'packed_stock_out')), 0)::int AS reserved_qty
      FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
@@ -282,8 +293,9 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     [today]
   );
   const out = [];
+  const demand = await loadDemandInputs(pool, today);
   for (const row of rows) {
-    const forecast = computeStockForecast({ stockQty: row.stock_qty, qty30d: row.qty_30d, qty90d: row.qty_90d, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    const forecast = computeDemandForecast({ weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: row.stock_qty, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
     const suggestion = computeReorderSuggestion({
       stockQty: row.stock_qty, reservedQty: row.reserved_qty, status: forecast.status,
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,

@@ -2,6 +2,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
+import { seesTierPrices } from "../shared/roles.js";
 import { openCostCalculator } from "../costCalculator.js";
 import { icons } from "../icons.js";
 import { compareProducts, sortedBrands } from "../productSort.js";
@@ -61,8 +62,8 @@ function buildProductTree(products) {
 // Price columns a user can show. Gold, landing cost and net cost are
 // management-only (the API does not even send them to anyone else).
 const PRICE_COLUMNS = [
-  { key: "bronze", label: () => t("col_bronze"), get: (p) => p.bronze_price_amd ?? p.unit_price_amd },
-  { key: "silver", label: () => t("col_silver"), get: (p) => p.silver_price_amd },
+  { key: "bronze", label: () => t("col_bronze"), get: (p) => p.bronze_price_amd ?? p.unit_price_amd, tierOnly: true },
+  { key: "silver", label: () => t("col_silver"), get: (p) => p.silver_price_amd, tierOnly: true },
   { key: "gold", label: () => t("col_gold"), get: (p) => p.gold_price_amd, costOnly: true },
   { key: "retail", label: () => t("price_retail"), short: () => t("price_retail_short"), get: (p) => p.effective_retail_amd },
   { key: "landing", label: () => t("landing_cost"), get: (p) => p.landing_cost_amd, costOnly: true },
@@ -72,7 +73,8 @@ const COLUMNS_STORAGE_KEY = "fv_products_cols";
 const DEFAULT_COLUMNS = ["silver", "retail"];
 
 function allowedColumns() {
-  return PRICE_COLUMNS.filter((c) => !c.costOnly || seesProductCosts());
+  // the warehouse manager gets retail prices only (owner, 2026-11-03)
+  return PRICE_COLUMNS.filter((c) => (!c.costOnly || seesProductCosts()) && (!c.tierOnly || seesTierPrices(state.user?.role)));
 }
 
 function loadVisibleColumns() {
@@ -84,7 +86,7 @@ function loadVisibleColumns() {
   } catch {
     // storage unavailable -- defaults
   }
-  return DEFAULT_COLUMNS;
+  return allowed.has("silver") ? DEFAULT_COLUMNS : ["retail"];
 }
 
 function colValue(p, key) {
@@ -175,6 +177,7 @@ export async function renderPricelist(root, navigate) {
         <h1>${t("products_page_title")}</h1>
       </div>
       <div class="detail-header-actions">
+        <button type="button" class="icon-btn" id="method-btn" aria-label="${t("meth_stock_link")}" title="${t("meth_stock_link")}">${icons.info}</button>
         ${seesProductCosts() ? `<button type="button" class="icon-btn" id="calc-btn" aria-label="${t("cc_title")}" title="${t("cc_title")}">${icons.calculator}</button>` : ""}
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
         <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
@@ -202,6 +205,7 @@ export async function renderPricelist(root, navigate) {
 
   container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   container.querySelector("#export-btn").addEventListener("click", () => openExportSheet());
+  container.querySelector("#method-btn").addEventListener("click", async () => (await import("../methodology.js")).openMethodologySheet("stock_days"));
   container.querySelector("#calc-btn")?.addEventListener("click", () => openCostCalculator({ products }));
 
   const sortBtn = container.querySelector("#pricelist-sort-btn");

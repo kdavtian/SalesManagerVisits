@@ -378,7 +378,7 @@ let lastHomeHash = "#/dashboard";
 // before the switch as it would step back within the tab the user is
 // actually on (reported as "swipe back switches tabs instead of going to
 // the previous page on the same tab").
-const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders", "#/wh-pack", "#/pricelist", "#/tasks", "#/delivery"]);
+const NAV_TAB_ROOT_HASHES = new Set(["#/dashboard", "#/activity", "#/map", "#/customers", "#/orders", "#/wh-pack", "#/pricelist", "#/tasks", "#/delivery", "#/stock-count"]);
 
 // Tapping the tab you are already on: the first tap jumps back to the top of
 // the screen, a second tap within a second RESTARTS the tab (a fresh render

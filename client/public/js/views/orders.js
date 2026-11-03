@@ -12,6 +12,7 @@ import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state, seesAllActivity } from "../state.js";
+import { seesOrderAmounts } from "../shared/roles.js";
 // who sees (and can filter by) the accounting-document status: the people who send orders to accounting
 import { canRequestAccountingDocs } from "../shared/roles.js";
 import { installInlineClearButton } from "../searchBar.js";
@@ -44,7 +45,9 @@ function formatOrderDateHeading(value) {
 
 // Desktop table columns (docs/desktop-roadmap.md, step 2); Customer and Status are the fixed cells. Sorting is the server's
 // (ORDER_SORTS in routes/orders.js), so only the columns it can sort by carry a sort key.
+const showsAmounts = () => seesOrderAmounts(state.user?.role); // the warehouse manager sees no order amounts
 const ORDER_DESK_COLUMNS = () => [
+  // (the amount column is dropped for him below)
   { key: "amount", label: t("desk_col_amount"), width: "120px", narrowWidth: "104px", sort: "amount", align: "end", narrow: true, cell: (o) => formatAmd(Number(o.total_amd)), csv: (o) => Math.round(Number(o.total_amd)) },
   { key: "code", label: t("desk_col_code"), width: "110px", cell: (o) => o.order_code || "" },
   { key: "rep", label: t("desk_col_rep"), width: "130px", cell: (o) => o.user_name || "" },
@@ -56,7 +59,7 @@ const ORDER_DESK_COLUMNS = () => [
   { key: "created", label: t("desk_col_date"), width: "130px", narrowWidth: "110px", sort: "date", narrow: true, cell: (o) => formatDateTime(o.created_at) },
   { key: "delivered", label: t("desk_col_delivered"), width: "110px", cell: (o) => (o.status === "delivered" ? formatDayMonth(new Date(o.updated_at)) : "") },
   { key: "documents", label: t("desk_col_documents"), width: "70px", align: "end", cell: (o) => (o.document_count > 0 ? String(o.document_count) : "") },
-];
+].filter((c) => c.key !== "amount" || showsAmounts());
 const ORDER_DESK_DEFAULTS = ["amount", "code", "rep", "created"];
 const SERVER_SORTS = new Set(["date", "amount", "customer", "status"]);
 const ORDER_PERIODS = ["today", "week", "month", "last_month"];
@@ -563,7 +566,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
           dateHeading = `
             <div class="order-date-heading">
               <span class="order-date-heading-label">${formatOrderDateHeading(o.created_at)}</span>
-              <span class="order-date-heading-stats">${formatAmd(day.total)} | ${formatLiters(day.liters)} | ${day.count} ${t("orders_count_label")}</span>
+              <span class="order-date-heading-stats">${showsAmounts() ? `${formatAmd(day.total)} | ` : ""}${formatLiters(day.liters)} | ${day.count} ${t("orders_count_label")}</span>
             </div>`;
         }
         return `${dateHeading}
@@ -577,7 +580,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
           <div class="list-row-body">
             <div class="list-row-top">
               <strong>${escapeHtml(o.customer_name)}</strong>
-              <span class="list-row-trailing-text text-amount">${formatAmd(Number(o.total_amd))}</span>
+              ${showsAmounts() ? `<span class="list-row-trailing-text text-amount">${formatAmd(Number(o.total_amd))}</span>` : ""}
             </div>
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}${o.checkin_id ? ` · ${t("order_at_visit")}` : ""}</div>
             <div class="list-row-bottom">

@@ -11,7 +11,7 @@ import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTim
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
-import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges } from "./shared/roles.js";
+import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts } from "./shared/roles.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
@@ -158,15 +158,17 @@ function orderTimelineHtml(history, currentStatus) {
 // brand line (small, muted) keeps those from reading as duplicate rows.
 // Unit price sits in the same small font next to the quantity, sum stays
 // bold, so a multi-line order still fits on one screen.
+// the warehouse manager sees quantities only: the server sends him no amounts (middleware/roleRedaction.js), the sheet shows none
+const showsAmounts = () => seesOrderAmounts(state.user?.role);
 function orderLineHtml(i) {
   return `
     <div class="order-line-row">
       ${i.brand ? `<span class="order-line-brand">${escapeHtml(i.brand)}</span>` : ""}
       <div class="order-line-top">
         <span class="order-line-name">${escapeHtml(i.product_name)}${i.size ? ` · ${escapeHtml(i.size)}` : ""}</span>
-        <strong class="text-amount">${formatPriceOrFree(Number(i.line_total_amd))}</strong>
+        ${showsAmounts() ? `<strong class="text-amount">${formatPriceOrFree(Number(i.line_total_amd))}</strong>` : `<strong>&times; ${Number(i.quantity)}</strong>`}
       </div>
-      <span class="order-line-meta">${formatPriceOrFree(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>
+      ${showsAmounts() ? `<span class="order-line-meta">${formatPriceOrFree(Number(i.unit_price_amd))} &times; ${Number(i.quantity)}</span>` : ""}
     </div>`;
 }
 
@@ -281,7 +283,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           : ""
       }
       ${order.pricing_check?.below_cost ? `<p class="order-stock-warning order-stock-danger">${t("below_cost_warning")}</p>` : ""}
-      <p class="order-detail-total"><span>${t("total")}${labelColon().trim()}</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>
+      ${showsAmounts() ? `<p class="order-detail-total"><span>${t("total")}${labelColon().trim()}</span> <span class="text-amount">${formatAmd(Number(order.total_amd))}</span></p>` : ""}
       ${order.credit_status === "pending" ? `<p class="muted">${t("credit_status_pending_hint")}</p>` : ""}
       ${order.note ? `<p class="muted">${escapeHtml(order.note)}</p>` : ""}
       ${accountingSectionHtml(order)}

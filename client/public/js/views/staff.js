@@ -5,6 +5,8 @@ import { api } from "../api.js";
 import { t, getLang } from "../i18n.js";
 import { activateDialog, escapeHtml, showToast, bindAmdInput, parseAmd } from "../util.js";
 import { deskSelectChips } from "../deskTable.js";
+import { state } from "../state.js";
+import { seesCompanyStructure } from "../shared/roles.js";
 
 const TABS = ["pay", "people", "tree", "rules"];
 const KINDS = ["executive", "director", "rep", "office", "warehouse", "driver"];
@@ -59,7 +61,7 @@ export async function renderStaff(root, navigate, personId = null, query = new U
     return;
   }
   if (personId) return renderPerson(root, navigate, personId, month0, access);
-  return renderMain(root, navigate, month0, access, TABS.includes(query.get("tab")) ? query.get("tab") : "pay");
+  return renderMain(root, navigate, month0, access, TABS.includes(query.get("tab")) ? query.get("tab") : seesCompanyStructure(state.user?.role) ? "tree" : "pay");
 }
 
 // ---- the list screen: Payroll / People / Structure / Rules ---------------------------------------------------------------------
@@ -215,24 +217,40 @@ async function renderMain(root, navigate, month0, access, tab0) {
   }
 
   // -- structure: the tree (admin > CEO > sales director > reps; warehouse; driver ...) --
-  function paintTree() {
-    if (!people.length) {
+  async function paintTree() {
+    // The warehouse manager and the driver see the whole company's structure and who their boss is -- names and positions only (owner, 2026-11-03)
+    let boss = null;
+    let nodes = people;
+    if (seesCompanyStructure(state.user?.role)) {
+      try {
+        const structure = await api.getStaffStructure();
+        nodes = structure.people.map((p) => ({ ...p, active: true }));
+        boss = structure.boss;
+      } catch (err) {
+        body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+        return;
+      }
+    }
+    if (!nodes.length) {
       body.innerHTML = `<p class="muted">${t("st_tree_empty")}</p>`;
       return;
     }
-    const ids = new Set(people.map((p) => p.id));
-    const kids = (id) => people.filter((p) => p.reports_to === id);
+    const ids = new Set(nodes.map((p) => p.id));
+    const kids = (id) => nodes.filter((p) => p.reports_to === id);
     // the roots: nobody above, or the boss is not visible to this user
-    const roots = people.filter((p) => !p.reports_to || !ids.has(p.reports_to));
+    const roots = nodes.filter((p) => !p.reports_to || !ids.has(p.reports_to));
     const node = (p) => {
       const sub = kids(p.id);
       return `<li>
-        <button type="button" class="st-node ${p.active ? "" : "st-row-off"}" data-person="${p.id}">
+        <button type="button" class="st-node ${p.active ? "" : "st-row-off"}${p.mine ? " st-node-me" : ""}" ${boss ? "" : `data-person="${p.id}"`}>
           <strong>${escapeHtml(p.name)}</strong><span class="muted">${escapeHtml(p.position)}</span>
         </button>${sub.length ? `<ul>${sub.map(node).join("")}</ul>` : ""}
       </li>`;
     };
-    body.innerHTML = `<ul class="st-tree">${roots.map(node).join("")}</ul>`;
+    const bossLine = seesCompanyStructure(state.user?.role)
+      ? `<p class="st-boss">${boss ? `${escapeHtml(t("st_your_boss"))}: <strong>${escapeHtml(boss.name)}</strong> <span class="muted">${escapeHtml(boss.position)}</span>` : escapeHtml(t("st_no_boss"))}</p>`
+      : "";
+    body.innerHTML = `${bossLine}<ul class="st-tree">${roots.map(node).join("")}</ul>`;
     body.querySelectorAll("[data-person]").forEach((el) => el.addEventListener("click", () => goPerson(el.dataset.person)));
   }
 

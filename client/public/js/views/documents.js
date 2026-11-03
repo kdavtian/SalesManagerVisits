@@ -6,6 +6,7 @@ import { escapeHtml, formatDateTime } from "../util.js";
 import { openFileViewer, fileKindLabel } from "../fileViewer.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { deskSelectChip } from "../deskTable.js";
+import { methodologyListHtml, wireMethodologyList } from "../methodology.js";
 
 const PERIODS = [
   ["today", "pb_today"],
@@ -32,7 +33,11 @@ export function renderDocuments(root, navigate) {
       <button type="button" class="btn btn-block" id="doc-print-slips" hidden>${t("docs_print_slips")}</button>
       <div class="card-list" id="doc-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <button type="button" class="btn btn-block" id="doc-more" hidden>${t("load_more")}</button>
+      <!-- Company Methodology (owner, 2026-11-03): how the company's numbers are worked out; policies and more methods are added here later -->
+      <h2 class="section-title">${t("methodology_title")}</h2>
+      <div class="card-list" id="doc-methods">${methodologyListHtml()}</div>
     </div>`;
+  wireMethodologyList(root.querySelector("#doc-methods"));
   root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const listEl = root.querySelector("#doc-list");
   const moreBtn = root.querySelector("#doc-more");

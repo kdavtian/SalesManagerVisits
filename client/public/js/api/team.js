@@ -48,6 +48,7 @@ export const teamApi = {
   // Staff (see server/src/team/routes/staff.js)
   getStaffAccess: () => request("/staff/access", { fresh: true }),
   getStaffPeople: () => request("/staff/people", { fresh: true }),
+  getStaffStructure: () => request("/staff/structure", { fresh: true }),
   getStaffCandidates: () => request("/staff/candidates", { fresh: true }),
   getStaffPayroll: (month) => request(`/staff/payroll?month=${month}`, { fresh: true }),
   linkSalaryPayment: (personId, entryId) => json(`/staff/people/${personId}/pay-keys`, "POST", { entry_id: entryId }),

@@ -190,6 +190,31 @@ export async function refreshWarehouseBadge() {
   }
   applyWarehouseBadge();
   persistBadgeCounts();
+  if (state.user.role === "warehouse_manager") refreshOpsTabBadges();
+}
+
+// The warehouse manager's other four tabs (owner, 2026-11-03), all from the one Home answer: Home = things needing attention, Stock
+// count = products still to count today, Orders = packed and waiting for the driver, Tasks = open tasks.
+const opsTabCounts = {};
+function applyOpsTabBadges() {
+  for (const el of document.querySelectorAll("[data-shell-badge^='wh-']")) {
+    const n = opsTabCounts[el.dataset.shellBadge] ?? 0;
+    el.hidden = n <= 0;
+    if (n > 0) el.textContent = n > 99 ? "99+" : String(n);
+  }
+}
+export async function refreshOpsTabBadges() {
+  try {
+    const [home, { attentionItems }] = await Promise.all([api.getWarehouseHome(), import("./warehouseAttention.js")]);
+    const sc = home.stock_count;
+    opsTabCounts["wh-home"] = attentionItems(home).length;
+    opsTabCounts["wh-count"] = sc && !sc.finished ? Math.max(0, sc.due - sc.counted) : 0;
+    opsTabCounts["wh-orders"] = home.packed?.count ?? 0;
+    opsTabCounts["wh-tasks"] = home.tasks?.open ?? 0;
+  } catch {
+    return;
+  }
+  applyOpsTabBadges();
 }
 
 window.addEventListener("warehouse-changed", refreshWarehouseBadge);
@@ -386,6 +411,7 @@ export async function refreshAllBadgesFromServer() {
   applyPaymentBadge();
   applyUnrecordedBadge();
   applyWarehouseBadge();
+  applyOpsTabBadges();
   applyAccountingBadge();
   applyDeliveryBadge();
   applyNotificationBadge();
