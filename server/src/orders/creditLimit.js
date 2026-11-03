@@ -6,10 +6,11 @@
 //   + this order.
 // No limit set (NULL) means no check. Pure SQL helpers take any pg client/pool.
 import { liveAdjustments } from "../money/liveDebt.js";
+import { netDebt, frozenApplied } from "../shared/netDebt.js";
 
 export async function creditSnapshot(db, customerId, excludeOrderId = null) {
   const { rows } = await db.query(
-    `SELECT c.credit_limit_amd, COALESCE(erp.debt_amd, 0) AS debt_amd,
+    `SELECT c.credit_limit_amd, c.frozen_credit_amd::float8 AS frozen_amd, COALESCE(erp.debt_amd, 0) AS debt_amd,
             COALESCE((SELECT SUM(o.total_amd) FROM orders o
                       WHERE o.customer_id = c.id AND ($2::int IS NULL OR o.id <> $2)
                         AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out')
@@ -25,9 +26,13 @@ export async function creditSnapshot(db, customerId, excludeOrderId = null) {
   // cash desks) lower the exposure, so a customer who has just paid can order again before the accountant enters it.
   const adj = (await liveAdjustments(db, [customerId])).get(Number(customerId));
   const paid = adj?.payments_amd ?? 0;
+  const liveDebt = Number(row.debt_amd) - paid;
   return {
     limit: row.credit_limit_amd === null ? null : Number(row.credit_limit_amd),
-    debt: Number(row.debt_amd) - paid,
+    // NET debt only (owner, 2026-11-03): the frozen credit is not counted against the limit (netDebt.js)
+    debt: netDebt(liveDebt, row.frozen_amd),
+    grossDebt: liveDebt,
+    frozen: frozenApplied(liveDebt, row.frozen_amd),
     excelDebt: Number(row.debt_amd),
     paymentsNotInExcel: paid,
     openOrders: Number(row.open_orders_amd),

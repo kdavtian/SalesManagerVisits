@@ -12,6 +12,7 @@
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 //   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
+import { netDebt, frozenApplied } from "../../shared/netDebt.js";
 import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import { addWish, cleanWish, WishValidationError } from "../productWishes.js";
 import path from "node:path";
@@ -53,7 +54,7 @@ partnerRouter.use(async (req, res, next) => {
 const officePhone = () => normalizePhoneForStorage(OFFICE_PHONE);
 
 async function loadCustomer(customerId) {
-  const { rows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, credit_limit_amd, credit_term_days FROM customers WHERE id = $1", [customerId]);
+  const { rows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, credit_limit_amd, credit_term_days, frozen_credit_amd::float8 AS frozen_credit_amd FROM customers WHERE id = $1", [customerId]);
   return rows[0];
 }
 
@@ -63,11 +64,14 @@ function presentCampaign(c) {
 
 async function balanceFor(customer) {
   const erpId = customer.erp_customer_id;
-  const out = { debt_amd: 0, overdue_amd: 0, oldest_due_days: 0, credit_limit_amd: null, open_orders_amd: 0, available_credit_amd: null, unrecorded_amd: 0, payments: [], as_of: null };
+  const out = { debt_amd: 0, frozen_amd: 0, overdue_amd: 0, oldest_due_days: 0, credit_limit_amd: null, open_orders_amd: 0, available_credit_amd: null, unrecorded_amd: 0, payments: [], as_of: null };
   if (!erpId) return out;
   const { rows } = await pool.query("SELECT debt_amd, synced_at FROM erp_customer_data WHERE erp_customer_id = $1", [erpId]);
-  const debt = Number(rows[0]?.debt_amd ?? 0);
+  const grossDebt = Number(rows[0]?.debt_amd ?? 0);
+  // two lines for the customer (owner, 2026-11-03): the debt that counts (net) and the frozen credit set aside
+  const debt = netDebt(grossDebt, customer.frozen_credit_amd);
   out.debt_amd = debt;
+  out.frozen_amd = frozenApplied(grossDebt, customer.frozen_credit_amd);
   out.as_of = rows[0]?.synced_at ?? null;
   const orders = await loadOrdersNewestFirst(pool, [erpId]);
   const a = allocateFifo({ orders: orders.get(erpId) ?? [], debt, today: yerevanToday(), termDays: customer.credit_term_days ?? 45 });

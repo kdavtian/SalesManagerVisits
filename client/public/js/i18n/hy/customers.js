@@ -34,6 +34,8 @@ export const hyCustomers = {
     map_compass_mode: "Կողմնացույց",
     credit_limit_label: "Վարկային սահման",
     credit_limit_hint: "ԱՄԴ, դատարկ՝ առանց սահմանի",
+    frozen_credit_label: "Սառեցված վարկ",
+    frozen_credit_hint: "ԱՄԴ, առանձնացված՝ պարտք չի հաշվվում",
     credit_limit_none: "Առանց սահմանի",
     debt_statement_button: "Պարտքի ամփոփաթերթ",
     debt_statement_creating: "Ստեղծվում է…",

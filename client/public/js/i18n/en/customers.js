@@ -34,6 +34,8 @@ export const enCustomers = {
     map_compass_mode: "Compass",
     credit_limit_label: "Credit limit",
     credit_limit_hint: "AMD, empty = no limit",
+    frozen_credit_label: "Frozen credit",
+    frozen_credit_hint: "AMD, set aside: not counted as debt",
     credit_limit_none: "No limit",
     debt_statement_button: "Debt statement",
     debt_statement_creating: "Creating…",

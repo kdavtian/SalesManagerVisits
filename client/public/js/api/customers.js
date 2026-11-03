@@ -141,6 +141,7 @@ export const customersApi = {
   getRecentOrders: (customerId) => request(`/customers/${customerId}/recent-orders`),
   getOrderDefaults: (customerId) => request(`/customers/${customerId}/order-defaults`),
   getCreditHistory: (customerId) => request(`/customers/${customerId}/credit-history`),
-  setCreditLimit: (customerId, limit) => json(`/customers/${customerId}/credit-terms`, "PUT", { credit_limit_amd: limit }),
+  // frozen: the frozen credit amount next to the limit (undefined = leave it as it is)
+  setCreditLimit: (customerId, limit, frozen) => json(`/customers/${customerId}/credit-terms`, "PUT", { credit_limit_amd: limit, ...(frozen === undefined ? {} : { frozen_credit_amd: frozen }) }),
   getVisitPriorities: () => request("/customers/visit-priorities"),
 };
