@@ -106,6 +106,9 @@ export async function openAccountSettingsSheet(customer, onDone) {
                <label>${t("credit_limit_label")} (${t("credit_limit_hint")})
                  <input type="number" name="credit_limit_amd" min="0" step="1" inputmode="numeric" value="${customer.credit_limit_amd != null ? Math.round(Number(customer.credit_limit_amd)) : ""}" placeholder="${t("credit_limit_none")}" />
                </label>
+               <label>${t("frozen_credit_label")} (${t("frozen_credit_hint")})
+                 <input type="number" name="frozen_credit_amd" min="0" step="1" inputmode="numeric" value="${Math.round(Number(customer.frozen_credit_amd) || 0) || ""}" placeholder="0" />
+               </label>
                <div id="credit-history" class="muted" style="font-size:0.85em;margin:-4px 0 8px"></div>
                ${
                  customer.erp_balance0_amd != null
@@ -343,7 +346,7 @@ export async function openAccountSettingsSheet(customer, onDone) {
       const limitRaw = String(data.get("credit_limit_amd") ?? "").trim();
       sections.push({
         label: t("credit_limit_label"),
-        promise: api.setCreditLimit(customer.id, limitRaw === "" ? null : Number(limitRaw)),
+        promise: api.setCreditLimit(customer.id, limitRaw === "" ? null : Number(limitRaw), String(data.get("frozen_credit_amd") ?? "").trim() === "" ? 0 : Number(data.get("frozen_credit_amd"))),
       });
     }
 

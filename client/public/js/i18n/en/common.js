@@ -291,6 +291,7 @@ export const enCommon = {
     debt_gap_orders: "orders",
     debt_gap_payments: "payments",
     debt_advance: "Advance",
+    debt_frozen: "Frozen",
     app_order_paid: "Paid",
     shortfall_on_you: "Short at counting: {amount}",
     handover_today_btn: "Hand over",

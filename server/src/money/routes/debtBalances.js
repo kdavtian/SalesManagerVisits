@@ -277,7 +277,7 @@ debtBalancesRouter.get("/", async (req, res) => {
             ${balanceExpr} AS remaining_balance,
             ${lastPaymentExpr} AS last_payment_date,
             ${LAST_VISIT_SUBQUERY} AS last_visit_at,
-            c.assigned_manager_id, c.credit_term_days, c.sales_channel,
+            c.assigned_manager_id, c.credit_term_days, c.sales_channel, c.frozen_credit_amd::float8 AS frozen_credit_amd,
             am.name AS assigned_manager_name
      ${fromClause}
      LEFT JOIN users am ON am.id = c.assigned_manager_id
@@ -299,10 +299,10 @@ debtBalancesRouter.get("/", async (req, res) => {
     loadCustomerHistory(rows, today, asOfDate),
     erpSyncFreshness("erp_customer_data"),
   ]);
-  const withAging = rows.map(({ credit_term_days, ...r }) => {
+  const withAging = rows.map(({ credit_term_days, frozen_credit_amd, ...r }) => {
     const excel = Number(r.remaining_balance);
     const adj = adjustments.get(r.internal_customer_id);
-    const live = liveDebtOf({ excelDebt: excel, excelOrders: orders.get(r.customer_id) ?? [], adj, today, termDays: credit_term_days ?? 45 });
+    const live = liveDebtOf({ excelDebt: excel, excelOrders: orders.get(r.customer_id) ?? [], adj, today, termDays: credit_term_days ?? 45, frozenAmd: asOfDate ? 0 : frozen_credit_amd });
     const a = live.aging;
     const h = history.get(r.customer_id) ?? {};
     const debt = live.debt_amd;
@@ -310,6 +310,7 @@ debtBalancesRouter.get("/", async (req, res) => {
       ...r,
       // the main number is the live debt; the Excel figure and the gap stay visible (excel_balance, not_in_excel_*)
       remaining_balance: debt,
+      frozen_amd: live.frozen_amd, // net of this (owner, 2026-11-03): shown as its own line
       excel_balance: excel,
       not_in_excel_orders_amd: live.orders_not_in_excel_amd,
       advance_amd: live.advance_amd,

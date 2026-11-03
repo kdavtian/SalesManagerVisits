@@ -291,6 +291,7 @@ export const hyCommon = {
     debt_gap_orders: "պատվեր",
     debt_gap_payments: "վճարում",
     debt_advance: "Կանխավճար",
+    debt_frozen: "Սառեցված",
     app_order_paid: "Վճարված է",
     shortfall_on_you: "Հաշվարկի պակասորդ՝ {amount}",
     handover_today_btn: "Հանձնել",

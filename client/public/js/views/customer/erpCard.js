@@ -57,6 +57,8 @@ export function renderErpCard(customer, erpOrders) {
     debtSub: [
       live ? liveGapText(live) : !isDataError && collectedSinceSync > 0 ? `${t("estimated_remaining")}${labelColon()}${formatAmd(estimatedDebt)}` : "",
       live && Number(live.advance_amd) > 0 ? `<strong>${t("debt_advance")} ${formatAmd(Number(live.advance_amd))}</strong>` : "",
+      // the frozen credit set aside (owner, 2026-11-03): the number above is the NET debt, this is the part that is not counted
+      live && Number(live.frozen_amd) > 0 ? `<strong class="frozen-credit-line">${t("debt_frozen")} ${formatAmd(Number(live.frozen_amd))}</strong>` : "",
       returnCreditText(customer),
     ]
       .filter(Boolean)

@@ -9,6 +9,7 @@ import { allocateFifo, loadOrdersNewestFirst } from "./debtAging.js";
 import { pool } from "../db/pool.js";
 import { cashflowByCustomer } from "./cashflowCopy.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { netDebt, frozenApplied } from "../shared/netDebt.js";
 
 const EXCEL_GRACE_DAYS = 14;
 const day = (col) => `((${col} AT TIME ZONE 'Asia/Yerevan')::date)`;
@@ -105,18 +106,26 @@ export async function liveBalances(db, requests) {
   });
 }
 
+/** Map(customerId -> frozen credit amount) for the customers that have one (customers.frozen_credit_amd, migration 182). */
+export async function frozenOf(db, customerIds) {
+  if (!customerIds.length) return new Map();
+  const { rows } = await db.query("SELECT id, frozen_credit_amd::float8 AS frozen FROM customers WHERE id = ANY($1) AND frozen_credit_amd > 0", [customerIds]);
+  return new Map(rows.map((r) => [r.id, r.frozen]));
+}
+
 /** Map(customerId -> live numbers) for many customers at once (live view): what the debt-reading screens and jobs need. */
-export async function liveDebtMap(db, rows, today) {
+export async function liveDebtMap(db, rows, today, { gross = false } = {}) {
   // rows: [{ id, erp_customer_id, debt_amd (Excel), credit_term_days }]
+  // debt_amd of the answer is the NET debt (live - frozen credit, owner 2026-11-03) unless gross is asked for (a paper the customer signs).
   const withErp = rows.filter((r) => r.erp_customer_id && r.debt_amd != null);
-  const adj = await liveAdjustments(db, withErp.map((r) => r.id));
+  const [adj, frozen] = await Promise.all([liveAdjustments(db, withErp.map((r) => r.id)), gross ? new Map() : frozenOf(db, withErp.map((r) => r.id))]);
   // the Excel orders only for the customers who owe something live (a customer at zero or in advance has no unpaid order to age)
   const liveOf = (r) => Math.round(Number(r.debt_amd) || 0) + (adj.get(r.id)?.orders_amd ?? 0) - (adj.get(r.id)?.payments_amd ?? 0);
   const owing = withErp.filter((r) => liveOf(r) > 0);
   const orders = await loadOrdersNewestFirst(db, owing.map((r) => r.erp_customer_id));
   const out = new Map();
   for (const r of withErp) {
-    out.set(r.id, liveDebtOf({ excelDebt: r.debt_amd, excelOrders: orders.get(r.erp_customer_id) ?? [], adj: adj.get(r.id), today, termDays: r.credit_term_days ?? 45 }));
+    out.set(r.id, liveDebtOf({ excelDebt: r.debt_amd, excelOrders: orders.get(r.erp_customer_id) ?? [], adj: adj.get(r.id), today, termDays: r.credit_term_days ?? 45, frozenAmd: frozen.get(r.id) ?? 0 }));
   }
   return out;
 }
@@ -153,7 +162,7 @@ export async function liveDebtors(db, { select = "", join = "", where = "", para
  *   adj: one liveAdjustments entry (or undefined).
  * Returns { debt_amd, excel_amd, orders_not_in_excel_amd, payments_not_in_excel_amd, advance_amd, aging } (aging = allocateFifo's result).
  */
-export function liveDebtOf({ excelDebt, excelOrders = [], adj, today, termDays = 45 }) {
+export function liveDebtOf({ excelDebt, excelOrders = [], adj, today, termDays = 45, frozenAmd = 0 }) {
   if (excelDebt == null) return null;
   const excel = Math.round(Number(excelDebt) || 0);
   const ordersAmd = adj?.orders_amd ?? 0;
@@ -161,9 +170,13 @@ export function liveDebtOf({ excelDebt, excelOrders = [], adj, today, termDays =
   const live = excel + ordersAmd - paymentsAmd;
   // newest first across both lists (the app orders are the newest: the Excel has not caught up with them)
   const all = [...(adj?.orders ?? []), ...excelOrders].sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const aging = allocateFifo({ orders: all, debt: live, today, termDays });
+  // NET of the frozen credit: the frozen part is not chased, not overdue and not counted by the credit check (netDebt.js)
+  const net = netDebt(live, frozenAmd);
+  const aging = allocateFifo({ orders: all, debt: net, today, termDays });
   return {
-    debt_amd: Math.max(0, live),
+    debt_amd: Math.max(0, net),
+    gross_debt_amd: Math.max(0, live),
+    frozen_amd: frozenApplied(live, frozenAmd),
     excel_amd: excel,
     orders_not_in_excel_amd: ordersAmd,
     payments_not_in_excel_amd: paymentsAmd,

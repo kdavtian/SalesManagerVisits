@@ -800,6 +800,7 @@ customersRouter.get("/:id", async (req, res) => {
       adj: adj.get(customer.id),
       today: yerevanToday(),
       termDays: customer.credit_term_days ?? 45,
+      frozenAmd: customer.frozen_credit_amd, // net of the frozen credit (owner, 2026-11-03); the card shows it as its own line
     });
     customer.debt_summary = liveSummary(live);
     const { aging, ...rest } = live;
@@ -1150,12 +1151,12 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
 // app orders the Excel does not have yet, and the live numbers. null without an Excel debt figure.
 async function liveUnpaid(customerId, erpCustomerId) {
   const [{ rows: [c] }, orders, adj] = await Promise.all([
-    pool.query("SELECT c.credit_term_days, erp.debt_amd FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1", [customerId]),
+    pool.query("SELECT c.credit_term_days, c.frozen_credit_amd::float8 AS frozen_credit_amd, erp.debt_amd FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = $1", [customerId]),
     loadOrdersNewestFirst(pool, [erpCustomerId]),
     liveAdjustments(pool, [customerId]),
   ]);
   if (!c || c.debt_amd == null) return null;
-  const live = liveDebtOf({ excelDebt: c.debt_amd, excelOrders: orders.get(erpCustomerId) ?? [], adj: adj.get(customerId), today: yerevanToday(), termDays: c.credit_term_days ?? 45 });
+  const live = liveDebtOf({ excelDebt: c.debt_amd, excelOrders: orders.get(erpCustomerId) ?? [], adj: adj.get(customerId), today: yerevanToday(), termDays: c.credit_term_days ?? 45, frozenAmd: c.frozen_credit_amd });
   const byOrder = new Map();
   const byApp = new Map();
   for (const inv of live.aging.invoices) {
@@ -1673,7 +1674,7 @@ customersRouter.get("/:id/debt-statement", async (req, res) => {
   const today = yerevanToday();
   const termDays = Number(c.term_days);
   const live = c.erp_customer_id && c.debt_amd != null
-    ? (await liveDebtMap(pool, [{ id: customerId, erp_customer_id: c.erp_customer_id, debt_amd: c.debt_amd, credit_term_days: termDays }], today)).get(customerId)
+    ? (await liveDebtMap(pool, [{ id: customerId, erp_customer_id: c.erp_customer_id, debt_amd: c.debt_amd, credit_term_days: termDays }], today, { gross: true })).get(customerId) // a paper for the customer: the whole debt, nothing frozen
     : null;
   const debt = live?.debt_amd ?? 0;
   if (debt <= 0) return res.status(400).json({ error: "This customer has no outstanding debt" });
@@ -1715,15 +1716,26 @@ customersRouter.put("/:id/credit-terms", async (req, res) => {
     limit = Math.round(Number(raw));
     if (!Number.isFinite(limit) || limit < 0 || limit >= 1e13) return res.status(400).json({ error: "credit_limit_amd must be a non-negative amount (empty = no limit)" });
   }
-  const { rows: beforeRows } = await pool.query("SELECT credit_limit_amd FROM customers WHERE id = $1", [customerId]);
+  // the frozen credit amount sits next to the limit (owner, 2026-11-03); left out of the request = unchanged
+  let frozen = null;
+  if (req.body?.frozen_credit_amd !== undefined) {
+    frozen = req.body.frozen_credit_amd === null || req.body.frozen_credit_amd === "" ? 0 : Math.round(Number(req.body.frozen_credit_amd));
+    if (!Number.isFinite(frozen) || frozen < 0 || frozen >= 1e13) return res.status(400).json({ error: "frozen_credit_amd must be a non-negative amount (empty = 0)" });
+  }
+  const { rows: beforeRows } = await pool.query("SELECT credit_limit_amd, frozen_credit_amd::float8 AS frozen_credit_amd FROM customers WHERE id = $1", [customerId]);
   if (!beforeRows[0]) return res.status(404).json({ error: "Customer not found" });
+  const oldFrozen = Number(beforeRows[0].frozen_credit_amd);
+  if (frozen !== null && frozen !== oldFrozen) {
+    await pool.query("UPDATE customers SET frozen_credit_amd = $2 WHERE id = $1", [customerId, frozen]);
+    await pool.query("INSERT INTO customer_frozen_credit_log (customer_id, old_amount, new_amount, changed_by) VALUES ($1, $2, $3, $4)", [customerId, oldFrozen, frozen, req.user.id]);
+  }
   const oldLimit = beforeRows[0].credit_limit_amd === null ? null : Number(beforeRows[0].credit_limit_amd);
   const { rows } = await pool.query("UPDATE customers SET credit_limit_amd = $2 WHERE id = $1 RETURNING id, credit_limit_amd", [customerId, limit]);
   // Append-only trail of who changed the limit (only real changes are logged).
   if (oldLimit !== limit) {
     await pool.query("INSERT INTO customer_credit_limit_log (customer_id, old_limit, new_limit, changed_by) VALUES ($1, $2, $3, $4)", [customerId, oldLimit, limit, req.user.id]);
   }
-  res.json({ id: rows[0].id, credit_limit_amd: rows[0].credit_limit_amd === null ? null : Number(rows[0].credit_limit_amd) });
+  res.json({ id: rows[0].id, credit_limit_amd: rows[0].credit_limit_amd === null ? null : Number(rows[0].credit_limit_amd), frozen_credit_amd: frozen ?? oldFrozen });
 });
 
 // Every photo taken at this customer's check-ins, newest first: ids and dates only (a few bytes each). The Files sheet used to load

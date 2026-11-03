@@ -69,6 +69,7 @@ export const SOURCES = [
       { key: "credit_term", type: "number", expr: "c.credit_term_days", label: L("Payment term (days)", "Վճարման ժամկետ (օր)"), agg: "avg" },
       { key: "payment_method", type: "text", expr: "c.payment_method", label: L("Payment method", "Վճարման եղանակ"), vk: "payment_method_{v}" },
       { key: "credit_limit", type: "number", expr: "c.credit_limit_amd", label: L("Credit limit", "Վարկային սահմանաչափ") },
+      { key: "frozen_credit", type: "number", expr: "c.frozen_credit_amd", label: L("Frozen credit", "Սառեցված վարկ") },
       { key: "counterfeit", type: "bool", expr: "COALESCE(c.counterfeit_flag, false)", label: L("Counterfeit flag", "Կեղծիքի նշան") },
       { key: "last_visit", type: "date", expr: day("lv.last_visit"), join: "visits", label: L("Last visit", "Վերջին այց") },
       { key: "visits_90", type: "number", expr: "COALESCE(lv.visits_90, 0)", join: "visits", label: L("Visits (90 days)", "Այցեր (90 օր)") },
