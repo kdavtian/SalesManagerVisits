@@ -20,6 +20,7 @@ export const fieldApi = {
   setFuelOverride: (data) => json("/fuel/overrides", "PUT", data),
   postLocation: (lat, lng) => json("/locations", "POST", { lat, lng }),
   getTeamLocations: () => request("/locations"),
+  getMyDay: () => request("/visit-plans/my-day"),
   getMyVisitPlan: async (date, userId) => {
     const params = new URLSearchParams();
     if (date) params.set("date", date);

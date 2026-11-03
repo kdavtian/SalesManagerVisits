@@ -47,7 +47,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, role, token_version, failed_login_attempts, locked_until, status, home_tile_order FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, name_hy, role, token_version, failed_login_attempts, locked_until, status, home_tile_order FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];
@@ -78,7 +78,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   issueSession(res, user);
-  res.json({ id: user.id, email: user.email, name: user.name, role: user.role, home_tile_order: user.home_tile_order ?? null });
+  res.json({ id: user.id, email: user.email, name: user.name, name_hy: user.name_hy ?? null, role: user.role, home_tile_order: user.home_tile_order ?? null });
 });
 
 authRouter.post("/logout", (req, res) => {
@@ -90,7 +90,7 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at, home_tile_order FROM users WHERE id = $1",
+    "SELECT id, email, name, name_hy, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at, home_tile_order FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {

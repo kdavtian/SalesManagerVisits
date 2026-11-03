@@ -212,7 +212,9 @@ async function openCustomerPickSheet({ userId, userName, days, existingCustomerI
     // light route-plan customer list (id, name, region, subregion) replaces
     // the full customer list, which carried ~700 bytes and several computed
     // visit-status columns per customer that this picker never shows.
-    const [existing, { customers }] = await Promise.all([existingIdsPromise ?? existingCustomerIds, api.getRoutePlanCustomers(userId, scope)]);
+    const [existing, { customers: all }] = await Promise.all([existingIdsPromise ?? existingCustomerIds, api.getRoutePlanCustomers(userId, scope)]);
+    // competitors are not visited: they never appear in the picker (owner, 2026-11-03), and saving drops one that was in the plan
+    const customers = all.filter((c) => c.customer_tier !== "competitor");
     // only this plan's customers can be ticked (the person's other plan keeps its own)
     const listed = new Set(customers.map((c) => c.id));
     selectedIds = new Set(existing.filter((id) => listed.has(Number(id))));
