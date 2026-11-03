@@ -20,7 +20,8 @@ import { openAccountSettingsSheet } from "./customer/accountSettings.js";
 import { openEditSheet } from "./customer/editSheet.js";
 import { openCustomerFiles } from "./customer/files.js";
 import { renderErpCard } from "./customer/erpCard.js";
-import { openPaymentsReceivedSheet, openOrderDetailSheet, renderPendingRequest } from "./customer/sheets.js";
+import { openPaymentsReceivedSheet, openOrdersSheet, openOrderDetailSheet, renderPendingRequest } from "./customer/sheets.js";
+import { attentionStripHtml, bindAttention } from "../customerAttention.js";
 export { openOrderDetailSheet } from "./customer/sheets.js";
 
 // A potential customer shows how likely the sale is (Likely, Very likely, ...); every other tier shows its own name.
@@ -41,6 +42,7 @@ function placeReviewChip(customer) {
     : ` <span class="badge badge-warning detail-review-chip" title="${hint}">${label}</span>`;
 }
 
+const PHONE_CHIPS = 10; // chips shown first on a phone (the rest behind "more")
 export async function renderCustomerDetail(root, navigate, customerId, { fresh = false } = {}) {
   root.innerHTML = `<div class="detail-view customer-detail-view"></div>`;
   const container = root.querySelector(".detail-view");
@@ -161,6 +163,8 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
       </div>
     </div>
 
+    ${attentionStripHtml(customer)}
+
     <!-- Two wrapper columns: invisible on a phone (display: contents), side by side on a desktop window (desktop.css). -->
     <div class="cd-col cd-col-main">
     <div id="open-visit-slot"></div>
@@ -266,6 +270,29 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     </div>
   `;
 
+  // Phone: the products at the shop show their first 10 chips, the rest behind "more" (owner, 2026-11-03); the wide card shows all of them.
+  {
+    const card = container.querySelector("#product-chips-card");
+    const chips = card ? [...card.querySelectorAll(".product-chip")] : [];
+    if (chips.length > PHONE_CHIPS && !wideCard(container)) {
+      chips.slice(PHONE_CHIPS).forEach((c) => c.classList.add("product-chip-extra"));
+      card.classList.add("product-chips-collapsed");
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "btn btn-block product-chips-more";
+      more.textContent = t("chips_show_more").replace("{n}", chips.length - PHONE_CHIPS);
+      more.addEventListener("click", () => {
+        card.classList.remove("product-chips-collapsed");
+        more.remove();
+      });
+      card.appendChild(more);
+    }
+  }
+  bindAttention(container, {
+    overdue: () => openPaymentsReceivedSheet(customer),
+    unpaid: () => openOrdersSheet(customer),
+    visit: () => container.querySelector("#checkin-btn")?.click(),
+  });
   container.querySelector("#chips-info-btn").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("brand_chips_hint"))}</p>`));
   container.querySelector("#checkin-btn").addEventListener("click", () => {
     navigate(`#/checkin/${customerId}`);
@@ -390,7 +417,8 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     tile.addEventListener("pointerdown", () => warmFor(stat), { passive: true });
     const onTap = () => {
       if (stat === "sales") {
-        navigate(`#/customers/${customerId}/orders`);
+        // a sheet beside the card, like the payments (owner, 2026-11-03); the long press on "Last order" still goes to the full page
+        openOrdersSheet(customer);
       } else if (stat === "debt" || stat === "last-payment") {
         openPaymentsReceivedSheet(customer);
       } else if (stat === "last-visit" && checkins[0]) {
@@ -466,6 +494,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     openAppOrder: async (id) => (await import("../orderDetailSheet.js")).openOrderDetailSheet(id, { navigate }),
   });
 
+  const WIDE_VISITS = 12;
   const historyEl = container.querySelector("#checkin-history");
   const openVisit = (index) =>
     openVisitDetailSheet(checkins[index], reload, navigate);
@@ -493,14 +522,22 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     historyEl.innerHTML = `<p class="empty-state">${t("no_visits_yet")}</p>`;
   } else {
     let moreAvailable = checkins.length >= VISITS_PAGE;
+    // the wide card shows the last 12 visits first (owner, 2026-11-03); "older visits" then shows what the page already holds, and the
+    // next tap fetches the rest. The phone keeps its page of 30.
+    let shownVisits = wide ? WIDE_VISITS : Infinity;
     const paint = () => {
+      const rest = checkins.length > shownVisits;
       historyEl.innerHTML =
-        checkins.map(visitRowHtml).join("") +
-        (moreAvailable ? `<button type="button" class="btn btn-block" id="more-visits-btn">${t("show_older_visits")}</button>` : "");
+        checkins.slice(0, shownVisits).map(visitRowHtml).join("") +
+        (rest || moreAvailable ? `<button type="button" class="btn btn-block" id="more-visits-btn">${t("show_older_visits")}</button>` : "");
       historyEl.querySelectorAll("[data-checkin-index]").forEach((btn) => btn.addEventListener("click", () => openVisit(Number(btn.dataset.checkinIndex))));
       const moreBtn = historyEl.querySelector("#more-visits-btn");
-      if (moreBtn && wide) queueMicrotask(() => moreBtn.click());
       moreBtn?.addEventListener("click", async (e) => {
+        if (rest) {
+          shownVisits = Infinity;
+          paint();
+          return;
+        }
         e.currentTarget.disabled = true;
         try {
           const older = await api.customerCheckins(customerId, { limit: 1000, offset: checkins.length });

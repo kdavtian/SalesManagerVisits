@@ -2196,11 +2196,15 @@
 .detail-stat-tile {
   position: relative;
 }
+/* The due chip ("Ուշացած 172 օր") sits under the tile's text, not over its corner: a wide chip on a narrow tile used to cover the
+   payments icon (owner, 2026-11-03, customer 10001 on a MacBook Pro 14). */
 .detail-stat-chip {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  order: 9;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: 4px;
 }
+.detail-stat-chip .due-chip { white-space: normal; }
 .readonly-field {
   display: flex;
   align-items: baseline;
@@ -3189,7 +3193,7 @@
   .cd-wcol {
     min-width: 0;
   }
-  .cd-wcol-mid #checkin-history > .checkin-row {
+  .cd-wcol-right #checkin-history > .checkin-row {
     margin: 0;
     min-height: 52px;
     padding: 8px 14px;
@@ -3198,19 +3202,19 @@
     border-radius: 0;
     box-shadow: none;
   }
-  .cd-wcol-mid #checkin-history > .checkin-row:last-child {
+  .cd-wcol-right #checkin-history > .checkin-row:last-child {
     border-bottom: 0;
   }
-  .cd-wcol-mid #checkin-history > .checkin-row:hover {
+  .cd-wcol-right #checkin-history > .checkin-row:hover {
     background: var(--bg-card-pressed);
   }
-  .cd-wcol-mid .checkin-row-main {
+  .cd-wcol-right .checkin-row-main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 12px;
     min-width: 0;
   }
-  .cd-wcol-mid .checkin-row-main > .checkin-row-outcomes {
+  .cd-wcol-right .checkin-row-main > .checkin-row-outcomes {
     grid-column: 1 / -1;
   }
   .checkin-row-outcomes {
@@ -3391,3 +3395,18 @@
 .detail-review-chip { display: inline-block; vertical-align: baseline; margin-left: 4px; font-size: 0.75rem; padding: 2px 8px; line-height: 1.4; text-decoration: none; }
 a.detail-review-chip { position: relative; }
 a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px; }
+
+/* Customer card: "needs attention" strip under the heading, and the phone's collapsed product chips (owner, 2026-11-03) */
+.cd-attention { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.cd-attn { min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); font: inherit; font-size: 0.86rem; font-weight: 600; color: var(--text); cursor: pointer; text-align: left; }
+.cd-attn-red { color: var(--danger); border-color: var(--danger); }
+.cd-attn-amber { color: var(--warning-text, #9a6700); border-color: var(--warning-text, #9a6700); }
+.product-chips-collapsed .product-chip-extra { display: none; }
+.product-chips-more { margin-top: 10px; }
+/* The orders sheet: a row is date | order | amount, the unpaid chips under it (same look as the payments sheet's rows) */
+.orders-sheet-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "date code amount" "chips chips chips"; align-items: center; column-gap: 12px; row-gap: 4px; width: 100%; min-height: 44px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; box-sizing: border-box; }
+.orders-sheet-row > :nth-child(1) { grid-area: date; }
+.orders-sheet-row > :nth-child(2) { grid-area: code; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orders-sheet-row > :nth-child(3) { grid-area: amount; text-align: right; white-space: nowrap; }
+.orders-sheet-chips { grid-area: chips; display: flex; flex-wrap: wrap; gap: 6px; }
+.orders-sheet-row:hover { background: var(--bg); }

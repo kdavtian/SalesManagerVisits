@@ -9,7 +9,8 @@ import { icons } from "../../icons.js";
 import { isAdmin } from "../../state.js";
 import { openFileReadySheet } from "../../fileReadySheet.js";
 import { loadWithCache } from "../../listCache.js";
-import { orderDetailSource, paymentsSource } from "../../customerCardData.js";
+import { allOrdersSource, orderDetailSource, paymentsSource } from "../../customerCardData.js";
+import { dueChipHtml, partialChipHtml, unpaidRowClass } from "../../debtChip.js";
 
 // Long lists (payments, orders, photos) paint this many rows first and the rest on "Show more": 1,000 rows at once froze a phone.
 export const FIRST_ROWS = 40;
@@ -100,6 +101,86 @@ export async function openPaymentsReceivedSheet(customer) {
     overlay.querySelector(".sheet").innerHTML = `<button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button><p class="form-error">${escapeHtml(err.message)}</p>`;
     overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", () => overlay.remove());
   }
+}
+
+// The customer's Excel orders as a sheet beside the card (owner, 2026-11-03: the "Sales this month" tile opens a right-hand sheet like the
+// payments do, not a page): newest first, unpaid ones marked, a tap opens the order. Same opening-from-the-saved-copy and "Show more" as
+// the payments sheet; any failure shows its message with a Retry (never a loading line that does not end).
+export async function openOrdersSheet(customer) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  const closeX = `<button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>`;
+  overlay.innerHTML = `<div class="sheet">${closeX}<p class="loading-state" role="status">${t("loading")}</p></div>`;
+  document.body.appendChild(overlay);
+  dockSheet(overlay, `customer-orders:${customer.id}`);
+  activateDialog(overlay);
+  overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+  const sheet = overlay.querySelector(".sheet");
+  const bindClose = () => sheet.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
+  bindClose();
+
+  let shown = FIRST_ROWS;
+  let lastJson = "";
+  const render = (orders) => {
+    const visible = orders.slice(0, shown);
+    const hidden = orders.length - visible.length;
+    const total = orders.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);
+    sheet.innerHTML = `
+      ${closeX}
+      <h2>${t("all_orders")}</h2>
+      <p class="muted">${escapeHtml(customer.name)}</p>
+      ${
+        orders.length
+          ? `<div class="card erp-card payments-received-list">
+              ${visible
+                .map(
+                  (o, i) => `<button type="button" class="orders-sheet-row ${unpaidRowClass(o)}" data-order-index="${i}">
+                    <span class="payments-received-date">${escapeHtml(formatDateDMY(o.order_date))}</span>
+                    <span class="orders-sheet-code">${escapeHtml(o.order_id)}</span>
+                    <strong class="text-amount">${formatAmd(o.total_amd)}</strong>
+                    ${Number(o.unpaid_amd) > 0 ? `<span class="orders-sheet-chips">${partialChipHtml(o)} ${dueChipHtml(o.due_days)}</span>` : ""}
+                  </button>`
+                )
+                .join("")}
+              ${hidden > 0 ? `<button type="button" class="btn btn-block" data-action="show-more-orders">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
+              <div class="payments-received-row payments-received-total"><span>${t("total")}</span><span></span><strong class="text-amount">${formatAmd(total)}</strong></div>
+            </div>`
+          : `<p class="empty-state">${t("no_orders_found")}</p>`
+      }
+      <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>`;
+    bindClose();
+    sheet.querySelector('[data-action="show-more-orders"]')?.addEventListener("click", () => {
+      shown = orders.length;
+      render(orders);
+    });
+    sheet.querySelectorAll("[data-order-index]").forEach((row) =>
+      row.addEventListener("click", () => {
+        const order = orders[Number(row.dataset.orderIndex)];
+        openOrderDetailSheet(customer.id, order.order_id, order);
+      })
+    );
+  };
+  const source = allOrdersSource(customer.id);
+  const load = async () => {
+    try {
+      await loadWithCache(source.key, source.fetch, (orders) => {
+        if (!overlay.isConnected) return;
+        const json = JSON.stringify(orders);
+        if (json === lastJson) return;
+        lastJson = json;
+        render(orders);
+      });
+    } catch (err) {
+      sheet.innerHTML = `${closeX}<p class="form-error">${escapeHtml(err.message)}</p><div class="sheet-actions"><button type="button" class="btn btn-primary" data-action="retry-orders">${t("retry")}</button></div>`;
+      bindClose();
+      sheet.querySelector('[data-action="retry-orders"]').addEventListener("click", () => {
+        sheet.innerHTML = `${closeX}<p class="loading-state" role="status">${t("loading")}</p>`;
+        bindClose();
+        load();
+      });
+    }
+  };
+  load();
 }
 
 export function groupLinesByBrand(lines) {

@@ -11,8 +11,8 @@ import { loadWithCache } from "./listCache.js";
 import { paymentsSource, photosSource } from "./customerCardData.js";
 import { isWide } from "./deskTable.js";
 
-const ORDER_ROWS = 8;
-const PAYMENT_ROWS = 6;
+const ORDER_ROWS = 5;
+const PAYMENT_ROWS = 5;
 const PHOTO_THUMBS = 8;
 
 // The card is drawn into the page (not the 560 px customer panel) and the window is wide enough.
@@ -39,9 +39,12 @@ export function layoutCustomerWide(container, ctx) {
 
   function build() {
     const pick = (sel) => container.querySelector(sel);
-    const left = [pick("#open-visit-slot"), pick(".detail-facts-card"), "MAP", pick("#pending-request-slot"), pick(".detail-stat-grid"), pick(".detail-actions-grid"), pick(".product-chips-heading"), pick("#product-chips-card"), pick("#potential-slot")];
-    const mid = [pick("#visit-history-anchor"), pick("#checkin-history")];
-    const right = [pick("#customer-tasks-slot"), pick(".next-visit-card"), "ORDERS", "PAYMENTS", "FILES", pick("#customer-docs-slot")];
+    // Owner, 2026-11-03: heading, then the quick actions in one row, then three equal columns --
+    // 1 facts + the info tiles + next visit + map + products, 2 orders and payments (5 each, with totals) + tasks, 3 files + visit history (12).
+    const actions = pick(".detail-actions-grid");
+    const left = [pick("#open-visit-slot"), pick(".detail-facts-card"), pick("#pending-request-slot"), pick(".detail-stat-grid"), pick(".next-visit-card"), "MAP", pick(".product-chips-heading"), pick("#product-chips-card"), pick("#potential-slot")];
+    const mid = ["ORDERS", "PAYMENTS", pick("#customer-tasks-slot")];
+    const right = ["FILES", pick("#customer-docs-slot"), pick("#visit-history-anchor"), pick("#checkin-history")];
     moved = [];
     extras = [];
     const grid = document.createElement("div");
@@ -61,6 +64,10 @@ export function layoutCustomerWide(container, ctx) {
       }
       return el;
     };
+    if (actions) {
+      moved.push({ node: actions, parent: actions.parentNode, next: actions.nextSibling });
+      grid.appendChild(actions);
+    }
     grid.append(col("cd-wcol-left", left), col("cd-wcol-mid", mid), col("cd-wcol-right", right));
     container.appendChild(grid);
     container.classList.add("cd-three");
@@ -116,6 +123,9 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
       body.innerHTML = `<p class="muted cd-panel-empty">${t("no_orders_found")}</p>`;
       return;
     }
+    // the total of the orders in this list (the last 3 months), not only of the five shown
+    const all = [...appRows, ...excel];
+    const total = all.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
     body.innerHTML = rows
       .map(
         (r, i) => `<button type="button" class="cd-row" data-order-row="${i}">
@@ -124,7 +134,7 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
           <span class="cd-row-amount">${formatAmd(Number(r.amount) || 0)}</span>
         </button>`
       )
-      .join("");
+      .join("") + `<div class="cd-row cd-row-total"><span>${t("orders_total_3m")}</span><span></span><span class="cd-row-amount">${formatAmd(total)}</span></div>`;
     body.querySelectorAll("[data-order-row]").forEach((btn) =>
       btn.addEventListener("click", () => {
         const r = rows[Number(btn.dataset.orderRow)];
@@ -138,7 +148,13 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
     .listOrders({ customer_id: customer.id }, { fresh: true })
     .then(async (result) => {
       const open = (result.rows ?? []).filter((o) => !o.erp_matched_order_id && !o.cancelled_at && !o.delivered_from_erp);
-      if (!open.length) return;
+      // A customer with no app orders (all of theirs are in the Excel -- like the shop 10001) must still get its list: the first paint
+      // below happens before the panel is on the page and draws nothing, so this is the one that fills it (owner, 2026-11-03: the
+      // order history "loaded for ever" for exactly such a customer).
+      if (!open.length) {
+        paint([]);
+        return;
+      }
       const { orderStatusMeta } = await import("./orderDetailSheet.js");
       paint(
         open.map((o) => {
@@ -147,7 +163,7 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
         })
       );
     })
-    .catch(() => {});
+    .catch(() => paint([]));
   return el;
 }
 

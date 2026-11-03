@@ -169,15 +169,22 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     });
   };
 
+  // Any failure -- the request, or drawing the answer -- ends in a message with Retry, never in a loading line that stays for ever
+  // (owner, 2026-11-03: the order history of one customer "loads for ever").
+  const showError = (err) => {
+    if (!listEl.isConnected) return;
+    listEl.innerHTML = `<p class="form-error">${escapeHtml(err?.message || String(err))}</p><button type="button" class="btn" id="orders-retry">${t("retry")}</button>`;
+    listEl.querySelector("#orders-retry").addEventListener("click", () => renderCustomerOrders(root, navigate, customerId));
+  };
   const source = allOrdersSource(customerId);
   try {
     await loadWithCache(source.key, source.fetch, (orders) => {
       const json = JSON.stringify(orders);
       if (json === lastJson) return;
       lastJson = json;
-      render(orders);
+      render(orders).catch(showError);
     });
   } catch (err) {
-    listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    showError(err);
   }
 }
