@@ -22,6 +22,7 @@ import { weeklyDigest as vaghinakWeeklyDigest } from "../team/vaghinak/digest.js
 import { fullDigest as vaghinakFullDigest } from "../team/vaghinak/fullDigest.js";
 import { runAntiFraud } from "../money/antiFraud.js";
 import { runExpenseWatch } from "../money/expenseWatch.js";
+import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -32,6 +33,7 @@ export const JOBS = [
   { name: "vaghinak-wrap-up", everyMs: MINUTE, run: (now) => vaghinakWrapUp(now) },
   { name: "vaghinak-weekly-digest", everyMs: MINUTE, run: (now) => vaghinakWeeklyDigest(now) },
   { name: "vaghinak-full-digest", everyMs: MINUTE, run: (now) => vaghinakFullDigest(now) },
+  { name: "vaghinak-route-plan-analysis", everyMs: HOUR, run: (now) => runWeeklyRoutePlanAnalysis(now) },
   { name: "task-deadline-reminders", everyMs: MINUTE, run: () => sendDeadlineReminders() },
   { name: "weekly-scorecard", everyMs: MINUTE, run: (now) => sendWeeklyScorecards(now) },
   { name: "weekly-debt-digest", everyMs: MINUTE, run: (now) => sendWeeklyDebtDigest(now) },

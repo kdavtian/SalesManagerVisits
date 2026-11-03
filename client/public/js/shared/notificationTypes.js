@@ -57,6 +57,8 @@ export const NOTIFICATION_GROUPS = [
       { type: "plan_reviewed", roles: ["admin", "sales_manager"] },
       // a new customer was put into my route plan by someone else (field/autoRoutePlan.js)
       { type: "route_plan_added", roles: ["admin", "sales_director", "sales_manager"] },
+      // Vaghinak's route-plan suggestions wait for the CEO (field/routePlanAnalysis.js)
+      { type: "route_plan_suggestions", roles: ["admin", "ceo"] },
       { type: "perf_plan_submitted", roles: ["admin", "ceo", "operations_director", "accountant"] },
       { type: "perf_plan_reviewed", roles: ["admin", "sales_director", "accountant"] },
     ],

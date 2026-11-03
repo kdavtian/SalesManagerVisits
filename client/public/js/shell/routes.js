@@ -368,6 +368,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/routeDistribution.js"))).renderRouteDistribution(ctx.app, ctx.navigate);
   } else if (routePlanSetMatch) {
     (await fresh(import("../views/routePlanSets.js"))).renderRoutePlanSet(ctx.app, ctx.navigate, Number(routePlanSetMatch[1]));
+  } else if (path === "#/route-plan-suggestions") {
+    (await fresh(import("../views/routePlanSuggestions.js"))).renderRoutePlanSuggestions(ctx.app, ctx.navigate);
   } else if (path === "#/route-plans") {
     (await fresh(import("../views/routePlans.js"))).renderRoutePlans(ctx.app, ctx.navigate);
   } else if (path === "#/ops-control") {

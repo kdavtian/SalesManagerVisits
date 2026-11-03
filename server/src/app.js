@@ -42,6 +42,7 @@ import { productDetailsRouter } from "./products/routes/productDetails.js";
 import { companyProfileRouter } from "./system/routes/companyProfile.js";
 import { routeDistributionRouter } from "./field/routes/routeDistribution.js";
 import { routePlanSetsRouter } from "./field/routes/routePlanSets.js";
+import { routePlanSuggestionsRouter } from "./field/routes/routePlanSuggestions.js";
 import { ordersRouter } from "./orders/routes/orders.js";
 import { orderMetaRouter } from "./orders/routes/orderMeta.js";
 import { exportsRouter } from "./system/routes/exports.js";
@@ -223,6 +224,7 @@ app.use("/api/products", express.json(), productShortcutsRouter, productDetailsR
 app.use("/api/company-profile", express.json(), companyProfileRouter);
 app.use("/api/route-distribution", express.json(), routeDistributionRouter);
 app.use("/api/route-plan-sets", express.json(), routePlanSetsRouter);
+app.use("/api/route-plan-suggestions", express.json(), routePlanSuggestionsRouter);
 app.use("/api/orders", express.json(), ordersRouter);
 app.use("/api/order-meta", express.json(), orderMetaRouter);
 app.use("/api/exports", exportsRouter);
