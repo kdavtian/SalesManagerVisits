@@ -276,3 +276,92 @@
   .perf-channel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; align-items: start; }
   .perf-aggregate-card { margin-bottom: 12px; }
 }
+
+/* ===== Pivot report (views/pivot.js) ===== */
+.pv-view { max-width: 1600px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.pv-view .detail-header { flex-wrap: wrap; }
+.pv-head-actions { display: flex; gap: 8px; margin-left: auto; }
+.pv-head-actions .btn { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.pv-head-actions .btn svg { width: 18px; height: 18px; }
+.pv-view-name { margin: 0 0 8px; font-size: 0.85rem; overflow-wrap: anywhere; }
+.pv-layout { display: flex; flex-direction: column; gap: 12px; }
+.pv-builder { padding: 0; display: flex; flex-direction: column; }
+.pv-builder-toggle { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 10px 14px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pv-builder-toggle > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.pv-summary { font-size: 0.8rem; overflow-wrap: anywhere; }
+.pv-toggle-icon { flex: none; font-size: 1.3rem; width: 28px; text-align: center; }
+.pv-builder-body { display: flex; flex-direction: column; gap: 12px; padding: 0 14px 14px; }
+.pv-field-label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); min-width: 0; }
+.pv-field-label select, .pv-field-label input, .pv-sheet input[type="search"], .pv-sheet input[type="date"], .pv-sheet input[type="number"] { font: inherit; min-height: 44px; padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); box-sizing: border-box; width: 100%; }
+.pv-mode, .pv-ops { border: 1px solid var(--border); }
+.pv-mode .chip, .pv-ops .chip { min-height: 40px; }
+.pv-ops { flex-wrap: wrap; }
+.pv-ops .chip { flex: 1 1 auto; }
+.pv-zone-title { font-size: 0.8rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.02em; margin-bottom: 6px; }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip { display: inline-flex; align-items: stretch; border-radius: 999px; background: var(--accent-soft, rgba(10, 132, 255, 0.12)); max-width: 100%; }
+.pv-chip-main { border: 0; background: none; color: var(--text); font: inherit; font-size: 0.85rem; padding: 0 4px 0 12px; min-height: 36px; text-align: left; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.pv-chip-main small { color: var(--text-dim); }
+.pv-chip-x { border: 0; background: none; color: var(--text-dim); font-size: 1.1rem; width: 36px; min-height: 36px; cursor: pointer; position: relative; }
+.pv-chip-x::after { content: ""; position: absolute; inset: -4px 0; }
+.pv-add { border: 1px dashed var(--border); background: none; color: var(--accent); border-radius: 999px; padding: 0 12px; min-height: 36px; font: inherit; font-size: 0.85rem; cursor: pointer; position: relative; }
+.pv-add::after { content: ""; position: absolute; inset: -4px 0; }
+.pv-reset { align-self: flex-start; min-height: 44px; }
+.pv-meta { margin: 0 0 8px; font-size: 0.85rem; }
+.pv-table-wrap { overflow: auto; max-height: calc(100vh - 220px); border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); -webkit-overflow-scrolling: touch; }
+.pv-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 0.85rem; }
+.pv-table th, .pv-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; max-width: 320px; overflow-wrap: anywhere; vertical-align: top; }
+.pv-table thead th { position: sticky; top: 0; background: var(--bg-card); z-index: 1; padding: 0; }
+.pv-th { display: block; width: 100%; min-height: 44px; padding: 6px 10px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 700; text-align: inherit; cursor: pointer; }
+.pv-table .pv-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pv-table tfoot td { position: sticky; bottom: 0; background: var(--bg-subtle, var(--bg-card)); font-weight: 700; }
+.pv-sheet { max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.pv-sheet h2 { margin: 0; overflow-wrap: anywhere; }
+.pv-sheet p { margin: 0; }
+.pv-field-list, .pv-value-list, .pv-view-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.pv-field-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.pv-field-on { border-color: var(--accent); }
+.pv-type { color: var(--text-dim); font-size: 0.8rem; text-align: center; }
+.pv-field-name { overflow-wrap: anywhere; }
+.pv-check { color: var(--accent); font-weight: 700; }
+.pv-check-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-height: 44px; font-size: 0.9rem; }
+.pv-check-row input { width: 20px; height: 20px; }
+.pv-value-name { overflow-wrap: anywhere; }
+.pv-value-n { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.pv-value-tools { display: flex; gap: 16px; }
+.pv-value-tools .btn-link { min-height: 44px; }
+.pv-opt-title { font-size: 0.85rem; color: var(--text-dim); }
+.pv-opt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-opt { min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.9rem; cursor: pointer; }
+.pv-opt-on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pv-opt-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pv-opt-row .btn { flex: 1 1 140px; min-height: 44px; }
+.pv-two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pv-export-list { display: flex; flex-direction: column; gap: 8px; }
+.pv-export-list .btn { min-height: 48px; }
+.pv-save-box { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.pv-view-row { display: flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 10px; }
+.pv-view-current { border-color: var(--accent); }
+.pv-view-open { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 6px 10px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.pv-view-open .muted { font-size: 0.8rem; }
+/* phone: the two header buttons become icon buttons beside the title (one row, not a row of their own) */
+@media (max-width: 599px) {
+  .pv-view .detail-header { flex-wrap: nowrap; }
+  .pv-head-actions .btn { width: 44px; padding: 0; justify-content: center; }
+  .pv-head-actions .btn span { display: none; }
+}
+@media (max-width: 379px) { .pv-two { grid-template-columns: 1fr; } }
+/* Wide screens: the builder beside the result, always open */
+@media (min-width: 1024px) {
+  .pv-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); align-items: start; }
+  .pv-builder { position: sticky; top: 8px; max-height: calc(100vh - 120px); overflow-y: auto; }
+  .pv-builder-toggle { pointer-events: none; }
+  .pv-toggle-icon { display: none; }
+  .pv-builder-body[hidden] { display: flex; }
+}
+/* the title wraps onto a second line instead of "Ամփոփիչ ..." on a narrow phone */
+.pv-view .detail-header-title h1 { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; }
+/* the first column (the names) stays in place while a wide table scrolls sideways */
+.pv-table tbody td:first-child, .pv-table tfoot td:first-child { position: sticky; left: 0; z-index: 1; background: var(--bg-card); box-shadow: 1px 0 0 var(--border); }
+.pv-table tfoot td:first-child { background: var(--bg-subtle, var(--bg-card)); z-index: 2; }
+.pv-table thead th:first-child { left: 0; z-index: 3; box-shadow: 1px 0 0 var(--border); }

@@ -7,6 +7,15 @@ import { pool } from "../db/pool.js";
 // since a plain sales manager has no reason to see org-wide reports on
 // their own customers unless admin explicitly grants it.
 export const REPORTS = [
+  // The Pivot report over every data source (reports/pivot, routes/pivot.js): admin and CEO only, fixed -- the per-role report settings
+  // cannot widen it (owner, 2026-11-03).
+  {
+    key: "pivot",
+    nameKey: "report_pivot_name",
+    descriptionKey: "report_pivot_description",
+    defaultRoles: ["admin", "ceo"],
+    fixedRoles: true,
+  },
   // Kilometres each rep really drove between the day's check-ins (home legs for
   // days outside Yerevan) and the fuel money that distance is worth -- see
   // fuelReport.js / routes/fuel.js.
@@ -177,6 +186,7 @@ export const REPORTS = [
 // cash controls after, the document archive last. (The array above stays in
 // the order reports were added; this is the order users see.)
 const REPORT_DISPLAY_ORDER = [
+  "pivot",
   "daily_management",
   "product_liters",
   "customer_debt",
@@ -215,6 +225,7 @@ export async function canAccessReport(role, reportKey) {
   if (role === "admin") return true;
   const report = findReport(reportKey);
   if (!report) return false;
+  if (report.fixedRoles) return report.defaultRoles.includes(role);
   const { rows } = await pool.query(
     "SELECT enabled FROM report_access WHERE report_key = $1 AND role = $2",
     [reportKey, role]

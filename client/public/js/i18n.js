@@ -60,6 +60,12 @@ export async function setLang(lang) {
   localStorage.setItem(LANG_KEY, next);
 }
 
+// Whether a text exists in the loaded texts, without asking for it (labels built from data, e.g. the Pivot report's "order_status_<value>").
+export function hasText(key) {
+  const dict = dicts[getLang()] ?? Object.values(dicts)[0];
+  return dict?.[key] !== undefined;
+}
+
 export function t(key) {
   // The language can be changed from another tab or window (localStorage is shared): until this page has loaded it, use what it has.
   const dict = dicts[getLang()] ?? Object.values(dicts)[0];
