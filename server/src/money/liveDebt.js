@@ -50,6 +50,7 @@ export async function liveAdjustments(db, customerIds) {
     const e = entry(customerId);
     e.payments_amd = Math.round(p.amount);
     e.payments_count = p.count;
+    e.payment_items = p.items;
   }
   // Release 4 (owner, 2026-11-02): bank / card payments (Bank & cash desks: typed by the accountant or read from a statement) lower the
   // live debt too, until the Excel's books have them (books_state open). They live only in customer_payments (no old-module row), so they
@@ -68,6 +69,40 @@ export async function liveAdjustments(db, customerIds) {
     e.bank_payments_amd = Math.round(b.amd);
   }
   return result;
+}
+
+/**
+ * One customer's live debt as a single number, for the papers (owner, 2026-11-03: the debt statement, the order blank's and the signed
+ * act's "previous debt" and the payment slip use the live debt, so what the customer signs matches what the app shows). The orders and the
+ * payment of the visit being written are left out (the paper writes them as this visit's own amounts):
+ *   excludeOrderIds  app order ids   excludePaymentIds  app payment ids   checkinId  the visit (its payment carries client_ref checkin-<id>)
+ * null when the customer has no Excel debt figure (the paper leaves the line blank). Negative = an advance.
+ */
+export async function liveBalance(db, customerId, options = {}) {
+  return (await liveBalances(db, [{ customerId, ...options }]))[0];
+}
+
+// The same for many customers in one go (a print of 40 blanks makes one set of queries, not 40): requests = [{ customerId, excludeOrderIds,
+// excludePaymentIds, checkinId }]; returns the amounts in the same order.
+export async function liveBalances(db, requests) {
+  const ids = [...new Set(requests.map((r) => Number(r.customerId)))];
+  if (!ids.length) return [];
+  const [{ rows }, adjAll] = await Promise.all([
+    db.query("SELECT c.id, erp.debt_amd::float8 AS debt FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id WHERE c.id = ANY($1)", [ids]),
+    liveAdjustments(db, ids),
+  ]);
+  const excel = new Map(rows.map((r) => [r.id, r.debt]));
+  return requests.map(({ customerId, excludeOrderIds = [], excludePaymentIds = [], checkinId = null }) => {
+    const debt = excel.get(Number(customerId));
+    if (debt == null) return null;
+    const adj = adjAll.get(Number(customerId));
+    const skipOrders = new Set(excludeOrderIds.map(Number));
+    const skipPayments = new Set(excludePaymentIds.filter(Boolean).map(Number));
+    const ref = checkinId ? `checkin-${checkinId}` : null;
+    const orders = (adj?.orders ?? []).filter((o) => !skipOrders.has(o.app_order_id)).reduce((sum, o) => sum + o.total, 0);
+    const cash = (adj?.payment_items ?? []).filter((p) => !skipPayments.has(p.id) && !(ref && p.client_ref === ref)).reduce((sum, p) => sum + p.amount, 0);
+    return Math.round(debt + orders - cash - (adj?.bank_payments_amd ?? 0));
+  });
 }
 
 /** Map(customerId -> live numbers) for many customers at once (live view): what the debt-reading screens and jobs need. */
@@ -167,7 +202,7 @@ export async function loadUnrecordedPayments(rows, user, db = pool) {
     scope = `AND p.sales_manager_id = $${params.length}`;
   }
   const { rows: appRows } = await db.query(
-    `SELECT p.id, p.customer_id, p.amount_amd,
+    `SELECT p.id, p.customer_id, p.amount_amd, p.client_ref,
             to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date
        FROM payments p
       WHERE p.customer_id = ANY($1) AND p.status IN ('pending', 'approved') AND NOT COALESCE(p.approved_from_erp, false)
@@ -204,9 +239,10 @@ export async function loadUnrecordedPayments(rows, user, db = pool) {
       hit.used = true;
       continue;
     }
-    const cur = result.get(p.customer_id) ?? { amount: 0, count: 0 };
+    const cur = result.get(p.customer_id) ?? { amount: 0, count: 0, items: [] };
     cur.amount += Number(p.amount_amd);
     cur.count += 1;
+    cur.items.push({ id: p.id, amount: Number(p.amount_amd), client_ref: p.client_ref });
     result.set(p.customer_id, cur);
   }
   return result;

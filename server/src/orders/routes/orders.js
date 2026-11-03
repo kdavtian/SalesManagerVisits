@@ -4,7 +4,7 @@ import { accountingQueueChanged } from "../accountingEvents.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
-import { loadBlankOrders } from "../orderBlankData.js";
+import { loadBlankOrders, previousDebts } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
 import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import { Router } from "express";
@@ -695,7 +695,8 @@ ordersRouter.post("/blank-pdf", async (req, res) => {
   if (!seesAllActivity(req.user.role) && orders.some((o) => o.user_id !== req.user.id)) {
     return res.status(403).json({ error: "Not allowed" });
   }
-  const pdf = await buildOrderBlanksPdf(ids.map((id) => blank(id, variant)), { warning: (await getDocumentTexts()).pdf_warning });
+  const [previous, texts] = await Promise.all([previousDebts(orders, ids), getDocumentTexts()]);
+  const pdf = await buildOrderBlanksPdf(ids.map((id) => blank(id, variant, { previousDebtAmd: previous.get(id) })), { warning: texts.pdf_warning });
   const name = ids.length === 1 && orders[0].order_code ? `Order-${orders[0].order_code}.pdf` : "Order-blanks.pdf";
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);

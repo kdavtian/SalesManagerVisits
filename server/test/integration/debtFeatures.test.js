@@ -74,6 +74,26 @@ test("debt statement PDF: only with debt and only for people who see the debt", 
   assert.equal((await apiRequest("/api/customers/999999999/debt-statement", { cookie: adminCookie })).status, 404);
 });
 
+test("debt statement PDF uses the live debt: a delivered app order the Excel does not have yet makes a statement", async () => {
+  const erpId = `ITEST-DF-live-${stamp}`;
+  erpIds.push(erpId);
+  const c = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id, erp_customer_id: erpId, name: `DF live ${stamp}` });
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, balance0_amd, synced_at) VALUES ($1, 'x', 0, 0, now())", [erpId]);
+  const url = `/api/customers/${c.id}/debt-statement`;
+  assert.equal((await apiRequest(url, { cookie: repCookie })).status, 400, "Excel 0 and nothing in the app: no debt");
+  const { rows: [o] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd) VALUES ($1, $2, 'delivered', 45000) RETURNING id", [c.id, rep.id]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'confirmed', 'delivered', now())", [o.id]);
+  const res = await apiRequest(url, { cookie: repCookie });
+  assert.equal(res.status, 200, "the live debt (45,000) has a statement");
+  assert.ok(String(res.data).startsWith("%PDF"));
+  // the order form's warning reads the same live number
+  const credit = await apiRequest(`/api/customers/${c.id}/credit-status`, { cookie: repCookie });
+  assert.equal(credit.status, 200);
+  assert.equal(credit.data.debt_hold?.debt_amd, 45000);
+  await pool.query("DELETE FROM order_status_history WHERE order_id = $1", [o.id]);
+  await pool.query("DELETE FROM orders WHERE id = $1", [o.id]);
+});
+
 test("visit first: the bigger overdue amount ranks higher and the money at stake is returned", async () => {
   const lone = await createUser("sales_manager");
   const loneCookie = await loginAs(lone.email);

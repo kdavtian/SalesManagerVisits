@@ -60,7 +60,7 @@ export async function openPaymentsReceivedSheet(customer) {
     }
     <p class="form-error" id="debt-statement-error" hidden></p>
     <div class="sheet-actions">
-      ${Number(customer.erp_debt_amd) > 0 ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
+      ${Number(customer.live_debt?.debt_amd ?? customer.erp_debt_amd) > 0 ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
       <button type="button" class="btn" data-action="close-sheet">${t("done")}</button>
     </div>`;
     overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
