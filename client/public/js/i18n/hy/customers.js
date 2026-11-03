@@ -272,4 +272,9 @@ export const hyCustomers = {
     payments_source_app: "Հավելված",
     payments_received_title: "Ստացված վճարումներ",
     payments_received_empty: "Այս հաճախորդից վճարումներ դեռ չեն ստացվել։",
+  attn_overdue_debt: "Ժամկետանց պարտք",
+  attn_unpaid_orders: "{n} չվճարված պատվեր",
+  attn_no_visit: "{n} օր այց չի եղել",
+  chips_show_more: "Ցույց տալ ևս {n}",
+  orders_total_3m: "Ընդամենը (3 ամիս)",
 };

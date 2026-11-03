@@ -1094,9 +1094,14 @@
 @media (min-width: 1400px) {
   .cd-wide {
     display: grid;
-    grid-template-columns: minmax(340px, 1fr) minmax(340px, 1.15fr) minmax(320px, 1fr);
+    /* three equal columns (owner, 2026-11-03); the quick actions sit in one row above them */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     column-gap: 20px;
     align-items: start;
+  }
+  .cd-wide > .detail-actions-grid {
+    grid-column: 1 / -1;
+    margin-bottom: 16px;
   }
   .cd-wcol > .section-title:first-child,
   .cd-wcol > .cd-panel:first-child .section-title,
@@ -1111,7 +1116,7 @@
     display: none;
   }
   /* the middle column: the visits as one compact list, a row per visit with what happened */
-  .cd-wcol-mid #checkin-history.card-list {
+  .cd-wcol-right #checkin-history.card-list {
     gap: 0;
     padding: 0;
     overflow: hidden;

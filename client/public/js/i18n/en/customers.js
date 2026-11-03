@@ -272,4 +272,9 @@ export const enCustomers = {
     payments_source_app: "App",
     payments_received_title: "Payments received",
     payments_received_empty: "No payments received from this customer yet.",
+  attn_overdue_debt: "Overdue debt",
+  attn_unpaid_orders: "{n} unpaid orders",
+  attn_no_visit: "No visit for {n} days",
+  chips_show_more: "Show {n} more",
+  orders_total_3m: "Total, 3 mo.",
 };

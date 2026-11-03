@@ -37,7 +37,7 @@ test.describe("Desktop customer card in three columns", () => {
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpId]);
   }
 
-  test("three columns, whole visit history, orders / payments / files panels, mini map, docked sheets", async ({ page, fixtures }) => {
+  test("three equal columns under the action row: facts | orders + payments | files + last 12 visits, mini map, docked sheets", async ({ page, fixtures }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const data = await seed(fixtures);
     try {
@@ -47,22 +47,30 @@ test.describe("Desktop customer card in three columns", () => {
       await expect(card).toBeVisible({ timeout: 15000 });
       const [left, mid, right] = [card.locator(".cd-wcol-left"), card.locator(".cd-wcol-mid"), card.locator(".cd-wcol-right")];
       await expect(left.locator(".detail-facts-card")).toBeVisible();
-      await expect(left.locator(".detail-actions-grid")).toBeVisible();
+      // the quick actions are one row above the three columns (owner, 2026-11-03)
+      await expect(card.locator(".cd-wide > .detail-actions-grid")).toBeVisible();
+      await expect(left.locator(".detail-stat-grid")).toBeVisible();
       // the columns sit side by side
       const [lb, mb, rb] = [await left.boundingBox(), await mid.boundingBox(), await right.boundingBox()];
       expect(lb.x + lb.width).toBeLessThanOrEqual(mb.x + 1);
       expect(mb.x + mb.width).toBeLessThanOrEqual(rb.x + 1);
 
-      // the whole history, no "older visits" button, each row says what happened
-      await expect(mid.locator(".checkin-row")).toHaveCount(35, { timeout: 15000 });
-      await expect(mid.locator("#more-visits-btn")).toHaveCount(0);
-      await expect(mid.locator(".checkin-row-outcomes").first()).toContainText("Payment collected");
+      // equal widths, to the pixel
+      expect(Math.abs(lb.width - mb.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(mb.width - rb.width)).toBeLessThanOrEqual(2);
+
+      // the last 12 visits first, each row says what happened; "older visits" shows the rest
+      await expect(right.locator(".checkin-row")).toHaveCount(12, { timeout: 15000 });
+      await expect(right.locator("#more-visits-btn")).toHaveCount(1);
+      await expect(right.locator(".checkin-row-outcomes").first()).toContainText("Payment collected");
+      await right.locator("#more-visits-btn").click();
+      await expect(right.locator(".checkin-row")).toHaveCount(30);
 
       // orders: the app order Excel does not have yet + the Excel order
-      const orders = right.locator(".cd-panel-orders");
+      const orders = mid.locator(".cd-panel-orders");
       await expect(orders.locator(".cd-row", { hasText: `APP${data.stamp}` })).toBeVisible({ timeout: 15000 });
       await expect(orders.locator(".cd-row", { hasText: `X${data.stamp}` })).toBeVisible();
-      await expect(right.locator(".cd-panel-payments [data-payment-row]", { hasText: "64,000" })).toBeVisible({ timeout: 15000 });
+      await expect(mid.locator(".cd-panel-payments [data-payment-row]", { hasText: "64,000" })).toBeVisible({ timeout: 15000 });
       await expect(right.locator(".cd-panel-files")).toBeVisible();
       await expect(right.locator('.cd-panel-files .cd-thumb[data-file="0"]')).toHaveAttribute("title", /\d{2}-\d{2}-\d{4}/);
 
@@ -73,11 +81,11 @@ test.describe("Desktop customer card in three columns", () => {
       await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/desktop-customer-card.png` });
 
       // payments "View all" docks to the right and takes the right column's place; Esc gives it back
-      await right.locator(".cd-panel-payments [data-panel-all]").click();
+      await mid.locator(".cd-panel-payments [data-panel-all]").click();
       const docked = page.locator(".sheet-overlay.sheet-docked > .sheet");
       await expect(docked).toContainText("Payments received");
       await expect(right).toBeHidden();
-      await expect(mid.locator(".checkin-row").first()).toBeVisible();
+      await expect(left.locator(".detail-facts-card")).toBeVisible();
       await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/desktop-customer-card-docked.png` });
       await page.keyboard.press("Escape");
       await expect(page.locator(".sheet-overlay.sheet-docked")).toHaveCount(0);
@@ -94,6 +102,31 @@ test.describe("Desktop customer card in three columns", () => {
       await expect(page.locator(".customer-detail-view .cd-col-side .checkin-row").first()).toBeVisible();
     } finally {
       await cleanup(data);
+    }
+  });
+
+  // The shop 10001's order history "loaded for ever" (owner, 2026-11-03): a customer whose orders are ALL in the Excel (no app order) never
+  // got its Orders panel drawn. Same customer shape here: Excel orders only.
+  test("a customer with Excel orders only (no app order) still gets its orders list, never a loading line", async ({ page, fixtures }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const admin = await fixtures.createUser("admin");
+    const stamp = `${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`;
+    const erpId = `XOLY${stamp}`;
+    const customer = await fixtures.createCustomer({ name: `ExcelOnly${stamp}`, created_by: admin.id, assigned_manager_id: admin.id, erp_customer_id: erpId });
+    await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) SELECT $1, 'XO'||g, current_date - g, 50000 FROM generate_series(1, 7) g", [erpId]);
+    try {
+      await loginViaUi(page, admin.email);
+      await page.goto(`/#/customers/${customer.id}`);
+      const panel = page.locator(".cd-panel-orders");
+      await expect(panel.locator(".cd-row", { hasText: "XO1" })).toBeVisible({ timeout: 15000 });
+      await expect(panel.locator(".cd-row[data-order-row]")).toHaveCount(5);
+      await expect(panel.locator(".loading-state")).toHaveCount(0);
+      // the Sales tile opens the orders as a sheet beside the card (not a page)
+      await page.locator('[data-stat="sales"]').click();
+      await expect(page.locator(".sheet-overlay.sheet-docked > .sheet")).toContainText("XO7", { timeout: 10000 });
+      await expect(page).toHaveURL(new RegExp(`#/customers/${customer.id}$`));
+    } finally {
+      await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpId]);
     }
   });
 
