@@ -50,7 +50,7 @@ test("a rule day built from an area leaves competitors out", async () => {
   const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
   const put = await apiRequest(`/api/visit-plans/rules/${dow}`, { method: "PUT", cookie: mgrCookie, body: { areas: [{ region: "ZZ Test Region" }] } });
   assert.equal(put.status, 201);
-  const plan = await apiRequest("/api/visit-plans/mine", { cookie: mgrCookie });
+  const plan = await apiRequest(`/api/visit-plans/mine?date=${today}`, { cookie: mgrCookie });
   assert.ok(plan.data.customer_ids.includes(customers[0].id));
   assert.ok(!plan.data.customer_ids.includes(competitor.id));
 });
