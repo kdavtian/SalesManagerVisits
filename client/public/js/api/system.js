@@ -3,6 +3,9 @@ import { APP_VERSION } from "../version.js";
 import { getCsrfToken, json, request } from "./core.js";
 
 export const systemApi = {
+  // staff birthdays (team/routes/birthdays.js): who has a birthday today, and a colleague's one-tap wish
+  getBirthdaysToday: () => request("/birthdays/today", { fresh: true }),
+  wishBirthday: (staffId) => json(`/birthdays/${staffId}/wish`, "POST", {}),
   // usage analytics: the app's batch of screens / taps (answers { enabled }) and the admin's report (system/usageAnalytics.js)
   postUsageEvents: (events) => json("/usage/events", "POST", { events }),
   getUsageReport: (days) => request(`/usage/report?days=${days}`),

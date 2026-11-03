@@ -292,7 +292,7 @@ async function renderMain(root, navigate, month0, access, tab0) {
     const candidates = access.can_manage ? await api.getStaffCandidates().catch(() => []) : [];
     const loginOptions = [...(p?.user ? [{ id: p.user.id, name: p.user.name }] : []), ...candidates.filter((c) => c.id !== p?.user_id)];
     const bosses = people.filter((x) => x.id !== p?.id);
-    const v = p ?? { name: "", position: "", pay_keys: [], kind: "rep", user_id: null, reports_to: null, channel: "", fixed_salary_amd: 0, visit_based: false, min_visit_pct: null, paid_dayoffs_per_month: 0, commission_basis: "none", commission_pct: 0, commission_channels: null, commission_excluded: [], start_date: "", end_date: "", active: true };
+    const v = p ?? { name: "", position: "", pay_keys: [], kind: "rep", user_id: null, reports_to: null, channel: "", fixed_salary_amd: 0, visit_based: false, min_visit_pct: null, paid_dayoffs_per_month: 0, commission_basis: "none", commission_pct: 0, commission_channels: null, commission_excluded: [], start_date: "", end_date: "", active: true, birth_day: null, birth_month: null };
     const opt = (value, label, sel) => `<option value="${value}" ${sel ? "selected" : ""}>${escapeHtml(label)}</option>`;
     const overlay = openSheet(`
       <h2>${p ? t("st_edit_person") : t("st_add_person")}</h2>
@@ -313,6 +313,8 @@ async function renderMain(root, navigate, month0, access, tab0) {
         <label>${t("st_commission_pct")}<input name="commission_pct" type="number" min="0" max="100" step="0.1" inputmode="decimal" value="${v.commission_pct ?? 0}" /></label>
         <label>${t("st_commission_channels")}<input name="commission_channels" value="${escapeHtml((v.commission_channels ?? []).join(", "))}" /></label>
         <label>${t("st_commission_excluded")}<input name="commission_excluded" value="${escapeHtml((v.commission_excluded ?? []).join(", "))}" /></label>
+        <label>${t("st_birthday")}<span class="st-birthday"><input name="birth_day" type="number" min="1" max="31" inputmode="numeric" placeholder="${t("st_birth_day")}" value="${v.birth_day ?? ""}" /><select name="birth_month"><option value="">${t("st_birth_month")}</option>${Array.from({ length: 12 }, (_, i) => opt(i + 1, new Intl.DateTimeFormat(getLang() === "hy" ? "hy" : "en", { month: "long" }).format(new Date(2000, i, 1)), v.birth_month === i + 1)).join("")}</select></span></label>
+        <p class="muted st-small">${t("st_birthday_hint")}</p>
         <label>${t("st_start")}<input name="start_date" type="date" value="${v.start_date ?? ""}" /></label>
         <label>${t("st_end")}<input name="end_date" type="date" value="${v.end_date ?? ""}" /></label>
         <label class="checkbox-row"><input type="checkbox" name="active" ${v.active ? "checked" : ""} /> ${t("st_active")}</label>
@@ -364,6 +366,8 @@ async function renderMain(root, navigate, month0, access, tab0) {
         commission_pct: Number(f.get("commission_pct")) || 0,
         commission_channels: f.get("commission_channels"),
         commission_excluded: f.get("commission_excluded"),
+        birth_day: num("birth_day"),
+        birth_month: num("birth_month"),
         start_date: f.get("start_date") || null,
         end_date: f.get("end_date") || null,
         active: f.get("active") === "on",
@@ -516,6 +520,7 @@ async function renderPerson(root, navigate, id, month0, access) {
         ? `<div class="st-day-actions">
             ${btn("completed", t("st_day_completed"), "btn-primary")}
             ${btn("dayoff", t("st_day_dayoff"))}
+            ${btn("birthday_off", t("st_day_birthday"))}
             ${btn("unpaid", t("st_day_unpaid"))}
             ${day.mark ? btn("clear", t("st_day_clear")) : ""}
           </div>

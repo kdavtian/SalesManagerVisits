@@ -91,15 +91,16 @@ async function recentVariants(db, userId) {
 
 // Writes one message (once per person / kind / day / level). Returns the new row, or null if it already existed,
 // the daily cap was reached, or there is nothing to say.
-export async function createMessage(db, user, { kind, level, day, ctx = {}, audience, severity = "info", settings, pick }) {
+// choices / needsAnswer / bypassCap: a message with its own question (the birthday day off) that must not be held back by the daily cap
+export async function createMessage(db, user, { kind, level, day, ctx = {}, audience, severity = "info", settings, pick, choices: ownChoices, needsAnswer: ownNeeds, bypassCap = false }) {
   const variants = await recentVariants(db, user.id);
   const withAddr = { ...ctx, addr: addressFor(user, audience, pick) };
   const { text, variant } = pickVariant(kind, level, audience, withAddr, variants, pick);
-  const choices = QUESTION_CHOICES[kind] ?? null;
-  const needsAnswer = Boolean(choices) && (level === 2 || kind === "not_started");
+  const choices = ownChoices ?? QUESTION_CHOICES[kind] ?? null;
+  const needsAnswer = ownNeeds ?? (Boolean(choices) && (level === 2 || kind === "not_started"));
   const mandatory = needsAnswer && level === 2 && MANDATORY_ROLES.has(user.role);
   const shadow = settings.mode !== "live";
-  if (!mandatory && !shadow) {
+  if (!mandatory && !shadow && !bypassCap) {
     const { rows } = await db.query(
       "SELECT count(*)::int AS n FROM vaghinak_messages WHERE user_id = $1 AND day = $2 AND NOT shadow AND NOT mandatory",
       [user.id, day]

@@ -20,6 +20,7 @@ import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
 import { tick as vaghinakTick, wrapUp as vaghinakWrapUp } from "../team/vaghinak/engine.js";
 import { weeklyDigest as vaghinakWeeklyDigest } from "../team/vaghinak/digest.js";
 import { fullDigest as vaghinakFullDigest } from "../team/vaghinak/fullDigest.js";
+import { birthdayTick as vaghinakBirthdays } from "../team/vaghinak/birthdays.js";
 import { runAntiFraud } from "../money/antiFraud.js";
 import { runExpenseWatch } from "../money/expenseWatch.js";
 import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
@@ -34,6 +35,7 @@ export const JOBS = [
   { name: "vaghinak-wrap-up", everyMs: MINUTE, run: (now) => vaghinakWrapUp(now) },
   { name: "vaghinak-weekly-digest", everyMs: MINUTE, run: (now) => vaghinakWeeklyDigest(now) },
   { name: "vaghinak-full-digest", everyMs: MINUTE, run: (now) => vaghinakFullDigest(now) },
+  { name: "vaghinak-birthdays", everyMs: MINUTE, run: (now) => vaghinakBirthdays(now) },
   { name: "vaghinak-route-plan-analysis", everyMs: HOUR, run: (now) => runWeeklyRoutePlanAnalysis(now) },
   { name: "usage-retention", everyMs: 6 * HOUR, run: () => deleteOldUsage() },
   { name: "task-deadline-reminders", everyMs: MINUTE, run: () => sendDeadlineReminders() },

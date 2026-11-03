@@ -1,4 +1,5 @@
 import { renderMyDay } from "../homeDay.js";
+import { renderBirthdayLine } from "../birthdayLine.js";
 import { api } from "../api.js";
 import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
 import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
@@ -256,6 +257,7 @@ export async function renderDashboard(root, navigate) {
       // desktop management: the numbers first, across the full width (hidden on phones)
       seesHomeKpis(state.user.role) ? `<div class="home-kpis" id="home-kpis" hidden></div>` : ""
     }
+    <div id="birthday-slot"></div>
     <div id="tasks-home-slot"></div>
     ${
       homeShowsCompanyDashboard(state.user.role)
@@ -574,6 +576,7 @@ export async function renderDashboard(root, navigate) {
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
 
+  renderBirthdayLine(container.querySelector("#birthday-slot"));
   const myDaySlot = container.querySelector("#my-day-slot");
   if (myDaySlot) renderMyDay(myDaySlot, customers, navigate);
   const handoverSlot = container.querySelector("#handover-slot");

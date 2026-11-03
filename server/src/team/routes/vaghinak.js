@@ -1,6 +1,7 @@
 // Vaghinak (Վաղինակ) API. Everybody: own inbox, badge, the blocking question, answering, reacting.
 // Management (admin, CEO, operations/sales director, accountant): Team pulse, the questions-and-answers log, the full
 // feed (including what he WOULD say in shadow mode). Settings and addressing: admin / CEO / operations director.
+import { applyBirthdayChoice } from "../vaghinak/birthdays.js";
 import { Router } from "express";
 import { autoTaskDiagnostics } from "../../money/debtCollectionTasks.js";
 import { pool } from "../../db/pool.js";
@@ -86,6 +87,8 @@ vaghinakRouter.post("/messages/:id/answer", async (req, res) => {
       [req.user.id, day]
     );
   }
+  // the birthday gift: the day the person picked becomes a paid day off (team/birthdays.js)
+  if (message.kind === "birthday" && choice) await applyBirthdayChoice(pool, req.user.id, choice);
   res.json({ count: await badgeCount(req.user.id) });
 });
 
