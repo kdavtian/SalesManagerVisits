@@ -28,6 +28,7 @@ import { ROLES } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
 import { buildAdminCounts } from "../adminCounts.js";
 import { getPlanSkipRecentVisitDays, setPlanSkipRecentVisitDays } from "../../utils/planSkipRecent.js";
+import { getDemandSettings, setDemandSettings, DEMAND_LEAD_TIME_RANGE, DEMAND_SERVICE_LEVEL_RANGE } from "../../products/demandSettings.js";
 import { getDocumentTexts, setDocumentTexts, DOCUMENT_TEXT_DEFAULTS, getVisitFrequencyByType, setVisitFrequencyByType, recomputeDefaultVisitFrequencies } from "../../shared/documentTexts.js";
 
 export const settingsRouter = Router();
@@ -52,6 +53,7 @@ settingsRouter.get("/", async (req, res) => {
     visitFrequencyByType,
     autoRoutePlan,
     usageAnalytics,
+    demandSettings,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
@@ -69,12 +71,16 @@ settingsRouter.get("/", async (req, res) => {
     getVisitFrequencyByType(),
     getAutoRoutePlanEnabled(),
     getUsageEnabled(),
+    getDemandSettings(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
     checkin_allowance_enabled: checkinAllowanceEnabled,
     default_visit_frequency_days: defaultVisitFrequencyDays,
     plan_skip_recent_visit_days: planSkipRecentVisitDays,
+    // the demand model's knobs (products/demandSettings.js): the supplier lead time in days and the service level in percent
+    demand_lead_time_days: demandSettings.leadTimeDays,
+    demand_service_level_pct: demandSettings.serviceLevelPct,
     // a new customer joins its rep's route plan on the day that holds its area (field/autoRoutePlan.js, ON by default)
     auto_route_plan_new_customers: autoRoutePlan,
     // usage analytics switch (system/usageAnalytics.js, OFF by default): the admin turns it on in Settings
@@ -170,6 +176,20 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "plan_skip_recent_visit_days must be between 0 and 60" });
     }
     result.plan_skip_recent_visit_days = await setPlanSkipRecentVisitDays(Math.round(days));
+  }
+
+  if (req.body?.demand_lead_time_days !== undefined || req.body?.demand_service_level_pct !== undefined) {
+    const lead = req.body.demand_lead_time_days === undefined ? null : Number(req.body.demand_lead_time_days);
+    const level = req.body.demand_service_level_pct === undefined ? null : Number(req.body.demand_service_level_pct);
+    if (lead !== null && !(Number.isInteger(lead) && lead >= DEMAND_LEAD_TIME_RANGE[0] && lead <= DEMAND_LEAD_TIME_RANGE[1])) {
+      return res.status(400).json({ error: `demand_lead_time_days must be a whole number between ${DEMAND_LEAD_TIME_RANGE[0]} and ${DEMAND_LEAD_TIME_RANGE[1]}` });
+    }
+    if (level !== null && !(Number.isInteger(level) && level >= DEMAND_SERVICE_LEVEL_RANGE[0] && level <= DEMAND_SERVICE_LEVEL_RANGE[1])) {
+      return res.status(400).json({ error: `demand_service_level_pct must be a whole number between ${DEMAND_SERVICE_LEVEL_RANGE[0]} and ${DEMAND_SERVICE_LEVEL_RANGE[1]}` });
+    }
+    const saved = await setDemandSettings({ leadTimeDays: lead, serviceLevelPct: level });
+    result.demand_lead_time_days = saved.leadTimeDays;
+    result.demand_service_level_pct = saved.serviceLevelPct;
   }
 
   if (req.body?.incentive_message !== undefined) {

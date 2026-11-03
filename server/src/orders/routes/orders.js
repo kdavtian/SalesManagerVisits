@@ -15,7 +15,7 @@ import { pdfBufferPreview } from "../../shared/pdfPreview.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { tierListPrice } from "../../products/tierPricing.js";
-import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSetAccountingStatus, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSetAccountingStatus, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, seesAmountPapers, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { notifyTelegram, escapeHtml } from "../../shared/telegram.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
@@ -633,7 +633,7 @@ async function canSeeOrderDocs(user, orderId) {
 
 // The warehouse and drivers: only documents of orders from the last two weeks (roles.js seesOnlyRecentAccountingDocs).
 const RECENT_DOC_SQL = `(SELECT o.created_at >= now() - interval '${ACCOUNTING_DOCS_RECENT_DAYS} days' FROM orders o WHERE o.id = d.order_id)`;
-const docTooOld = (user, doc) => seesOnlyRecentAccountingDocs(user.role) && !doc.recent;
+const docTooOld = (user, doc) => !seesAmountPapers(user.role) || (seesOnlyRecentAccountingDocs(user.role) && !doc.recent); // the warehouse manager sees none (amounts); a driver the last two weeks
 
 ordersRouter.get("/documents/:docId/file", async (req, res) => {
   const { rows } = await pool.query(`SELECT d.order_id, d.filename, d.content_type, d.data, ${RECENT_DOC_SQL} AS recent FROM order_documents d WHERE d.id = $1`, [req.params.docId]);
@@ -670,6 +670,7 @@ ordersRouter.delete("/documents/:docId", async (req, res) => {
 });
 
 ordersRouter.get("/:id/documents", async (req, res) => {
+  if (!seesAmountPapers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const allowed = await canSeeOrderDocs(req.user, req.params.id);
   if (allowed === null) return res.status(404).json({ error: "Order not found" });
   if (!allowed) return res.status(403).json({ error: "Not allowed" });
@@ -685,6 +686,7 @@ ordersRouter.get("/:id/documents", async (req, res) => {
 // ones get a whole sheet. A rep can only print their own orders. Declared
 // ahead of GET /:id.
 ordersRouter.post("/blank-pdf", async (req, res) => {
+  if (!seesAmountPapers(req.user.role)) return res.status(403).json({ error: "Not allowed" }); // the blank carries the order's amounts
   const ids = [...new Set((Array.isArray(req.body?.order_ids) ? req.body.order_ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
   if (!ids.length) return res.status(400).json({ error: "order_ids is required" });
   if (ids.length > 40) return res.status(400).json({ error: "Too many orders at once (max 40)" });

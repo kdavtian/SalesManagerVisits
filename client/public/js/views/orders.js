@@ -12,7 +12,7 @@ import { availableBulkActions, runBulkAction } from "../orderBulk.js";
 import { openPrintBlankSheet } from "../orderBlankPrint.js";
 import { ACCOUNTING_STATUS_BADGE, accountingStatusLabel } from "../accountingDocSheet.js";
 import { state, seesAllActivity } from "../state.js";
-import { seesOrderAmounts } from "../shared/roles.js";
+import { seesOrderAmounts, seesAmountPapers } from "../shared/roles.js";
 // who sees (and can filter by) the accounting-document status: the people who send orders to accounting
 import { canRequestAccountingDocs } from "../shared/roles.js";
 import { installInlineClearButton } from "../searchBar.js";
@@ -81,7 +81,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
       <div class="list-header-row">
         <h1>${t("orders_title")}</h1>
         <div class="orders-header-actions">
-          <button type="button" class="icon-btn orders-new-action" id="orders-print-btn" aria-label="${t("print_blank_select")}" aria-pressed="false">${icons.printer}</button>
+          ${seesAmountPapers(state.user.role) ? `<button type="button" class="icon-btn orders-new-action" id="orders-print-btn" aria-label="${t("print_blank_select")}" aria-pressed="false">${icons.printer}</button>` : ""}
           <button type="button" class="icon-btn" id="orders-new-btn" aria-label="${t("create_order")}">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </button>
@@ -318,7 +318,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
     await load();
     showToast(failed.length ? t("bulk_result_failed").replace("{ok}", String(ok)).replace("{fail}", String(failed.length)).replace("{why}", failed[0].message) : t("bulk_result_ok").replace("{n}", String(ok)), { ms: failed.length ? 6000 : 3000 });
   }
-  printBtn.addEventListener("click", () => setSelectMode(!selectMode));
+  printBtn?.addEventListener("click", () => setSelectMode(!selectMode));
   root.querySelector("#orders-select-all").addEventListener("click", () => {
     for (const o of visibleOrders) selected.set(o.id, o.order_code ?? null);
     updateSelectBar();

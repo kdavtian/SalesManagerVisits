@@ -69,7 +69,7 @@ test("the warehouse manager's product answers carry retail but no bronze / silve
   assert.equal(Number(rWh.data.find((p) => p.id === product.id).silver_price_amd), 4800, "a rep still sees silver");
 });
 
-test("staff structure: the warehouse manager sees the whole structure and his boss, with no pay; a rep gets 403", async () => {
+test("staff structure: every role sees the whole structure with no pay, the warehouse manager also his boss", async () => {
   const { rows: [boss] } = await pool.query("INSERT INTO staff_members (name, position, kind, fixed_salary_amd) VALUES ($1, 'Ops director', 'director', 900000) RETURNING id", [`WR Boss ${process.pid}`]);
   const { rows: [me] } = await pool.query("INSERT INTO staff_members (name, position, kind, user_id, reports_to, fixed_salary_amd) VALUES ($1, 'Warehouse manager', 'warehouse', $2, $3, 400000) RETURNING id", [`WR Me ${process.pid}`, wh.id, boss.id]);
   try {
@@ -78,7 +78,13 @@ test("staff structure: the warehouse manager sees the whole structure and his bo
     assert.equal(res.data.boss.name, `WR Boss ${process.pid}`);
     assert.ok(res.data.people.some((p) => p.id === me.id && p.mine === true));
     assert.ok(!/salary|commission|pay_keys|fixed/.test(text(res)), "no pay in the structure");
-    assert.equal((await apiRequest("/api/staff/structure", { cookie: await loginAs(rep.email) })).status, 403);
+    // everybody sees it (owner, 2026-11-03: "all roles"), still with no pay
+    for (const cookie of [await loginAs(rep.email), adminCookie]) {
+      const other = await apiRequest("/api/staff/structure", { cookie });
+      assert.equal(other.status, 200);
+      assert.ok(other.data.people.some((p) => p.id === boss.id));
+      assert.ok(!/salary|commission|pay_keys|fixed/.test(text(other)), "no pay in the structure");
+    }
   } finally {
     await pool.query("DELETE FROM staff_members WHERE id = ANY($1)", [[me.id, boss.id]]);
   }

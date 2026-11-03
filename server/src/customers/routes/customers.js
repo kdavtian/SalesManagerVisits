@@ -5,7 +5,7 @@ import { placeNewCustomer } from "../../field/autoRoutePlan.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
@@ -732,6 +732,7 @@ customersRouter.get("/:id/sign-statement", async (req, res) => {
 });
 
 customersRouter.get("/:id/documents", async (req, res) => {
+  if (!seesAmountPapers(req.user.role)) return res.json([]); // the warehouse manager sees no paper that carries amounts (roles.js)
   // the warehouse and drivers see the documents of the last two weeks' orders only (roles.js)
   const recentOnly = seesOnlyRecentAccountingDocs(req.user.role);
   const { rows } = await pool.query(
@@ -1674,7 +1675,7 @@ customersRouter.get("/:id/debt-statement", async (req, res) => {
   );
   const c = rows[0];
   if (!c) return res.status(404).json({ error: "Customer not found" });
-  if (!seesCustomerErpData(req.user.role, c.assigned_manager_id, req.user.id)) return res.status(403).json({ error: "Not allowed" });
+  if (!seesCustomerErpData(req.user.role, c.assigned_manager_id, req.user.id) || !seesAmountPapers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   // the LIVE debt (owner, 2026-11-03): the Excel debt + delivered app orders the Excel does not have yet - app payments it does not have
   // yet, so the paper the customer gets matches the customer card; the unpaid list holds those app orders too (oldest paid first)
   const today = yerevanToday();

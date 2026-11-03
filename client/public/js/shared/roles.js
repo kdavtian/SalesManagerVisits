@@ -94,15 +94,25 @@ export function canManageProducts(role) {
 
 // The warehouse manager works with quantities, not money (owner, 2026-11-03): no order amounts, no bronze / silver / gold prices (retail
 // prices only). The server removes those fields from his answers (middleware/roleRedaction.js); the screens hide the labels.
-// The warehouse manager and the driver see who their boss is and the whole company's structure -- names, positions and who reports to whom
-// only, never pay (server/src/team/routes/staff.js GET /structure).
+// Everybody sees who their boss is and the whole company's structure -- names, positions and who reports to whom only, never pay
+// (owner, 2026-11-03: "all roles"; server/src/team/routes/staff.js GET /structure).
 export function seesCompanyStructure(role) {
+  return Boolean(role);
+}
+// The warehouse manager and the driver have no pay of their own in Staff: the structure is their whole Staff screen.
+export function staffIsStructureOnly(role) {
   return role === "warehouse_manager" || role === "delivery_manager";
 }
 export function seesOrderAmounts(role) {
   return role !== "warehouse_manager";
 }
 export function seesTierPrices(role) {
+  return role !== "warehouse_manager";
+}
+// Papers that carry amounts -- order blanks / acts, accounting documents (invoice, waybill), debt statements, payment slips -- are not for the
+// warehouse manager at all (owner, 2026-11-03: "restrict"). The stock-count paper has quantities only and stays his; the price list he may print
+// with the retail column only. Checked on the server for every such route.
+export function seesAmountPapers(role) {
   return role !== "warehouse_manager";
 }
 

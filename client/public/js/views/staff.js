@@ -6,7 +6,7 @@ import { t, getLang } from "../i18n.js";
 import { activateDialog, escapeHtml, showToast, bindAmdInput, parseAmd } from "../util.js";
 import { deskSelectChips } from "../deskTable.js";
 import { state } from "../state.js";
-import { seesCompanyStructure } from "../shared/roles.js";
+import { seesAllStaff, staffIsStructureOnly } from "../shared/roles.js";
 
 const TABS = ["pay", "people", "tree", "rules"];
 const KINDS = ["executive", "director", "rep", "office", "warehouse", "driver"];
@@ -46,6 +46,37 @@ function openSheet(html) {
   return overlay;
 }
 
+// The company structure as a tree: names and positions (the server sends nothing else). `clickable` = the ids whose person page this user may open.
+function structureTreeHtml(structure, clickable = new Set()) {
+  const nodes = structure.people;
+  const ids = new Set(nodes.map((p) => p.id));
+  const kids = (id) => nodes.filter((p) => p.reports_to === id);
+  const roots = nodes.filter((p) => !p.reports_to || !ids.has(p.reports_to));
+  const node = (p) => {
+    const sub = kids(p.id);
+    return `<li>
+      <button type="button" class="st-node${p.mine ? " st-node-me" : ""}" ${clickable.has(p.id) ? `data-person="${p.id}"` : ""}>
+        <strong>${escapeHtml(p.name)}</strong><span class="muted">${escapeHtml(p.position)}</span>
+      </button>${sub.length ? `<ul>${sub.map(node).join("")}</ul>` : ""}
+    </li>`;
+  };
+  const boss = structure.boss;
+  const bossLine = `<p class="st-boss">${boss ? `${escapeHtml(t("st_your_boss"))}: <strong>${escapeHtml(boss.name)}</strong> <span class="muted">${escapeHtml(boss.position)}</span>` : escapeHtml(t("st_no_boss"))}</p>`;
+  return `${bossLine}<ul class="st-tree">${roots.map(node).join("")}</ul>`;
+}
+
+// A person with no Staff card (and so no pay or days of their own) still sees the company structure.
+async function renderStructureOnly(root) {
+  root.innerHTML = `<div class="st-view"><div class="st-head"><h1>${t("st_title")}</h1></div><div id="st-body"><p class="loading-state" role="status">${t("loading")}</p></div></div>`;
+  const body = root.querySelector("#st-body");
+  try {
+    const structure = await api.getStaffStructure();
+    body.innerHTML = structure.people.length ? structureTreeHtml(structure) : `<p class="muted">${t("st_tree_empty")}</p>`;
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
+}
+
 export async function renderStaff(root, navigate, personId = null, query = new URLSearchParams()) {
   const month0 = /^\d{4}-\d{2}$/.test(query.get("month") ?? "") ? query.get("month") : thisMonth();
   root.innerHTML = `<div class="st-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
@@ -56,12 +87,9 @@ export async function renderStaff(root, navigate, personId = null, query = new U
     root.innerHTML = `<div class="st-view"><p class="form-error">${escapeHtml(err.message)}</p></div>`;
     return;
   }
-  if (!access.has_access) {
-    root.innerHTML = `<div class="st-view"><h1>${t("st_title")}</h1><p class="muted">${t("st_none_self")}</p></div>`;
-    return;
-  }
+  if (!access.has_access) return renderStructureOnly(root);
   if (personId) return renderPerson(root, navigate, personId, month0, access);
-  return renderMain(root, navigate, month0, access, TABS.includes(query.get("tab")) ? query.get("tab") : seesCompanyStructure(state.user?.role) ? "tree" : "pay");
+  return renderMain(root, navigate, month0, access, TABS.includes(query.get("tab")) ? query.get("tab") : staffIsStructureOnly(state.user?.role) ? "tree" : "pay");
 }
 
 // ---- the list screen: Payroll / People / Structure / Rules ---------------------------------------------------------------------
@@ -218,19 +246,20 @@ async function renderMain(root, navigate, month0, access, tab0) {
 
   // -- structure: the tree (admin > CEO > sales director > reps; warehouse; driver ...) --
   async function paintTree() {
-    // The warehouse manager and the driver see the whole company's structure and who their boss is -- names and positions only (owner, 2026-11-03)
-    let boss = null;
-    let nodes = people;
-    if (seesCompanyStructure(state.user?.role)) {
+    // Admin, CEO and the accountant see the full tree with every person's page. Everybody else sees the whole company's structure and who
+    // their boss is -- names and positions only (owner, 2026-11-03) -- and opens the pages of the people in their own scope.
+    if (!seesAllStaff(state.user?.role)) {
       try {
         const structure = await api.getStaffStructure();
-        nodes = structure.people.map((p) => ({ ...p, active: true }));
-        boss = structure.boss;
+        const own = new Set(people.map((p) => p.id));
+        body.innerHTML = structure.people.length ? structureTreeHtml(structure, staffIsStructureOnly(state.user?.role) ? new Set() : own) : `<p class="muted">${t("st_tree_empty")}</p>`;
+        body.querySelectorAll("[data-person]").forEach((el) => el.addEventListener("click", () => goPerson(el.dataset.person)));
       } catch (err) {
         body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-        return;
       }
+      return;
     }
+    const nodes = people;
     if (!nodes.length) {
       body.innerHTML = `<p class="muted">${t("st_tree_empty")}</p>`;
       return;
@@ -242,15 +271,12 @@ async function renderMain(root, navigate, month0, access, tab0) {
     const node = (p) => {
       const sub = kids(p.id);
       return `<li>
-        <button type="button" class="st-node ${p.active ? "" : "st-row-off"}${p.mine ? " st-node-me" : ""}" ${boss ? "" : `data-person="${p.id}"`}>
+        <button type="button" class="st-node ${p.active ? "" : "st-row-off"}" data-person="${p.id}">
           <strong>${escapeHtml(p.name)}</strong><span class="muted">${escapeHtml(p.position)}</span>
         </button>${sub.length ? `<ul>${sub.map(node).join("")}</ul>` : ""}
       </li>`;
     };
-    const bossLine = seesCompanyStructure(state.user?.role)
-      ? `<p class="st-boss">${boss ? `${escapeHtml(t("st_your_boss"))}: <strong>${escapeHtml(boss.name)}</strong> <span class="muted">${escapeHtml(boss.position)}</span>` : escapeHtml(t("st_no_boss"))}</p>`
-      : "";
-    body.innerHTML = `${bossLine}<ul class="st-tree">${roots.map(node).join("")}</ul>`;
+    body.innerHTML = `<ul class="st-tree">${roots.map(node).join("")}</ul>`;
     body.querySelectorAll("[data-person]").forEach((el) => el.addEventListener("click", () => goPerson(el.dataset.person)));
   }
 

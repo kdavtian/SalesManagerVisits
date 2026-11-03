@@ -200,6 +200,19 @@ export function paintSettingsMarkup(ctx) {
             <p class="form-success" id="plan-skip-success" role="status" hidden>${t("saved")}</p>
             <button type="submit" class="btn btn-primary">${t("save")}</button>
           </form>
+          <form id="demand-form" class="settings-list-group-item">
+            <label>
+              <span class="settings-form-label">${ICON.calendar}${t("demand_lead_label")}${hintIcon("demand-help-text")}</span>
+              <input type="number" name="lead" min="1" max="365" step="1" inputmode="numeric" required />
+            </label>
+            <label>
+              <span class="settings-form-label">${ICON.calendar}${t("demand_service_label")}</span>
+              <input type="number" name="level" min="50" max="99" step="1" inputmode="numeric" required />
+            </label>
+            <p class="muted radius-help" id="demand-help-text" hidden>${t("demand_help")}</p>
+            <p class="form-success" id="demand-success" role="status" hidden>${t("saved")}</p>
+            <button type="submit" class="btn btn-primary">${t("save")}</button>
+          </form>
         </div>
         <div class="card settings-list-group">
           ${settingsToggleRow({ icon: ICON.calendar, label: t("auto_route_plan_label"), value: "", id: "toggle-auto-route-plan", checked: true, color: "green", hintBtnId: "auto-route-plan-hint", hintTextId: "auto-route-plan-help-text" })}

@@ -13,6 +13,7 @@ import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
 import { computeReorderSuggestion } from "../../products/stockForecast.js";
 import { computeDemandForecast } from "../../products/demandModel.js";
+import { getDemandSettings } from "../../products/demandSettings.js";
 import { loadDemandInputs } from "../../products/demandInputs.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { displayNetCost } from "../discountPolicy.js";
@@ -237,9 +238,11 @@ warehouseRouter.get("/inventory", async (req, res) => {
   const annotated = [];
   // the company's demand model (products/demandModel.js; the method is on the Products and Documents pages): weighted weekly sales,
   // outliers damped, lumpy sales by Croston, safety stock and reorder point, stock already promised to open orders left out
-  const { weekly, reserved } = await loadDemandInputs(pool, today);
+  const [{ weekly, reserved }, demandSettings] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool)]);
   for (const row of rows) {
     const forecast = computeDemandForecast({
+      leadTimeDays: demandSettings.leadTimeDays,
+      serviceZ: demandSettings.serviceZ,
       weeklyQty: weekly.get(row.erp_product_id) ?? [],
       stockQty: row.stock_qty,
       reservedQty: reserved.get(row.id) ?? 0,
@@ -293,9 +296,9 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     [today]
   );
   const out = [];
-  const demand = await loadDemandInputs(pool, today);
+  const [demand, demandSettings] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool)]);
   for (const row of rows) {
-    const forecast = computeDemandForecast({ weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: row.stock_qty, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: row.stock_qty, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
     const suggestion = computeReorderSuggestion({
       stockQty: row.stock_qty, reservedQty: row.reserved_qty, status: forecast.status,
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,

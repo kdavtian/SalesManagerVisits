@@ -8,7 +8,7 @@ import { Router } from "express";
 import multer from "multer";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireProductManager } from "../../middleware/auth.js";
-import { seesProductCosts, canManageProducts, canPrintCostColumns } from "../../shared/roles.js";
+import { seesProductCosts, canManageProducts, canPrintCostColumns, seesTierPrices } from "../../shared/roles.js";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { fetchPricedProducts } from "./products.js";
@@ -175,6 +175,7 @@ productDetailsRouter.delete("/:id/images/:imageId", requireProductManager, async
 // director (an internal sheet, marked as such in the PDF).
 function allowedPdfColumns(role) {
   return PDF_COLUMN_ORDER.filter((c) => {
+    if (!seesTierPrices(role)) return c === "retail"; // the warehouse manager prints the retail column only
     if (PDF_INTERNAL_COLUMNS.includes(c)) return canPrintCostColumns(role);
     if (c === "gold") return seesProductCosts(role);
     return true;
