@@ -11,6 +11,7 @@ import { buildDirectionManagerTree, openTriStateTreeSheet } from "../../regionTr
 import { repColor } from "../../repColors.js";
 
 export function passesAssignment(ctx, c) {
+  if (c.checkin_for_all) return true; // an office is on the map for every rep whatever channel filter is on (owner, 2026-11-03)
   // Default: only the field channels (a customer with no channel at all is never hidden by it).
   if (ctx.assignmentKeys === null) return !c.sales_channel || MAP_DEFAULT_CHANNEL_FILTERS.includes(c.sales_channel);
   return !ctx.assignmentKeys.size || ctx.assignmentKeys.has(ctx.assignmentKeyOf(c));

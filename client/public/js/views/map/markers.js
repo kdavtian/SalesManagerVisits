@@ -136,7 +136,20 @@ export function pinArtHtml(ctx, c, tier) {
   return img;
 }
 
+// An office (customers.checkin_for_all) is a place every rep can check in at, not a sale: one round building pin, same size for everyone.
+function officeIcon(ctx) {
+  const size = ctx.pinSize("gold");
+  return L.divIcon({
+    className: "",
+    html: `<div class="pin pin-office" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5l8-2v18M12 9h8v12M7 9h2M7 13h2M7 17h2M15 13h2M15 17h2M3 21h18"/></svg></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
 export function customerIcon(ctx, c, status) {
+  if (c.checkin_for_all) return officeIcon(ctx);
   const tier = ctx.markerKind(c.customer_tier);
   const check = status === "today" ? '<span class="pin-check">&#10003;</span>' : "";
   // Overdue pins already carry the red "!" badge (map-marker-system.css ::after); a never-visited pin shows the yellow "!!" instead of it.

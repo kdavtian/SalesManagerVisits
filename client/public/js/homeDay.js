@@ -20,7 +20,7 @@ export function paintMyDay(slot, day, customers, navigate) {
         .filter(Boolean)
         .map((c) => ({ ...c, done: day.done_ids.includes(c.id) || !!c.visited_today }))
     : customers
-        .filter((c) => !c.visited_today && c.customer_tier !== "competitor")
+        .filter((c) => !c.visited_today && c.customer_tier !== "competitor" && !c.checkin_for_all)
         .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0))
         .slice(0, SUGGESTED)
         .map((c) => ({ ...c, done: false }));

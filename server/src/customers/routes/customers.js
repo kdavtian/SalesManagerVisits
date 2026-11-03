@@ -850,6 +850,7 @@ export const EDITABLE_FIELDS = [
   "sales_channel",
   "credit_term_days",
   "payment_method",
+  "checkin_for_all", // an office: every rep can check in there (owner, 2026-11-03); admin only, see the PATCH guard
 ];
 
 // A director/ceo (not just admin) can fix these four directly -- everything
@@ -905,6 +906,9 @@ customersRouter.patch("/:id", async (req, res) => {
     }
   }
 
+  if (req.body?.checkin_for_all !== undefined && typeof req.body.checkin_for_all !== "boolean") {
+    return res.status(400).json({ error: "checkin_for_all must be true or false" });
+  }
   if (req.body?.customer_tier !== undefined && !CUSTOMER_TIERS.has(req.body.customer_tier)) {
     return res.status(400).json({ error: "Invalid customer_tier" });
   }
