@@ -56,10 +56,7 @@ test("Colour by Rep: default Tier, ring per rep colour, remembered per user; col
   // the circles are for today's planned visits per rep: three states (Off / Highlight / Only today), off by default
   await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(0);
   await expect(page.locator('[data-planned-mode="off"]')).toHaveClass(/chip-active/);
-  const plannedToday = await page.evaluate(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  });
+  const plannedToday = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Yerevan" }).format(new Date()); // the app's "today" is the Yerevan day
   await pool.query("INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by) VALUES ($1, $2, $3, 'approved', $1)", [aram.id, plannedToday, [c2.id, c1.id]]);
   await page.locator('[data-planned-mode="highlight"]').click();
   await expect(page.locator("#leaflet-map .pin-rep-ring")).toHaveCount(2, { timeout: 10000 });

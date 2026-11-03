@@ -4,7 +4,7 @@
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
-import { escapeHtml } from "./util.js";
+import { escapeHtml, neverVisitedMarkHtml } from "./util.js";
 
 const fill = (key, vars) => Object.entries(vars).reduce((s, [k, v]) => s.replace(`{${k}}`, String(v)), t(key));
 const LONG_PRESS_MS = 500;
@@ -21,7 +21,7 @@ export function paintMyDay(slot, day, customers, navigate) {
         .map((c) => ({ ...c, done: day.done_ids.includes(c.id) || !!c.visited_today }))
     : customers
         .filter((c) => !c.visited_today && c.customer_tier !== "competitor" && !c.checkin_for_all)
-        .sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0))
+        .sort((a, b) => (b.overdue || b.never_visited ? 1 : 0) - (a.overdue || a.never_visited ? 1 : 0))
         .slice(0, SUGGESTED)
         .map((c) => ({ ...c, done: false }));
   const total = day.planned;
@@ -52,7 +52,7 @@ export function paintMyDay(slot, day, customers, navigate) {
               .map(
                 (c) => `<div class="my-day-row ${c.done ? "is-done" : ""}">
                   <span class="my-day-tick ${c.done ? "my-day-tick-done" : ""}" aria-hidden="true">${c.done ? icons.checkCircle : ""}</span>
-                  <button type="button" class="my-day-name" data-map="${c.id}">${escapeHtml(c.name)}${c.overdue && !c.done ? ` <span class="dot dot-danger" aria-hidden="true"></span>` : ""}</button>
+                  <button type="button" class="my-day-name" data-map="${c.id}">${escapeHtml(c.name)}${c.done ? "" : c.never_visited ? ` ${neverVisitedMarkHtml()}` : c.overdue ? ` <span class="dot dot-danger" aria-hidden="true"></span>` : ""}</button>
                   ${c === firstPending ? `<button type="button" class="btn btn-primary btn-sm my-day-checkin" data-checkin="${c.id}">${t("check_in")}</button>` : ""}
                   <button type="button" class="icon-btn my-day-open" data-open="${c.id}" aria-label="${escapeHtml(t("view_customer"))}">&#8250;</button>
                 </div>`

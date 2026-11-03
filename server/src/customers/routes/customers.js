@@ -59,16 +59,20 @@ const VISIT_STATUS_JOIN = `
            COALESCE(bool_or(ch.timestamp >= now() - interval '7 days'), false) AS visited_this_week
     FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}
   ) v ON true`;
+// Overdue and never visited are two different things (owner, 2026-11-03: "split overdue everywhere"): overdue = visited before, but longer
+// ago than its visit rhythm allows; never visited = no field visit at all yet.
 const OVERDUE_SQL = `(
     ${NOT_NO_VISIT_CHANNEL_SQL}
     AND NOT v.visited_today
-    AND (v.last_visit_at IS NULL OR v.last_visit_at < now() - (c.visit_frequency_days || ' days')::interval)
+    AND v.last_visit_at IS NOT NULL AND v.last_visit_at < now() - (c.visit_frequency_days || ' days')::interval
   )`;
+const NEVER_VISITED_SQL = `(${NOT_NO_VISIT_CHANNEL_SQL} AND v.last_visit_at IS NULL)`;
 const STATUS_COLUMNS = `
   v.last_visit_at AS last_visit_at,
   v.visited_today AS visited_today,
   v.visited_this_week AS visited_this_week,
   ${OVERDUE_SQL} AS overdue,
+  ${NEVER_VISITED_SQL} AS never_visited,
   -- Whether this customer is on a channel that is visited in the field at
   -- all. Exposed as its own flag (rather than the client re-deriving it
   -- from sales_channel) so the exemption list lives in exactly one place;
@@ -91,7 +95,7 @@ async function applyPlannedOverdue(rows) {
       ruleWeekdays: ruleWeekdaysFor(row, rules),
       today,
     });
-    row.overdue = Boolean(row.requires_visit) && !row.visited_today && due.overdue;
+    row.overdue = Boolean(row.requires_visit) && !row.visited_today && due.overdue && !due.never_visited; // a never-visited customer is "never visited", not overdue
     // The desktop Customers table shows it as its "Next visit" column (null: never visited or not visited in the field).
     row.next_visit_date = row.requires_visit ? (due.planned_date ?? null) : null;
   }
@@ -169,6 +173,8 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`${NOT_NO_VISIT_CHANNEL_SQL} AND NOT v.visited_this_week`);
   } else if (visited === "overdue") {
     conditions.push(OVERDUE_SQL);
+  } else if (visited === "never") {
+    conditions.push(NEVER_VISITED_SQL);
   }
 
   if (page?.after) {

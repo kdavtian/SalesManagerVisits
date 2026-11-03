@@ -70,17 +70,14 @@ export const STATUS_BADGE = {
   today: { cls: "badge-success", labelKey: "visited_today" },
   overdue: { cls: "badge-danger", labelKey: "filter_overdue" },
   recent: { cls: "badge-info", labelKey: "visited_this_week" },
-  never: { cls: "badge-neutral", labelKey: "never_visited" },
+  never: { cls: "badge-danger", labelKey: "never_visited" }, // red like the "!!" mark; Overdue is the other red one, told apart by its words
 };
 
 // The badge (class + label key) for a customer's derived visit status, or
 // null for a status that deliberately carries no badge (exempt/on_track).
-// A never-visited customer whose cadence window has already elapsed is
-// genuinely urgent, so it keeps the alarming colour even though the more
-// specific "Not visited" wording wins over "Overdue".
+// Never visited and Overdue are two separate statuses with their own words (owner, 2026-11-03).
 export function visitStatusBadge(c) {
   const status = visitStatus(c);
-  if (status === "never" && c.overdue) return { ...STATUS_BADGE.never, cls: "badge-danger" };
   return STATUS_BADGE[status] ?? null;
 }
 

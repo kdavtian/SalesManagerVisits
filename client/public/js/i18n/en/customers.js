@@ -146,7 +146,7 @@ export const enCustomers = {
     filter_visited: "Visited",
     filter_visited_today: "Visited today",
     filter_visited_7days: "Visited last 7 days",
-    filter_not_visited: "Not visited",
+    filter_not_visited: "Never visited",
     visited_this_week: "Visited",
     visited_today: "Visited today",
     new_customer: "New customer",

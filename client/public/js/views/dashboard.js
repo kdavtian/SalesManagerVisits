@@ -294,6 +294,7 @@ export async function renderDashboard(root, navigate) {
             <div class="progress-side-row"><span class="dot dot-success"></span>${totals.visited_today} ${t("stat_visited_today")}</div>
             <div class="progress-side-row"><span class="dot dot-warning"></span>${remaining} ${t("stat_remaining")}</div>
             <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.overdue} ${t("stat_overdue")}</div>
+            <div class="progress-side-row"><span class="dot dot-danger"></span>${totals.never_visited ?? 0} ${t("never_visited")}</div>
           </div>
           ${canOpenRepProgress ? `<span class="progress-card-chevron" aria-hidden="true">${icons.chevronDown}</span>` : ""}
         </div>
@@ -611,7 +612,7 @@ async function renderNextVisit(slot, customers, navigate) {
     return;
   }
 
-  candidates.sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0));
+  candidates.sort((a, b) => (b.overdue || b.never_visited ? 1 : 0) - (a.overdue || a.never_visited ? 1 : 0));
   let next = candidates[0];
   let distanceText = "";
 

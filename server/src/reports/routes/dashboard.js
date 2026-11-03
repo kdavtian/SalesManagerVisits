@@ -201,7 +201,17 @@ dashboardRouter.get("/summary", async (req, res) => {
           WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
           ${customerFilter}
           AND NOT COALESCE(v.visited_today, false)
-          AND (v.last_visit_at IS NULL OR v.last_visit_at < now() - (c.visit_frequency_days || ' days')::interval)) AS overdue`,
+          AND v.last_visit_at < now() - (c.visit_frequency_days || ' days')::interval) AS overdue,
+       -- never visited is its own number, not part of overdue (owner, 2026-11-03)
+       (WITH v AS (
+          SELECT DISTINCT ch.customer_id FROM checkins ch
+          WHERE ${repVisitSql("ch")}
+            AND ch.customer_id IN (SELECT c.id FROM customers c WHERE true ${customerFilter})
+        )
+        SELECT count(*) FROM customers c
+          WHERE ${NOT_NO_VISIT_CHANNEL_SQL}
+          ${customerFilter}
+          AND NOT EXISTS (SELECT 1 FROM v WHERE v.customer_id = c.id)) AS never_visited`,
     params
   );
 

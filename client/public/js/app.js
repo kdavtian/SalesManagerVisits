@@ -408,9 +408,19 @@ function handleNavTap(target, tab = target.split("?")[0]) {
   app.scrollTo({ top: 0, behavior: "instant" });
 }
 
+// A page opened from inside a Home screen (a product from Products, a person from Staff, ...) is part of the Home tree too: the Home tap
+// from there goes to Home itself. It used to jump to the Home screen last opened -- from a product that is the Products list, so the
+// person could never reach Home from a product page (owner, 2026-11-03: "from product page the user cannot go back to home").
+const HOME_DETAIL_PREFIXES = ["#/product/"];
+function inHomeTree(path) {
+  if (HOME_TREE_ROUTES.has(path)) return true;
+  if (HOME_DETAIL_PREFIXES.some((p) => path.startsWith(p))) return true;
+  for (const route of HOME_TREE_ROUTES) if (route !== "#/dashboard" && path.startsWith(`${route}/`)) return true;
+  return false;
+}
 function homeNavTarget() {
   const currentPath = (location.hash || "#/dashboard").split("?")[0];
-  return HOME_TREE_ROUTES.has(currentPath) ? "#/dashboard" : lastHomeHash;
+  return inHomeTree(currentPath) ? "#/dashboard" : lastHomeHash;
 }
 
 
