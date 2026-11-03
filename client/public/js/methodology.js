@@ -2,6 +2,7 @@
 // Products page and as a section of the Documents page; more methods (policies) are added to METHODS later. The days-of-stock text
 // describes server/src/products/demandModel.js -- change them together.
 import { t } from "./i18n.js";
+import { api } from "./api.js";
 import { escapeHtml, activateDialog } from "./util.js";
 import { icons } from "./icons.js";
 
@@ -25,9 +26,14 @@ export function wireMethodologyList(host) {
   host.querySelectorAll("[data-method]").forEach((b) => b.addEventListener("click", () => openMethodologySheet(b.dataset.method)));
 }
 
-export function openMethodologySheet(key = "stock_days") {
+// The lead time and the service level in the text are the administrator's settings (Settings -> App configuration), not fixed numbers.
+const fillNumbers = (text, s) => text.replace(/\{lead\}/g, String(s?.demand_lead_time_days ?? 45)).replace(/\{level\}/g, String(s?.demand_service_level_pct ?? 95));
+
+export async function openMethodologySheet(key = "stock_days") {
   const m = METHODS[key];
   if (!m) return;
+  const settings = await api.getSettings().catch(() => null);
+  const tx = (k) => fillNumbers(t(k), settings);
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet methodology-sheet">
@@ -35,8 +41,8 @@ export function openMethodologySheet(key = "stock_days") {
     <p class="muted methodology-kicker">${escapeHtml(t("methodology_title"))}</p>
     <h2>${escapeHtml(t(m.title))}</h2>
     <p>${escapeHtml(t(m.intro))}</p>
-    <ol class="methodology-steps">${m.steps.map((s) => `<li>${escapeHtml(t(s))}</li>`).join("")}</ol>
-    ${m.notes.map((n) => `<p class="muted methodology-note">${escapeHtml(t(n))}</p>`).join("")}
+    <ol class="methodology-steps">${m.steps.map((s) => `<li>${escapeHtml(tx(s))}</li>`).join("")}</ol>
+    ${m.notes.map((n) => `<p class="muted methodology-note">${escapeHtml(tx(n))}</p>`).join("")}
     <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>
   </div>`;
   document.body.appendChild(overlay);

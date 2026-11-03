@@ -12,7 +12,6 @@
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 //   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
-import { netDebt, frozenApplied } from "../../shared/netDebt.js";
 import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import { addWish, cleanWish, WishValidationError } from "../productWishes.js";
 import path from "node:path";
@@ -25,7 +24,7 @@ import { orderedProductIdsOf } from "../../customers/routes/customers.js";
 import { companyFrequentIds } from "../../products/routes/productShortcuts.js";
 import { tierListPrice } from "../../products/tierPricing.js";
 import { compareProducts } from "../../../../client/public/js/productSort.js";
-import { allocateFifo, loadOrdersNewestFirst } from "../../money/debtAging.js";
+import { liveDebtMap } from "../../money/liveDebt.js";
 import { creditSnapshot } from "../creditLimit.js";
 import { loadUnrecordedPayments } from "../../money/routes/debtBalances.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
@@ -62,21 +61,30 @@ function presentCampaign(c) {
   return { id: c.id, title: c.title, note: c.note, kind: c.kind, percent: c.percent, starts_at: c.starts_at, ends_at: c.ends_at, products: c.products };
 }
 
+// The customer's account in KAD Motors, for KAD OS (owner, 2026-11-03): ONE debt number = the LIVE debt (the Excel debt + the app's delivered orders
+// the Excel does not have yet - the app's payments it does not have yet), the frozen credit INCLUDED. The part of it the Excel books have not
+// confirmed yet comes next to it (unconfirmed_amd = |orders - payments|; KAD OS writes "[amount] not confirmed yet"). The overdue part, the
+// credit limit and the available credit still count the NET debt (the frozen credit is not chased and does not use the limit).
 async function balanceFor(customer) {
   const erpId = customer.erp_customer_id;
-  const out = { debt_amd: 0, frozen_amd: 0, overdue_amd: 0, oldest_due_days: 0, credit_limit_amd: null, open_orders_amd: 0, available_credit_amd: null, unrecorded_amd: 0, payments: [], as_of: null };
+  const out = {
+    debt_amd: 0, unconfirmed_amd: 0, unconfirmed_orders_amd: 0, unconfirmed_payments_amd: 0, overdue_amd: 0, oldest_due_days: 0,
+    credit_limit_amd: null, open_orders_amd: 0, available_credit_amd: null, unrecorded_amd: 0, payments: [], as_of: null,
+  };
   if (!erpId) return out;
   const { rows } = await pool.query("SELECT debt_amd, synced_at FROM erp_customer_data WHERE erp_customer_id = $1", [erpId]);
-  const grossDebt = Number(rows[0]?.debt_amd ?? 0);
-  // two lines for the customer (owner, 2026-11-03): the debt that counts (net) and the frozen credit set aside
-  const debt = netDebt(grossDebt, customer.frozen_credit_amd);
-  out.debt_amd = debt;
-  out.frozen_amd = frozenApplied(grossDebt, customer.frozen_credit_amd);
   out.as_of = rows[0]?.synced_at ?? null;
-  const orders = await loadOrdersNewestFirst(pool, [erpId]);
-  const a = allocateFifo({ orders: orders.get(erpId) ?? [], debt, today: yerevanToday(), termDays: customer.credit_term_days ?? 45 });
-  out.overdue_amd = a.overdue_amd;
-  out.oldest_due_days = a.oldest_due_days;
+  const live = rows[0]?.debt_amd == null
+    ? null
+    : (await liveDebtMap(pool, [{ id: customer.id, erp_customer_id: erpId, debt_amd: rows[0].debt_amd, credit_term_days: customer.credit_term_days ?? 45 }], yerevanToday())).get(customer.id);
+  if (live) {
+    out.debt_amd = live.excel_amd + live.orders_not_in_excel_amd - live.payments_not_in_excel_amd; // signed: below zero = paid in advance
+    out.unconfirmed_orders_amd = live.orders_not_in_excel_amd;
+    out.unconfirmed_payments_amd = live.payments_not_in_excel_amd;
+    out.unconfirmed_amd = Math.abs(live.orders_not_in_excel_amd - live.payments_not_in_excel_amd);
+    out.overdue_amd = live.aging.overdue_amd;
+    out.oldest_due_days = live.aging.oldest_due_days;
+  }
   const snap = await creditSnapshot(pool, customer.id);
   if (snap) {
     out.credit_limit_amd = snap.limit;

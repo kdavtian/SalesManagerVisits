@@ -1,5 +1,5 @@
-// Signed accounting documents (owner, 2026-10-27): the warehouse and the drivers open only those of orders placed in the last two weeks;
-// every other role sees them all, as on the customer card.
+// Signed accounting documents (owner, 2026-10-27): drivers open only those of orders placed in the last two weeks; every other role sees them all,
+// as on the customer card. The warehouse manager opens none (owner, 2026-11-03: papers with amounts are restricted for him).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, loginAs, apiRequest, trackOrder } from "./helpers.js";
@@ -11,7 +11,7 @@ test.after(async () => {
   await stopTestServer();
 });
 
-test("the warehouse and drivers open only the documents of orders from the last two weeks; other roles see them all", async () => {
+test("drivers open only the documents of orders from the last two weeks, the warehouse manager none; other roles see them all", async () => {
   const director = await createUser("sales_director");
   const customer = await createCustomer({ created_by: director.id, assigned_manager_id: director.id });
   const order = async (daysAgo) =>
@@ -21,10 +21,20 @@ test("the warehouse and drivers open only the documents of orders from the last 
   const pdf = Buffer.from("%PDF-1.4\n%itest\n");
   const doc = async (orderId) =>
     (await pool.query("INSERT INTO order_documents (order_id, filename, size_bytes, data) VALUES ($1, 'w.pdf', $2, $3) RETURNING id", [orderId, pdf.length, pdf])).rows[0].id;
-  const fresh = await doc(await order(3));
+  const order0 = await order(3);
+  const fresh = await doc(order0);
   const old = await doc(await order(20));
 
-  for (const role of ["warehouse_manager", "delivery_manager"]) {
+  const whCookie = await loginAs((await createUser("warehouse_manager")).email);
+  assert.deepEqual((await apiRequest(`/api/customers/${customer.id}/documents`, { cookie: whCookie })).data, []);
+  assert.equal((await apiRequest(`/api/orders/documents/${fresh}/file`, { cookie: whCookie })).status, 403);
+  assert.equal((await apiRequest(`/api/orders/documents/${fresh}/preview`, { cookie: whCookie })).status, 403);
+  assert.equal((await apiRequest(`/api/orders/${order0}/documents`, { cookie: whCookie })).status, 403);
+  assert.equal((await apiRequest("/api/orders/blank-pdf", { method: "POST", cookie: whCookie, body: { order_ids: [order0] } })).status, 403);
+  assert.equal((await apiRequest(`/api/customers/${customer.id}/debt-statement`, { cookie: whCookie })).status, 403);
+  assert.equal((await apiRequest("/api/files/print-slips", { method: "POST", cookie: whCookie, body: { ids: [1] } })).status, 403);
+  assert.equal((await apiRequest("/api/products/pricelist.pdf", { method: "POST", cookie: whCookie, body: { columns: ["silver", "gold"], valid_until: "2030-01-01" } })).status, 400);
+  for (const role of ["delivery_manager"]) {
     const cookie = await loginAs((await createUser(role)).email);
     const listed = (await apiRequest(`/api/customers/${customer.id}/documents`, { cookie })).data.map((d) => d.id);
     assert.deepEqual(listed, [fresh], `${role}: only the recent order's document is listed`);

@@ -6,7 +6,8 @@ import { reorderHash } from "../../reorder.js";
 import { activateDialog, erpLineDiscountRowHtml, escapeHtml, formatAmd, formatDateDMY, leaveSheetTo } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
-import { isAdmin } from "../../state.js";
+import { isAdmin, state } from "../../state.js";
+import { seesAmountPapers } from "../../shared/roles.js";
 import { openFileReadySheet } from "../../fileReadySheet.js";
 import { loadWithCache } from "../../listCache.js";
 import { allOrdersSource, orderDetailSource, paymentsSource } from "../../customerCardData.js";
@@ -61,7 +62,7 @@ export async function openPaymentsReceivedSheet(customer) {
     }
     <p class="form-error" id="debt-statement-error" hidden></p>
     <div class="sheet-actions">
-      ${Number(customer.live_debt?.debt_amd ?? customer.erp_debt_amd) > 0 ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
+      ${Number(customer.live_debt?.debt_amd ?? customer.erp_debt_amd) > 0 && seesAmountPapers(state.user.role) ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
       <button type="button" class="btn" data-action="close-sheet">${t("done")}</button>
     </div>`;
     overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));

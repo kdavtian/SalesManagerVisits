@@ -91,3 +91,15 @@ test("one lump order is a one-off, not daily demand; a product that only just st
   const g = computeDemandForecast({ ...base, weeklyQty: fresh, stockQty: 100 });
   assert.ok(Math.abs(g.dailyDemand - 15 / 7) < 0.05, `about 2.14 a day, got ${g.dailyDemand}`);
 });
+
+// Owner, 2026-11-03: lead time and service level are admin settings (products/demandSettings.js).
+test("the lead time moves the reorder point; the service level moves the safety stock", () => {
+  const lumpy = [30, 0, 10, 40, 5, 20, 35, 0, 15, 25, 5, 30, 10, 0, 20, 40, 10, 5, 25, 15, 30, 0, 10, 20, 35, 5];
+  const a = computeDemandForecast({ ...base, weeklyQty: lumpy, stockQty: 500 });
+  const longer = computeDemandForecast({ ...base, weeklyQty: lumpy, stockQty: 500, leadTimeDays: 90 });
+  assert.ok(longer.reorderPoint > a.reorderPoint, "a longer lead time needs a higher reorder point");
+  const surer = computeDemandForecast({ ...base, weeklyQty: lumpy, stockQty: 500, serviceZ: 2.33 });
+  assert.ok(surer.safetyStock > a.safetyStock, "a higher service level needs more safety stock");
+  const same = computeDemandForecast({ ...base, weeklyQty: lumpy, stockQty: 500, leadTimeDays: 45, serviceZ: 1.65 });
+  assert.deepEqual(same, a, "the defaults are the model's own 45 days and z = 1.65");
+});

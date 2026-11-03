@@ -1,5 +1,5 @@
 // Customer documents: the one place that knows who may see / add / change a file and how a row is stored.
-import { seesAllCustomerFiles, canManageSignedDocuments } from "../shared/roles.js";
+import { seesAllCustomerFiles, canManageSignedDocuments, seesAmountPapers } from "../shared/roles.js";
 
 export const FILE_KINDS = ["order_blank", "signed_act", "payment_slip", "other"];
 
@@ -9,6 +9,7 @@ export const FILE_COLUMNS = `f.id, f.customer_id, f.kind, f.mime, f.size_bytes, 
 
 // SQL that limits a query on customer_files f (joined with customers c) to what this user may see. Appends to params.
 export function visibleFilesCondition(user, params) {
+  if (!seesAmountPapers(user.role)) return "FALSE"; // signed acts, blanks and payment slips carry amounts: not for the warehouse manager
   if (seesAllCustomerFiles(user.role)) return "TRUE";
   params.push(user.id);
   const me = `$${params.length}`;

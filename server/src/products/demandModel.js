@@ -12,8 +12,8 @@
 //  4. Intermittent demand. A product that sells in fewer than half of the weeks is not forecast with an average (it would swing between
 //     "nothing" and "a lot"): Croston's method with the Syntetos-Boylan correction forecasts the size of a sale and the time between sales
 //     separately.
-//  5. Variability. The weighted standard deviation of the weekly sales gives a safety stock for a 95 % service level (z = 1.65) over the
-//     supplier lead time: SS = z x sigma_daily x sqrt(lead time). Reorder point = daily demand x lead time + SS.
+//  5. Variability. The weighted standard deviation of the weekly sales gives a safety stock for the service level (default 95 %, z = 1.65) over the
+//     supplier lead time (default 45 days; both are admin settings, demandSettings.js): SS = z x sigma_daily x sqrt(lead time). Reorder point = daily demand x lead time + SS.
 //  6. Stock that is free to sell. Days left = (stock - reserved by open orders) / daily demand: stock already promised to a customer is not
 //     stock the next customer can have.
 //  7. Status from the reorder point, not from a fixed day count: critical = free stock is at or under the reorder point (order now),
@@ -97,11 +97,12 @@ function crostonWeekly(series) {
 }
 
 /**
- * input: { weeklyQty: number[] newest first, stockQty, reservedQty = 0, lastSaleDate, createdAt, today }
+ * input: { weeklyQty: number[] newest first, stockQty, reservedQty = 0, lastSaleDate, createdAt, today, leadTimeDays, serviceZ }
+ *   leadTimeDays / serviceZ: the admin's settings (demandSettings.js); without them the model's own 45 days and z = 1.65
  * Returns { status, dailyDemand, daysOfStock, trend, method, safetyStock, reorderPoint, freeStock, daysToReorder, variability }
  *   status: 'unknown' | 'out' | 'new' | 'dead' | 'slow' | 'critical' | 'low' | 'ok'  (the same words the old model used)
  */
-export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 0, lastSaleDate = null, createdAt = null, today }) {
+export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 0, lastSaleDate = null, createdAt = null, today, leadTimeDays = MODEL.leadTimeDays, serviceZ = MODEL.serviceZ }) {
   const none = { dailyDemand: null, daysOfStock: null, trend: null, method: null, safetyStock: null, reorderPoint: null, freeStock: null, daysToReorder: null, variability: null };
   if (stockQty == null) return { status: "unknown", ...none };
   const stock = Number(stockQty);
@@ -130,8 +131,8 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
   if (!(dailyDemand > 0)) return { status: "slow", ...none, dailyDemand: 0 };
 
   const sdDaily = sd / Math.sqrt(7);
-  const safetyStock = Math.max(0, Math.ceil(MODEL.serviceZ * sdDaily * Math.sqrt(MODEL.leadTimeDays) - 1e-9));
-  const reorderPoint = Math.ceil(dailyDemand * MODEL.leadTimeDays + safetyStock - 1e-9);
+  const safetyStock = Math.max(0, Math.ceil(serviceZ * sdDaily * Math.sqrt(leadTimeDays) - 1e-9));
+  const reorderPoint = Math.ceil(dailyDemand * leadTimeDays + safetyStock - 1e-9);
   const freeStock = Math.max(0, stock - Math.max(0, Number(reservedQty) || 0));
   const daysOfStock = freeStock / dailyDemand;
   const daysToReorder = (freeStock - reorderPoint) / dailyDemand;
@@ -150,7 +151,7 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
 
   let status;
   if (freeStock <= reorderPoint) status = "critical";
-  else if (freeStock <= dailyDemand * (MODEL.leadTimeDays + MODEL.reviewDays) + safetyStock) status = "low";
+  else if (freeStock <= dailyDemand * (leadTimeDays + MODEL.reviewDays) + safetyStock) status = "low";
   else status = "ok";
 
   return { status, dailyDemand, daysOfStock, trend, method: intermittent ? "croston" : "ewma", safetyStock, reorderPoint, freeStock, daysToReorder, variability };

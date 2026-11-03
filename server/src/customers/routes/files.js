@@ -10,7 +10,7 @@ import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } from "../../utils/imageThumbs.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
-import { canAddCustomerFiles, seesAllCustomerFiles } from "../../shared/roles.js";
+import { canAddCustomerFiles, seesAllCustomerFiles, seesAmountPapers } from "../../shared/roles.js";
 import { scheduleAiCheck, checkFileWithAi, getAiCheckSettings, isAiConfigured } from "../aiBlankCheck.js";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -137,6 +137,7 @@ filesRouter.post("/pdf-preview", pdfPreviewLimiter, express.raw({ type: "applica
 // Payment slips for printing, two to an A4 sheet (owner, 2026-10-27). Each stored slip is a half-A4 page; its picture is placed in one half,
 // so the printed sheet is exactly what was signed. ids: the slips on screen (up to 40), in that order.
 filesRouter.post("/print-slips", async (req, res) => {
+  if (!seesAmountPapers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isInteger).slice(0, 40);
   if (!ids.length) return res.status(400).json({ error: "Choose the payment slips" });
   const params = [ids];

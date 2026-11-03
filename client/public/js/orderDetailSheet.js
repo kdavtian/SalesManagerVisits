@@ -11,7 +11,7 @@ import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTim
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
-import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts } from "./shared/roles.js";
+import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts, seesAmountPapers } from "./shared/roles.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
@@ -234,7 +234,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     overlay.querySelector(".sheet").classList.remove("sheet-adding");
     overlay.querySelector(".sheet").innerHTML = `
       <div class="sheet-head-actions">
-        <button type="button" class="icon-btn" data-action="print-blank" aria-label="${t("print_blank")}" title="${t("print_blank")}">${icons.printer}</button>
+        ${seesAmountPapers(state.user.role) ? `<button type="button" class="icon-btn" data-action="print-blank" aria-label="${t("print_blank")}" title="${t("print_blank")}">${icons.printer}</button>` : ""}
         <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       </div>
       <div class="order-detail-head">

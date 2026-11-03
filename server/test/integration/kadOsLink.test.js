@@ -223,7 +223,9 @@ test("balance: debt, overdue part, credit limit and payments of the own customer
   await pool.query("UPDATE customers SET credit_limit_amd = 2000000 WHERE id = $1", [shop.id]);
   try {
     const b = (await apiRequest("/api/partner/balance", { cookie: partnerCookie })).data;
-    assert.equal(b.debt_amd, 500000);
+    // the debt is the LIVE one: orders delivered earlier in this file are not in the Excel yet and count
+    const early = Number((await pool.query("SELECT COALESCE(SUM(total_amd), 0) AS s FROM orders WHERE customer_id = $1 AND status = 'delivered' AND erp_matched_order_id IS NULL", [shop.id])).rows[0].s);
+    assert.equal(b.debt_amd, 500000 + early);
     assert.equal(b.overdue_amd, 500000, "80 days old, 45-day terms");
     assert.ok(b.oldest_due_days > 0);
     assert.equal(b.credit_limit_amd, 2000000);
@@ -231,11 +233,34 @@ test("balance: debt, overdue part, credit limit and payments of the own customer
     assert.equal(b.payments[0].amount, 123000);
     const me = (await apiRequest("/api/partner/me", { cookie: partnerCookie })).data;
     assert.equal(me.customer.id, shop.id);
-    assert.equal(me.balance.debt_amd, 500000);
+    assert.equal(me.balance.debt_amd, 500000 + early);
   } finally {
     await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [shop.erp_customer_id]);
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [shop.erp_customer_id]);
     await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = $1", [shop.erp_customer_id]);
+  }
+});
+
+// Owner, 2026-11-03: KAD OS shows ONE debt number = the live debt, the frozen credit included, and "[amount] not confirmed yet".
+test("balance: one live debt number with the frozen credit included, and what the Excel has not confirmed yet", async () => {
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, balance0_amd, synced_at) VALUES ($1, 'x', 500000, 0, now()) ON CONFLICT (erp_customer_id) DO UPDATE SET debt_amd = 500000, synced_at = now()", [shop.erp_customer_id]);
+  await pool.query("UPDATE customers SET frozen_credit_amd = 200000 WHERE id = $1", [shop.id]);
+  const { rows: [o] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd, order_code) VALUES ($1, $2, 'delivered', 120000, $3) RETURNING id", [shop.id, rep.id, `KOS-NC-${stamp}`]);
+  trackOrder(o.id);
+  const early = Number((await pool.query("SELECT COALESCE(SUM(total_amd), 0) AS s FROM orders WHERE customer_id = $1 AND status = 'delivered' AND erp_matched_order_id IS NULL AND id <> $2", [shop.id, o.id])).rows[0].s);
+  try {
+    const b = (await apiRequest("/api/partner/balance", { cookie: partnerCookie })).data;
+    assert.equal(b.debt_amd, 620000 + early, "Excel 500,000 + the delivered app orders not in it yet (120,000 here), nothing taken off for the frozen 200,000");
+    assert.equal(b.unconfirmed_amd, 120000 + early);
+    assert.equal(b.unconfirmed_orders_amd, 120000 + early);
+    assert.equal(b.unconfirmed_payments_amd, 0);
+    assert.ok(!("frozen_amd" in b), "the frozen credit is not a second line any more");
+    const me = (await apiRequest("/api/partner/me", { cookie: partnerCookie })).data;
+    assert.equal(me.balance.debt_amd, 620000 + early);
+    assert.equal(me.balance.unconfirmed_amd, 120000 + early);
+  } finally {
+    await pool.query("UPDATE customers SET frozen_credit_amd = 0 WHERE id = $1", [shop.id]);
+    await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [shop.erp_customer_id]);
   }
 });
 
