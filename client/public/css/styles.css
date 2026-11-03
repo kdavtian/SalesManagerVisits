@@ -10064,3 +10064,88 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .methodology-steps li { line-height: 1.4; }
 .methodology-note { font-size: 0.84rem; line-height: 1.4; }
 .methodology-row { width: 100%; text-align: left; }
+
+/* Driver route: one next stop, the rest folded (owner, 2026-11-03) */
+.drv-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.drv-next {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.drv-customer {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+.drv-contact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  min-width: 0;
+}
+.drv-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  flex: none;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--accent);
+}
+.drv-address {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted, #6b7280);
+}
+.drv-sum {
+  margin: 0;
+}
+.drv-fold {
+  margin-top: 12px;
+}
+.drv-fold > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  cursor: pointer;
+}
+.drv-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+}
+.drv-row-seq {
+  flex: none;
+  font-weight: 700;
+  color: var(--accent);
+}
+.drv-row-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.drv-row-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drv-map {
+  height: 260px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 8px;
+}

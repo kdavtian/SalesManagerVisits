@@ -6,6 +6,7 @@ import { state } from "../state.js";
 import { canPlanRoutes, canDeliverOrders } from "../shared/roles.js";
 import { ensureOwnSignature } from "../signaturePad.js";
 import { ensureLeaflet } from "../leafletLoader.js";
+import { icons } from "../icons.js";
 
 const canPlan = () => canPlanRoutes(state.user.role);
 const canDrive = () => canDeliverOrders(state.user.role);
@@ -102,31 +103,49 @@ export async function renderDelivery(root, navigate) {
       contentEl.innerHTML = `<p class="empty-state">${t("delivery_route_empty")}</p>`;
       return;
     }
+    paintDriverRoute(route);
+  }
+
+  // The driver's day (owner, 2026-11-03): ONE next stop, big, with what he needs on it (name, phone + address on one line, amount) and two
+  // big buttons -- Navigate and Delivered. Signature and payment come only after "Delivered" (the sheet). The rest of the day is folded away:
+  // "Stops left" and "Done" open on tap, the map too.
+  function paintDriverRoute(route) {
+    const stops = route.stops;
+    const open = stops.filter((s) => !s.completed_at);
+    const done = stops.filter((s) => s.completed_at);
+    const next = open[0];
+    const pct = stops.length ? Math.round((done.length / stops.length) * 100) : 0;
+    const navUrl = (s) => (s.lat != null && s.lng != null ? `https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}&travelmode=driving` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.address || s.customer_name)}`);
+    const contactLine = (s) =>
+      `<p class="drv-contact">${s.phone ? `<a class="drv-phone" href="tel:${escapeHtml(String(s.phone).replace(/[^\d+]/g, ""))}">${icons.phone}<span>${escapeHtml(s.phone)}</span></a>` : ""}<span class="drv-address">${escapeHtml(s.address || "")}</span></p>`;
+    const row = (s) => `<button type="button" class="card drv-row ${s.completed_at ? "route-stop-done" : ""}" data-open-stop="${s.order_id}"><span class="drv-row-seq">${stops.indexOf(s) + 1}</span><span class="drv-row-body"><strong>${escapeHtml(s.customer_name)}</strong><span class="muted drv-row-address">${escapeHtml(s.address || "")}</span></span><span class="text-amount">${formatAmd(Number(s.total_amd))}</span></button>`;
     contentEl.innerHTML = `
-      <div id="route-map" style="height:220px;border-radius:12px;overflow:hidden;margin-bottom:12px;"></div>
-      <div class="card-list" id="route-stops-list"></div>
-    `;
-    await paintRouteMap(contentEl.querySelector("#route-map"), route.stops);
-    const listEl = contentEl.querySelector("#route-stops-list");
-    listEl.innerHTML = route.stops
-      .map(
-        (s, i) => `
-      <div class="card ${s.completed_at ? "route-stop-done" : ""}">
-        <div class="order-detail-ids"><span>${t("order_id_label")}${labelColon()}${escapeHtml(s.order_code || "")}</span></div>
-        <strong>${i + 1}. ${escapeHtml(s.customer_name)}</strong>
-        <p class="muted">${escapeHtml(s.address || "")}</p>
-        <p><span class="text-amount">${formatAmd(Number(s.total_amd))}</span></p>
-        ${
-          s.completed_at
-            ? `<span class="badge ${s.order_status === "delivered" ? "badge-success" : "badge-warning"}">${t(s.order_status === "delivered" ? "order_status_delivered" : "order_status_returned")}</span>`
-            : `<button type="button" class="btn btn-primary btn-block" data-open-stop="${s.order_id}">${t("delivery_open_stop")}</button>`
-        }
-      </div>`
-      )
-      .join("");
-    listEl.querySelectorAll("[data-open-stop]").forEach((btn) => {
-      btn.addEventListener("click", () => openDeliverySheet(Number(btn.dataset.openStop), route.stops.find((s) => s.order_id === Number(btn.dataset.openStop))));
+      <div class="drv-progress"><strong>${escapeHtml(next ? t("delivery_stop_n_of").replace("{n}", done.length + 1).replace("{total}", stops.length) : t("ops_driver_all_done"))}</strong><span class="ops-bar" aria-hidden="true"><span class="ops-bar-fill" style="width:${pct}%"></span></span></div>
+      ${
+        next
+          ? `<article class="card ops-next drv-next">
+              <strong class="drv-customer">${escapeHtml(next.customer_name)}</strong>
+              ${contactLine(next)}
+              <p class="drv-sum">${escapeHtml(next.order_code || "")} · <span class="text-amount">${formatAmd(Number(next.total_amd))}</span></p>
+              <div class="ops-actions drv-actions">
+                <a class="btn ops-problem-btn drv-navigate" href="${navUrl(next)}" target="_blank" rel="noopener">${icons.map} ${t("ops_driver_navigate")}</a>
+                <button type="button" class="btn btn-primary ops-pack-btn" data-open-stop="${next.order_id}">${t("delivery_delivered_btn")}</button>
+              </div>
+            </article>`
+          : ""
+      }
+      ${open.length > 1 ? `<details class="drv-fold"><summary>${t("delivery_stops_left").replace("{n}", open.length - 1)}</summary><div class="card-list">${open.slice(1).map(row).join("")}</div></details>` : ""}
+      ${done.length ? `<details class="drv-fold"><summary>${t("delivery_stops_done").replace("{n}", done.length)}</summary><div class="card-list">${done.map(row).join("")}</div></details>` : ""}
+      <details class="drv-fold" id="drv-map-fold"><summary>${t("delivery_show_map")}</summary><div id="route-map" class="drv-map"></div></details>`;
+    contentEl.querySelectorAll("[data-open-stop]").forEach((btn) => {
+      btn.addEventListener("click", () => openDeliverySheet(Number(btn.dataset.openStop), stops.find((s) => s.order_id === Number(btn.dataset.openStop))));
     });
+    // the map is the heaviest part of the screen (Leaflet + tiles): only drawn when he opens it
+    contentEl.querySelector("#drv-map-fold").addEventListener(
+      "toggle",
+      (e) => e.currentTarget.open && paintRouteMap(contentEl.querySelector("#route-map"), stops).catch(() => {}),
+      { once: true }
+    );
   }
 
   // --- Planner (delivery_manager/admin) ---------------------------------
