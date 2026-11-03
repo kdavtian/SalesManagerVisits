@@ -23,16 +23,6 @@ import { enhanceMapSearchRow, enhanceMapDimensionFilters, attachCompetitorToggle
 
 export const NEARBY_RADIUS_METERS = 5000;
 
-// The channel/rep filter's own default (per explicit request): a field sales
-// manager's own assigned book -- every "SM ..." channel -- plus Potential
-// (not yet ERP-linked, so not yet assigned to any channel at all). The
-// non-field/office channels (SM B2B, PCO, CVO, OEM, KF, bare CAS) are
-// real customers too, just not what a rep walking the map is usually
-// looking for, so they start hidden -- still just a normal filter value,
-// not a hard restriction: opening the channel filter sheet and selecting
-// any of them (or Clear, for "show everything") works exactly as before.
-export const MAP_DEFAULT_CHANNEL_FILTERS = ["POTENTIAL", "SM YVN", "SM Davtashen", "SM Shirak", "SM CAS"];
-
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
 // checkin.js) -- castrol/lotos/royal get their own status tags, each
 // competitor is a flat presence flag inside brand_status.competitors.

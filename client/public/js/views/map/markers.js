@@ -66,6 +66,7 @@ export function setClusteringPreference(ctx, enabled) {
 
 export function customerStatus(ctx, c) {
   if (c.visited_today) return "today";
+  if (isNeverVisited(c)) return "never"; // never visited and overdue are two different things (owner, 2026-11-03)
   if (c.overdue) return "overdue";
   if (c.visited_this_week) return "week";
   return "pending";
@@ -75,8 +76,8 @@ export function customerStatus(ctx, c) {
 // status, same badge, one place to keep them in sync.
 export function customerStatusBadge(ctx, status) {
   return {
-    cls: status === "today" ? "badge-success" : status === "overdue" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral",
-    text: status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "week" ? t("visited_this_week") : t("not_visited"),
+    cls: status === "today" ? "badge-success" : status === "overdue" || status === "never" ? "badge-danger" : status === "week" ? "badge-info" : "badge-neutral",
+    text: status === "today" ? t("visited_today") : status === "overdue" ? t("filter_overdue") : status === "never" ? t("never_visited") : status === "week" ? t("visited_this_week") : t("not_visited"),
   };
 }
 
@@ -126,10 +127,18 @@ export async function loadDebtFlags(ctx, { repaint = true } = {}) {
   }
 }
 
+// Competitors and the non-field channels (CVO, OEM, PCO, CAS, KF) are drawn 35% smaller, so the field customers stand out (owner, 2026-11-03).
+const SMALL_PIN_CHANNELS = new Set(["CVO", "OEM", "PCO", "CAS", "KF"]);
+const SMALL_PIN_SCALE = 0.65;
+export const pinPx = (ctx, c, tier) => {
+  const size = ctx.pinSize(tier);
+  return tier === "competitor" || SMALL_PIN_CHANNELS.has(c.sales_channel) ? Math.round(size * SMALL_PIN_SCALE) : size;
+};
+
 export function pinArtHtml(ctx, c, tier) {
   // The potential customer's crosshair is the original raster art (PNG); the other kinds are SVG (see scripts/make-pin-art.mjs).
   const src = `/icons/markers/${tier}-${categoryIconSlug(c.category)}.${tier === "potential" ? "png" : "svg"}`;
-  const img = `<img class="pin-img-asset" src="${src}" alt="" width="${ctx.pinSize(tier)}" height="${ctx.pinSize(tier)}" draggable="false" />`;
+  const img = `<img class="pin-img-asset" src="${src}" alt="" width="${pinPx(ctx, c, tier)}" height="${pinPx(ctx, c, tier)}" draggable="false" />`;
   if (ctx.colorBy === "rep" && c.assigned_manager_id && tier !== "competitor") {
     return `<span class="pin-colour-ring" style="--rep-color:${ctx.repColorOf(c)};--pin-ring:url('/icons/markers/ring-${tier}.svg')" aria-hidden="true"></span>${img}`;
   }
@@ -157,7 +166,7 @@ export function customerIcon(ctx, c, status) {
   const overdueClass = status === "overdue" ? "pin-status-overdue" : "";
   const never = neverVisited ? '<span class="pin-never" aria-hidden="true">!!</span>' : "";
   const isPinShaped = ctx.PIN_SHAPED_KINDS.has(tier);
-  const size = ctx.pinSize(tier);
+  const size = pinPx(ctx, c, tier);
   const anchorY = isPinShaped ? Math.round(size * ctx.PIN_TIP_RATIO) : size / 2;
   // Shape family also decides where the status badge hangs, since the two
   // families fill their square canvas differently (see the CSS).

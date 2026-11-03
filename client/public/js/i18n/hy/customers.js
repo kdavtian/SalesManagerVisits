@@ -146,7 +146,7 @@ export const hyCustomers = {
     filter_visited: "Այցելած",
     filter_visited_today: "Այցելված այսօր",
     filter_visited_7days: "Այցելված վերջին 7 օրում",
-    filter_not_visited: "Չայցելած",
+    filter_not_visited: "Երբեք չայցելված",
     visited_this_week: "Այցելած",
     visited_today: "Այցելած է այսօր",
     new_customer: "Նոր հաճախորդ",

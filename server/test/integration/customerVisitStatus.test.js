@@ -83,3 +83,32 @@ test("only a field rep's check-in is a visit (a director's is not); distance doe
   const batch = await apiRequest(`/api/customers/map-facts?ids=${c.id}`, { cookie });
   assert.equal(new Date(batch.data[c.id].last_visit_at).getTime(), new Date(after.data.last_visit_at).getTime());
 });
+
+// Owner, 2026-11-03: "split overdue everywhere" -- a customer never visited is "never visited", not overdue; a customer visited long ago is overdue.
+test("never visited and overdue are two separate statuses", async () => {
+  const late = await createCustomer({ created_by: admin.id });
+  await pool.query("UPDATE customers SET visit_frequency_days = 7 WHERE id = ANY($1)", [[late.id, neverVisited.id]]);
+  await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range) VALUES ($1, $2, now() - interval '30 days', 40.1, 44.5, 5, true)`,
+    [late.id, rep.id]
+  );
+  const list = (await apiRequest("/api/customers", { cookie })).data;
+  const never = list.find((c) => c.id === neverVisited.id);
+  assert.equal(never.never_visited, true);
+  assert.equal(never.overdue, false);
+  const old = list.find((c) => c.id === late.id);
+  assert.equal(old.never_visited, false);
+  assert.equal(old.overdue, true);
+  const ids = async (param) => (await apiRequest(`/api/customers?visited=${param}`, { cookie })).data.map((c) => c.id);
+  assert.ok((await ids("never")).includes(neverVisited.id));
+  assert.ok(!(await ids("never")).includes(late.id));
+  assert.ok((await ids("overdue")).includes(late.id));
+  assert.ok(!(await ids("overdue")).includes(neverVisited.id));
+  const card = (await apiRequest(`/api/customers/${neverVisited.id}`, { cookie })).data;
+  assert.equal(card.overdue, false);
+  assert.equal(card.never_visited, true);
+  // the Home progress card counts them apart too
+  const summary = (await apiRequest("/api/dashboard/summary", { cookie })).data;
+  assert.ok(Number(summary.totals.overdue) >= 1);
+  assert.ok(Number(summary.totals.never_visited) >= 1);
+});

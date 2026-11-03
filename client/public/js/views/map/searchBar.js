@@ -6,7 +6,7 @@ import { SEARCH_ICONS, ensureSelectedCheck, installClearButton, syncDropdownButt
 import { FILTER_ICONS } from "../../filterIcons.js";
 
 function mapFilterIcon(value) {
-  if (value === "overdue") return SEARCH_ICONS.overdue;
+  if (value === "overdue" || value === "never") return SEARCH_ICONS.overdue;
   if (value === "visited") return SEARCH_ICONS.status;
   if (value === "visited-today") return SEARCH_ICONS.status;
   if (value === "visited-7days") return SEARCH_ICONS.recent;

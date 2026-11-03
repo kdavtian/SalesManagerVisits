@@ -1,6 +1,6 @@
 // Parts of renderMapInner (map.js), moved out with the refactor tool (docs/architecture-roadmap.md, step 6). Each
 // function takes the screen's state as `ctx` (see the ctx object at the top of renderMapInner).
-import { MAP_DEFAULT_CHANNEL_FILTERS, NEARBY_RADIUS_METERS } from "../map.js";
+import { NEARBY_RADIUS_METERS } from "../map.js";
 import { CATEGORY_LIST, TIER_OPTIONS, activateDialog, customerMatchesSearch, channelDisplayLabel, escapeHtml, getCurrentPosition, haversineMeters } from "../../util.js";
 import { t } from "../../i18n.js";
 import { loadWithCache } from "../../listCache.js";
@@ -12,14 +12,13 @@ import { repColor } from "../../repColors.js";
 
 export function passesAssignment(ctx, c) {
   if (c.checkin_for_all) return true; // an office is on the map for every rep whatever channel filter is on (owner, 2026-11-03)
-  // Default: only the field channels (a customer with no channel at all is never hidden by it).
-  if (ctx.assignmentKeys === null) return !c.sales_channel || MAP_DEFAULT_CHANNEL_FILTERS.includes(c.sales_channel);
+  // Default: every direction and rep, not filtered (owner, 2026-11-03). Competitors stay behind their own show/hide switch.
+  if (ctx.assignmentKeys === null) return true;
   return !ctx.assignmentKeys.size || ctx.assignmentKeys.has(ctx.assignmentKeyOf(c));
 }
 
 export function currentAssignmentIds(ctx) {
-  if (ctx.assignmentKeys !== null) return ctx.assignmentKeys;
-  return new Set(ctx.lastCustomers.filter(({ c }) => ctx.passesAssignment(c)).map(({ c }) => ctx.assignmentKeyOf(c)));
+  return ctx.assignmentKeys ?? new Set(); // nothing picked = no filter = everything shown
 }
 
 // Competitors stay hidden unless asked for; picking the Competitor tier (or a COMPETITORS
@@ -296,7 +295,9 @@ export function applyFilter(ctx, { refit = true } = {}) {
         ctx.activeFilter &&
         !(ctx.activeFilter === "overdue"
           ? status === "overdue"
-          : ctx.activeFilter === "visited-today"
+          : ctx.activeFilter === "never"
+            ? status === "never"
+            : ctx.activeFilter === "visited-today"
             ? c.visited_today
             : ctx.activeFilter === "visited-7days"
               ? c.visited_today || c.visited_this_week
