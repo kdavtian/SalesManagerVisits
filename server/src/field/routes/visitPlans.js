@@ -63,7 +63,7 @@ async function expandAreas(areas) {
       params.push(area.subregion);
       subregionFilter = `AND subregion = $${params.length}`;
     }
-    const { rows } = await pool.query(`SELECT id FROM customers WHERE region = $1 ${subregionFilter} AND COALESCE(customer_tier, '') <> 'competitor'`, params); // competitors are not visited: never planned (owner, 2026-11-03)
+    const { rows } = await pool.query(`SELECT id FROM customers WHERE region = $1 ${subregionFilter} AND COALESCE(customer_tier, '') <> 'competitor' AND NOT COALESCE(checkin_for_all, false)`, params); // competitors and offices are not visited: never planned (owner, 2026-11-03)
     rows.forEach((r) => ids.add(r.id));
   }
   return [...ids];
@@ -78,7 +78,7 @@ async function expandAreas(areas) {
 export async function batchExpandAreas(rules) {
   const result = new Map(rules.map((rule) => [rule.id, new Set()]));
   if (!rules.some((rule) => Array.isArray(rule.areas) && rule.areas.length)) return result;
-  const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers WHERE COALESCE(customer_tier, '') <> 'competitor'");
+  const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers WHERE COALESCE(customer_tier, '') <> 'competitor' AND NOT COALESCE(checkin_for_all, false)");
   for (const rule of rules) {
     if (!Array.isArray(rule.areas) || !rule.areas.length) continue;
     const ids = result.get(rule.id);

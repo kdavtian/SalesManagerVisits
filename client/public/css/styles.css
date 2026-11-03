@@ -10261,3 +10261,27 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .my-day-month {
   margin: 0;
 }
+
+/* Office pin on the map and the admin's office switch (owner, 2026-11-03) */
+.pin-office {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+.pin-office svg {
+  width: 60%;
+  height: 60%;
+}
+.office-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireLocationViewer } from "../../middleware/auth.js";
 import { broadcastsLocation } from "../../shared/roles.js";
+import { officeNear } from "../offices.js";
 
 export const locationsRouter = Router();
 
@@ -25,7 +26,8 @@ locationsRouter.post("/", async (req, res) => {
      ON CONFLICT (user_id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, updated_at = now()`,
     [req.user.id, lat, lng]
   );
-  res.status(204).end();
+  // "You are at the office": the foreground ping doubles as the office detector (field/offices.js)
+  res.json({ office: await officeNear(pool, req.user.id, lat, lng) });
 });
 
 // Only shows users seen in the last 10 minutes, so a closed app doesn't

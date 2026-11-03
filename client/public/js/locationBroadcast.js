@@ -1,6 +1,7 @@
 import { api } from "./api.js";
 import { broadcastsLocation } from "./state.js";
 import { rememberPosition } from "./util.js";
+import { handleOfficeNear } from "./officeDetect.js";
 
 const INTERVAL_MS = 60000;
 let timerId = null;
@@ -10,7 +11,7 @@ function ping() {
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       rememberPosition(pos);
-      api.postLocation(pos.coords.latitude, pos.coords.longitude).catch(() => {});
+      api.postLocation(pos.coords.latitude, pos.coords.longitude).then((r) => handleOfficeNear(r?.office ?? null)).catch(() => {});
     },
     () => {},
     { maximumAge: 30000, timeout: 10000 }

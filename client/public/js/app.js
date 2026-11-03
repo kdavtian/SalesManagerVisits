@@ -117,6 +117,7 @@ import { clearListCache, clearCacheIfRoleChanged } from "./listCache.js";
 import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./updateBanner.js";
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
+import { setOfficeNavigator } from "./officeDetect.js";
 import { pruneParkedSheet, installPhoneMask } from "./util.js";
 import { QUICK_ACTION_ROUTE } from "./quickActions.js";
 import { installStatusBarTap } from "./statusBarTap.js";
@@ -765,6 +766,7 @@ async function init() {
     await clearCacheIfRoleChanged(user);
     startLocationBroadcast();
     startDriverArrival(navigate);
+    setOfficeNavigator(navigate);
     startErrorMonitoring();
   } catch (err) {
     // Only the server's answer "not signed in / not allowed" (401, 403) signs out. No network, a timeout or a server error is not a
@@ -777,6 +779,7 @@ async function init() {
       skipRedundantRender = optimisticRenderDone;
       startLocationBroadcast();
       startDriverArrival(navigate);
+    setOfficeNavigator(navigate);
       startErrorMonitoring();
     }
   }

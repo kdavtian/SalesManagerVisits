@@ -67,6 +67,7 @@ editRequestsRouter.post("/", async (req, res) => {
 
   const filtered = {};
   for (const field of EDITABLE_FIELDS) {
+    if (field === "checkin_for_all") continue; // making a place an office is the admin's direct edit, never a request
     if (changes[field] !== undefined) filtered[field] = field === "phone" ? normalizePhoneForStorage(changes[field]) : changes[field];
   }
   if (!Object.keys(filtered).length) {

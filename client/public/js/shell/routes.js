@@ -13,6 +13,7 @@ import { applyUpdate, controllerChanged, isUpdatePending } from "../updateBanner
 import { pruneParkedSheet, takeParkedSheet } from "../util.js";
 import { startLocationBroadcast } from "../locationBroadcast.js";
 import { startDriverArrival } from "../driverArrival.js";
+import { setOfficeNavigator } from "../officeDetect.js";
 import { flushQueue } from "../offlineQueue.js";
 import { refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshOrderBadge, refreshPaymentBadge, refreshPlanApprovalBadge, refreshUnrecordedBadge, refreshWarehouseBadge } from "../badges.js";
 
@@ -87,6 +88,7 @@ export async function renderRoute(ctx) {
       location.hash = "#/dashboard";
       startLocationBroadcast();
       startDriverArrival(ctx.navigate);
+      setOfficeNavigator(ctx.navigate);
       // A session that expired while this device had queued offline work
       // stops flushQueue() at the first 401 rather than deleting that work
       // (see offlineQueue.js) -- nothing else re-triggers a flush once the
