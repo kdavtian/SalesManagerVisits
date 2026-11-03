@@ -14,6 +14,7 @@ import { pruneParkedSheet, takeParkedSheet } from "../util.js";
 import { startLocationBroadcast } from "../locationBroadcast.js";
 import { startDriverArrival } from "../driverArrival.js";
 import { setOfficeNavigator } from "../officeDetect.js";
+import { startUsageTracking } from "../usageTracker.js";
 import { flushQueue } from "../offlineQueue.js";
 import { refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshOrderBadge, refreshPaymentBadge, refreshPlanApprovalBadge, refreshUnrecordedBadge, refreshWarehouseBadge } from "../badges.js";
 
@@ -89,6 +90,7 @@ export async function renderRoute(ctx) {
       startLocationBroadcast();
       startDriverArrival(ctx.navigate);
       setOfficeNavigator(ctx.navigate);
+      startUsageTracking();
       // A session that expired while this device had queued offline work
       // stops flushQueue() at the first 401 rather than deleting that work
       // (see offlineQueue.js) -- nothing else re-triggers a flush once the
@@ -368,6 +370,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/routeDistribution.js"))).renderRouteDistribution(ctx.app, ctx.navigate);
   } else if (routePlanSetMatch) {
     (await fresh(import("../views/routePlanSets.js"))).renderRoutePlanSet(ctx.app, ctx.navigate, Number(routePlanSetMatch[1]));
+  } else if (path === "#/usage-report") {
+    (await fresh(import("../views/usageReport.js"))).renderUsageReport(ctx.app, ctx.navigate);
   } else if (path === "#/route-plan-suggestions") {
     (await fresh(import("../views/routePlanSuggestions.js"))).renderRoutePlanSuggestions(ctx.app, ctx.navigate);
   } else if (path === "#/route-plans") {

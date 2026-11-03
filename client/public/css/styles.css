@@ -10320,3 +10320,31 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .rps-count {
   margin-left: 8px;
 }
+
+/* Usage report (owner, 2026-11-03) */
+.usage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.usage-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.usage-line strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.usage-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2, #e5e7eb);
+  overflow: hidden;
+}
+.usage-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
