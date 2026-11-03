@@ -10149,3 +10149,115 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   overflow: hidden;
   margin-top: 8px;
 }
+
+/* Rep Home: today's visits with the mandatory share (owner, 2026-11-03) */
+.my-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.my-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.my-day-count {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+.my-day-count small {
+  font-size: 1rem;
+  color: var(--text-muted, #6b7280);
+}
+.my-day-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 6px;
+  background: var(--surface-2, #e5e7eb);
+}
+.my-day-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: var(--accent);
+}
+.my-day-reached .my-day-bar-fill {
+  background: var(--success, #1a7f37);
+}
+.my-day-bar-target {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text, #111);
+}
+.my-day-line {
+  margin: 0;
+  font-weight: 600;
+}
+.my-day-line-ok {
+  color: var(--success, #1a7f37);
+}
+.my-day-list {
+  display: flex;
+  flex-direction: column;
+}
+.my-day-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  border-top: 1px solid var(--border-color, #e5e7eb);
+}
+.my-day-row:first-child {
+  border-top: 0;
+}
+.my-day-tick {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border-color, #cbd5e1);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.my-day-tick-done {
+  border: 0;
+  color: var(--success, #1a7f37);
+}
+.my-day-name {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.my-day-row.is-done .my-day-name {
+  font-weight: 400;
+  color: var(--text-muted, #6b7280);
+}
+.my-day-checkin {
+  flex: none;
+}
+.my-day-open {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.4rem;
+}
+.my-day-month {
+  margin: 0;
+}

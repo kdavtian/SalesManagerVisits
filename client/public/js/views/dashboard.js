@@ -1,9 +1,9 @@
-import { renderVisitFirst } from "../visitFirstCard.js";
+import { renderMyDay } from "../homeDay.js";
 import { api } from "../api.js";
 import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
 import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
 import { seesHomeKpis, homeShowsCompanyData, homeShowsCompanyDashboard } from "../shared/roles.js";
-import { t } from "../i18n.js";
+import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyVaghinakBadge } from "../vaghinak.js";
 import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
@@ -142,6 +142,13 @@ function companyDashboardPreviewHtml(planPreview) {
   `;
 }
 
+// Armenian greeting uses the Armenian first name when there is one ("Բարի օր, Արտակ"); English keeps the login name
+function greetingName() {
+  const u = state.user;
+  const full = getLang() === "hy" && u.name_hy ? u.name_hy : u.name;
+  return String(full || "").trim().split(/\s+/)[0] || "";
+}
+
 function greeting() {
   const hour = new Date().getHours();
   if (hour < 12) return t("greeting_morning");
@@ -167,8 +174,7 @@ export async function renderDashboard(root, navigate) {
         // The accountant has no field book: no "next visit" (so no customer
         // list fetch) -- the Company Dashboard glance sits there instead.
         const showsSnapshotInstead = isCeoOrAdmin || state.user.role === "accountant";
-        const isSalesManager = state.user.role === "sales_manager";
-        const [summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans] = await Promise.all([
+        const [summary, customers, trends, settings, planPreview, teamTodayPlans] = await Promise.all([
           api.dashboardSummary(),
           // The result here only ever feeds renderNextVisit below, and only
           // for the roles that card is actually rendered for (not admin/ceo --
@@ -195,7 +201,6 @@ export async function renderDashboard(root, navigate) {
           // customers actually scheduled for today. sales_manager only:
           // visit plans are a field-rep concept, not one delivery_manager/
           // sales_director/accountant currently have a UI for setting.
-          isSalesManager ? api.getMyVisitPlan().catch(() => null) : Promise.resolve(null),
           // Today's plan for every sales_manager at once (GET
           // /visit-plans/team-today) -- management's own view of who's
           // going where today, by manager and customer, right under the
@@ -205,7 +210,7 @@ export async function renderDashboard(root, navigate) {
           // Dashboard preview card above does.
           canViewTeamLocations() ? api.getTeamTodayVisitPlans().catch(() => null) : Promise.resolve(null),
         ]);
-        return { summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans };
+        return { summary, customers, trends, settings, planPreview, teamTodayPlans };
       },
       (data) => {
         // The saved copy and the fresh answer are usually the same: repainting would rebuild the whole Home and ask for its tasks and sync
@@ -221,7 +226,7 @@ export async function renderDashboard(root, navigate) {
     return;
   }
 
-  function paint({ summary, customers, trends, settings, planPreview, myPlan, teamTodayPlans }) {
+  function paint({ summary, customers, trends, settings, planPreview, teamTodayPlans }) {
   const totals = summary.totals;
   const remaining = Math.max(0, totals.total_customers - totals.visited_today);
   const canOpenRepProgress = seesAllActivity();
@@ -241,7 +246,7 @@ export async function renderDashboard(root, navigate) {
         ? ""
         : `<div class="greeting-row">
       <div>
-        <h1>${greeting()}, ${escapeHtml(state.user.name.split(" ")[0])}</h1>
+        <h1>${greeting()}, ${escapeHtml(greetingName())}</h1>
         ${isManagementRole ? "" : `<p class="muted">${t("dashboard_subtitle")}</p>`}
       </div>
     </div>`
@@ -257,14 +262,18 @@ export async function renderDashboard(root, navigate) {
         ? ""
         : state.user.role === "accountant"
           ? companyDashboardPreviewHtml(planPreview)
+          : state.user.role === "sales_manager"
+          ? `<div id="my-day-slot" aria-live="polite"><div class="card my-day"><p class="loading-state" role="status">${t("loading")}</p></div></div>`
           : `<div id="next-visit-slot" aria-live="polite">
       <div class="card next-visit-card next-visit-loading"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`
     }
 
-    ${state.user.role === "sales_manager" ? `<div id="handover-slot"></div><div id="today-plan-slot"></div><div id="visit-first-slot"></div>` : ""}
+    ${state.user.role === "sales_manager" ? `<div id="handover-slot"></div>` : ""}
 
     <div class="card progress-card" id="progress-card" ${
+      state.user.role === "sales_manager" ? "hidden" : ""
+    } ${
       // Management taps through to "Progress by reps" (reps as columns, metrics as rows); a rep's own card has
       // nothing behind it, so it stays a plain static card.
       canOpenRepProgress ? `role="link" tabindex="0" aria-label="${t("rp_open_aria")}"` : ""
@@ -452,8 +461,6 @@ export async function renderDashboard(root, navigate) {
   for (const [id, route] of Object.entries(QUICK_ACTION_ROUTE)) {
     container.querySelector(`#${quickActionDomId(id)}`)?.addEventListener("click", () => navigate(route));
   }
-  const visitFirstSlot = container.querySelector("#visit-first-slot");
-  if (visitFirstSlot) renderVisitFirst(visitFirstSlot, navigate);
   applyPaymentBadge();
   applyUnrecordedBadge();
   applyWarehouseBadge();
@@ -567,8 +574,8 @@ export async function renderDashboard(root, navigate) {
   const nextVisitSlot = container.querySelector("#next-visit-slot");
   if (nextVisitSlot) renderNextVisit(nextVisitSlot, customers, navigate);
 
-  const todayPlanSlot = container.querySelector("#today-plan-slot");
-  if (todayPlanSlot) renderTodayPlan(todayPlanSlot, myPlan, customers, navigate);
+  const myDaySlot = container.querySelector("#my-day-slot");
+  if (myDaySlot) renderMyDay(myDaySlot, customers, navigate);
   const handoverSlot = container.querySelector("#handover-slot");
   if (handoverSlot) renderHandoverCard(handoverSlot, navigate);
   }
@@ -592,67 +599,6 @@ function renderHandoverCard(slot, navigate) {
       slot.querySelector("#home-handover").addEventListener("click", () => navigate(d.count ? "#/cash-handoffs?handover=1" : "#/cash-handoffs"));
     })
     .catch(() => {});
-}
-
-// Today's actual planned stops (see the myPlan fetch above), cross-
-// referenced against the already-fetched, already-scoped `customers` list
-// for name/visited/overdue -- no second network round trip just to get
-// display fields for ids the plan already gave us. `plan` is null both
-// when nothing was ever planned for today and when the fetch itself
-// failed (caught above), so both render the same empty state rather than
-// distinguishing "no plan" from "couldn't load the plan" -- neither is
-// actionable from this card.
-function renderTodayPlan(slot, plan, customers, navigate) {
-  const customerIds = plan?.customer_ids ?? [];
-  if (!customerIds.length) {
-    slot.innerHTML = "";
-    return;
-  }
-  const byId = new Map(customers.map((c) => [c.id, c]));
-  const stops = customerIds.map((id) => byId.get(id)).filter(Boolean);
-  const visitedCount = stops.filter((c) => c.visited_today).length;
-
-  // Collapsed by default -- this sits right under the single-customer
-  // "next visit" card, so showing the whole list open by default would
-  // just duplicate that card's job and push everything else down the
-  // page. Tapping the header expands it into the full checklist below,
-  // with a tick for each stop already checked in today vs. not yet.
-  let expanded = false;
-
-  function paint() {
-    slot.innerHTML = `
-      <div class="card today-plan-card">
-        <button type="button" class="today-plan-header" aria-expanded="${expanded}" aria-controls="today-plan-list">
-          <span>${t("today_plan")}</span>
-          <span class="today-plan-header-right">
-            <span class="muted">${visitedCount}/${stops.length}</span>
-            ${expanded ? icons.chevronUp : icons.chevronDown}
-          </span>
-        </button>
-        <div class="today-plan-list" id="today-plan-list" ${expanded ? "" : "hidden"}>
-          ${stops
-            .map(
-              (c) => `
-            <button type="button" class="today-plan-row" data-customer-id="${c.id}">
-              <span class="today-plan-tick ${c.visited_today ? "today-plan-tick-done" : ""}" aria-hidden="true">${c.visited_today ? icons.checkCircle : ""}</span>
-              <span class="today-plan-name">${escapeHtml(c.name)}</span>
-              ${c.visited_today ? `<span class="muted">${t("stat_visited_today")}</span>` : c.overdue ? `<span class="dot dot-danger" aria-hidden="true"></span>` : ""}
-            </button>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-    slot.querySelector(".today-plan-header").addEventListener("click", () => {
-      expanded = !expanded;
-      paint();
-    });
-    slot.querySelectorAll(".today-plan-row").forEach((row) => {
-      row.addEventListener("click", () => navigate(`#/customers/${row.dataset.customerId}`));
-    });
-  }
-  paint();
 }
 
 async function renderNextVisit(slot, customers, navigate) {

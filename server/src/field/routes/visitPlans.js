@@ -8,6 +8,8 @@ import { APPROVER_ROLES } from "../../shared/notificationPreferences.js";
 import { repVisitSql } from "../visitCount.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "../../customers/routes/customers.js";
 import { dropRecentlyVisited } from "../../utils/planSkipRecent.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
+import { getStaffSettings, visitsOf } from "../../money/payroll.js";
 import { MAIN_SCOPE, parseScope, loadChannelMap, inScope, mergeScopeIds, scopesFor } from "../planScopes.js";
 
 export const visitPlansRouter = Router();
@@ -61,7 +63,7 @@ async function expandAreas(areas) {
       params.push(area.subregion);
       subregionFilter = `AND subregion = $${params.length}`;
     }
-    const { rows } = await pool.query(`SELECT id FROM customers WHERE region = $1 ${subregionFilter}`, params);
+    const { rows } = await pool.query(`SELECT id FROM customers WHERE region = $1 ${subregionFilter} AND COALESCE(customer_tier, '') <> 'competitor'`, params); // competitors are not visited: never planned (owner, 2026-11-03)
     rows.forEach((r) => ids.add(r.id));
   }
   return [...ids];
@@ -76,7 +78,7 @@ async function expandAreas(areas) {
 export async function batchExpandAreas(rules) {
   const result = new Map(rules.map((rule) => [rule.id, new Set()]));
   if (!rules.some((rule) => Array.isArray(rule.areas) && rule.areas.length)) return result;
-  const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers");
+  const { rows: customers } = await pool.query("SELECT id, region, subregion FROM customers WHERE COALESCE(customer_tier, '') <> 'competitor'");
   for (const rule of rules) {
     if (!Array.isArray(rule.areas) || !rule.areas.length) continue;
     const ids = result.get(rule.id);
@@ -95,36 +97,80 @@ export async function batchExpandAreas(rules) {
 // The target user's plan for a date (defaults to today): an explicit
 // visit_plans row always wins; otherwise an active recurring rule for that
 // weekday is expanded live into a synthesized (non-persisted) plan.
-visitPlansRouter.get("/mine", async (req, res) => {
-  const targetId = resolveTargetUserId(req, res, req.query.user_id);
-  if (targetId === null) return;
-  const date = isValidDate(req.query.date) ? req.query.date : todayDate();
-
-  const { rows } = await pool.query("SELECT * FROM visit_plans WHERE user_id = $1 AND plan_date = $2", [
-    targetId,
-    date,
-  ]);
-  if (rows[0]) return res.json(rows[0]);
+async function resolveDayPlan(userId, date) {
+  const { rows } = await pool.query("SELECT * FROM visit_plans WHERE user_id = $1 AND plan_date = $2", [userId, date]);
+  if (rows[0]) return rows[0];
 
   const dayOfWeek = new Date(`${date}T00:00:00Z`).getUTCDay();
-  const { rows: ruleRows } = await pool.query(
-    "SELECT * FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2 AND active",
-    [targetId, dayOfWeek]
-  );
+  const { rows: ruleRows } = await pool.query("SELECT * FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2 AND active", [userId, dayOfWeek]);
   const rule = ruleRows[0];
-  if (!rule) return res.json(null);
+  if (!rule) return null;
 
   const areaIds = await expandAreas(rule.areas);
   // A customer visited 1..N days ago is left out of this rule day (see utils/planSkipRecent.js).
   const customerIds = await dropRecentlyVisited(new Set([...areaIds, ...(rule.customer_ids ?? [])]), date);
-  res.json({
+  return {
     id: null,
-    user_id: targetId,
+    user_id: userId,
     plan_date: date,
     customer_ids: customerIds,
     status: "approved",
     source: "rule",
     rule_id: rule.id,
+  };
+}
+
+visitPlansRouter.get("/mine", async (req, res) => {
+  const targetId = resolveTargetUserId(req, res, req.query.user_id);
+  if (targetId === null) return;
+  const date = isValidDate(req.query.date) ? req.query.date : todayDate();
+  res.json(await resolveDayPlan(targetId, date));
+});
+
+// The rep's own day against the mandatory share (owner, 2026-11-03): "today X of Y needed" + the month so far. The share is the person's own
+// (staff card) or the company default (75 %); a day counts when that share of the PLANNED customers got a check-in. GET /my-day.
+visitPlansRouter.get("/my-day", async (req, res) => {
+  const today = yerevanToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const [plan, own, settings, { rows: month }] = await Promise.all([
+    resolveDayPlan(req.user.id, today),
+    pool.query("SELECT min_visit_pct FROM staff_members WHERE user_id = $1 AND active LIMIT 1", [req.user.id]),
+    getStaffSettings(),
+    pool.query(
+      `SELECT COUNT(DISTINCT (c.customer_id, (c.timestamp AT TIME ZONE 'Asia/Yerevan')::date))::int AS visits
+       FROM checkins c WHERE c.user_id = $1 AND (c.timestamp AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $2 AND $3`,
+      [req.user.id, monthStart, today]
+    ),
+  ]);
+  const pct = own.rows[0]?.min_visit_pct ?? settings.min_visit_pct;
+  const ids = plan?.status === "approved" || plan?.source === "rule" ? (plan.customer_ids ?? []) : [];
+  let done = 0;
+  let doneIds = [];
+  if (ids.length) {
+    const { rows } = await pool.query(
+      `SELECT DISTINCT customer_id FROM checkins WHERE user_id = $1 AND customer_id = ANY($2) AND (timestamp AT TIME ZONE 'Asia/Yerevan')::date = $3`,
+      [req.user.id, ids, today]
+    );
+    doneIds = rows.map((r) => r.customer_id);
+    done = doneIds.length;
+  }
+  const visits = await visitsOf(req.user.id, today.slice(0, 7));
+  let planDays = 0;
+  let daysMet = 0;
+  for (const [day, v] of visits) {
+    if (day >= today || v.planned <= 0) continue; // today is still open
+    planDays += 1;
+    if (Math.round((v.done / v.planned) * 100) >= pct) daysMet += 1;
+  }
+  res.json({
+    date: today,
+    pct,
+    planned: ids.length,
+    done,
+    required: Math.ceil((ids.length * pct) / 100),
+    done_ids: doneIds,
+    customer_ids: ids,
+    month: { visits: month[0]?.visits ?? 0, plan_days: planDays, days_met: daysMet },
   });
 });
 
