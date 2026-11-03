@@ -3,6 +3,7 @@ import { pool } from "../db/pool.js";
 import { canDeleteOrEditDirectly, canViewTeamLocations, canManageProducts, canManageBonusChallenges } from "../shared/roles.js";
 import { issueCsrfToken, clearCsrfToken } from "./csrf.js";
 import { isPartnerAccount, partnerMayUse } from "../orders/appOrders.js";
+import { applyRoleRedaction } from "./roleRedaction.js";
 
 const COOKIE_NAME = "session";
 
@@ -53,6 +54,7 @@ export async function requireAuth(req, res, next) {
   }
 
   req.user = { id: user.id, role: user.role, position: user.position };
+  applyRoleRedaction(res, user.role);
   // A KAD OS install's account (partner_links) may use only the partner API (see appOrders.js), whatever its role would otherwise allow.
   if (!partnerMayUse(req) && (await isPartnerAccount(user.id))) {
     return res.status(403).json({ error: "This account is for KAD OS only", code: "partner_only" });

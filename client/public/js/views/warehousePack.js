@@ -271,7 +271,7 @@ export async function renderWarehousePack(root, navigate, tab = "orders") {
         (o) => `
       <article class="ops-order ops-order-packed">
         <header class="ops-order-head"><strong class="ops-order-customer">${escapeHtml(o.customer_name)}</strong><span class="ops-order-badges">${appBadgeHtml(o)}<span class="badge badge-neutral">${escapeHtml(fill("ops_waiting", { t: formatAge(minutesSince(o.packed_at)) }))}</span></span></header>
-        <p class="muted ops-order-sub">${escapeHtml([o.order_code, formatAmd(Number(o.total_amd))].filter(Boolean).join(" · "))}</p>
+        <p class="muted ops-order-sub">${escapeHtml([o.order_code, o.total_amd != null ? formatAmd(Number(o.total_amd)) : ""].filter(Boolean).join(" · "))}</p>
         <p class="${o.driver_name ? "ops-route-ok" : "ops-route-none"}">${o.driver_name ? escapeHtml(fill("ops_on_route", { driver: o.driver_name })) : t("ops_no_route")}</p>
       </article>`
       )

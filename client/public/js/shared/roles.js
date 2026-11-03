@@ -92,6 +92,20 @@ export function canManageProducts(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
+// The warehouse manager works with quantities, not money (owner, 2026-11-03): no order amounts, no bronze / silver / gold prices (retail
+// prices only). The server removes those fields from his answers (middleware/roleRedaction.js); the screens hide the labels.
+// The warehouse manager and the driver see who their boss is and the whole company's structure -- names, positions and who reports to whom
+// only, never pay (server/src/team/routes/staff.js GET /structure).
+export function seesCompanyStructure(role) {
+  return role === "warehouse_manager" || role === "delivery_manager";
+}
+export function seesOrderAmounts(role) {
+  return role !== "warehouse_manager";
+}
+export function seesTierPrices(role) {
+  return role !== "warehouse_manager";
+}
+
 // Who sees the management-only product fields (gold price, landing cost, net
 // cost) -- the same circle as the financial exports. A sales manager gets
 // bronze / silver / retail only; the API strips the rest.

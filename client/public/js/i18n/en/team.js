@@ -342,4 +342,6 @@ export const enTeam = {
     st_min_visit_rule_hint: "A sales rep gets the daily salary only if at least this share of the visits planned for that day was done. A manager can still mark a day as completed by hand.",
     st_tree_empty: "Add people and choose who reports to whom",
     st_inactive: "left",
+  st_your_boss: "Your boss",
+  st_no_boss: "Your boss is not set yet (ask the office).",
 };

@@ -196,3 +196,6 @@
 .exp-bar-fill { display: block; width: 100%; max-width: 34px; border-radius: 6px 6px 2px 2px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .exp-bar-now .exp-bar-fill { background: var(--accent); }
 .exp-bar-label { margin-top: 4px; font-size: 0.7rem; color: var(--text-dim); }
+/* The warehouse manager's and the driver's structure view (owner, 2026-11-03): their boss on top, their own row marked */
+.st-boss { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.st-node-me { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }

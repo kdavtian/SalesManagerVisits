@@ -6,6 +6,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, activateDialog } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts } from "../state.js";
+import { seesTierPrices } from "../shared/roles.js";
 import { icons } from "../icons.js";
 import { openCostCalculator } from "../costCalculator.js";
 
@@ -98,10 +99,10 @@ export async function renderProductDetail(root, navigate, productId) {
         <h3 class="pd-card-title">${t("product_prices")}</h3>
         ${hasSpecial ? `<div class="pd-row"><span class="muted">${t("price_special_period")}</span><span class="pd-amount pd-amount-strong">${formatAmd(p.effective_special_amd)}</span></div>
           <p class="muted pd-note">${t("valid_through")} ${escapeHtml(p.special_valid_to)}</p>` : ""}
-        ${priceRow(t("col_bronze"), p.bronze_price_amd ?? p.unit_price_amd)}
-        ${priceRow(t("col_silver"), p.silver_price_amd, { strong: true })}
+        ${seesTierPrices(state.user?.role) ? `${priceRow(t("col_bronze"), p.bronze_price_amd ?? p.unit_price_amd)}
+        ${priceRow(t("col_silver"), p.silver_price_amd, { strong: true })}` : ""}
         ${costs ? priceRow(t("col_gold"), p.gold_price_amd) : ""}
-        ${priceRow(t("price_retail"), p.effective_retail_amd)}
+        ${priceRow(t("price_retail"), p.effective_retail_amd, { strong: !seesTierPrices(state.user?.role) })}
       </div>
 
       ${

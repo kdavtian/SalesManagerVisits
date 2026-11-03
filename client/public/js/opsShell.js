@@ -7,11 +7,12 @@ import { formatDuration } from "./util.js";
 export const OPS_SHELLS = {
   warehouse_manager: {
     tabs: [
-      { hash: "#/dashboard", label: "nav_dashboard", icon: "home" },
+      // Home, Stock count, Packing, Orders, Tasks -- each with its own count (owner, 2026-11-03); badges.js refreshOpsTabBadges fills them
+      { hash: "#/dashboard", label: "nav_dashboard", icon: "home", badge: "wh-home" },
+      { hash: "#/stock-count", label: "qa_stock_count", icon: "clipboardCheck", badge: "wh-count" },
       { hash: "#/wh-pack", label: "ops_tab_pack", icon: "box", badge: "warehouse" },
-      { hash: "#/orders", label: "nav_orders", icon: "cart" },
-      { hash: "#/pricelist", label: "ops_tab_products", icon: "tag" },
-      { hash: "#/tasks", label: "qa_tasks", icon: "tasks" },
+      { hash: "#/orders", label: "nav_orders", icon: "cart", badge: "wh-orders" },
+      { hash: "#/tasks", label: "qa_tasks", icon: "tasks", badge: "wh-tasks" },
     ],
     allowed: [/^#\/dashboard/, /^#\/wh-pack/, /^#\/stock-count/, /^#\/warehouse/, /^#\/delivery/, /^#\/orders/, /^#\/pricelist/, /^#\/product\//, /^#\/tasks/, /^#\/returns/, /^#\/staff/, /^#\/notifications/, /^#\/settings/],
   },

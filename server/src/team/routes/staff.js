@@ -4,7 +4,7 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { seesAllStaff, canManageStaff, canSetStaffRules } from "../../shared/roles.js";
+import { seesAllStaff, canManageStaff, canSetStaffRules, seesCompanyStructure } from "../../shared/roles.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { monthBounds, getStaffSettings, saveStaffSettings, payForStaff, holidaysOf, salaryLines, unmatchedSalaryLines } from "../../money/payroll.js";
 
@@ -110,6 +110,19 @@ staffRouter.put("/settings", async (req, res) => {
   const pct = Math.round(Number(req.body?.min_visit_pct));
   if (!(pct >= 1 && pct <= 100)) return res.status(400).json({ error: "Visit % must be 1-100" });
   res.json({ ...(await saveStaffSettings({ min_visit_pct: pct })), can_edit: true });
+});
+
+// The company structure for people who only see themselves in Staff (warehouse manager, driver): names, positions and who reports to
+// whom -- no pay, no commission, no pay keys, no dates -- plus which row is the caller's own and who their boss is.
+staffRouter.get("/structure", async (req, res) => {
+  if (!seesCompanyStructure(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const rows = await allStaff();
+  const people = rows
+    .filter((r) => r.active !== false)
+    .map((r) => ({ id: r.id, name: r.name, position: r.position, kind: r.kind, reports_to: r.reports_to, mine: r.user_id === req.user.id }));
+  const me = people.find((p) => p.mine) ?? null;
+  const boss = me?.reports_to ? people.find((p) => p.id === me.reports_to) ?? null : null;
+  res.json({ people, boss: boss ? { name: boss.name, position: boss.position } : null });
 });
 
 // ---- people + structure -------------------------------------------------------------------------------------------------------

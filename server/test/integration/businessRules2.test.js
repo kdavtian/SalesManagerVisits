@@ -159,8 +159,9 @@ test("warehouse 'To order' list suggests pieces for low products", async () => {
   const product = await createProduct({ unit_price_amd: 1000 });
   const erpProductId = `ITEST-BR2-RO-${stamp}`;
   await pool.query("UPDATE products SET erp_product_id = $2, stock_qty = 5 WHERE id = $1", [product.id, erpProductId]);
-  // Sold 60 pieces in the last 30 days: ~2 per day, so 5 in stock is ~2 days.
-  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ('ITEST-BR2-RO', $1, CURRENT_DATE - 3, $2, 60, 60000)", [`ITEST-BR2-${stamp}-RO`, erpProductId]);
+  // Sold 15 pieces a week for the last 13 weeks (~2 per day), so 5 in stock is ~2 days. (One lump order would not do: the demand model
+  // treats a single big order as a one-off, not as daily demand -- products/demandModel.js.)
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) SELECT 'ITEST-BR2-RO', $1 || '-' || g, CURRENT_DATE - (g * 7), $2, 15, 15000 FROM generate_series(0, 12) g", [`ITEST-BR2-${stamp}`, erpProductId]);
   const res = await apiRequest("/api/warehouse/reorder-suggestions", { cookie: cookies.admin });
   assert.equal(res.status, 200);
   const row = res.data.find((r) => r.id === product.id);
