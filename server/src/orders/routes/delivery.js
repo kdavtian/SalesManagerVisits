@@ -203,7 +203,7 @@ deliveryRouter.post("/routes/plan", async (req, res) => {
   if (!canPlanRoutes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { driver_id, route_date, start_lat, start_lng } = req.body ?? {};
   const driverId = Number(driver_id);
-  const routeDate = route_date || new Date().toISOString().slice(0, 10);
+  const routeDate = route_date || yerevanToday();
   if (!driverId) return res.status(400).json({ error: "driver_id is required" });
   const { rows: driverRows } = await pool.query("SELECT id, role FROM users WHERE id = $1", [driverId]);
   if (!driverRows[0] || !canDeliverOrders(driverRows[0].role)) {
@@ -299,7 +299,7 @@ deliveryRouter.get("/routes/:id", async (req, res) => {
 // mobile delivery screen loads.
 deliveryRouter.get("/my-route", async (req, res) => {
   if (!canDeliverOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  const routeDate = req.query.date || new Date().toISOString().slice(0, 10);
+  const routeDate = req.query.date || yerevanToday();
   const { rows } = await pool.query(
     "SELECT id FROM delivery_routes WHERE driver_id = $1 AND route_date = $2 ORDER BY created_at DESC LIMIT 1",
     [req.user.id, routeDate]

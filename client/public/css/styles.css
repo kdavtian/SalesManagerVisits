@@ -10348,3 +10348,36 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   height: 100%;
   background: var(--accent);
 }
+
+/* Birthday today on Home and the birthday field of the staff card (owner, 2026-11-03) */
+.birthday-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.birthday-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+}
+.birthday-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.birthday-me {
+  margin: 0;
+  font-weight: 600;
+}
+.st-birthday {
+  display: flex;
+  gap: 8px;
+}
+.st-birthday input {
+  width: 5.5rem;
+}
+.st-birthday select {
+  flex: 1;
+  min-width: 0;
+}

@@ -173,6 +173,7 @@ export function computeMonthPay(staff, month, ctx) {
     else if (outside) state = "outside";
     else if (mark === "completed") state = "paid";
     else if (mark === "unpaid") state = "unpaid";
+    else if (mark === "birthday_off") state = "dayoff_paid"; // the birthday gift (owner, 2026-11-03): paid, and it does not use the paid-day-off allowance
     else if (mark === "dayoff") {
       if (dayoffsLeft > 0) {
         dayoffsLeft--;

@@ -6,6 +6,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesAllStaff, canManageStaff, canSetStaffRules, seesCompanyStructure } from "../../shared/roles.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
+import { isRealBirthday } from "../birthdays.js";
 import { monthBounds, getStaffSettings, saveStaffSettings, payForStaff, holidaysOf, salaryLines, unmatchedSalaryLines } from "../../money/payroll.js";
 
 export const staffRouter = Router();
@@ -13,13 +14,13 @@ staffRouter.use(requireAuth);
 
 const KINDS = ["executive", "director", "rep", "office", "warehouse", "driver"];
 const BASES = ["none", "collected", "sales"];
-const DAY_STATUSES = ["completed", "dayoff", "unpaid"];
+const DAY_STATUSES = ["completed", "dayoff", "unpaid", "birthday_off"];
 const ITEM_KINDS = ["premium", "bonus", "deduction"];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const PERSON_COLS = `id, user_id, name, position, pay_keys, kind, reports_to, channel, fixed_salary_amd::float8 AS fixed_salary_amd, visit_based, min_visit_pct,
   paid_dayoffs_per_month, commission_basis, commission_pct::float8 AS commission_pct, commission_channels, commission_excluded,
-  start_date::text AS start_date, end_date::text AS end_date, active, note`;
+  start_date::text AS start_date, end_date::text AS end_date, active, note, birth_day, birth_month`;
 
 const monthOf = (q) => (monthBounds(q) ? q : yerevanToday().slice(0, 7));
 
@@ -80,6 +81,15 @@ function cleanPerson(b, { partial = false } = {}) {
     }
   }
   for (const k of ["start_date", "end_date"]) if (has(k)) { if (b[k] && !DATE.test(b[k])) return err("Bad date"); v[k] = b[k] || null; }
+  if (has("birth_day") || has("birth_month")) {
+    // a day and a month, both or none (the year is never stored: nobody's age is shown)
+    const day = b.birth_day === null || b.birth_day === "" || b.birth_day === undefined ? null : Math.round(Number(b.birth_day));
+    const month = b.birth_month === null || b.birth_month === "" || b.birth_month === undefined ? null : Math.round(Number(b.birth_month));
+    if ((day === null) !== (month === null)) return err("Birthday needs a day and a month");
+    if (day !== null && !isRealBirthday(day, month)) return err("Bad birthday");
+    v.birth_day = day;
+    v.birth_month = month;
+  }
   if (has("active")) v.active = b.active !== false;
   if (has("note")) v.note = str("note", 500) || null;
   return { value: v };
