@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getAutoRoutePlanEnabled, setAutoRoutePlanEnabled } from "../../field/autoRoutePlan.js";
+import { getUsageEnabled, setUsageEnabled } from "../usageAnalytics.js";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
 import {
@@ -50,6 +51,7 @@ settingsRouter.get("/", async (req, res) => {
     documentTexts,
     visitFrequencyByType,
     autoRoutePlan,
+    usageAnalytics,
   ] = await Promise.all([
     getCheckinRadiusMeters(),
     getCheckinAllowanceEnabled(),
@@ -66,6 +68,7 @@ settingsRouter.get("/", async (req, res) => {
     getDocumentTexts(),
     getVisitFrequencyByType(),
     getAutoRoutePlanEnabled(),
+    getUsageEnabled(),
   ]);
   res.json({
     checkin_radius_meters: checkinRadiusMeters,
@@ -74,6 +77,8 @@ settingsRouter.get("/", async (req, res) => {
     plan_skip_recent_visit_days: planSkipRecentVisitDays,
     // a new customer joins its rep's route plan on the day that holds its area (field/autoRoutePlan.js, ON by default)
     auto_route_plan_new_customers: autoRoutePlan,
+    // usage analytics switch (system/usageAnalytics.js, OFF by default): the admin turns it on in Settings
+    usage_analytics_enabled: usageAnalytics,
     incentive_message: incentiveMessage,
     // Read by every role (the dashboard needs its own row to decide which
     // tiles to render); only an admin can PATCH it, same as every other
@@ -279,6 +284,12 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "auto_route_plan_new_customers must be a boolean" });
     }
     result.auto_route_plan_new_customers = await setAutoRoutePlanEnabled(req.body.auto_route_plan_new_customers);
+  }
+  if (req.body?.usage_analytics_enabled !== undefined) {
+    if (typeof req.body.usage_analytics_enabled !== "boolean") {
+      return res.status(400).json({ error: "usage_analytics_enabled must be a boolean" });
+    }
+    result.usage_analytics_enabled = await setUsageEnabled(req.body.usage_analytics_enabled);
   }
   if (req.body?.ai_blank_check_enabled !== undefined) {
     if (typeof req.body.ai_blank_check_enabled !== "boolean") {

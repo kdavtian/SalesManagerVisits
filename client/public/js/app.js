@@ -118,6 +118,7 @@ import { mountUpdateBanner, initServiceWorkerUpdates, isUpdatePending } from "./
 import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadcast.js";
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { setOfficeNavigator } from "./officeDetect.js";
+import { startUsageTracking } from "./usageTracker.js";
 import { pruneParkedSheet, installPhoneMask } from "./util.js";
 import { QUICK_ACTION_ROUTE } from "./quickActions.js";
 import { installStatusBarTap } from "./statusBarTap.js";
@@ -767,6 +768,7 @@ async function init() {
     startLocationBroadcast();
     startDriverArrival(navigate);
     setOfficeNavigator(navigate);
+    startUsageTracking();
     startErrorMonitoring();
   } catch (err) {
     // Only the server's answer "not signed in / not allowed" (401, 403) signs out. No network, a timeout or a server error is not a
@@ -780,6 +782,7 @@ async function init() {
       startLocationBroadcast();
       startDriverArrival(navigate);
     setOfficeNavigator(navigate);
+    startUsageTracking();
       startErrorMonitoring();
     }
   }

@@ -3,6 +3,9 @@ import { APP_VERSION } from "../version.js";
 import { getCsrfToken, json, request } from "./core.js";
 
 export const systemApi = {
+  // usage analytics: the app's batch of screens / taps (answers { enabled }) and the admin's report (system/usageAnalytics.js)
+  postUsageEvents: (events) => json("/usage/events", "POST", { events }),
+  getUsageReport: (days) => request(`/usage/report?days=${days}`),
   login: (email, password) => json("/auth/login", "POST", { email, password }),
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),

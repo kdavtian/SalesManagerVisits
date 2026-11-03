@@ -205,6 +205,11 @@ export function paintSettingsMarkup(ctx) {
           ${settingsToggleRow({ icon: ICON.calendar, label: t("auto_route_plan_label"), value: "", id: "toggle-auto-route-plan", checked: true, color: "green", hintBtnId: "auto-route-plan-hint", hintTextId: "auto-route-plan-help-text" })}
           <p class="muted settings-hint-text" id="auto-route-plan-help-text" hidden>${t("auto_route_plan_help")}</p>
         </div>
+        <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.chart, label: t("usage_toggle_label"), value: "", id: "toggle-usage-analytics", checked: false, color: "blue", hintBtnId: "usage-hint", hintTextId: "usage-help-text" })}
+          <p class="muted settings-hint-text" id="usage-help-text" hidden>${t("usage_toggle_help")}</p>
+          ${settingsRow({ icon: ICON.chart, label: t("usage_title"), id: "row-usage-report", color: "blue" })}
+        </div>
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.calendar, label: t("visit_types_title"), id: "row-visit-types", color: "green" })}
           ${settingsRow({ icon: ICON.book, label: t("doc_texts_title"), id: "row-doc-texts", color: "orange" })}

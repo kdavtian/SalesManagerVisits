@@ -1071,6 +1071,7 @@ export const hyCommon = {
     job_vaghinak_wrap_up: "Վաղինակ՝ օրվա ամփոփում",
     job_vaghinak_full_digest: "Վաղինակ՝ օրվա ամբողջական ամփոփում տնօրենի և ադմինի համար",
     job_vaghinak_weekly_digest: "Վաղինակ՝ շաբաթական ամփոփում",
+    job_usage_retention: "Օգտագործման վիճակագրություն՝ 90 օրից հին տողերի ջնջում",
     job_vaghinak_route_plan_analysis: "Վաղինակ՝ երթուղային պլանի առաջարկներ (շաբաթական)",
     job_task_deadline_reminders: "Առաջադրանքների ժամկետի հիշեցումներ",
     job_weekly_scorecard: "Շաբաթական արդյունքներ (երկուշաբթի)",
