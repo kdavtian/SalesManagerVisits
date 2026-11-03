@@ -29,8 +29,9 @@ function formatPlanDate(value) {
 
 visitPlansRouter.use(requireAuth);
 
+// "today" is the Yerevan day (between 00:00 and 04:00 local time the UTC date is still yesterday)
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  return yerevanToday();
 }
 
 function isValidDate(value) {
