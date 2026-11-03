@@ -14,6 +14,7 @@ import { REORDER_COLUMNS, REORDER_JOIN, withReorderState } from "../../orders/or
 import { loadOrdersNewestFirst } from "../../money/debtAging.js";
 import { liveAdjustments, liveDebtMap, liveDebtOf, liveSummary } from "../../money/liveDebt.js";
 import { buildDebtStatementPdf } from "../../money/debtStatementPdf.js";
+import { cashflowByCustomer, lastPayment } from "../../money/cashflowCopy.js";
 import { getDefaultVisitFrequencyDays, getCheckinRadiusMeters } from "../../shared/settings.js";
 import { haversineMeters } from "../../utils/geo.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
@@ -112,7 +113,7 @@ function pageParams(query) {
 }
 
 customersRouter.get("/", async (req, res) => {
-  const { search, visited, region, subregion, include_debt, min_lat, max_lat, min_lng, max_lng } = req.query;
+  const { search, visited, region, subregion, include_debt, include_payment, only_erp, min_lat, max_lat, min_lng, max_lng } = req.query;
   const page = pageParams(req.query);
   // A sales_manager's own book only -- always, not just when the client
   // happens to pass this filter. Every other route scoping a plain
@@ -160,6 +161,8 @@ customersRouter.get("/", async (req, res) => {
     // The office-style "check in for everyone" customers stay visible to every rep.
     conditions.push(`(c.assigned_manager_id = $${params.length} OR c.checkin_for_all)`);
   }
+  // "Only our customers" (owner, 2026-11-03): the ones that exist in the Excel -- bronze / silver / gold, which all have an ERP customer ID
+  if (only_erp) conditions.push(`NULLIF(btrim(c.erp_customer_id), '') IS NOT NULL`);
   if (visited === "visited") {
     conditions.push(`v.visited_this_week`);
   } else if (visited === "not_visited") {
@@ -196,6 +199,16 @@ customersRouter.get("/", async (req, res) => {
   if (include_debt && req.user.role === "sales_manager") {
     for (const row of rows) {
       if (!seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id)) row.debt_amd = null;
+    }
+  }
+  // The last payment (date and amount) is opt-in too, for the desktop table's columns: read from the server's copy of the Excel cashflow,
+  // so a thousand customers cost one map lookup each; a rep only gets it for their own customers (like the debt).
+  if (include_payment) {
+    const lines = await cashflowByCustomer(pool);
+    for (const row of rows) {
+      const last = seesCustomerErpData(req.user.role, row.assigned_manager_id, req.user.id) && lines ? lastPayment(lines.get(row.erp_customer_id)) : null;
+      row.last_payment_date = last?.date ?? null;
+      row.last_payment_amd = last?.amount ?? null;
     }
   }
   await applyPlannedOverdue(rows);

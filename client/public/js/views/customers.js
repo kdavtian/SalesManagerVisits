@@ -123,6 +123,10 @@ const DESK_COLUMNS = () => [
   { key: "phone", label: t("desk_col_phone"), width: "130px", cell: (c) => c.phone || "" },
   { key: "region", label: t("region"), width: "150px", sort: "region", cell: regionText },
   { key: "added", label: t("desk_col_added"), width: "100px", sort: "last_added", cell: (c) => shortDay(c.created_at) },
+  // address and the last payment (date, amount) -- owner, 2026-11-03; the payment comes with ?include_payment=1 (only asked for while one of them is on)
+  { key: "address", label: t("desk_col_address"), width: "220px", sort: "address", cell: (c) => c.address || "" },
+  { key: "last_payment", label: t("desk_col_last_payment"), width: "110px", sort: "last_payment", cell: (c) => (c.last_payment_date ? shortDay(c.last_payment_date) : "") },
+  { key: "last_payment_amount", label: t("desk_col_last_payment_amount"), width: "130px", sort: "last_payment_amount", align: "end", cell: (c) => (c.last_payment_amd ? formatAmd(Number(c.last_payment_amd)) : "") },
 ];
 const DESK_DEFAULT_COLUMNS = ["last_visit", "rep", "debt", "added"];
 const TIER_RANK = { gold: 0, silver: 1, bronze: 2, potential: 3, competitor: 4 };
@@ -134,6 +138,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
         <h1>${t("nav_customers")}</h1>
         <button type="button" class="settings-hint-icon cl-legend-btn" id="cl-legend-btn" aria-label="${t("cl_legend_title")}">!</button>
         <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
+        <button class="list-header-add-btn" id="toggle-ours-btn" aria-label="${t("customers_only_ours")}" title="${t("customers_only_ours")}" aria-pressed="false">${icons.checkCircle}</button>
         <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}</button>
       </div>
 
@@ -213,6 +218,19 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // lookup is a real join server-side, not free, so it's opt-in per
   // session rather than always fetched with the rest of the list.
   let showDebt = false;
+  // "Only our customers" (owner, 2026-11-03): the ones that exist in the Excel -- bronze / silver / gold, all with an ERP customer ID.
+  // Remembered on this device; it only narrows the list already loaded.
+  const OURS_PREF_KEY = "fieldvisits_customers_only_ours";
+  let onlyOurs = false;
+  try {
+    onlyOurs = localStorage.getItem(OURS_PREF_KEY) === "1";
+  } catch {
+    /* storage blocked: the switch starts off */
+  }
+  const isOurs = (c) => String(c.erp_customer_id ?? "").trim() !== "";
+  // the last payment (date / amount) columns need the payment lookup on the server: asked for only while one of them is shown
+  let loadedWithPayment = false;
+  const needsPayment = () => isDesktop() && Boolean(table?.cols?.isOn("last_payment") || table?.cols?.isOn("last_payment_amount"));
   // Reopened after the app was closed (viewMemory.js): the tab, sort, filters and search the person had.
   const restored = takeViewState("customers");
   if (restored) {
@@ -259,6 +277,23 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   });
 
 
+  const oursBtn = root.querySelector("#toggle-ours-btn");
+  const paintOurs = () => {
+    oursBtn.classList.toggle("list-header-add-btn-active", onlyOurs);
+    oursBtn.setAttribute("aria-pressed", String(onlyOurs));
+  };
+  paintOurs();
+  oursBtn.addEventListener("click", () => {
+    onlyOurs = !onlyOurs;
+    try {
+      localStorage.setItem(OURS_PREF_KEY, onlyOurs ? "1" : "0");
+    } catch {
+      /* storage blocked: it lasts until the page closes */
+    }
+    paintOurs();
+    render();
+  });
+
   sortBtn.addEventListener("click", () => {
     sortMenu.hidden = !sortMenu.hidden;
     sortBtn.setAttribute("aria-expanded", String(!sortMenu.hidden));
@@ -282,6 +317,18 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     ],
     leadCols: "minmax(0, 1.5fr) minmax(0, 1.7fr)",
     rowSelector: ".list-row[data-id]",
+    // the facts of a customer after the mouse rests on its row (deskTable.js): where, who to call, who is the rep, when last seen / paid
+    preview: (c) => {
+      const line = (label, value) => (value ? `<div class="desk-preview-line"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>` : "");
+      return `<div class="desk-preview-title">${escapeHtml(c.name)}</div>
+        ${line(t("desk_col_id"), c.erp_customer_id)}
+        ${line(t("desk_col_address"), c.address)}
+        ${line(t("desk_col_phone"), c.phone)}
+        ${line(t("desk_col_rep"), c.assigned_manager_name)}
+        ${line(t("desk_col_last_visit"), c.last_visit_at ? formatDateTime(c.last_visit_at) : "")}
+        ${line(t("debt_col_debt"), c.debt_amd != null && Number(c.debt_amd) > 0 ? formatAmd(Number(c.debt_amd)) : "")}
+        ${line(t("desk_col_last_payment"), c.last_payment_date ? `${shortDay(c.last_payment_date)}${c.last_payment_amd ? ` · ${formatAmd(Number(c.last_payment_amd))}` : ""}` : "")}`;
+    },
     rows: () => visibleCustomers(),
     sort: () => ({ key: sortKey, reversed: sortReversed }),
     onSort: (key) => setSort(key),
@@ -298,10 +345,12 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     onBulk: (key, chosen) => key === "assign" && openAssignRepSheet(chosen.map((c) => c.id)),
     // the debt column is the debt fetch (see the toggle above): turning it on asks the server for the debt join
     onColumnsChange: (key) => {
-      if (key === "debt" && table.cols.isOn("debt") !== showDebt) {
+      // "*": the saved columns of this person arrived (or were reset) -- bring the debt switch and the payment lookup in line with them
+      if ((key === "debt" || key === "*") && table.cols.isOn("debt") !== showDebt) {
         debtToggleBtn.click();
         return false;
       }
+      if (needsPayment() !== loadedWithPayment) load({ silent: true });
       return true;
     },
     onRepaint: () => renderList(),
@@ -611,7 +660,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   // you're currently sitting on never narrows its own sibling counts (the
   // tri-state itself is applied separately, on top, only for the list).
   function applyNonStatusFilters(customers) {
-    let list = customers;
+    let list = onlyOurs ? customers.filter(isOurs) : customers;
     const query = searchInput.value.trim().toLowerCase();
     if (query) list = list.filter((c) => customerMatchesSearch(c, query, brandSearchText(brandSummary.get(c.id))));
     if (brandChipIds.size) list = list.filter((c) => matchesSelectedChips(brandSummary.get(c.id), brandChipIds));
@@ -717,6 +766,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     debt: { value: (c) => (c.debt_amd != null && Number(c.debt_amd) > 0 ? -Number(c.debt_amd) : ""), numeric: true },
     region: { value: regionText },
     next_visit: { value: (c) => c.next_visit_date || "" },
+    address: { value: (c) => c.address || "" },
+    // the newest payment first, the biggest first
+    last_payment: { value: (c) => (c.last_payment_date ? -new Date(c.last_payment_date).getTime() : ""), numeric: true },
+    last_payment_amount: { value: (c) => (c.last_payment_amd ? -Number(c.last_payment_amd) : ""), numeric: true },
   };
 
   const CUSTOMER_BATCH = 100;
@@ -1019,10 +1072,12 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
     // calls load() again) doesn't flash a blank loading state over an
     // already-visible list while its own cache lookup resolves.
     if (!silent) listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    const wantPayment = needsPayment();
+    loadedWithPayment = wantPayment;
     let paintedOnce = false;
     try {
       await loadWithCache(
-        `customers-list:${showDebt ? "with-debt" : "plain"}`,
+        `customers-list:${showDebt ? "with-debt" : "plain"}${wantPayment ? "+pay" : ""}`,
         async () => {
           // Pages of 500 (about the whole customer list of the company today), so the list on screen no longer
           // waits for the last customer to download as the company grows. With a cached list already showing it is
@@ -1031,7 +1086,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
           const all = [];
           let cursor = {};
           for (;;) {
-            const rows = await api.listCustomers({ ...(showDebt ? { include_debt: 1 } : {}), limit: CUSTOMER_PAGE, ...cursor });
+            const rows = await api.listCustomers({ ...(showDebt ? { include_debt: 1 } : {}), ...(wantPayment ? { include_payment: 1 } : {}), limit: CUSTOMER_PAGE, ...cursor });
             all.push(...rows);
             if (rows.length < CUSTOMER_PAGE) break;
             const last = rows[rows.length - 1];

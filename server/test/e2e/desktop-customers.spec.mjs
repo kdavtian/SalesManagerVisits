@@ -58,7 +58,10 @@ test.describe("Desktop Customers table", () => {
     await expect(rows.first().locator(".desk-cell-added")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("fieldvisits_desk_cols_customers")))).toContain("phone");
+    // kept on this device at once (and saved on the server for this person): { order, on, fit }
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("fieldvisits_desk_cols_customers")));
+    expect(saved.on).toContain("phone");
+    expect(saved.on).not.toContain("added");
 
     // sorting by a desktop-only column works from the heading
     await head.locator('[data-sort-key="erp_id"]').click();

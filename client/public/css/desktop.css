@@ -735,6 +735,36 @@
     margin: 6px 0;
     background: var(--border);
   }
+  /* the column picker lists every column in its order: grip | tick + name | arrows (drag a row, or use the arrows) */
+  .desk-col-menu { width: 300px; max-width: calc(100vw - 16px); overflow-y: auto; }
+  .desk-col-menu-hint { margin: 0; padding: 2px 14px 6px; font-size: 0.78rem; color: var(--text-dim); }
+  .desk-col-menu-row { display: flex; align-items: center; padding-right: 6px; }
+  .desk-col-menu-row .desk-col-menu-item { flex: 1; width: auto; min-width: 0; }
+  .desk-col-menu-row .desk-col-menu-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .desk-col-grip { padding-left: 10px; color: var(--text-dim); cursor: grab; font-size: 1rem; line-height: 1; user-select: none; }
+  .desk-col-move { width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; color: var(--text-dim); font: inherit; cursor: pointer; }
+  .desk-col-move:hover:not(:disabled), .desk-col-move:focus-visible { background: var(--bg-card-pressed); color: var(--text); outline: none; }
+  .desk-col-move:disabled { opacity: 0.3; cursor: default; }
+  .desk-col-dragging { opacity: 0.45; }
+  .desk-col-menu-row:has(+ .desk-col-menu-row:hover) { box-shadow: inset 0 -2px 0 var(--accent); }
+  .desk-col-reset { display: block; width: 100%; min-height: 34px; padding: 0 14px; border: 0; background: none; color: var(--accent); font: inherit; font-size: 0.88rem; text-align: left; cursor: pointer; }
+  .desk-col-reset:hover, .desk-col-reset:focus-visible { background: var(--bg-card-pressed); outline: none; }
+
+  /* a short card with a row's facts after the mouse rests on it (deskTable.js opts.preview) */
+  .desk-preview { position: fixed; z-index: 2150; width: 320px; max-width: calc(100vw - 24px); padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16); pointer-events: none; font-size: 0.86rem; }
+  .desk-preview-title { margin-bottom: 6px; font-weight: 800; font-size: 0.95rem; }
+  .desk-preview-line { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; }
+  .desk-preview-line > span { color: var(--text-dim); flex: none; }
+  .desk-preview-line > strong { text-align: right; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+
+  /* the chips of a customer row (visit status, reorder, potential) sit under each other, not side by side: the table is narrow (owner, 2026-11-03) */
+  .desk-view #customer-list > .list-row .list-row-body > .list-row-bottom:not(.product-match-row) {
+    flex-direction: column;
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    gap: 3px;
+  }
+  .desk-view #customer-list > .list-row .list-row-body > .list-row-bottom:not(.product-match-row) .badge { white-space: nowrap; }
 
   /* density: compact rows for every desktop table */
   body.desk-compact :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row {
