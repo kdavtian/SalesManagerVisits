@@ -7,6 +7,8 @@ import { openFileViewer, fileKindLabel } from "../fileViewer.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { deskSelectChip } from "../deskTable.js";
 import { methodologyListHtml, wireMethodologyList } from "../methodology.js";
+import { state } from "../state.js";
+import { canViewStockCount } from "../shared/roles.js";
 
 const PERIODS = [
   ["today", "pb_today"],
@@ -33,11 +35,44 @@ export function renderDocuments(root, navigate) {
       <button type="button" class="btn btn-block" id="doc-print-slips" hidden>${t("docs_print_slips")}</button>
       <div class="card-list" id="doc-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <button type="button" class="btn btn-block" id="doc-more" hidden>${t("load_more")}</button>
+      <div id="doc-stock"></div>
       <!-- Company Methodology (owner, 2026-11-03): how the company's numbers are worked out; policies and more methods are added here later -->
       <h2 class="section-title">${t("methodology_title")}</h2>
       <div class="card-list" id="doc-methods">${methodologyListHtml()}</div>
     </div>`;
   wireMethodologyList(root.querySelector("#doc-methods"));
+  // The stock count reports (owner, 2026-11-03: the signed PDF of each day is kept here, for the accountants and the bosses)
+  const stockEl = root.querySelector("#doc-stock");
+  if (canViewStockCount(state.user?.role)) {
+    api
+      .getStockCountDocuments()
+      .then((days) => {
+        if (!days.length || !stockEl.isConnected) return;
+        stockEl.innerHTML = `<h2 class="section-title">${t("stock_counts_title")}</h2>
+          <div class="card-list">${days
+            .slice(0, 14)
+            .map(
+              (d) => `<button type="button" class="card list-row" data-stock-day="${d.day}"><span class="list-row-body">
+                <strong>${escapeHtml(d.day.split("-").reverse().join("-"))}</strong>
+                <span class="muted list-row-meta">${escapeHtml([d.counter, `${d.counted}/${d.planned}`, d.differences ? t("stock_count_doc_diffs").replace("{n}", d.differences) : t("stock_count_doc_clean"), d.signed ? t("stock_count_signed") : t("stock_count_doc_auto")].filter(Boolean).join(" · "))}</span>
+              </span><span class="chevron">&#8250;</span></button>`
+            )
+            .join("")}</div>`;
+        stockEl.querySelectorAll("[data-stock-day]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            b.disabled = true;
+            try {
+              openFileReadySheet(await api.getStockCountPdf(b.dataset.stockDay), `Stock-count-${b.dataset.stockDay}.pdf`);
+            } catch (err) {
+              stockEl.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(err.message)}</p>`);
+            } finally {
+              b.disabled = false;
+            }
+          })
+        );
+      })
+      .catch(() => {});
+  }
   root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
   const listEl = root.querySelector("#doc-list");
   const moreBtn = root.querySelector("#doc-more");

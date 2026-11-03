@@ -72,7 +72,20 @@ export const ordersApi = {
   getStockCountDay: (day) => request(`/stock-count/day${day ? `?day=${day}` : ""}`, { fresh: true }),
   saveStockCount: (productId, qty, note, day) => json(`/stock-count/items/${productId}`, "PUT", { qty, note, ...(day ? { day } : {}) }),
   clearStockCount: (productId) => request(`/stock-count/items/${productId}`, { method: "DELETE" }),
-  finishStockCountDay: () => json("/stock-count/finish", "POST", {}),
+  // the day is signed (the PNG drawn on the pad, mandatory) and may come with a photo / PDF of the paper count (owner, 2026-11-03)
+  finishStockCountDay: (signature, attachment = null) => {
+    const form = new FormData();
+    form.set("signature", signature, "signature.png");
+    if (attachment) form.set("attachment", attachment);
+    return request("/stock-count/finish", { method: "POST", body: form });
+  },
+  getStockCountDocuments: () => request("/stock-count/documents", { fresh: true }),
+  // the day's report as a PDF
+  getStockCountPdf: async (day) => {
+    const res = await fetch(`/api/stock-count/day/${day}/pdf`, { credentials: "include", headers: { "X-App-Version": APP_VERSION } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t("pdf_failed"));
+    return res.blob();
+  },
   getStockCountMonth: (month) => request(`/stock-count/month${month ? `?month=${month}` : ""}`, { fresh: true }),
   getWarehousePendingCount: () => request("/warehouse/pending-count"),
   getPickList: () => request("/warehouse/pick-list"),

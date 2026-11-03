@@ -43,7 +43,22 @@ test("@smoke @iphone stock count: count blind, Enter moves on, finish the day", 
     const finish = page.locator("#sc-finish");
     await finish.click();
     if (await page.locator("#sc-bar-hint.is-warning").isVisible()) await finish.click();
+    // the counter signs (mandatory), then may add a photo / PDF of the paper count (here: finish without)
+    const pad = page.locator(".sig-pad-canvas");
+    await expect(pad).toBeVisible();
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stock-count-sign.png` });
+    const box = await pad.boundingBox();
+    await page.mouse.move(box.x + 20, box.y + box.height / 2);
+    await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(box.x + 20 + i * 12, box.y + box.height / 2 + (i % 2 ? 25 : -25));
+    await page.mouse.up();
+    await page.locator('.sig-pad-actions [data-act="done"]').click();
+    await expect(page.locator('[data-act="skip"]')).toBeVisible();
+    await page.waitForTimeout(500);
+    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/stock-count-attach.png` });
+    await page.locator('[data-act="skip"]').click();
     await expect(page.locator("#sc-bar")).toBeHidden();
+    await expect(page.locator("[data-sc-pdf]")).toBeVisible();
     await page.locator("#sc-search").fill(tag);
     await expect(rowB.locator(".sc-diff")).toHaveText("-3"); // closed: now the difference shows
     await expect(rowA.locator(".sc-diff")).toHaveText("✓");

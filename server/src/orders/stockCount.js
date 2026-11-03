@@ -13,6 +13,11 @@ import { pool } from "../db/pool.js";
 import { yerevanToday, yerevanMonthStart } from "../utils/yerevanDate.js";
 import { notifyUser } from "../shared/notifications.js";
 import { yerevanMinutesOfDay } from "../team/taskReminders.js";
+import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
+import { stockCountDirPath } from "../shared/upload.js";
+import { buildStockCountPdf, readIfExists } from "./stockCountPdf.js";
 
 export const AUTO_CLOSE_MIN = 20 * 60; // 20:00 Yerevan: an unclosed day is closed automatically
 const PLAN_RECHECK_MS = 10 * 60 * 1000; // new / reactivated products are added to the plan at most every 10 minutes
@@ -102,7 +107,10 @@ export async function ensurePlan(db, today = yerevanToday(), { force = false } =
 }
 
 async function closedDay(db, day) {
-  const { rows } = await db.query("SELECT day, planned, counted, differences, left_over, finished_at, finished_by, task_id FROM stock_count_days WHERE day = $1", [day]);
+  const { rows } = await db.query(
+    "SELECT day, planned, counted, differences, left_over, finished_at, finished_by, task_id, (signature_path IS NOT NULL) AS signed, (pdf_path IS NOT NULL) AS has_pdf, (attachment_path IS NOT NULL) AS has_attachment FROM stock_count_days WHERE day = $1",
+    [day]
+  );
   return rows[0] ?? null;
 }
 
@@ -122,6 +130,41 @@ export async function dayNumbers(db, day) {
     [monthOf(day), day]
   );
   return n;
+}
+
+/** The day's report as a PDF file (stock-count/<uuid>.pdf), its path kept on the day. Also used to make a missing one again. */
+export async function savePdf(db, day) {
+  const { rows: [d] } = await db.query(
+    `SELECT s.*, to_char(s.day, 'YYYY-MM-DD') AS day_text, COALESCE(u.name_hy, u.name) AS counter_name
+     FROM stock_count_days s LEFT JOIN users u ON u.id = s.finished_by WHERE s.day = $1`,
+    [day]
+  );
+  if (!d) return null;
+  const { rows: items } = await db.query(
+    `SELECT p.name, p.brand, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty, s.note
+     FROM stock_counts s JOIN products p ON p.id = s.product_id WHERE s.counted_day = $1
+     ORDER BY lower(COALESCE(p.brand, '')), lower(p.name), lower(COALESCE(p.unit, ''))`,
+    [day]
+  );
+  const attachmentIsPdf = d.attachment_mime === "application/pdf";
+  const pdf = await buildStockCountPdf({
+    day: d.day_text,
+    counter: d.finished_by ? d.counter_name : null,
+    finishedAt: d.finished_at,
+    auto: !d.finished_by,
+    planned: d.planned,
+    counted: d.counted,
+    left_over: d.left_over,
+    items,
+    signaturePng: await readIfExists(d.signature_path && path.join(stockCountDirPath, path.basename(d.signature_path))),
+    signedAt: d.signed_at,
+    attachmentImage: attachmentIsPdf ? null : await readIfExists(d.attachment_path && path.join(stockCountDirPath, path.basename(d.attachment_path))),
+    attachmentIsPdf,
+  });
+  const file = `${d.day_text}-${crypto.randomUUID()}.pdf`;
+  await fs.promises.writeFile(path.join(stockCountDirPath, file), pdf);
+  await db.query("UPDATE stock_count_days SET pdf_path = $2 WHERE day = $1", [day, file]);
+  return file;
 }
 
 /** For the warehouse Home and the digest: today's progress (no product list). */
@@ -188,7 +231,10 @@ const signed = (n) => (n > 0 ? `+${n}` : String(n));
 
 // Closes `day`: its numbers are kept, the differences become one task for the accountant and a notice to the CEO / admin.
 // `userId` null = closed automatically in the evening. Safe to call twice (the second call does nothing).
-export async function closeDay(db, day, userId = null) {
+// evidence (owner, 2026-11-03): { signaturePath, attachmentPath, attachmentMime } -- the counter's drawn signature (mandatory when a person
+// finishes the day, enforced by the route) and the optional photo / PDF of the paper count. Vaghinak then (1) gives the counter a task to
+// recheck the products that differ, (2) tells every accountant the result, and (3) the day's report is saved as a PDF.
+export async function closeDay(db, day, userId = null, evidence = {}) {
   const before = await closedDay(db, day);
   if (before) return { already: true, day: before };
   const n = await dayNumbers(db, day);
@@ -206,9 +252,10 @@ export async function closeDay(db, day, userId = null) {
   try {
     await client.query("BEGIN");
     const { rows: inserted } = await client.query(
-      `INSERT INTO stock_count_days (day, planned, counted, differences, left_over, finished_by) VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO stock_count_days (day, planned, counted, differences, left_over, finished_by, signature_path, signed_at, attachment_path, attachment_mime)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7::text IS NULL THEN NULL ELSE now() END, $8, $9)
        ON CONFLICT (day) DO NOTHING RETURNING day`,
-      [day, n.due, n.counted, n.differences, n.left_over, userId]
+      [day, n.due, n.counted, n.differences, n.left_over, userId, evidence.signaturePath ?? null, evidence.attachmentPath ?? null, evidence.attachmentMime ?? null]
     );
     if (!inserted.length) {
       await client.query("ROLLBACK");
@@ -236,6 +283,28 @@ export async function closeDay(db, day, userId = null) {
           notifyUser(accountant.id, "task_assigned", { title: `Նոր առաջադրանք՝ Գույքագրում ${dateText(day)}`, body: `${diffs.length} ապրանքի տարբերություն`, url: `/#/tasks?open=${taskId}` })
         );
       }
+      // Vaghinak's follow-up for the counter: recheck every product that differs (the quantity he typed may be a slip)
+      const { rows: [counter] } = userId
+        ? await client.query("SELECT id FROM users WHERE id = $1 AND status = 'active'", [userId])
+        : await client.query("SELECT id FROM users WHERE role = 'warehouse_manager' AND status = 'active' ORDER BY id LIMIT 1");
+      if (counter) {
+        const { rows: [maker] } = await client.query(
+          `SELECT id FROM users WHERE role IN ('sales_director', 'ceo', 'admin') AND status = 'active'
+           ORDER BY CASE role WHEN 'sales_director' THEN 0 WHEN 'ceo' THEN 1 ELSE 2 END, id LIMIT 1`
+        );
+        const due = await nextWorkingDay(client, day);
+        const { rows: [recheck] } = await client.query(
+          `INSERT INTO tasks (title, creator_id, assignee_id, due_date) VALUES ($1, $2, $3, $4) RETURNING id`,
+          [`Գույքագրում ${dateText(day)}․ կրկին ստուգեք ${diffs.length} ապրանքի քանակը`, maker?.id ?? counter.id, counter.id, due]
+        );
+        let line = 0;
+        for (const d of diffs) {
+          await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [recheck.id, `${d.name}${d.size ? ` ${d.size}` : ""}․ Excel ${d.expected_qty}, դուք հաշվել եք ${d.counted_qty} (${signed(d.counted_qty - d.expected_qty)}). Նորից հաշվեք պահեստում`, line++]);
+        }
+        notices.push(() =>
+          notifyUser(counter.id, "task_assigned", { title: `Նոր առաջադրանք՝ Գույքագրում ${dateText(day)}`, body: `Կրկին ստուգեք ${diffs.length} ապրանքի քանակը`, url: `/#/tasks` })
+        );
+      }
       await client.query("UPDATE stock_counts SET reported_at = now() WHERE id = ANY($1)", [diffs.map((d) => d.id)]);
     }
     await client.query("COMMIT");
@@ -245,12 +314,19 @@ export async function closeDay(db, day, userId = null) {
   } finally {
     client.release();
   }
+  // the day's report as a PDF (a failure here never undoes the close: the numbers are saved, the report can be made again)
+  await savePdf(db, day).catch((err) => console.error("Stock count PDF failed:", err.message));
   const { rows: bosses } = await db.query("SELECT id FROM users WHERE role IN ('ceo', 'admin') AND status = 'active'");
   const lines = diffs.slice(0, 5).map((d) => `${d.name}${d.size ? ` ${d.size}` : ""} ${signed(d.counted_qty - d.expected_qty)}`);
   const body = [
     `Հաշվվել է ${n.counted}/${n.due}${n.left_over ? ` · ${n.left_over}-ը տեղափոխվեց հաջորդ օր (օրը չի ավարտվել)` : ""}`,
     diffs.length ? `Տարբերություններ՝ ${diffs.length}. ${lines.join(", ")}${diffs.length > 5 ? "…" : ""}` : "Տարբերություններ չկան",
   ].join("\n");
+  // every accountant is told the result, with or without differences (CEO / admin below: only when something is wrong)
+  const { rows: accountants } = await db.query("SELECT id FROM users WHERE role = 'accountant' AND status = 'active'");
+  for (const a of accountants) {
+    notices.push(() => notifyUser(a.id, "stock_count_diff", { title: `Գույքագրում ${dateText(day)}`, body, url: `/#/stock-count?day=${day}` }));
+  }
   if (diffs.length || n.left_over) {
     for (const b of bosses) {
       notices.push(() => notifyUser(b.id, "stock_count_diff", { title: `Գույքագրում ${dateText(day)}`, body, url: `/#/stock-count?day=${day}` }));
