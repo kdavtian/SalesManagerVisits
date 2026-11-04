@@ -108,7 +108,25 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L463 Orders: server-side column sort (1.368.0, migration 129, owner 2026-10-18 "yes w - GET /api/orders?sort=date|amount|customer|status[&reverse=1] (whitelist in ORDERSORTS, routes/orders.js; unkno
 - L468 Typing masks and iPhone Safari (1.372.0, owner 2026-10-19: "I tap on 6 and it is - Desktop Chromium never reproduced it (fuzzed 700 digit/caret combinations, all fine); the stuck spot is the ke
 
-## kad-os-gmm.md (8 KB, 61 lines)
+## kad-app-standard.md (23 KB, 257 lines)
+- L12 0. How to use this file - New app: follow section 14 top to bottom, then tick section 15 before the first release.
+- L18 1. Product rules (the owner's taste, distilled) - Armenian (hy) is the main language, English (en) always complete; no fallback language on a device (every key
+- L33 2. Stack (no surprises, no framework churn)
+- L46 3. Repo layout and files to copy into a new app - client/public/ index.html, sw.js, manifest.webmanifest, css/, icons/, brand/ js/app.js router + shell (tab bar
+- L74 4. Navigation standard (the "One KAD navigation model", 2026-11-04) - The shell is the same in every KAD app, so a person who works in two apps never has to think where things are.
+- L117 5. Speed standard (measured, not hoped) - Budgets (3 GB Android + iPhone, installed app, from kit navTiming / launch timing):
+- L140 6. Offline, updates and data safety - sw.js: APPSHELL precache (every client file listed; a test checks), network-first for /api/ with a short cache
+- L150 7. Security standard - Auth: httpOnly cookie session (JWT) + CSRF double-submit, tokenversion (logout everywhere), lockout after fail
+- L161 8. UI standard (components every app has) - Bottom sheet (ui/sheet.js): grab handle that drags, title, x, scrollable body, fixed action bar, error line ab
+- L174 9. Domain and data conventions - Excel / the source system stays the trusted source until cutover; imported totals reconcile to it (an acceptan
+- L181 10. Quality gates (CI and before "done") - CI jobs named test and e2e-smoke (required), a changes job that skips slow jobs for docs-only changes; one loc
+- L192 11. Observability - Client errors reach the CEO / super admin's bell (OS errorReport.js, FV errorMonitoring.js), deduplicated, no
+- L198 12. Ops standard - Droplet /opt/<app>, docker compose app + db, nginx + Let's Encrypt, own host name; never touch another app's f
+- L205 13. Edge technologies: adopted, and the watch list - Always feature-detect; the old path stays for phones without it.
+- L226 14. New KAD app - bootstrap, in this order - Owner brief -> docs/SPEC.md (who uses it, the 5 jobs per role, the main action for the centre tab, the trusted
+- L245 15. Release checklist (tick every item; copy into the PR when it is a new app or - [ ] Back closes a sheet and stays; Back never jumps tabs; deep link + Back goes to a sensible parent [ ] Re-ta
+
+## kad-os-gmm.md (8 KB, 64 lines)
 - L7 Workflow differences from Field Visits - Same owner rules apply (draft PR -> subscribe -> CI test + e2e-smoke -> ready -> squash merge -> unsubscribe;
 - L22 Architecture (KAD OS side) - server/src/lib/kad.js talks to KAD Motors' /api/partner/ (link from the DB via lib/kadLink.js, AES-256-GCM; .e
 - L36 Wholesale price = KAD Bronze price (owner, 2026-10-23, 0.53.0) - The shop's wholesale price (the "Wholesale" switch of a sale line, Products page, Oil finder) is KAD Motors' B
@@ -117,6 +135,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L49 Row actions (swipe pen/bin, long press) - `ui/rowActions.js` - Phones send NO click after a swipe, so a "swallow the next click" flag armed by a swipe stayed on and ate the
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
+- L62 Shared kit and navigation (0.95.0) - client/public/js/kit/ is the SAME kit as Field Visits (KADDev rule 60, kad-app-standard.md section 4).
 
 ## ops-runbook.md (20 KB, 111 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
@@ -148,7 +167,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L82 6. Proactive moves that always land well - After a numbered list, add "Suggestions" (numbered, with recommendation) only if you saw something real while
 - L90 7. Mistakes I made that cost them time (do not repeat) - Claiming sheets "load before showing" without reading them (Add payment and the customer pickers already paint
 
-## owner-preferences-and-history.md (94 KB, 424 lines)
+## owner-preferences-and-history.md (98 KB, 448 lines)
 - L3 How they work with you - Writes short, numbered, imperative requests (often with screenshots "image1/img2"), mixes English with Armenia
 - L11 Visual / UX preferences (apply by default) - Compact, iOS-native feel: bottom sheets, floating/fixed action bars (Cancel/Save on customer edit must be fixe
 - L25 Things that repeatedly bit us (check proactively) - Forgetting CACHEVERSION bump -> "no updates" on phones.
@@ -193,6 +212,9 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L349 2026-10-26 (1.419.0): potential customer pin = the ORIGINAL red crosshair again - Owner first wrote "Potential customer: crosshair (keep current color)" (I read it as: keep the new amber, add
 - L353 2026-10-26 (1.420.0): owner answers to the open questions - Demo site: same server, name kadostest (his own domain's subdomain, or free DuckDNS), NO weekly reset.
 - L374 2026-10-27 (1.441.0): Vaghinak wording rules, desktop step 1 - Vaghinak wording (owner picked A1, B1, C1, D1 from the variants offered; enforced by server/test/vaghinakWordi
+- L425 2026-11-04 (1.514.0): tab bar floated 62 pt above the bottom on iPhone -> solid  - Owner (screenshots, iPhone 16 Pro Max): the bottom menu sat far too high compared with KAD OS and the KAD webs
+- L431 2026-11-04 (1.515.0): floating tab bar rejected; the bar sits exactly like KAD O - Owner after 1.514.0 (screenshot): "I didn't like the floating style ...
+- L436 2026-11-04 (FV 1.516.0, OS 0.95.0): one KAD navigation model + the KAD App Stand - Owner: "Analyze navigation through the kad motors app and kad os app ...
 
 ## strategy-roadmap.md (6 KB, 31 lines)
 - L5 Target (owner, 2026-10-12): 10 % of the market = ~1 million liters a year - Owner's working assumption: the Armenian market is ~10M L a year, so 10 % = 1M L.

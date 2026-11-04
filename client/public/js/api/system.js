@@ -13,6 +13,22 @@ export const systemApi = {
   logout: () => request("/auth/logout", { method: "POST" }),
   me: () => request("/me"),
   setHomeTileOrder: (order) => json("/me/home-order", "PUT", { order }),
+  // pinned screens (shared/screens.js; server: system/routes/auth.js)
+  getPins: () => request("/me/pins", { fresh: true }),
+  savePins: (pins) => json("/me/pins", "PUT", { pins }),
+  // tap-to-screen timings (kit/navTiming.js -> system/navTimings.js): a keepalive fetch, so a batch sent while the app goes to the
+  // background still arrives; it never waits for or reports an error
+  postNavTimings: (items, device) => {
+    const csrfToken = getCsrfToken();
+    return fetch("/api/perf/nav", {
+      method: "POST",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: { "Content-Type": "application/json", ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}) },
+      body: JSON.stringify({ items, device }),
+    }).catch(() => {});
+  },
+  getSlowScreens: (days = 7) => request(`/perf/slow-screens?days=${days}`, { fresh: true }),
   // a person's desktop table settings (columns, their order, fit-to-content), the same on every computer (server/src/system/routes/tablePrefs.js)
   getTablePrefs: () => request("/table-prefs", { fresh: true }),
   saveTablePrefs: (page, config) => json(`/table-prefs/${encodeURIComponent(page)}`, "PUT", { config }),

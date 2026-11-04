@@ -25,6 +25,7 @@ import { runAntiFraud } from "../money/antiFraud.js";
 import { runExpenseWatch } from "../money/expenseWatch.js";
 import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 import { deleteOldUsage } from "../system/usageAnalytics.js";
+import { deleteOldNavTimings } from "../system/navTimings.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -38,6 +39,7 @@ export const JOBS = [
   { name: "vaghinak-birthdays", everyMs: MINUTE, run: (now) => vaghinakBirthdays(now) },
   { name: "vaghinak-route-plan-analysis", everyMs: HOUR, run: (now) => runWeeklyRoutePlanAnalysis(now) },
   { name: "usage-retention", everyMs: 6 * HOUR, run: () => deleteOldUsage() },
+  { name: "nav-timing-retention", everyMs: 6 * HOUR, run: () => deleteOldNavTimings() },
   { name: "task-deadline-reminders", everyMs: MINUTE, run: () => sendDeadlineReminders() },
   { name: "weekly-scorecard", everyMs: MINUTE, run: (now) => sendWeeklyScorecards(now) },
   { name: "weekly-debt-digest", everyMs: MINUTE, run: (now) => sendWeeklyDebtDigest(now) },

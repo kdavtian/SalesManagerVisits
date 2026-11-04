@@ -432,3 +432,16 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
 - Owner after 1.514.0 (screenshot): "I didn't like the floating style ... make as before"; "now it is even higher"; "exactly where the menu on KAD OS sits".
 - Lessons: (1) changing `apple-mobile-web-app-status-bar-style` does NOT reach an already installed iPhone app (iOS keeps the install-time style) -- so 1.514.0's `default` did nothing on the owner's phone and the floating bar sat 62 pt + its own gap above the edge; never rely on that meta for installed users. (2) The owner wants the docked bar.
 - Now: status bar back to `black-translucent` (index.html, theme.js, theme-init.js, bootGate.js as before 1.514.0). The iOS 26 short screen is fixed the way frappe-ui #1284 did: `@media (display-mode: standalone) { html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top))) } }` -- iOS shortens the screen only while the page is shorter than the screen, and this app locks html/body to 100%. The bar copies KAD OS: a 58 px row of buttons + the full `safe-area-inset-bottom` under it (`--nav-h`, `--nav-reserve = 58px + safe-bottom`), docked, border-top, translucent as before. Measured in Chromium with Emulation.setSafeAreaInsetsOverride (top 62, bottom 34) at 440 x 956: bar top 864 pt = KAD OS's on the owner's screenshot.
+
+## 2026-11-04 (FV 1.516.0, OS 0.95.0): one KAD navigation model + the KAD App Standard
+- Owner: "Analyze navigation through the kad motors app and kad os app ... the highest priority is being user friendly and fast, fluent", then
+  "implement all" and "I want kaddev skill which includes all the fixes and improvements and has these all as a standard so that when i create
+  new app, it already has all the required standards ... get best possible global practice and edge of technologies".
+- Audit (artifact "KAD Navigation Map"): 25 navigation elements side by side. Found: KAD OS Back jumped between tabs, Back left a sheet
+  floating over another screen, re-tapping the active tab did nothing, records had no address; Field Visits ☰ opened Settings while KAD OS ☰
+  opened the menu, 8 requests just for badges, no search on the phone; neither had app-icon shortcuts.
+- Built in both apps: the shared kit `js/kit/` (Back closes the top sheet, swipe-down, View Transitions, Navigation API, tap timing, palette
+  ranking) with a lock + CI check; tab taps replace history; re-tap = top / twice = refresh; ☰ = More sheet in both; one search (phone icon,
+  Ctrl K); pinned screens per user (migrations); one badges request (FV); record addresses + prefetch on touch + LRU screens (OS); manifest
+  shortcuts; slowest-screens report from real phones.
+- Standard written: `references/kad-app-standard.md` (rules 59-60). New apps start from it.

@@ -9,8 +9,64 @@
   "theme_color": "#f6f7f9",
   "orientation": "any",
   "icons": [
-    { "src": "icons/app/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/app/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/app/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Չեք-ին",
+      "short_name": "Չեք-ին",
+      "description": "Map: check in at a customer",
+      "url": "/#/map",
+      "icons": [
+        {
+          "src": "icons/app/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Նոր պատվեր",
+      "short_name": "Նոր պատվեր",
+      "description": "Start a new order",
+      "url": "/#/orders?new=1",
+      "icons": [
+        {
+          "src": "icons/app/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Հաճախորդներ",
+      "short_name": "Հաճախորդներ",
+      "description": "Customer list",
+      "url": "/#/customers",
+      "icons": [
+        {
+          "src": "icons/app/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

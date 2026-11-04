@@ -25,6 +25,7 @@ export async function renderUsageReport(root, navigate) {
       </div>
       <div class="segmented" id="usage-period">${PERIODS.map((d) => `<button type="button" class="chip ${d === days ? "chip-active" : ""}" data-days="${d}">${fill("usage_days", { n: d })}</button>`).join("")}</div>
       <p class="form-error" id="usage-error" hidden></p>
+      <section class="usage-speed" id="usage-speed" aria-live="polite"></section>
       <div id="usage-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/settings"));
@@ -77,5 +78,41 @@ export async function renderUsageReport(root, navigate) {
       load();
     })
   );
+  loadSpeed(root.querySelector("#usage-speed"));
   await load();
+}
+
+// Slowest screens (owner, 2026-11-04: "measure every tap"): tap-to-screen time on the real phones, last 7 days (GET /api/perf/slow-screens,
+// system/navTimings.js). Always measured, whatever the usage switch says; only the screen's kind, never who.
+const ms = (v) => `${Math.round(Number(v) || 0)} ms`;
+async function loadSpeed(slot) {
+  let r;
+  try {
+    r = await api.getSlowScreens(7);
+  } catch {
+    slot.hidden = true;
+    return;
+  }
+  const head = `<h2 class="section-title">${t("perf_slow_title")}</h2><p class="muted">${t("perf_slow_hint")}</p>`;
+  if (!r.screens?.length) {
+    slot.innerHTML = `${head}<p class="empty-state">${t("perf_slow_none")}</p>`;
+    return;
+  }
+  const slow = (v) => (v > 1000 ? " perf-bad" : v > 300 ? " perf-warn" : "");
+  slot.innerHTML = `${head}
+    <div class="perf-table-wrap"><table class="perf-table">
+      <thead><tr><th>${t("perf_col_screen")}</th><th class="num">p50</th><th class="num">p75</th><th class="num">p95</th><th class="num">${t("perf_col_samples")}</th></tr></thead>
+      <tbody>${r.screens
+        .map(
+          (row) => `<tr><td class="perf-route">${escapeHtml(row.route)}</td><td class="num">${ms(row.p50)}</td><td class="num${slow(row.p75)}">${ms(row.p75)}</td><td class="num${slow(row.p95)}">${ms(row.p95)}</td><td class="num">${row.samples}</td></tr>`
+        )
+        .join("")}</tbody>
+    </table></div>
+    ${
+      r.slowTaps?.length
+        ? `<h3 class="perf-sub">${t("perf_slow_taps")}</h3><div class="perf-table-wrap"><table class="perf-table"><tbody>${r.slowTaps
+            .map((row) => `<tr><td class="perf-route">${escapeHtml(row.route)}</td><td class="num">${ms(row.p75)}</td><td class="num">${row.samples}</td></tr>`)
+            .join("")}</tbody></table></div>`
+        : ""
+    }`;
 }

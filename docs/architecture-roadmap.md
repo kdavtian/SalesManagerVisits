@@ -459,3 +459,10 @@ the server share `roles.js`; a screen never edits another screen's DOM.
 - Step 10 scripts bundled at deploy (esbuild in the Docker build, browser tests on the build): 1.474.0, PR #519, 2026-10-29.
 - Step 12 speed budgets in CI (first start on a slow phone; 10 busiest endpoints with a company-sized data set): tests only, PR #520, 2026-10-29.
 - Step 8c styles per area (css/areas/*, loaded with the screen; computed-style parity on every screen): 1.475.0, PR #521, 2026-10-29.
+- Navigation roadmap on the shared KAD kit (`client/public/js/kit/`, identical in KAD OS; `node scripts/check-kit.mjs` in CI): Back closes
+  the sheet on top first (`sheetNav.js`), pull a bottom sheet down to close, the menu button opens the More sheet (`moreSheet.js`,
+  Settings at the bottom), one search for screens, actions and records (`searchPalette.js` on the phone, the top-bar search + Ctrl K on a
+  computer, `searchSources.js`), pinned screens (`pins.js`, `shared/screens.js`, migration 187, `GET/PUT /api/me/pins`), one badge
+  request at start (`GET /api/badges`), calm screen transitions (`screenMotion.js`, View Transitions on a tab's kept pages, a fade on a
+  new screen, none on Back), the Navigation API decides Back/Forward when the browser has it, tap-to-screen timings (`kit/navTiming.js`
+  -> `POST /api/perf/nav`, migration 188, "Slowest screens" in the usage report), icon shortcuts in the manifest: 1.516.0, 2026-11-04.

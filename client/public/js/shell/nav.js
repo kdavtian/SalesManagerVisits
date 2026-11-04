@@ -8,6 +8,7 @@ import { opsShellFor } from "../opsShell.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds } from "../quickActions.js";
 import { escapeHtml } from "../util.js";
 import { canRecordBankPayments } from "../shared/roles.js";
+import { pinnedItems } from "../pins.js";
 
 // Icons for the sidebar's role-visible quick-action items that aren't
 // already one of the 5 core routes (see EXCLUDED_FROM_SIDEBAR below).
@@ -202,12 +203,15 @@ export function rebuildSidebarMarkup(ctx, hash) {
     `;
   }
 
+  // the person's pinned screens first (pins.js), when there are any
+  const pinned = shell ? [] : pinnedItems(ctx.cachedSettings);
   ctx.sidebar.innerHTML = `
     <div class="sidebar-brand">
       <img class="topbar-logo topbar-logo-wordmark" src="/brand/kad-wordmark.png" alt="KAD" />
       <span class="topbar-title">${t("app_name_suffix")}</span>
     </div>
     <nav class="sidebar-nav" aria-label="${t("nav_settings")}">
+      ${pinned.length ? `<div class="sidebar-group sidebar-pinned" data-group="pinned"><div class="sidebar-section-label">${escapeHtml(t("pins_title"))}</div>${pinned.map((p) => itemHtml({ ...p, id: `pin-${p.id}` })).join("")}</div>` : ""}
       ${coreItems.map(itemHtml).join("")}
       ${groups
         .map((g) => {
@@ -305,11 +309,14 @@ export function rebuildNavMarkup(ctx, hash) {
     </span>
     <div class="topbar-right">
       <span class="topbar-user">${escapeHtml(state.user.name)}</span>
+      <button type="button" class="topbar-menu-btn topbar-search-btn" id="topbar-search-btn" aria-label="${t("search_title")}" title="${t("search_title")}">
+        ${icons.search}
+      </button>
       <button type="button" class="topbar-menu-btn" id="topbar-bell-btn" aria-label="${t("notifications_title")}" ${hash === "#/notifications" ? 'aria-current="page"' : ""}>
         ${icons.bell}
         <span class="nav-badge count-badge" id="topbar-bell-badge" hidden></span>
       </button>
-      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_settings")}" ${hash.split("?")[0] === "#/settings" ? 'aria-current="page"' : ""}>
+      <button type="button" class="topbar-menu-btn" id="topbar-menu-btn" aria-label="${t("nav_more")}" aria-haspopup="dialog" ${hash.split("?")[0] === "#/settings" ? 'aria-current="page"' : ""}>
         ${icons.menu}
         <span class="nav-badge count-badge" id="topbar-menu-badge" hidden></span>
       </button>
@@ -318,16 +325,16 @@ export function rebuildNavMarkup(ctx, hash) {
   // Desktop: global search + quick actions + keyboard shortcuts (deskTopBar.js; fetched only on a desktop-wide window).
   if (window.matchMedia?.("(min-width: 1024px)").matches) {
     const allowed = !opsShellFor(state.user.role);
-    import("../deskTopBar.js").then((m) => m.installDeskTopBar(ctx.topBar, ctx.navigate, { allowed })).catch(() => {});
+    import("../deskTopBar.js").then((m) => m.installDeskTopBar(ctx.topBar, ctx.navigate, { allowed, settings: () => ctx.cachedSettings })).catch(() => {});
   }
   ctx.topBar.querySelector("#topbar-bell-btn").addEventListener("click", () => ctx.navigate("#/notifications"));
+  // The menu button opens the More sheet: every screen in the sidebar's groups, pins, Settings at the bottom (moreSheet.js; owner,
+  // 2026-11-04: the same menu in both KAD apps). It used to open Settings itself.
   ctx.topBar.querySelector("#topbar-menu-btn").addEventListener("click", () => {
-    const current = (location.hash || "#/dashboard").split("?")[0];
-    if (current === "#/settings") {
-      ctx.navigate(ctx.preSettingsHash);
-    } else {
-      ctx.preSettingsHash = current;
-      ctx.navigate("#/settings");
-    }
+    import("../moreSheet.js").then((m) => m.openMoreSheet({ navigate: ctx.navigate, settings: ctx.cachedSettings })).catch(() => ctx.navigate("#/settings"));
+  });
+  // The Search button (phone; a computer has the search box in the top bar instead): one search for screens, actions and records.
+  ctx.topBar.querySelector("#topbar-search-btn").addEventListener("click", () => {
+    import("../searchPalette.js").then((m) => m.openSearch({ navigate: ctx.navigate, settings: ctx.cachedSettings })).catch(() => {});
   });
 }
