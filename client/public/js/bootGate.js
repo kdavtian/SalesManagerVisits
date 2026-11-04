@@ -94,14 +94,7 @@ async function bootRealApp() {
     // in-session reload, which is the safer failure direction here.
   }
   const themeColor = document.querySelector('meta[name="theme-color"]');
-  if (themeColor) {
-    // the solid iPhone status bar follows the stored theme (theme.js paintStatusBar); Calculator Mode set its own colour before the unlock
-    let dark = false;
-    try {
-      dark = localStorage.getItem("fieldvisits_theme") === "dark";
-    } catch {}
-    themeColor.content = dark ? "#000000" : "#f6f7f9";
-  }
+  if (themeColor) themeColor.content = "#f6f7f9";
   // app.js sets data-fv-booted on <html> once its first screen is drawn
   setTimeout(() => bootFailed(`no first screen after ${BOOT_WAIT_MS / 1000}s`), BOOT_WAIT_MS);
   try {

@@ -40,13 +40,10 @@
      look detached from the bottom edge. Keep a compact protected inset for
      the home indicator while avoiding a large empty band below the labels. */
   --nav-safe-bottom: min(var(--safe-bottom), 14px);
-  /* The floating tab bar (owner 2026-11-04, like list.am): a rounded bar --nav-h tall, --nav-float above the bottom edge (just over the
-     iPhone's home indicator), and --nav-reserve = everything a screen keeps clear at the bottom for it (the bar, its gap, a little air).
-     Every element that sits "just above the tab bar" uses --nav-reserve. */
+  /* The tab bar sits exactly like KAD OS's (owner 2026-11-04): a --nav-h row of buttons with the full home-indicator inset under it.
+     --nav-reserve = what a screen keeps clear at the bottom for it; every element that sits "just above the tab bar" uses it. */
   --nav-h: 58px;
-  --nav-float: max(10px, calc(var(--safe-bottom) - 6px));
-  --nav-reserve: calc(var(--nav-h) + var(--nav-float) + 6px);
-  --nav-side: 12px;
+  --nav-reserve: calc(var(--nav-h) + var(--safe-bottom));
   /* One bottom inset for EVERY bottom sheet (content, filter sheets, action
      bars): buttons always sit the same small distance above the screen edge,
      using the compact inset (like the tab bar) instead of the full 34px home-
@@ -110,10 +107,6 @@
   --skeleton: rgba(17, 19, 24, 0.07);
 }
 
-/* narrow phones: the floating tab bar keeps a smaller side margin so five tabs still fit */
-@media (max-width: 380px) {
-  :root { --nav-side: 6px; }
-}
 
 :root[data-theme="dark"] {
   --skeleton: rgba(255, 255, 255, 0.09);
@@ -219,6 +212,15 @@ html {
      states) reads as backdrop behind the app rather than a stray white
      flash, and is a no-op at phone widths where body already fills it. */
   background: var(--bg-card-pressed);
+}
+
+/* iOS 26 (WebKit 301108, owner 2026-11-04): an installed app with viewport-fit=cover and the see-through status bar gets a screen that is
+   short by the status-bar height (956 -> 894 pt on a 16 Pro Max) while the page is shorter than the screen, so the tab bar, sheets and toasts
+   floated that much too high. A page at least screen-tall gets the full screen; min() keeps it from growing where there is no top inset. */
+@media (display-mode: standalone) {
+  html {
+    min-height: min(100lvh, calc(100% + env(safe-area-inset-top)));
+  }
 }
 
 html,
@@ -559,6 +561,7 @@ a {
   background: var(--bg-elevated);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--border);
   flex-shrink: 0;
   /* Fixed (not sticky/relative) and pinned to the real viewport edge --
      nav-bar is a sibling of #app, not one of its scrolling descendants, so
@@ -581,17 +584,17 @@ a {
      exceeds the viewport there. */
   left: 50%;
   right: auto;
-  width: calc(100% - 2 * var(--nav-side));
-  max-width: calc(var(--app-max-width) - 2 * var(--nav-side));
-  bottom: var(--nav-float);
-  border: 0.5px solid var(--border);
-  border-radius: calc(var(--nav-h) / 2);
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.08);
+  width: 100%;
+  max-width: var(--app-max-width);
+  bottom: 0;
   /* Must sit above the isolated app/map stacking context. Leaflet uses
      internal z-index values up to 1000, but those can no longer escape
      .app-main and cover this navigation surface. */
   z-index: 1200;
-  height: var(--nav-h);
+  /* like KAD OS: the buttons fill a --nav-h row and the home-indicator inset stays empty below them */
+  box-sizing: border-box;
+  height: calc(var(--nav-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
   /* iOS WebKit has a known compositing bug where a position:fixed element
      combined with backdrop-filter fails to repaint after a sibling's
      content changes underneath it (e.g. the map mounting) -- it stays in
@@ -722,8 +725,7 @@ a {
   width: 50px;
   height: 50px;
   flex-shrink: 0;
-  /* rises out of the floating bar so its label still fits inside it */
-  margin-top: -16px;
+  margin-top: -4px;
   border-radius: 50%;
   /* Dim/inactive by default, same as every other nav item -- this raised
      circle used to be accent-colored unconditionally, which is the actual
