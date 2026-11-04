@@ -1,8 +1,12 @@
 // After every ERP sync: anything the workbook already shows is settled in KAD
 // too (owner's rule).
 //  - A confirmed / packed order that matches an ERP order (same ERP customer,
-//    date within 1 day, same total) is moved to Delivered, marked "from ERP",
-//    and taken out of the warehouse and delivery queues.
+//    same total, ERP date from 1 day before the order to MATCH_WINDOW_DAYS
+//    after it) is moved to Delivered, marked "from ERP", and taken out of the
+//    warehouse and delivery queues. The window was "within 1 day" until
+//    2026-11-04: an order made on Friday, packed on Monday and entered in
+//    Excel on Monday never matched and stayed "packed" for ever -- and the
+//    stock count then took its pieces off the shelf a second time.
 //  - A pending cash payment that matches an ERP payment (same ERP customer,
 //    same amount, date within 3 days) is approved, marked "from ERP".
 // Both only act on a UNIQUE match, never on a guess, and never twice on the
@@ -10,6 +14,9 @@
 
 // Yerevan calendar date of a timestamptz.
 const YEREVAN_DAY = "((%s AT TIME ZONE 'Asia/Yerevan')::date)";
+
+/** How many days after an order (or its delivery) Excel may show it: the same window for every "found in Excel" match. */
+export const MATCH_WINDOW_DAYS = 14;
 
 export async function autoDeliverOrdersFromErp(client) {
   // ERP orders (one per order id): customer, date, total.
@@ -27,7 +34,7 @@ export async function autoDeliverOrdersFromErp(client) {
        SELECT cand.id AS order_id, erp.order_id AS erp_order_id, cand.d AS cand_d, erp.d AS erp_d
        FROM cand JOIN erp ON erp.erp_customer_id = cand.erp_customer_id
         AND ABS(erp.total - cand.total) <= 1
-        AND erp.d BETWEEN cand.d - 1 AND cand.d + 1
+        AND erp.d BETWEEN cand.d - 1 AND cand.d + ${MATCH_WINDOW_DAYS}
      )
      SELECT p.order_id, p.erp_order_id, p.cand_d, p.erp_d
      FROM pairs p
@@ -123,7 +130,7 @@ export async function markAppRowsInExcel(client) {
        SELECT cand.id AS order_id, erp.order_id AS erp_order_id
        FROM cand JOIN erp ON erp.erp_customer_id = cand.erp_customer_id
         AND ABS(erp.total - cand.total) <= 1
-        AND erp.d BETWEEN cand.created_d - 1 AND cand.delivered_d + 14
+        AND erp.d BETWEEN cand.created_d - 1 AND cand.delivered_d + ${MATCH_WINDOW_DAYS}
      )
      SELECT p.order_id, p.erp_order_id FROM pairs p
      WHERE (SELECT COUNT(*) FROM pairs q WHERE q.order_id = p.order_id) = 1
