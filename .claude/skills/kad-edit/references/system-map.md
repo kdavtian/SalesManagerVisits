@@ -35,6 +35,7 @@ Server areas in `server/src/<area>/` (routes in `<area>/routes/`), shared code i
 
 | Touch | Also check |
 |---|---|
+| `client/public/js/kit/` (the shared KAD kit, identical in Field Visits and KAD OS: Back closes sheets, swipe-down, transitions, Navigation API, tap timing, palette) | BOTH apps' Back button, every sheet, screen changes, search; change it in both repos at once, bump `KIT_VERSION`, `node scripts/check-kit.mjs --write` (CI checks the lock); KADDev rule 60 |
 | `shared/roles.js`, `middleware/auth.js`, `csrf.js`, `lockdown.js` | every route's capability; client nav/buttons (`client/public/js`); RBAC tests; partner role (`/api/partner/*` only); lockdown screen; `docs/roles-permissions.md` |
 | `orders/` (`discountPolicy.js` <= 3 % auto, never below net cost; `creditLimit.js`; `orderStock.js` reservation; `signedActs.js` lock after signature; `orderReturns.js`; `appOrders.js`) | warehouse staging, delivery routes (`routePlanner.js`, `osrm.js`), Lily accounting events, ERP auto-delivered match, KAD OS partner orders + campaigns (409 `below_cost`), Vaghinak chasing, order blank PDF, stock count, offline-queued orders, reports |
 | `products/` (`landingCalc.js`, `pricelistApply.js`, `priceSyncLog.js`), 4 price tiers, net / landing cost | order prices, discount floor, campaigns, partner catalog (tier price only, never cost), margin reports, Castrol-file semantics |

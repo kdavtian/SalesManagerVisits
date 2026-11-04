@@ -58,3 +58,6 @@ droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os
 - Suggestions: debounce 140 ms, server `GET /api/oil-finder/suggest?q=`, shop's own customer cars boost the ranking; picking a model fills the input and
   waits for the year (oil depends on the year, and a no-year AI answer would be stored for every year).
 - Open an existing screen as a sheet (`openSheet`) when it must not lose the screen below it (a sale in progress); mount the same view with `{ embedded, onPick }`.
+
+## Shared kit and navigation (0.95.0)
+- `client/public/js/kit/` is the SAME kit as Field Visits (KADDev rule 60, `kad-app-standard.md` section 4). Tab bar / sidebar / More / G+letter replace history; Back closes the top sheet; a screen change closes every sheet; re-tap = top, twice = refresh; record addresses (`#/customers/<card>` ...) open their sheet; `/api/search` + palette (Ctrl K); pinned screens; slow-screens report from `/api/perf/nav`.
