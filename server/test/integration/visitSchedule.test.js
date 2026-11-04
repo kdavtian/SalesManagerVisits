@@ -22,7 +22,7 @@ test.before(async () => {
   adminCookie = await loginAs(adminU.email);
   mgrCookie = await loginAs(mgr.email);
   otherCookie = await loginAs(other.email);
-  cust = await createCustomer({ created_by: mgr.id });
+  cust = await createCustomer({ created_by: mgr.id, assigned_manager_id: mgr.id });
   await pool.query("UPDATE customers SET visit_frequency_days = 7 WHERE id = $1", [cust.id]);
 });
 test.after(async () => {
@@ -82,7 +82,7 @@ test("a sales manager never sees another manager's plans; admin sees everyone's"
   const asAdmin = await apiRequest(`/api/customers/${cust.id}/visit-schedule`, { cookie: adminCookie });
   assert.ok(asAdmin.data.planned.some((p) => p.user_id === other.id));
   const asOther = await apiRequest(`/api/customers/${cust.id}/visit-schedule`, { cookie: otherCookie });
-  assert.ok(asOther.data.planned.every((p) => p.user_id === other.id));
+  assert.equal(asOther.status, 404, "another rep does not reach the customer at all (customers.js param guard)");
 });
 
 test("GET /customers/map-facts: batch of popup facts, same shape as the single endpoint", async () => {
@@ -100,7 +100,7 @@ test("GET /customers/map-facts: batch of popup facts, same shape as the single e
 // who does not own the customer.
 test("map-facts: last order date, same RBAC as the debt", async () => {
   const erp = `MF-${Date.now()}`;
-  const owned = await createCustomer({ created_by: mgr.id, erp_customer_id: erp });
+  const owned = await createCustomer({ created_by: mgr.id, assigned_manager_id: mgr.id, erp_customer_id: erp });
   await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, 'A', '2026-09-01', 10), ($1, 'B', '2026-10-03', 10)", [erp]);
   try {
     const mine = await apiRequest(`/api/customers/${owned.id}/map-facts`, { cookie: mgrCookie });
@@ -108,7 +108,9 @@ test("map-facts: last order date, same RBAC as the debt", async () => {
     const batch = await apiRequest(`/api/customers/map-facts?ids=${owned.id}`, { cookie: adminCookie });
     assert.equal(batch.data[owned.id].erp_last_order_date, "2026-10-03");
     const notMine = await apiRequest(`/api/customers/${owned.id}/map-facts`, { cookie: otherCookie });
-    assert.equal(notMine.data.erp_last_order_date, null);
+    assert.equal(notMine.status, 404);
+    const notMineBatch = await apiRequest(`/api/customers/map-facts?ids=${owned.id}`, { cookie: otherCookie });
+    assert.deepEqual(notMineBatch.data, {}, "the batch leaves out another rep's customers");
   } finally {
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erp]);
   }

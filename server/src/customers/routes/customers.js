@@ -582,8 +582,8 @@ customersRouter.get("/map-facts", async (req, res) => {
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
               (SELECT max(eol.order_date)::text FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS last_order_date
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
-       WHERE c.id = ANY($1)`,
-      [ids]
+       WHERE c.id = ANY($1) ${seesAllActivity(req.user.role) ? "" : "AND (c.assigned_manager_id = $2 OR c.checkin_for_all)"}`, // a rep: his own customers and the offices only
+      seesAllActivity(req.user.role) ? [ids] : [ids, req.user.id]
     ),
   ]);
   const out = {};
