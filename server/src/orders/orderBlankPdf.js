@@ -23,7 +23,7 @@ export { formatPhone };
 const ASSET_DIR = ASSETS_DIR;
 const logo = (name) => fs.readFileSync(path.join(ASSET_DIR, "logos", `ob-${name}.png`));
 
-export const COMPANY_NAME = "Քալանթարյան Ֆեմիլի ՓԲԸ";
+export const COMPANY_NAME = "Քալանթարյան Ֆէմիլի ՓԲԸ";
 export const HALF_MAX_ROWS = 8;
 export const FULL_MIN_ROWS = 15;
 const FULL_PAGE_ROWS = 22;

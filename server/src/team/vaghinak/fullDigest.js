@@ -131,7 +131,7 @@ export function personSummary(f, { graceMin = 15 } = {}) {
 // The day's stock count (orders/stockCount.js): progress and differences, and a recommendation when products are left uncounted.
 function stockLines(s) {
   if (!s || (!s.due && !s.counted)) return [];
-  return [`Գույքագրում՝ հաշվվել է ${s.counted}/${s.due}${s.differences ? ` · տարբերություններ Excel-ի հետ՝ ${s.differences}` : ""}`];
+  return [`Գույքագրում՝ հաշվվել է ${s.counted}/${s.due}${s.differences ? ` · տարբերություններ ծրագրի մնացորդի հետ՝ ${s.differences}` : ""}`];
 }
 function stockRecos(s) {
   if (!s || !s.due || s.counted >= s.due) return [];
