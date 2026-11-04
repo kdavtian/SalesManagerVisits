@@ -229,7 +229,7 @@ test("finishing the day needs the drawn signature; with it the day is signed, it
 // already off the shelf. Excel 50: packed 7, delivered 4 (not found in Excel yet) and delivered 6 BEFORE the last sync but still not in
 // Excel are subtracted; a good return received and not in Excel yet (2) is added back. Unchanged: a confirmed order (still on the shelf),
 // a delivery Excel already holds (matched), one the ERP sync itself delivered, an unmatched delivery older than the matching window, a
-// damaged return, and a return already recorded in Excel. 50 - 7 - 4 - 6 + 2 = 35.
+// damaged return, and a return already recorded in Excel; nor orders whose line Excel already shows. 50 - 7 - 4 - 6 + 2 - 3 = 32.
 test("the counted quantity is compared with the app's stock, not the Excel number", async () => {
   const day = "2030-04-22";
   const { rows: [p] } = await pool.query(
@@ -268,11 +268,27 @@ test("the counted quantity is compared with the app's stock, not the Excel numbe
   await ret(2, "good", false);
   await ret(1, "damaged", false);
   await ret(3, "good", true);
+  // Edge 0W-20 C5 1L, 2026-11-04: orders whose totals did not match an Excel order but whose line Excel already shows (this product, same
+  // quantity, same customer) are already in the synced stock -- not subtracted again. A line of another quantity does not count.
+  const erpCustomer = `ITEST-SC-ERP-${p.id}`;
+  await pool.query("UPDATE products SET erp_product_id = $2 WHERE id = $1", [p.id, `ITEST-SC-P-${p.id}`]);
+  const known = await createCustomer({ created_by: users.admin.id, erp_customer_id: erpCustomer });
+  for (const [status, qty, excelQty] of [["packed_stock_out", 4, 4], ["delivered", 2, 2], ["packed_stock_out", 3, 5]]) {
+    const { rows: [o] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd) VALUES ($1, $2, $3, $4) RETURNING id", [known.id, users.admin.id, status, qty * 1000]);
+    trackOrder(o.id);
+    await pool.query("INSERT INTO order_items (order_id, product_id, product_name, unit_price_amd, quantity, line_total_amd) VALUES ($1, $2, 'ITEST stock app', 1000, $3, $4)", [o.id, p.id, qty, qty * 1000]);
+    if (status === "delivered") await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'packed_stock_out', 'delivered', now() - interval '10 minutes')", [o.id]);
+    await pool.query(
+      "INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, $2, (now() AT TIME ZONE 'Asia/Yerevan')::date, $3, $4, 1)",
+      [erpCustomer, `ITEST-SC-EO-${o.id}`, `itest-sc-p-${p.id}`, excelQty]
+    );
+  }
 
   const shown = (await dayList(pool, day, { showExpected: true })).items.find((i) => i.product_id === p.id);
-  assert.equal(shown?.expected_qty, 35, "management sees the app's stock before the count");
-  const saved = await saveCount(pool, users.warehouse_manager, { productId: p.id, qty: 35 }, day);
-  assert.equal(saved.item.expected_qty, 35);
+  assert.equal(shown?.expected_qty, 32, "management sees the app's stock before the count");
+  const saved = await saveCount(pool, users.warehouse_manager, { productId: p.id, qty: 32 }, day);
+  assert.equal(saved.item.expected_qty, 32);
   assert.equal(saved.item.counted_qty - saved.item.expected_qty, 0, "no difference: the shelf matches the app");
   await clearCount(pool, p.id, day);
+  await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erpCustomer]);
 });

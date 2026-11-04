@@ -59,7 +59,7 @@ async function addPayment(customer, userId, amount, daysAgo) {
   return trackPayment(rows[0].id);
 }
 
-test("order matching an ERP order (customer, date within a day, total) becomes Delivered from ERP; ambiguous ones are left alone", async () => {
+test("order matching an ERP order (customer, date, total) becomes Delivered from ERP; ambiguous ones are left alone", async () => {
   const rep = await createUser("sales_manager");
   const a = await customerWithErp(rep, "A");
   const orderA = await addOrder(a.id, rep.id, "confirmed", 52000, `T${stamp}-1`);
@@ -89,6 +89,24 @@ test("order matching an ERP order (customer, date within a day, total) becomes D
   }
   // Running again changes nothing (the ERP order is used up).
   assert.deepEqual(await run(autoDeliverOrdersFromErp), []);
+});
+
+// Edge 0W-20 C5 1L, 2026-11-04: ordered on Friday, packed and entered in Excel on Monday -- the old "within 1 day" rule never matched it,
+// so it stayed "packed" for ever. Excel may show an order up to MATCH_WINDOW_DAYS after it was made; older ones are left alone.
+test("an order Excel shows a few days after it was made is Delivered from ERP too; one far older is not", async () => {
+  const rep = await createUser("sales_manager");
+  const c = await customerWithErp(rep, "LATE");
+  const late = await addOrder(c.id, rep.id, "packed_stock_out", 41000, `T${stamp}-L1`);
+  const old = await addOrder(c.id, rep.id, "packed_stock_out", 43000, `T${stamp}-L2`);
+  await pool.query("UPDATE orders SET created_at = now() - interval '3 days' WHERE id = $1", [late]);
+  await pool.query("UPDATE orders SET created_at = now() - interval '20 days' WHERE id = $1", [old]);
+  for (const [oid, rev] of [[`E${stamp}L1`, 41000], [`E${stamp}L2`, 43000]]) {
+    await pool.query(`INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, ${YEREVAN_TODAY}, $3)`, [c.erp_customer_id, oid, rev]);
+  }
+  const delivered = await run(autoDeliverOrdersFromErp);
+  assert.ok(delivered.includes(late), "3 days later: found in Excel");
+  assert.ok(!delivered.includes(old), "20 days later: too far, left alone");
+  assert.equal((await pool.query("SELECT erp_matched_order_id FROM orders WHERE id = $1", [late])).rows[0].erp_matched_order_id, `E${stamp}L1`);
 });
 
 test("pending payment matching an ERP payment (customer, exact amount, date within 3 days) becomes Approved from ERP, once per ERP row", async () => {
