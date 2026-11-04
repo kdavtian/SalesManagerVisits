@@ -1,22 +1,22 @@
 // The desktop top bar (docs/desktop-roadmap.md, step 4): a global search (customers, orders, tasks) and quick actions
 // (New order, New task, New customer), with keyboard shortcuts -- "/" focuses the search, "n" then "o" / "t" / "c" start a new
 // order / task / customer. All of it is hidden on a phone (desktop.css) and the keys only work on a desktop window.
-import { matchKind, prepareSearchText } from "./shared/searchKey.js";
-import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { escapeHtml, formatAmd, formatDateDMY } from "./util.js";
 import { canCreateTasks } from "./state.js";
 import { isDesktop } from "./deskTable.js";
+import { MAX_PER_GROUP, localResults, recent, recordResults } from "./searchSources.js";
+import { state } from "./state.js";
 
-const MAX_PER_GROUP = 5;
 let navigateRef = null;
+let settingsRef = null; // () => the admin settings app.js holds (tile visibility for the screens found)
 let keysInstalled = false;
-let tasksCache = { at: 0, rows: null };
 
 /** Fills the search box and the quick actions into the top bar (called every time the bar is drawn). */
-export function installDeskTopBar(topBar, navigate, { allowed = true } = {}) {
+export function installDeskTopBar(topBar, navigate, { allowed = true, settings = null } = {}) {
   navigateRef = navigate;
+  settingsRef = settings;
   if (!allowed) return;
   const right = topBar.querySelector(".topbar-right");
   if (!right || topBar.querySelector(".topbar-search")) return;
@@ -89,17 +89,12 @@ function wireSearch(root) {
     item.open();
   };
 
-  async function run(query) {
+  // One search for everything (owner, 2026-11-04; searchSources.js): screens and actions at once (no network), records after 2 letters,
+  // what was opened recently before anything is typed.
+  async function run(query, { records = true } = {}) {
     const mine = ++seq;
     box.hidden = false;
     input.setAttribute("aria-expanded", "true");
-    box.innerHTML = `<p class="topbar-search-note">${t("loading")}</p>`;
-    const [customers, orders, tasks] = await Promise.all([
-      api.listCustomers({ search: query, limit: MAX_PER_GROUP }).catch(() => []),
-      api.listOrders({ q: query, limit: MAX_PER_GROUP }, { fresh: true }).then((r) => r.rows ?? []).catch(() => []),
-      searchTasks(query).catch(() => []),
-    ]);
-    if (mine !== seq || input.value.trim() !== query) return;
     items = [];
     const group = (title, rows, row) =>
       rows.length
@@ -114,34 +109,62 @@ function wireSearch(root) {
       </button>`;
     };
     const nav = navigateRef;
-    const html =
-      group(t("nav_customers"), customers.slice(0, MAX_PER_GROUP), (c) =>
-        itemHtml(escapeHtml(c.name), escapeHtml([c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · ")), "", () => nav(`#/customers/${c.id}`))
-      ) +
-      group(t("nav_orders"), orders.slice(0, MAX_PER_GROUP), (o) =>
-        itemHtml(escapeHtml(o.order_code || `#${o.id}`), escapeHtml([o.customer_name, formatDateDMY(o.created_at)].filter(Boolean).join(" · ")), formatAmd(Number(o.total_amd)), () => nav(`#/orders?open=${o.id}`))
-      ) +
-      group(t("qa_tasks"), tasks.slice(0, MAX_PER_GROUP), (r) =>
-        itemHtml(escapeHtml(r.title), escapeHtml([r.customer_name, r.assignee_name].filter(Boolean).join(" · ")), escapeHtml(formatDateDMY(r.due_date)), () => nav(`#/tasks?open=${r.id}`))
-      );
-    box.innerHTML = html || `<p class="topbar-search-note">${t("desk_search_none")}</p>`;
-    active = 0;
-    paintActive();
-    box.querySelectorAll("[data-result]").forEach((el) => {
-      el.addEventListener("mousedown", (e) => e.preventDefault()); // keep the focus in the input until the click opens it
-      el.addEventListener("click", () => openItem(Number(el.dataset.result)));
-    });
+    const remember = (entry) => entry.hash && recent.add(entry);
+    const go = (entry) => () => {
+      remember(entry);
+      if (entry.run) entry.run(nav);
+      else nav(entry.hash);
+    };
+    const settings = settingsRef?.() ?? null;
+    let html = "";
+    if (!query) {
+      html = group(t("search_recent"), recent.all(), (r) => itemHtml(escapeHtml(r.label), escapeHtml(r.hint || ""), "", go(r)));
+    } else {
+      const local = localResults(query, settings);
+      html =
+        group(t("search_screens"), local.filter((x) => x.kind === "screen"), (x) => itemHtml(escapeHtml(x.label), "", "", go(x))) +
+        group(t("search_actions"), local.filter((x) => x.kind === "action"), (x) => itemHtml(escapeHtml(x.label), "", "", go(x)));
+    }
+    const paint = (extra, loadingMore) => {
+      box.innerHTML = html + extra + (loadingMore ? `<p class="topbar-search-note">${t("loading")}</p>` : "") || `<p class="topbar-search-note">${query ? t("desk_search_none") : t("search_hint_all")}</p>`;
+      active = 0;
+      paintActive();
+      box.querySelectorAll("[data-result]").forEach((el) => {
+        el.addEventListener("mousedown", (e) => e.preventDefault()); // keep the focus in the input until the click opens it
+        el.addEventListener("click", () => openItem(Number(el.dataset.result)));
+      });
+    };
+    if (query.length < 2 || !records) {
+      paint("", query.length >= 2);
+      return;
+    }
+    paint("", true);
+    const { customers, orders, tasks } = await recordResults(query);
+    if (mine !== seq || input.value.trim() !== query) return;
+    const rec = (hash, label, hint) => ({ kind: "record", id: hash, hash, label, hint });
+    items = items.slice(0, (html.match(/data-result=/g) || []).length);
+    const extra =
+      group(t("nav_customers"), customers.slice(0, MAX_PER_GROUP), (c) => {
+        const hint = [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · ");
+        return itemHtml(escapeHtml(c.name), escapeHtml(hint), "", go(rec(`#/customers/${c.id}`, c.name, hint)));
+      }) +
+      group(t("nav_orders"), orders.slice(0, MAX_PER_GROUP), (o) => {
+        const hint = [o.customer_name, formatDateDMY(o.created_at)].filter(Boolean).join(" · ");
+        return itemHtml(escapeHtml(o.order_code || `#${o.id}`), escapeHtml(hint), formatAmd(Number(o.total_amd)), go(rec(`#/orders?open=${o.id}`, o.order_code || `#${o.id}`, hint)));
+      }) +
+      group(t("qa_tasks"), tasks.slice(0, MAX_PER_GROUP), (r) => {
+        const hint = [r.customer_name, r.assignee_name].filter(Boolean).join(" · ");
+        return itemHtml(escapeHtml(r.title), escapeHtml(hint), escapeHtml(formatDateDMY(r.due_date)), go(rec(`#/tasks?open=${r.id}`, r.title, hint)));
+      });
+    paint(extra, false);
   }
 
   input.addEventListener("input", () => {
     clearTimeout(timer);
     const query = input.value.trim();
-    if (query.length < 2) {
-      seq++;
-      close();
-      return;
-    }
-    timer = setTimeout(() => run(query), 220);
+    // screens and actions at once (Enter right after typing opens the best one), records a moment later
+    run(query, { records: false });
+    if (query.length >= 2) timer = setTimeout(() => run(query), 220);
   });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -162,21 +185,7 @@ function wireSearch(root) {
     }
   });
   input.addEventListener("blur", () => setTimeout(() => document.activeElement !== input && close(), 150));
-  input.addEventListener("focus", () => input.value.trim().length >= 2 && run(input.value.trim()));
-}
-
-// Open tasks are loaded once a minute at most and searched here (the task list already carries everything visible to this person).
-async function searchTasks(query) {
-  if (!tasksCache.rows || Date.now() - tasksCache.at > 60000) {
-    const result = await api.listTasks({ scope: "all", status: "open" });
-    tasksCache = { at: Date.now(), rows: result.rows ?? [] };
-  }
-  // both scripts, one typo in a long word (shared/searchKey.js), the exact matches first
-  return tasksCache.rows
-    .map((r) => ({ r, kind: matchKind(prepareSearchText([r.title, r.customer_name, r.assignee_name].filter(Boolean).join(" ")), query) }))
-    .filter((x) => x.kind > 0)
-    .sort((a, b) => b.kind - a.kind)
-    .map((x) => x.r);
+  input.addEventListener("focus", () => run(input.value.trim()));
 }
 
 /* ---------- Keyboard ---------- */
@@ -190,6 +199,16 @@ function installKeys() {
   keysInstalled = true;
   let chordAt = 0;
   document.addEventListener("keydown", (e) => {
+    // Ctrl K / Cmd K: the search, from anywhere (even while typing in another field), like every modern app
+    if (isDesktop() && (e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k" && state.user) {
+      const box = document.getElementById("topbar-search-input");
+      if (box) {
+        e.preventDefault();
+        box.focus();
+        box.select();
+        return;
+      }
+    }
     if (!isDesktop() || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     if (typing(e.target) || dialogOpen()) return;
     const input = document.getElementById("topbar-search-input");

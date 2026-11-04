@@ -1,0 +1,389 @@
+/* Navigation (owner, 2026-11-04: "one KAD navigation model"): screen transitions (js/screenMotion.js + kit/transition.js), the search
+   sheet (js/searchPalette.js), the More sheet (js/moreSheet.js), pin toggles and the pinned row (js/pins.js), the slowest-screens table. */
+
+/* kit/README.md rule 4: the View Transitions fade between screens, short; nothing with reduced motion */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 140ms;
+  animation-timing-function: ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+/* a screen opened by a tap fades in as it is drawn (never on Back) */
+#app.screen-enter > * {
+  animation: fv-screen-in 140ms ease-out;
+}
+@keyframes fv-screen-in {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #app.screen-enter > * {
+    animation: none;
+  }
+}
+
+/* the Search button of the top bar: on a computer the search box is in the top bar itself (deskTopBar.js) */
+#top-bar:has(.topbar-search) #topbar-search-btn {
+  display: none;
+}
+
+/* a phone's top bar now has three buttons (search, bell, menu): the name takes at most two short lines */
+@media (max-width: 480px) {
+  .topbar-user {
+    max-width: 28vw;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* ---------- search sheet ---------- */
+.search-overlay .search-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  max-height: 88vh;
+  min-height: 50vh;
+}
+.sheet-grab {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  margin: 0 auto 4px;
+  flex: none;
+}
+.search-sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.search-sheet-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.search-sheet-icon {
+  position: absolute;
+  left: 12px;
+  display: flex;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+.search-sheet-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.search-sheet .search-sheet-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 40px 0 38px;
+  border-radius: 12px;
+  border: 1px solid var(--control-border, var(--border));
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* no iOS zoom on focus */
+}
+.search-sheet .search-sheet-input::-webkit-search-cancel-button {
+  display: none; /* our own x below, the same on every phone */
+}
+.search-sheet-clear {
+  position: absolute;
+  right: 4px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.search-sheet-clear svg {
+  width: 16px;
+  height: 16px;
+}
+.search-sheet-cancel {
+  flex: none;
+  min-height: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.search-sheet-results {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+.search-group-title,
+.more-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 4px 4px 2px;
+}
+.search-row,
+.more-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 12px;
+}
+.search-row.is-active {
+  background: var(--bg-card-pressed, var(--bg));
+}
+.search-row-main,
+.more-link {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.search-row-main:active,
+.more-link:active {
+  background: var(--bg-card-pressed, var(--bg));
+}
+.search-row-icon,
+.more-link-icon {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+}
+.search-row-icon svg,
+.more-link-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.search-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.search-row-label,
+.more-link-label {
+  overflow-wrap: anywhere; /* long Armenian names wrap at 320 px */
+  line-height: 1.25;
+}
+.search-row-hint {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+.search-row-trailing {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.search-note {
+  color: var(--text-dim);
+  padding: 12px 6px;
+  margin: 0;
+}
+
+/* ---------- More sheet ---------- */
+.more-overlay .more-sheet {
+  max-height: 88vh;
+  padding-top: 8px;
+}
+.more-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.more-sheet-head h2 {
+  margin: 0;
+  font-size: var(--fs-title, 1.15rem);
+}
+.more-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+.more-section {
+  display: flex;
+  flex-direction: column;
+}
+.more-section-settings {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.more-link.is-current {
+  color: var(--accent);
+  font-weight: 600;
+}
+.more-link-icon .nav-badge {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+}
+@media (min-width: 768px) {
+  /* a wide phone / tablet: two columns of screens */
+  .more-section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 8px;
+  }
+  .more-section-title {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---------- pin toggle (More sheet, search) ---------- */
+.pin-toggle {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: var(--text-tertiary, var(--text-dim));
+  cursor: pointer;
+}
+.pin-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+.pin-toggle.is-pinned {
+  color: var(--accent);
+}
+.pin-toggle:focus-visible,
+.search-row-main:focus-visible,
+.more-link:focus-visible,
+.pinned-chip:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------- pinned row on Home ---------- */
+.pinned-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pinned-row-items {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.pinned-chip {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 12px);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+.pinned-chip:active {
+  background: var(--bg-card-pressed, var(--bg-card));
+}
+.pinned-chip-label {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.pinned-chip-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- slowest screens (usage report) ---------- */
+.usage-speed {
+  margin-bottom: 16px;
+}
+.perf-table-wrap {
+  overflow-x: auto;
+}
+.perf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.perf-table th,
+.perf-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.perf-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.perf-route {
+  overflow-wrap: anywhere;
+}
+.perf-warn {
+  color: var(--warning);
+}
+.perf-bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+.perf-sub {
+  margin: 12px 0 4px;
+  font-size: 0.95rem;
+}
+
+/* a computer shows the pinned screens at the top of the sidebar: Home does not repeat them */
+@media (min-width: 1024px) {
+  #pinned-slot {
+    display: none !important;
+  }
+}

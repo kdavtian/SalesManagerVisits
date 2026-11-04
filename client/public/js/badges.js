@@ -331,15 +331,19 @@ export async function refreshNotificationBadge() {
 let planApprovalBadgeCount = 0;
 let editRequestBadgeCount = 0;
 
+/** Plans and change requests waiting for this person: the number on the menu button and on Settings in the More sheet. */
+export const adminReviewCount = () => planApprovalBadgeCount + editRequestBadgeCount;
+
 export function applyPlanApprovalBadge() {
-  const el = document.getElementById("topbar-menu-badge");
-  if (!el) return;
-  const total = planApprovalBadgeCount + editRequestBadgeCount;
-  if (total > 0) {
-    el.textContent = total > 99 ? "99+" : String(total);
-    el.hidden = false;
-  } else {
-    el.hidden = true;
+  const total = adminReviewCount();
+  for (const el of [document.getElementById("topbar-menu-badge"), ...document.querySelectorAll('[data-badge="admin-review"]')]) {
+    if (!el) continue;
+    if (total > 0) {
+      el.textContent = total > 99 ? "99+" : String(total);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
   }
 }
 
@@ -388,9 +392,10 @@ export function restoreCachedBadgeCounts() {
 // Not more often than every few seconds, however many triggers (focus, visibility, pageshow, online, a screen refresh)
 // fire together.
 let lastBadgeFetchAt = 0;
-export async function refreshAllBadgesFromServer() {
+// `force`: the start of the app and a fresh sign-in (one request for every count instead of one per badge; owner, 2026-11-04).
+export async function refreshAllBadgesFromServer({ force = false } = {}) {
   if (!state.user) return;
-  if (Date.now() - lastBadgeFetchAt < 4000) return;
+  if (!force && Date.now() - lastBadgeFetchAt < 4000) return;
   lastBadgeFetchAt = Date.now();
   let counts;
   try {
