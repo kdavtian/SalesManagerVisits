@@ -232,7 +232,7 @@ test("finishing the day needs the drawn signature; with it the day is signed, it
 test("the counted quantity is compared with the app's stock, not the Excel number", async () => {
   const day = "2030-04-22";
   const { rows: [p] } = await pool.query(
-    "INSERT INTO products (name, brand, unit, unit_price_amd, active, stock_qty, synced_at) VALUES ('ITEST stock app', 'ITEST', '4 L', 1000, false, 50, now() - interval '1 hour') RETURNING id"
+    "INSERT INTO products (name, brand, unit, unit_price_amd, active, stock_qty, synced_at) VALUES ('ITEST stock app', 'ITEST', '4 L', 1000, true, 50, now() - interval '1 hour') RETURNING id"
   );
   trackProduct(p.id);
   await pool.query("INSERT INTO stock_counts (month, product_id, planned_date) VALUES ($1, $2, $3)", [MONTH, p.id, day]);
