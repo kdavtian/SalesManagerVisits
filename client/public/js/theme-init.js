@@ -5,7 +5,11 @@
 // carving out an 'unsafe-inline' exception.
 try {
   var t = localStorage.getItem("fieldvisits_theme");
-  if (t === "dark") document.documentElement.dataset.theme = "dark";
+  if (t === "dark") {
+    document.documentElement.dataset.theme = "dark";
+    var tc = document.querySelector('meta[name="theme-color"]');
+    if (tc) tc.content = "#000000"; // the solid iPhone status bar in the dark theme's background (see theme.js paintStatusBar)
+  }
 } catch (e) {}
 try {
   var ts = localStorage.getItem("fieldvisits_text_size");
