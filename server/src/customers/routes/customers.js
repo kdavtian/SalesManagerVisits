@@ -33,6 +33,18 @@ export const customersRouter = Router();
 
 customersRouter.use(requireAuth);
 
+// A sales manager reaches ONLY the customers assigned to him (owner, 2026-11-04: "rep should see only customers assigned to him"), on every
+// /:id route -- the card, its documents, check-ins, orders, debt statement ... -- not just in the list. The offices every rep may check in at
+// (checkin_for_all) stay open. Someone else's customer answers 404, so its existence is not revealed.
+customersRouter.param("id", async (req, res, next, id) => {
+  if (seesAllActivity(req.user.role)) return next();
+  const n = Number(id);
+  if (!Number.isInteger(n)) return next();
+  const { rows: [c] } = await pool.query("SELECT assigned_manager_id, checkin_for_all FROM customers WHERE id = $1", [n]);
+  if (!c || c.checkin_for_all || c.assigned_manager_id === req.user.id) return next();
+  return res.status(404).json({ error: "Customer not found" });
+});
+
 // KF/CAS/CVO/PCO/OEM are channels Castrol serves through a route that
 // doesn't involve field visits (key accounts / distributor-managed / OEM
 // contracts), so these customers never need to show up as "overdue" or

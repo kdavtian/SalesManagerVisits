@@ -112,3 +112,22 @@ test("never visited and overdue are two separate statuses", async () => {
   assert.ok(Number(summary.totals.overdue) >= 1);
   assert.ok(Number(summary.totals.never_visited) >= 1);
 });
+
+// Owner, 2026-11-04: a rep sees only the customers assigned to him -- the list AND every customer route.
+test("a sales manager reaches only his own customers on every /:id route; management reaches all", async () => {
+  const other = await createUser("sales_manager");
+  const repCookie = await loginAs(rep.email);
+  const mine = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id });
+  const theirs = await createCustomer({ created_by: admin.id, assigned_manager_id: other.id });
+  const nobodys = await createCustomer({ created_by: admin.id });
+  const office = await createCustomer({ created_by: admin.id });
+  await pool.query("UPDATE customers SET checkin_for_all = true WHERE id = $1", [office.id]);
+  for (const path of ["", "/checkins", "/documents", "/photos", "/visit-schedule", "/recent-orders", "/payments-received", "/credit-status"]) {
+    assert.equal((await apiRequest(`/api/customers/${mine.id}${path}`, { cookie: repCookie })).status, 200, `own ${path}`);
+    if (path !== "/credit-status") assert.equal((await apiRequest(`/api/customers/${office.id}${path}`, { cookie: repCookie })).status, 200, `office ${path}`); // (credit-status has its own rule)
+    for (const c of [theirs, nobodys]) assert.equal((await apiRequest(`/api/customers/${c.id}${path}`, { cookie: repCookie })).status, 404, `not his ${path}`);
+    assert.equal((await apiRequest(`/api/customers/${theirs.id}${path}`, { cookie })).status, 200, `admin ${path}`);
+  }
+  const list = (await apiRequest("/api/customers", { cookie: repCookie })).data.map((c) => c.id);
+  assert.ok(list.includes(mine.id) && !list.includes(theirs.id) && !list.includes(nobodys.id));
+});
