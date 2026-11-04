@@ -237,7 +237,7 @@ test("the counted quantity is compared with the app's stock, not the Excel numbe
   );
   trackProduct(p.id);
   await pool.query("INSERT INTO stock_counts (month, product_id, planned_date) VALUES ($1, $2, $3)", [MONTH, p.id, day]);
-  const customer = await createCustomer();
+  const customer = await createCustomer({ created_by: users.admin.id });
   let n = 0;
   const order = async (status, qty, { deliveredAgo = null, inExcel = false, fromErp = false } = {}) => {
     const { rows: [o] } = await pool.query(

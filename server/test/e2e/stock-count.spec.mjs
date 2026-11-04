@@ -7,8 +7,9 @@ const TODAY = "(now() AT TIME ZONE 'Asia/Yerevan')::date";
 test("@smoke @iphone stock count: count blind, Enter moves on, finish the day", async ({ page, fixtures }) => {
   const wm = await fixtures.createUser("warehouse_manager");
   const tag = `SC${Date.now().toString(36)}`;
-  const a = await fixtures.createProduct({ name: `${tag} A Magnatec 5W-40` });
-  const b = await fixtures.createProduct({ name: `${tag} B Edge 0W-30` });
+  // the list follows the Products order (Edge before Magnatec, owner 2026-11-04): A comes first, Enter on A moves to B
+  const a = await fixtures.createProduct({ name: `${tag} A Edge 0W-30` });
+  const b = await fixtures.createProduct({ name: `${tag} B Magnatec 5W-40` });
   await pool.query("UPDATE products SET stock_qty = 12, brand = 'Castrol', unit = '4 L' WHERE id = ANY($1)", [[a.id, b.id]]);
   await pool.query(`DELETE FROM stock_count_days WHERE day = ${TODAY}`);
   await pool.query(
@@ -75,8 +76,9 @@ test("@smoke @iphone stock count: count blind, Enter moves on, finish the day", 
 test("@smoke @iphone stock count: counting without signal keeps the numbers and sends them when the signal is back", async ({ page, context, fixtures }) => {
   const wm = await fixtures.createUser("warehouse_manager");
   const tag = `SO${Date.now().toString(36)}`;
-  const a = await fixtures.createProduct({ name: `${tag} A Magnatec 5W-40` });
-  const b = await fixtures.createProduct({ name: `${tag} B Edge 0W-30` });
+  // the list follows the Products order (Edge before Magnatec, owner 2026-11-04): A comes first, Enter on A moves to B
+  const a = await fixtures.createProduct({ name: `${tag} A Edge 0W-30` });
+  const b = await fixtures.createProduct({ name: `${tag} B Magnatec 5W-40` });
   await pool.query("UPDATE products SET stock_qty = 7, brand = 'Castrol', unit = '4 L' WHERE id = ANY($1)", [[a.id, b.id]]);
   await pool.query(`DELETE FROM stock_count_days WHERE day = ${TODAY}`);
   await pool.query(

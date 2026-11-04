@@ -19,14 +19,16 @@ test("a short day is one page with the signature", async () => {
   const pdf = await buildStockCountPdf({ ...base, items: items(22), signaturePng: PNG });
   assert.ok(pdf.subarray(0, 4).toString() === "%PDF");
   assert.equal(pages(pdf), 1);
-  assert.equal(images(pdf), 1);
+  assert.ok(images(pdf) >= 1, "the signature is in the PDF");
 });
 
 test("a long list runs over several pages; the signature is embedded once and drawn on every page", async () => {
+  const short = await buildStockCountPdf({ ...base, items: items(3), signaturePng: PNG });
   const pdf = await buildStockCountPdf({ ...base, items: items(80), signaturePng: PNG, left_over: 3 });
   const n = pages(pdf);
   assert.ok(n >= 3, `pages: ${n}`);
-  assert.equal(images(pdf), 1, "one embedded signature image (placed on every page)");
+  // embedded once (a PNG with transparency is an image + its mask), placed on every page: as many image objects as a one-page report
+  assert.equal(images(pdf), images(short), "the signature is embedded once, not once per page");
 });
 
 test("an automatically closed day (no signature) and a broken signature still give a PDF", async () => {
