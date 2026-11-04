@@ -2,7 +2,7 @@
 // renderRoute takes app.js's shared state as `ctx` (the ctx object at the top of app.js); render() in app.js calls it.
 import { allTextsLoaded, getLang, loadAllTexts } from "../i18n.js";
 import { loadStylesFor, stylesReadyFor } from "../styles.js";
-import { dropTabTrails, noteScreen } from "./tabs.js";
+import { dropTabTrails, noteScreen, settleTabSwap } from "./tabs.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
@@ -16,7 +16,9 @@ import { startDriverArrival } from "../driverArrival.js";
 import { setOfficeNavigator } from "../officeDetect.js";
 import { startUsageTracking } from "../usageTracker.js";
 import { flushQueue } from "../offlineQueue.js";
-import { refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshOrderBadge, refreshPaymentBadge, refreshPlanApprovalBadge, refreshUnrecordedBadge, refreshWarehouseBadge } from "../badges.js";
+import { wasTraverse } from "../kit/navType.js";
+import { markScreenEnter } from "../screenMotion.js";
+import { refreshAllBadgesFromServer, refreshNotificationBadge, refreshOpsTabBadges } from "../badges.js";
 
 const WAIT_LIMIT_MS = 4000;
 function updateReloadAllowed() {
@@ -58,6 +60,7 @@ export async function renderRoute(ctx) {
     });
   };
   step("start");
+  settleTabSwap();
   document.documentElement.lang = getLang();
   // Any open sheet/dialog overlay is appended straight to document.body,
   // outside the routed view container render() replaces below -- so
@@ -99,14 +102,9 @@ export async function renderRoute(ctx) {
       // other point that needs its own retry.
       flushQueue();
       ctx.render();
-      refreshOrderBadge();
-      refreshPaymentBadge();
-      refreshUnrecordedBadge();
-      refreshWarehouseBadge();
-      refreshAccountingBadge();
-      refreshDeliveryBadge();
-      refreshNotificationBadge();
-      refreshPlanApprovalBadge();
+      // every count in one request (GET /api/badges)
+      refreshAllBadgesFromServer({ force: true });
+      if (state.user?.role === "warehouse_manager") refreshOpsTabBadges();
     });
     return;
   }
@@ -147,7 +145,9 @@ export async function renderRoute(ctx) {
   noteScreen(ctx, hash);
   // A tap in the app (navigate()) or Back / an edge swipe: read at once, before the waits for texts and styles below -- the flag
   // clears itself after 0.8 s, and on a slow phone a first visit to an area can wait longer than that.
-  const isHistory = !ctx.programmaticNav;
+  // Back / Forward: the 0.8 s "the app navigated" flag, corrected by the browser when it has the Navigation API (kit/navType.js): a Back
+  // pressed within 0.8 s of a tap used to count as a tap. A typed address keeps counting as before (not the app's own navigation).
+  const isHistory = wasTraverse() === true || !ctx.programmaticNav;
   ctx.programmaticNav = false;
   // A new version is waiting and the person chose "Later": the screens already loaded are the old ones, and a screen opened for the first
   // time now would come from the new files and clash with them ("This screen could not load", e.g. the customer card). Moving to another
@@ -287,6 +287,8 @@ export async function renderRoute(ctx) {
   // sitting in the back-cache.
   pruneParkedSheet(ctx.backStack.map((entry) => entry.hash));
   ctx.lastRenderedHash = hash;
+  // a screen opened by a tap fades in as it is drawn (screenMotion.js); not on Back / Forward
+  markScreenEnter(ctx.app, { traverse: isHistory });
 
   const [path, queryString] = hash.split("?");
   if (path !== ctx.currentPath) {

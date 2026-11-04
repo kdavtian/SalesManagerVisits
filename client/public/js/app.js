@@ -1,7 +1,7 @@
 import { api } from "./api.js";
 import { forgetView, restoreScroll, saveView, viewToReopen } from "./viewMemory.js";
 import { APP_VERSION } from "./version.js";
-import { refreshOrderBadge, refreshPaymentBadge, refreshUnrecordedBadge, refreshWarehouseBadge, refreshAccountingBadge, refreshDeliveryBadge, refreshNotificationBadge, refreshPlanApprovalBadge, refreshEditRequestBadge, refreshAllBadgesFromServer, restoreCachedBadgeCounts } from "./badges.js";
+import { refreshAllBadgesFromServer, refreshOpsTabBadges, restoreCachedBadgeCounts } from "./badges.js";
 import { state, setUser, loadCachedUser } from "./state.js";
 import { t } from "./i18n.js";
 import { SLOW_MS, showSlowBar, hideSlowBar, cleanReload, noteLoadFailure } from "./shell/slowRoute.js";
@@ -132,6 +132,9 @@ import * as shellRoutes from "./shell/routes.js";
 import { markFirstScreenShown } from "./launchTiming.js";
 import { loadOtherStylesSoon } from "./styles.js";
 import { dropTabTrails, switchTab } from "./shell/tabs.js";
+import { afterSheetStep, installSheetNavigation } from "./sheetNav.js";
+import { loadPins } from "./pins.js";
+import { installNavTiming, screenReady } from "./kit/navTiming.js";
 
 const app = document.getElementById("app");
 const navBar = document.getElementById("nav-bar");
@@ -162,6 +165,9 @@ const baseBodyClassName = document.body.className;
 // part of this element, so a tap there counts too whenever iOS delivers it
 // to the page.
 installStatusBarTap();
+// Back closes the sheet on top first; a bottom sheet can be pulled down to close (sheetNav.js, the shared KAD kit). Installed before any
+// other popstate listener, since it must see Back first.
+installSheetNavigation();
 // Esc closes the top-most sheet or docked panel, wherever the focus is (docs/desktop-roadmap.md, step 4). A sheet's own Esc
 // (activateDialog), a menu or the top-bar search handle it first and mark the event, so one press closes one thing.
 document.addEventListener("keydown", (e) => {
@@ -311,6 +317,13 @@ window.addEventListener("app-rerender", () => {
   if (state.user) render();
 });
 
+// Pinned screens changed (pins.js): the desktop sidebar's pinned group is drawn again.
+window.addEventListener("pins-changed", () => {
+  if (!state.user) return;
+  lastNavSignature = null;
+  renderNav();
+});
+
 window.addEventListener("app-preferences-changed", () => {
   backStack.forEach(disposeBackEntry);
   backStack = [];
@@ -436,6 +449,9 @@ let hasNavigatedInApp = false;
 // restored screen showed up as a "ghost" of the card just closed (owner, 2026-10-26). The restored screen simply appears, at once.
 
 function navigate(hash) {
+  afterSheetStep(() => navigateNow(hash));
+}
+function navigateNow(hash) {
   if (location.hash === hash) {
     // Already exactly on this route (tapping the same active nav icon
     // again, e.g. Customers while already at the Customers list root) --
@@ -463,14 +479,14 @@ function navigate(hash) {
 
 // Leaving a flow that must not be reachable again with Back (relocating a customer, adding one): the flow's own
 // history entry is REPLACED by the screen it ends on, so Back skips it instead of reopening "change location".
-navigate.replace = (hash) => {
+navigate.replace = (hash) => afterSheetStep(() => {
   if (location.hash === hash) return;
   hasNavigatedInApp = true;
   programmaticNav = true;
   setTimeout(() => (programmaticNav = false), 800);
   history.replaceState(null, "", hash);
   window.dispatchEvent(new HashChangeEvent("hashchange"));
-};
+});
 // The screen on display stays mounted but its route changes (a finished add-customer flow is now just "the map
 // focused on the new customer"): rewrite the address bar and the router's idea of the current hash, no re-render.
 navigate.rewrite = (hash) => {
@@ -486,13 +502,14 @@ navigate.rewrite = (hash) => {
 // Falls back to fallbackHash only when there's genuinely nothing in this
 // session's history to go back to (e.g. the detail page was the very first
 // thing this tab loaded, from a deep link or a push notification).
-navigate.goBack = (fallbackHash) => {
-  if (hasNavigatedInApp) {
-    history.back();
-  } else {
-    navigate(fallbackHash);
-  }
-};
+navigate.goBack = (fallbackHash) =>
+  afterSheetStep(() => {
+    if (hasNavigatedInApp) {
+      history.back();
+    } else {
+      navigateNow(fallbackHash);
+    }
+  });
 
 async function doLogout() {
   forgetView();
@@ -570,6 +587,7 @@ async function render() {
   try {
     await renderRoute();
     if (seq === renderSeq) {
+      screenReady(location.hash); // tap-to-screen time of this screen (kit/navTiming.js)
       hideSlowBar();
       document.documentElement.dataset.fvBooted = "1"; // bootGate.js: the app did start
       restoreScroll(app, ctx.lastRenderedHash || location.hash); // a reopened screen goes back to where it was scrolled (viewMemory.js)
@@ -701,8 +719,18 @@ document.addEventListener("input", (event) => {
   }
 });
 
+// Tap-to-screen timings from this phone (owner, 2026-11-04: "measure every tap"; kit/navTiming.js): sent once a minute and when the app
+// goes to the background; the admin sees the slowest screens in the usage report. Only the screen's kind, the time, the role and the
+// kind of device are sent.
+const deviceClass = () =>
+  window.matchMedia?.("(max-width: 767px)").matches ? "phone" : window.matchMedia?.("(max-width: 1199px)").matches ? "tablet" : "desktop";
+function startNavTiming() {
+  installNavTiming({ send: (batch) => state.user && api.postNavTimings(batch, deviceClass()), currentRoute: () => location.hash });
+}
+
 async function init() {
   installTouchPrefetch();
+  startNavTiming();
   // Optimistic paint from whatever /api/me last returned successfully, so a
   // slow/high-latency network doesn't leave the screen blank through the
   // two sequential round trips below (lockdown status, then the real
@@ -807,23 +835,14 @@ async function init() {
         renderNav();
       })
       .catch(() => {});
+    loadPins(); // pinned screens (Home's top row, the sidebar), from the server
   }
-  refreshOrderBadge();
-  refreshPaymentBadge();
-  refreshUnrecordedBadge();
-  refreshWarehouseBadge();
-  refreshAccountingBadge();
-  refreshDeliveryBadge();
-  refreshNotificationBadge();
-  refreshPlanApprovalBadge();
-  refreshEditRequestBadge();
+  // Every count in ONE request (GET /api/badges; owner, 2026-11-04: it used to be nine separate requests at start, the slowest part of a
+  // cold start on mobile data). The single-purpose refresh*Badge() calls stay for the moment right after an action that changes one count.
+  refreshAllBadgesFromServer({ force: true });
+  if (state.user?.role === "warehouse_manager") refreshOpsTabBadges();
   startVaghinakWatch();
-  // The refresh*Badge() calls just above are the initial, right-at-
-  // boot values (each its own single-purpose endpoint, so the very first
-  // paint reflects whichever ones this role can even see without waiting
-  // on the others). The recurring 60s poll after that uses the combined
-  // /badges endpoint instead -- one request updating all the counts,
-  // rather than separate fetches landing back to back every minute.
+  // The recurring 60s poll uses the same combined /badges endpoint.
   // Not while the app is in the background (no one sees the numbers, and it costs battery and data); the badges are
   // refreshed the moment the app comes back to the front.
   setInterval(() => {
