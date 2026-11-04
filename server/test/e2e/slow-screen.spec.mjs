@@ -13,7 +13,8 @@ test("@smoke a screen that is slow to open shows Reload / Clean reload and repor
   });
   await loginViaUi(page, admin.email);
   const report = page.waitForRequest((r) => r.url().endsWith("/api/client-errors") && r.method() === "POST" && r.postDataJSON()?.kind === "slow_screen", { timeout: 15000 });
-  await page.locator("#topbar-menu-btn").click();
+  await page.locator("#topbar-menu-btn").click(); // the More sheet; Settings is its last row (1.516.0)
+  await page.locator('.more-sheet [data-hash="#/settings"]').click();
   await expect(page.locator(".slow-route-bar")).toBeVisible({ timeout: 9000 });
   await expect(page.locator("#slow-route-clean")).toBeVisible();
   expect((await report).postDataJSON().message).toMatch(/#\/settings .*step: code/);
