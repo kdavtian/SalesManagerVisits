@@ -22,7 +22,7 @@ test.after(async () => {
 
 test("only an admin can make a place an office; a rep's edit request cannot", async () => {
   const asRep = await apiRequest(`/api/customers/${office.id}`, { method: "PATCH", cookie, body: { checkin_for_all: true } });
-  assert.equal(asRep.status, 403);
+  assert.equal(asRep.status, 404); // not his customer (and not an office yet): a rep cannot even reach it
   const bad = await apiRequest(`/api/customers/${office.id}`, { method: "PATCH", cookie: adminCookie, body: { checkin_for_all: "yes" } });
   assert.equal(bad.status, 400);
   const ok = await apiRequest(`/api/customers/${office.id}`, { method: "PATCH", cookie: adminCookie, body: { checkin_for_all: true } });

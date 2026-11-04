@@ -32,7 +32,7 @@ test("a sales manager sets the level + reasons of their own customer; validation
   assert.equal((await put("rep", customer.id, { level: 4, reasons: [] })).status, 400, "a reason is required");
   assert.equal((await put("rep", customer.id, { level: 4, reasons: ["nope"] })).status, 400);
   assert.equal((await put("rep", customer.id, { level: 4, reasons: ["other"] })).status, 400, "Other needs an explanation");
-  assert.equal((await put("rep2", customer.id, { level: 4, reasons: ["high_potential"] })).status, 403, "someone else's customer");
+  assert.equal((await put("rep2", customer.id, { level: 4, reasons: ["high_potential"] })).status, 404, "someone else's customer");
   assert.equal((await put("accountant", customer.id, { level: 4, reasons: ["high_potential"] })).status, 403);
   assert.equal((await put("rep", 999999999, { level: 4, reasons: ["high_potential"] })).status, 404);
 
@@ -52,7 +52,7 @@ test("a sales manager sets the level + reasons of their own customer; validation
   assert.equal(hist[1].note, "met the owner");
   assert.equal(hist[1].reason_other, "asked for the price list");
   assert.ok(hist[0].changed_by_name);
-  assert.equal((await apiRequest(`/api/customers/${customer.id}/potential-history`, { cookie: cookies.rep2 })).status, 403);
+  assert.equal((await apiRequest(`/api/customers/${customer.id}/potential-history`, { cookie: cookies.rep2 })).status, 404); // not his customer
   assert.equal((await apiRequest(`/api/customers/${customer.id}/potential-history`, { cookie: cookies.rep })).status, 200);
 });
 
