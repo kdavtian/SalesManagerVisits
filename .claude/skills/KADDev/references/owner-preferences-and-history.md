@@ -421,3 +421,9 @@ Owner's rules: a Staff menu for people + payroll that replaces the Excel sheets 
   needs `max-width: none !important`.
 - **Task subordination decided (owner, 2026-10-28, "I agree"):** tasks follow Staff "reports to" (direct + indirect); admin and CEO
   task anyone; the accountant's requests still go to the sales director; no Staff record = the old role rule until the person is added.
+
+## 2026-11-04 (1.514.0): tab bar floated 62 pt above the bottom on iPhone -> solid status bar + floating tab bar
+- Owner (screenshots, iPhone 16 Pro Max): the bottom menu sat far too high compared with KAD OS and the KAD website; "if it fits, make it floating like list.am".
+- Cause: iOS 26 bug (WebKit 301108) -- an installed web app with `viewport-fit=cover` AND `apple-mobile-web-app-status-bar-style=black-translucent` gets a screen shorter than the phone by the status-bar height (956 -> 894 pt on a 16 Pro Max), so every `position:fixed; bottom:0` thing (tab bar, sheets, toasts) floats that much too high. Chromium cannot show it (it was flush there). KAD OS uses `default` and is flush on the same phone.
+- Fix: `default` status bar + `<meta name="theme-color">` that follows the theme (`theme.js paintStatusBar`, `theme-init.js`); the tab bar is a floating rounded bar (`--nav-h` 58px, `--nav-float` = safe-bottom - 6px, min 10px; 12px side margin, 6px under 380px); everything that sits "just above the tab bar" uses `--nav-reserve` (desktop keeps the old 48px value). The Map circle rises out of the bar (`margin-top: -16px`) so its label fits; `.nav-item { min-width: 0 }` lets long Armenian labels end in "...".
+- If an installed iPhone app still shows the old status bar after the update: iOS may keep the status-bar style from install time -> remove the home-screen icon and add it again (one time).

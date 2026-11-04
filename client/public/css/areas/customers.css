@@ -93,7 +93,7 @@
   left: 16px;
   /* Mirrors .fab's bottom offset on the opposite corner, clearing the
      opaque fixed nav bar the same way. */
-  bottom: calc(16px + 48px + var(--nav-safe-bottom));
+  bottom: calc(16px + var(--nav-reserve));
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1103,7 +1103,7 @@
   /* This panel is bottom:0 underneath the opaque, position:fixed nav bar
      (see .fab's own note on the same issue) -- without matching bottom
      padding here, the last row(s) scroll in behind it instead of above. */
-  padding: 4px 0 calc(4px + 48px + var(--nav-safe-bottom));
+  padding: 4px 0 calc(4px + var(--nav-reserve));
 }
 .stop-row {
   display: flex;
@@ -1159,7 +1159,7 @@
      the element actually sitting against the panel's bottom:0 edge, which
      is underneath the opaque, position:fixed nav bar -- same issue and fix
      as .fab's own note on this. */
-  padding: 12px 12px calc(12px + 48px + var(--nav-safe-bottom));
+  padding: 12px 12px calc(12px + var(--nav-reserve));
   cursor: pointer;
 }
 /* The Add Customer / relocate location picker -- deliberately NOT a
@@ -1190,7 +1190,7 @@
   border-top: 1px solid var(--border);
   border-radius: 16px 16px 0 0;
   box-shadow: var(--shadow-elevated, 0 -4px 20px rgba(0, 0, 0, 0.2));
-  padding: 14px 16px calc(14px + 48px + var(--nav-safe-bottom));
+  padding: 14px 16px calc(14px + var(--nav-reserve));
 }
 .location-picker-panel h2 {
   margin: 0;
@@ -2173,7 +2173,7 @@
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(60px + var(--nav-safe-bottom));
+  bottom: calc(12px + var(--nav-reserve));
   max-width: 560px;
   margin: 0 auto;
   z-index: 30;

@@ -40,6 +40,13 @@
      look detached from the bottom edge. Keep a compact protected inset for
      the home indicator while avoiding a large empty band below the labels. */
   --nav-safe-bottom: min(var(--safe-bottom), 14px);
+  /* The floating tab bar (owner 2026-11-04, like list.am): a rounded bar --nav-h tall, --nav-float above the bottom edge (just over the
+     iPhone's home indicator), and --nav-reserve = everything a screen keeps clear at the bottom for it (the bar, its gap, a little air).
+     Every element that sits "just above the tab bar" uses --nav-reserve. */
+  --nav-h: 58px;
+  --nav-float: max(10px, calc(var(--safe-bottom) - 6px));
+  --nav-reserve: calc(var(--nav-h) + var(--nav-float) + 6px);
+  --nav-side: 12px;
   /* One bottom inset for EVERY bottom sheet (content, filter sheets, action
      bars): buttons always sit the same small distance above the screen edge,
      using the compact inset (like the tab bar) instead of the full 34px home-
@@ -101,6 +108,11 @@
      don't inherit a parent's width constraint. */
   --app-max-width: 480px;
   --skeleton: rgba(17, 19, 24, 0.07);
+}
+
+/* narrow phones: the floating tab bar keeps a smaller side margin so five tabs still fit */
+@media (max-width: 380px) {
+  :root { --nav-side: 6px; }
 }
 
 :root[data-theme="dark"] {
@@ -547,7 +559,6 @@ a {
   background: var(--bg-elevated);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
-  border-top: 0.5px solid var(--border);
   flex-shrink: 0;
   /* Fixed (not sticky/relative) and pinned to the real viewport edge --
      nav-bar is a sibling of #app, not one of its scrolling descendants, so
@@ -570,14 +581,17 @@ a {
      exceeds the viewport there. */
   left: 50%;
   right: auto;
-  width: 100%;
-  max-width: var(--app-max-width);
-  bottom: 0;
+  width: calc(100% - 2 * var(--nav-side));
+  max-width: calc(var(--app-max-width) - 2 * var(--nav-side));
+  bottom: var(--nav-float);
+  border: 0.5px solid var(--border);
+  border-radius: calc(var(--nav-h) / 2);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.08);
   /* Must sit above the isolated app/map stacking context. Leaflet uses
      internal z-index values up to 1000, but those can no longer escape
      .app-main and cover this navigation surface. */
   z-index: 1200;
-  height: calc(48px + var(--nav-safe-bottom));
+  height: var(--nav-h);
   /* iOS WebKit has a known compositing bug where a position:fixed element
      combined with backdrop-filter fails to repaint after a sibling's
      content changes underneath it (e.g. the map mounting) -- it stays in
@@ -602,6 +616,7 @@ a {
 
 .nav-item {
   flex: 1;
+  min-width: 0; /* a long label (Armenian) shortens with "..." instead of pushing into the next tab */
   background: none;
   border: none;
   color: var(--text-dim);
@@ -707,7 +722,8 @@ a {
   width: 50px;
   height: 50px;
   flex-shrink: 0;
-  margin-top: -4px;
+  /* rises out of the floating bar so its label still fits inside it */
+  margin-top: -16px;
   border-radius: 50%;
   /* Dim/inactive by default, same as every other nav item -- this raised
      circle used to be accent-colored unconditionally, which is the actual
@@ -973,7 +989,7 @@ a {
      ignores this (its .map-view is absolutely inset:0 against #app's
      padding box) and deliberately extends full-bleed under the translucent
      nav bar instead. */
-  padding-bottom: calc(48px + var(--nav-safe-bottom));
+  padding-bottom: var(--nav-reserve);
 }
 
 /* Buttons */
@@ -2246,7 +2262,7 @@ label.checkbox-row input[type="checkbox"] {
      in this container's box, so a plain "safe-bottom" offset here sits
      the FAB underneath/behind the nav bar's 48px + safe-area height
      instead of above it. Clear the actual nav bar height explicitly. */
-  bottom: calc(16px + 48px + var(--nav-safe-bottom));
+  bottom: calc(16px + var(--nav-reserve));
   width: 54px;
   height: 54px;
   border-radius: 50%;
@@ -2434,7 +2450,7 @@ label.checkbox-row input[type="checkbox"] {
   left: 0;
   right: 0;
   /* The map screen is its own stacking context, so the sheet cannot rise over the tab bar: it sits right above it. */
-  bottom: calc(48px + var(--nav-safe-bottom, 0px));
+  bottom: var(--nav-reserve);
   z-index: 1250;
   width: auto;
   max-width: 560px;
@@ -5581,7 +5597,7 @@ button.list-row-icon {
 .order-cart-bar {
   position: fixed;
   left: 50%;
-  bottom: calc(48px + var(--nav-safe-bottom));
+  bottom: var(--nav-reserve);
   width: 100%;
   max-width: var(--app-max-width);
   transform: translate3d(-50%, 0, 0);
@@ -6307,6 +6323,9 @@ form select,
 }
 
 @media (min-width: 1024px) {
+  /* the side menu replaces the tab bar: keep the room screens kept before the tab bar floated */
+  :root { --nav-reserve: calc(48px + var(--nav-safe-bottom)); }
+
   body {
     max-width: none;
     margin: 0;
@@ -8298,7 +8317,7 @@ form select,
 .app-toast {
   position: fixed;
   left: 50%;
-  bottom: calc(110px + var(--nav-safe-bottom, 0px));
+  bottom: calc(62px + var(--nav-reserve));
   transform: translateX(-50%);
   z-index: 3000;
   display: flex;
@@ -9245,7 +9264,7 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(58px + var(--nav-safe-bottom));
+  bottom: calc(10px + var(--nav-reserve));
   width: calc(100% - 24px);
   max-width: calc(var(--app-max-width) - 24px);
   z-index: 1100;

@@ -141,7 +141,7 @@
 .ak-empty-title { margin: 0 0 2px; color: var(--text-dim); font-size: 0.9rem; }
 .ak-suggest { min-height: 44px; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: 14px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 0.92rem; text-align: left; cursor: pointer; }
 .ak-suggest:active { background: var(--bg-card-pressed); }
-.ak-composer { position: sticky; bottom: calc(48px + var(--nav-safe-bottom)); z-index: 2; display: flex; align-items: flex-end; gap: 8px; padding: 8px 0; background: var(--bg); }
+.ak-composer { position: sticky; bottom: var(--nav-reserve); z-index: 2; display: flex; align-items: flex-end; gap: 8px; padding: 8px 0; background: var(--bg); }
 .ak-composer textarea { flex: 1; min-height: 44px; max-height: 132px; padding: 10px 14px; border: 1px solid var(--control-border); border-radius: 22px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 16px; line-height: 1.35; resize: none; }
 .ak-send { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--accent-fill); color: var(--on-accent); cursor: pointer; }
 .ak-send svg { width: 20px; height: 20px; }
