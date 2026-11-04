@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "files": {
+    "README.md": "0bba2aff1873b44845ed963d870cd2e47eae53eec99eb91ff1bad3cf9aa0c9c2",
+    "navTiming.js": "1601dbd9be3d187af53c74c943d86b0c537212fe3422a290a084586c207b90b3",
+    "navType.js": "79d3ebe0135a4f456750400fb51501f2b22982d207cf11c1ea5d477ce49beb75",
+    "palette.js": "68a4e0a696a06222048df4c7fef0186be910bb0dbd1f064c40421a2698820b81",
+    "sheetBack.js": "a38742016868c7efe3ec656224bdf296327eb7e94693bf97c97868ca1e922c83",
+    "sheetSwipe.js": "b32adb702d63160832539f1149121d948df00531136a1f81d20052e6d57b65fb",
+    "transition.js": "80252a1659295aaef8fab6ea2f5b4ae9b8264dcda28144cdb3e3dc960db0bfe4",
+    "version.js": "ed94445017a99e30e83d6659a137a6d43f4842fe868b4fa2da63de0f33eb25d9"
+  }
+}
