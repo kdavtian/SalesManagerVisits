@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { dayList, saveCount, clearCount, closeDay, monthReport, savePdf } from "../stockCount.js";
 import { stockCountUpload, stockCountDirPath } from "../../shared/upload.js";
+import { PDF_LAYOUT } from "../stockCountPdf.js";
 
 export const stockCountRouter = Router();
 stockCountRouter.use(requireAuth);
@@ -72,7 +73,8 @@ stockCountRouter.get("/day/:day/pdf", async (req, res) => {
   const { rows: [d] } = await pool.query("SELECT pdf_path FROM stock_count_days WHERE day = $1", [day]);
   if (!d) return res.status(404).json({ error: "This day is not finished yet" });
   let file = d.pdf_path;
-  if (!file || !fs.existsSync(path.join(stockCountDirPath, path.basename(file)))) file = await savePdf(pool, day);
+  // missing, or saved with an older layout (PDF_LAYOUT in the file name): made again from the same saved numbers and signature
+  if (!file || !path.basename(file).includes(`-${PDF_LAYOUT}-`) || !fs.existsSync(path.join(stockCountDirPath, path.basename(file)))) file = await savePdf(pool, day);
   if (!file) return res.status(404).json({ error: "No report" });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="Stock-count-${day}.pdf"`);

@@ -4,7 +4,7 @@
 // Isolated (test/isolated-tests.txt): the plan covers EVERY active product, so other tests' products must not appear mid-way.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs, trackProduct } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackProduct, trackOrder } from "./helpers.js";
 import fs from "node:fs";
 import { pool } from "../../src/db/pool.js";
 import { spreadOverDays, workingDaysOfMonth, ensurePlan, dayList, saveCount, clearCount, closeDay, closeOpenDays, monthReport } from "../../src/orders/stockCount.js";
@@ -223,4 +223,56 @@ test("finishing the day needs the drawn signature; with it the day is signed, it
   assert.ok(tasks.some((t) => t.assignee_id === users.accountant.id), "the accountant has the differences as a task");
   const docs = await apiRequest("/api/stock-count/documents", { cookie: cookies.accountant });
   assert.ok(docs.data.some((d) => d.day === day.day && d.signed === true && d.has_attachment === true));
+});
+
+// Owner, 2026-11-04: the count is compared with the stock the APP knows (appStock.js), not the Excel number -- sales not in Excel yet are
+// already off the shelf. Excel 50: packed 7, delivered 4 (not found in Excel yet) and delivered 6 BEFORE the last sync but still not in
+// Excel are subtracted; a good return received and not in Excel yet (2) is added back. Unchanged: a confirmed order (still on the shelf),
+// a delivery Excel already holds (matched), one the ERP sync itself delivered, an unmatched delivery older than the matching window, a
+// damaged return, and a return already recorded in Excel. 50 - 7 - 4 - 6 + 2 = 35.
+test("the counted quantity is compared with the app's stock, not the Excel number", async () => {
+  const day = "2030-04-22";
+  const { rows: [p] } = await pool.query(
+    "INSERT INTO products (name, brand, unit, unit_price_amd, active, stock_qty, synced_at) VALUES ('ITEST stock app', 'ITEST', '4 L', 1000, true, 50, now() - interval '1 hour') RETURNING id"
+  );
+  trackProduct(p.id);
+  await pool.query("INSERT INTO stock_counts (month, product_id, planned_date) VALUES ($1, $2, $3)", [MONTH, p.id, day]);
+  const customer = await createCustomer({ created_by: users.admin.id });
+  let n = 0;
+  const order = async (status, qty, { deliveredAgo = null, inExcel = false, fromErp = false } = {}) => {
+    const { rows: [o] } = await pool.query(
+      "INSERT INTO orders (customer_id, user_id, status, total_amd, delivered_from_erp, erp_matched_order_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+      [customer.id, users.admin.id, status, qty * 1000, fromErp, inExcel || fromErp ? `ITEST-SC-${p.id}-${++n}` : null]
+    );
+    trackOrder(o.id);
+    await pool.query("INSERT INTO order_items (order_id, product_id, product_name, unit_price_amd, quantity, line_total_amd) VALUES ($1, $2, 'ITEST stock app', 1000, $3, $4)", [o.id, p.id, qty, qty * 1000]);
+    if (deliveredAgo) await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'packed_stock_out', 'delivered', now() - $2::interval)", [o.id, deliveredAgo]);
+    return o.id;
+  };
+  await order("packed_stock_out", 7);
+  await order("delivered", 4, { deliveredAgo: "10 minutes" });
+  await order("delivered", 6, { deliveredAgo: "3 hours" });
+  await order("confirmed", 5);
+  await order("delivered", 8, { deliveredAgo: "10 minutes", inExcel: true });
+  await order("delivered", 9, { deliveredAgo: "10 minutes", fromErp: true });
+  await order("delivered", 11, { deliveredAgo: "20 days" });
+  const returned = await order("delivered", 6, { deliveredAgo: "5 days", inExcel: true });
+  const ret = async (qty, condition, recorded) => {
+    const { rows: [r] } = await pool.query(
+      `INSERT INTO order_returns (order_id, customer_id, kind, status, reason, order_status_at_request, received_at, recorded_at, recorded_via)
+       VALUES ($1, $2, 'return', 'done', 'other', 'delivered', now(), $3, $4) RETURNING id`,
+      [returned, customer.id, recorded ? new Date(Date.now() - 2 * 3600 * 1000) : null, recorded ? "erp" : null]
+    );
+    await pool.query("INSERT INTO order_return_items (return_id, product_id, product_name, quantity, condition) VALUES ($1, $2, 'ITEST stock app', $3, $4)", [r.id, p.id, qty, condition]);
+  };
+  await ret(2, "good", false);
+  await ret(1, "damaged", false);
+  await ret(3, "good", true);
+
+  const shown = (await dayList(pool, day, { showExpected: true })).items.find((i) => i.product_id === p.id);
+  assert.equal(shown?.expected_qty, 35, "management sees the app's stock before the count");
+  const saved = await saveCount(pool, users.warehouse_manager, { productId: p.id, qty: 35 }, day);
+  assert.equal(saved.item.expected_qty, 35);
+  assert.equal(saved.item.counted_qty - saved.item.expected_qty, 0, "no difference: the shelf matches the app");
+  await clearCount(pool, p.id, day);
 });

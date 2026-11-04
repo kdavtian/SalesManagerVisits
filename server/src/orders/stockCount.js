@@ -1,11 +1,12 @@
 // Stock count (Գույքագրում), owner 2026-10-30: "the system should divide the products into working days so that the warehouse manager
 // counts the stock every single day; have planning for him and he should complete plans daily". Decided with the owner:
 //  - every ACTIVE product is counted once a month; the month's products are split evenly over its working days (Mon-Sat, company
-//    holidays skipped), in shelf order (brand, family, name, size), so a day's list is one walk along the shelves;
+//    holidays skipped), in the Products order (productSort.js: Edge, Magnatec, GTX, ...), so a day's list is one walk along the shelves;
 //  - a product not counted on its day moves to the next working day, and that day is "not finished";
-//  - a counted quantity that differs from the Excel stock is reported to the CEO / admin (and in Vaghinak's evening digest) and becomes
+//  - a counted quantity that differs from the stock the app knows (appStock.js: the Excel stock minus what left the warehouse since the
+//    last sync, owner 2026-11-04) is reported to the CEO / admin (and in Vaghinak's evening digest) and becomes
 //    ONE task for the accountant per day, one checklist line per product;
-//  - the counter counts blind: he does not see the Excel number before the day is closed (seesStockCountExpected).
+//  - the counter counts blind: he does not see the expected number before the day is closed (seesStockCountExpected).
 // A day is closed by "Finish the day" or automatically in the evening (closeOpenDays, from the job scheduler).
 // The very first plan (the month the feature is deployed in) leaves out the products whose day has already passed: they are counted
 // from the next month on, so the daily amount stays the same instead of piling the whole month into its last days.
@@ -17,7 +18,9 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import { stockCountDirPath } from "../shared/upload.js";
-import { buildStockCountPdf, readIfExists } from "./stockCountPdf.js";
+import { buildStockCountPdf, readIfExists, PDF_LAYOUT } from "./stockCountPdf.js";
+import { APP_STOCK_SQL } from "./appStock.js";
+import { compareProducts } from "../../../client/public/js/productSort.js";
 
 export const AUTO_CLOSE_MIN = 20 * 60; // 20:00 Yerevan: an unclosed day is closed automatically
 const PLAN_RECHECK_MS = 10 * 60 * 1000; // new / reactivated products are added to the plan at most every 10 minutes
@@ -63,12 +66,13 @@ export async function ensurePlan(db, today = yerevanToday(), { force = false } =
   if (!force && last && Date.now() - last < PLAN_RECHECK_MS) return 0;
   planChecked.set(month, Date.now());
   const { rows: missing } = await db.query(
-    `SELECT p.id FROM products p
+    `SELECT p.id, p.name, p.brand, p.family, p.unit FROM products p
      WHERE p.active AND NOT EXISTS (SELECT 1 FROM stock_counts s WHERE s.month = $1 AND s.product_id = p.id)
-     ORDER BY lower(COALESCE(p.brand, '')), lower(COALESCE(p.family, '')), lower(p.name), lower(COALESCE(p.unit, '')), p.id`,
+     ORDER BY p.id`,
     [month]
   );
   if (!missing.length) return 0;
+  missing.sort((a, b) => compareProducts(a, b) || a.id - b.id); // the Products / pricelist order (Edge, Magnatec, GTX, ...): one walk along the shelves
   const days = await workingDaysOfMonth(db, month);
   if (!days.length) return 0;
   const { rows: [state] } = await db.query(
@@ -135,21 +139,23 @@ export async function dayNumbers(db, day) {
 /** The day's report as a PDF file (stock-count/<uuid>.pdf), its path kept on the day. Also used to make a missing one again. */
 export async function savePdf(db, day) {
   const { rows: [d] } = await db.query(
-    `SELECT s.*, to_char(s.day, 'YYYY-MM-DD') AS day_text, COALESCE(u.name_hy, u.name) AS counter_name
+    `SELECT s.*, to_char(s.day, 'YYYY-MM-DD') AS day_text, COALESCE(NULLIF(btrim(u.name_hy), ''), u.name) AS counter_name,
+            NULLIF(btrim(u.position), '') AS counter_position
      FROM stock_count_days s LEFT JOIN users u ON u.id = s.finished_by WHERE s.day = $1`,
     [day]
   );
   if (!d) return null;
   const { rows: items } = await db.query(
-    `SELECT p.name, p.brand, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty, s.note
-     FROM stock_counts s JOIN products p ON p.id = s.product_id WHERE s.counted_day = $1
-     ORDER BY lower(COALESCE(p.brand, '')), lower(p.name), lower(COALESCE(p.unit, ''))`,
+    `SELECT p.id, p.name, p.brand, p.family, p.unit, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty, s.note
+     FROM stock_counts s JOIN products p ON p.id = s.product_id WHERE s.counted_day = $1`,
     [day]
   );
+  items.sort((a, b) => compareProducts(a, b) || a.id - b.id); // the Products order (Edge, Magnatec, GTX, ...), owner 2026-11-04
   const attachmentIsPdf = d.attachment_mime === "application/pdf";
   const pdf = await buildStockCountPdf({
     day: d.day_text,
     counter: d.finished_by ? d.counter_name : null,
+    counterPosition: d.finished_by ? d.counter_position : null,
     finishedAt: d.finished_at,
     auto: !d.finished_by,
     planned: d.planned,
@@ -161,7 +167,7 @@ export async function savePdf(db, day) {
     attachmentImage: attachmentIsPdf ? null : await readIfExists(d.attachment_path && path.join(stockCountDirPath, path.basename(d.attachment_path))),
     attachmentIsPdf,
   });
-  const file = `${d.day_text}-${crypto.randomUUID()}.pdf`;
+  const file = `${d.day_text}-${PDF_LAYOUT}-${crypto.randomUUID()}.pdf`; // the layout in the name: an older one is made again when opened
   await fs.promises.writeFile(path.join(stockCountDirPath, file), pdf);
   await db.query("UPDATE stock_count_days SET pdf_path = $2 WHERE day = $1", [day, file]);
   return file;
@@ -182,17 +188,19 @@ export async function dayList(db, day, { showExpected }) {
   const reveal = showExpected || Boolean(closed);
   const { rows } = await db.query(
     `SELECT s.product_id, p.name, p.brand, p.unit AS size, p.family, to_char(s.planned_date, 'YYYY-MM-DD') AS planned_date,
-            s.counted_qty, s.expected_qty, s.counted_at, s.note, s.planned_date < $2 AS carried, p.stock_qty
+            s.counted_qty, s.expected_qty, s.counted_at, s.note, s.planned_date < $2 AS carried,
+            ${reveal ? `CASE WHEN s.counted_at IS NULL THEN ${APP_STOCK_SQL}::int END` : "NULL::int"} AS app_stock
      FROM stock_counts s JOIN products p ON p.id = s.product_id
-     WHERE s.month = $1 AND s.planned_date <= $2 AND (s.counted_day = $2 OR (s.counted_at IS NULL AND p.active))
-     ORDER BY s.planned_date, lower(COALESCE(p.brand, '')), lower(COALESCE(p.family, '')), lower(p.name), lower(COALESCE(p.unit, '')), p.id`,
+     WHERE s.month = $1 AND s.planned_date <= $2 AND (s.counted_day = $2 OR (s.counted_at IS NULL AND p.active))`,
     [monthOf(day), day]
   );
+  // carried-over days first, then the Products order within a day (owner 2026-11-04)
+  rows.sort((a, b) => a.planned_date.localeCompare(b.planned_date) || compareProducts({ ...a, unit: a.size }, { ...b, unit: b.size }) || a.product_id - b.product_id);
   const items = rows.map((r) => {
     const counted = r.counted_at != null;
     const item = { product_id: r.product_id, name: r.name, brand: r.brand, size: r.size, family: r.family, planned_date: r.planned_date, carried: r.carried, counted, counted_qty: r.counted_qty, note: r.note };
     if (reveal) {
-      item.expected_qty = counted ? r.expected_qty : r.stock_qty;
+      item.expected_qty = counted ? r.expected_qty : r.app_stock; // not counted yet: the app's stock of this moment
       item.difference = counted ? r.counted_qty - (r.expected_qty ?? 0) : null;
     }
     return item;
@@ -200,12 +208,12 @@ export async function dayList(db, day, { showExpected }) {
   return { day, items, numbers: await dayNumbers(db, day), finished: closed, shows_expected: reveal };
 }
 
-/** One product counted (or counted again the same day). The Excel stock of that moment is kept next to it. */
+/** One product counted (or counted again the same day). The app's stock of that moment (appStock.js) is kept next to it. */
 export async function saveCount(db, user, { productId, qty, note }, today = yerevanToday()) {
   if (!Number.isInteger(qty) || qty < 0 || qty > 1_000_000) return { status: 400, error: "Enter a whole number, 0 or more" };
   if (await closedDay(db, today)) return { status: 409, error: "Today's count is already finished" };
   const { rows } = await db.query(
-    `UPDATE stock_counts s SET counted_qty = $3, expected_qty = p.stock_qty, counted_at = now(), counted_day = $4, counted_by = $5,
+    `UPDATE stock_counts s SET counted_qty = $3, expected_qty = ${APP_STOCK_SQL}::int, counted_at = now(), counted_day = $4, counted_by = $5,
             note = NULLIF(btrim($6), '')
      FROM products p
      WHERE p.id = s.product_id AND s.month = $1 AND s.product_id = $2 AND (s.counted_at IS NULL OR s.counted_day = $4)
@@ -270,12 +278,12 @@ export async function closeDay(db, day, userId = null, evidence = {}) {
         const due = await nextWorkingDay(client, day);
         const { rows: [task] } = await client.query(
           `INSERT INTO tasks (title, creator_id, assignee_id, due_date) VALUES ($1, $2, $3, $4) RETURNING id`,
-          [`Գույքագրում ${dateText(day)}․ ${diffs.length} ապրանքի տարբերություն Excel-ի հետ`, creator, accountant.id, due]
+          [`Գույքագրում ${dateText(day)}․ ${diffs.length} ապրանքի տարբերություն ծրագրի մնացորդի հետ`, creator, accountant.id, due]
         );
         taskId = task.id;
         let order = 0;
         for (const d of diffs) {
-          const text = `${d.name}${d.size ? ` ${d.size}` : ""}․ Excel ${d.expected_qty}, հաշվվել է ${d.counted_qty} (${signed(d.counted_qty - d.expected_qty)})${d.note ? ` — ${d.note}` : ""}`;
+          const text = `${d.name}${d.size ? ` ${d.size}` : ""}․ ծրագրով ${d.expected_qty}, փաստացի ${d.counted_qty} (${signed(d.counted_qty - d.expected_qty)})${d.note ? ` — ${d.note}` : ""}`;
           await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [taskId, text, order++]);
         }
         await client.query("UPDATE stock_count_days SET task_id = $2 WHERE day = $1", [day, taskId]);
@@ -299,7 +307,7 @@ export async function closeDay(db, day, userId = null, evidence = {}) {
         );
         let line = 0;
         for (const d of diffs) {
-          await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [recheck.id, `${d.name}${d.size ? ` ${d.size}` : ""}․ Excel ${d.expected_qty}, դուք հաշվել եք ${d.counted_qty} (${signed(d.counted_qty - d.expected_qty)}). Նորից հաշվեք պահեստում`, line++]);
+          await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [recheck.id, `${d.name}${d.size ? ` ${d.size}` : ""}․ ծրագրով ${d.expected_qty}, դուք հաշվել եք ${d.counted_qty} (${signed(d.counted_qty - d.expected_qty)}). Նորից հաշվեք պահեստում`, line++]);
         }
         notices.push(() =>
           notifyUser(counter.id, "task_assigned", { title: `Նոր առաջադրանք՝ Գույքագրում ${dateText(day)}`, body: `Կրկին ստուգեք ${diffs.length} ապրանքի քանակը`, url: `/#/tasks` })

@@ -329,7 +329,7 @@ export const hyOrders = {
     stock_count_group_counted: "Հաշվված",
     stock_count_nothing: "Այսօր հաշվելու ապրանք չկա",
     stock_count_no_match: "Ոչինչ չի գտնվել",
-    stock_count_excel: "Excel",
+    stock_count_excel: "Ծրագրով",
     stock_count_counted: "Հաշվված",
     stock_count_from_day: "{d}-ից",
     stock_count_qty_for: "{name}՝ քանակ",

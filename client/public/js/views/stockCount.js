@@ -1,7 +1,7 @@
 // Stock count (Գույքագրում), owner 2026-10-30: the warehouse manager counts the day's part of the stock (every active product once a
 // month, spread over the working days by the server: server/src/orders/stockCount.js). "Today": what is due (products carried over from
 // earlier days first), one number field per product, saved when the field is left (Enter = next product), then "Finish the day".
-// The counter counts blind (no Excel number until the day is closed); management sees the Excel number and the difference at once.
+// The counter counts blind (no expected number until the day is closed); management sees the app stock (server appStock.js) and the difference at once.
 // "Month": every working day with its result and every difference found (management, and the counter for his own history).
 import { api } from "../api.js";
 import { t } from "../i18n.js";

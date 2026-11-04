@@ -329,7 +329,7 @@ export const enOrders = {
     stock_count_group_counted: "Counted",
     stock_count_nothing: "Nothing to count today",
     stock_count_no_match: "Nothing found",
-    stock_count_excel: "Excel",
+    stock_count_excel: "In app",
     stock_count_counted: "Counted",
     stock_count_from_day: "from {d}",
     stock_count_qty_for: "{name}: quantity",
