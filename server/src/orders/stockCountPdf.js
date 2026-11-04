@@ -124,6 +124,8 @@ export function buildStockCountPdf(data) {
   const c3 = [M + W * 0.8, M + W]; // date
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
+    // text with a width is wrapped by PDFKit, which adds a NEW page for a line below the bottom margin: the footer and "Էջ n/N" sit there
+    doc.page.margins.bottom = 0;
     const top = H - M - FOOT;
     const base = top + 64; // the signature line
     hline(top, M, M + W);
