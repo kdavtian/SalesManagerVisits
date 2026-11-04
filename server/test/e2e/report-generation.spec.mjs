@@ -7,7 +7,8 @@ test.describe("Report generation", () => {
 
     await page.goto("/#/reports");
     // A desktop window shows the list beside the report (reportsDesk.js): open another report from the side list.
-    const firstReport = page.locator(".reports-side-item:not(.is-active)").first();
+    // (not Pivot: it opens as a page of its own without the side list, and whether it is listed first depends on what other specs left)
+    const firstReport = page.locator('.reports-side-item:not(.is-active):not([data-report="pivot"])').first();
     await expect(firstReport).toBeVisible({ timeout: 10000 });
     await firstReport.click();
     await expect(page.locator(".reports-side-item.is-active")).toBeVisible();
