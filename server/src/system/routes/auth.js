@@ -9,6 +9,9 @@ import { saveOwnSignature } from "../../orders/signedActs.js";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
+import { MAX_PINS, cleanPins, pinnableScreenIds } from "../../shared/screens.js";
+import { getQuickActionVisibility } from "../../shared/settings.js";
+import { getBonusesEnabled } from "../../bonus/bonusSettings.js";
 
 export const authRouter = Router();
 
@@ -47,7 +50,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    "SELECT id, email, password_hash, name, name_hy, role, token_version, failed_login_attempts, locked_until, status, home_tile_order FROM users WHERE email = $1",
+    "SELECT id, email, password_hash, name, name_hy, role, token_version, failed_login_attempts, locked_until, status, home_tile_order, pinned_screens FROM users WHERE email = $1",
     [String(email).toLowerCase()]
   );
   const user = rows[0];
@@ -78,7 +81,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
 
   issueSession(res, user);
-  res.json({ id: user.id, email: user.email, name: user.name, name_hy: user.name_hy ?? null, role: user.role, home_tile_order: user.home_tile_order ?? null });
+  res.json({ id: user.id, email: user.email, name: user.name, name_hy: user.name_hy ?? null, role: user.role, home_tile_order: user.home_tile_order ?? null, pinned_screens: user.pinned_screens ?? [] });
 });
 
 authRouter.post("/logout", (req, res) => {
@@ -90,7 +93,7 @@ export const meRouter = Router();
 
 meRouter.get("/", requireAuth, async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, email, name, name_hy, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at, home_tile_order FROM users WHERE id = $1",
+    "SELECT id, email, name, name_hy, role, role_title, position, phone, avatar_path IS NOT NULL AS has_avatar, signature_path IS NOT NULL AS has_signature, created_at, home_tile_order, COALESCE(pinned_screens, '{}') AS pinned_screens FROM users WHERE id = $1",
     [req.user.id]
   );
   if (!rows[0]) {
@@ -113,6 +116,30 @@ meRouter.put("/home-order", requireAuth, async (req, res) => {
   const value = order === null ? null : [...new Set(order)];
   await pool.query("UPDATE users SET home_tile_order = $2 WHERE id = $1", [req.user.id, value]);
   res.json({ home_tile_order: value });
+});
+
+// This person's pinned screens (owner, 2026-11-04): up to MAX_PINS screen ids shown at the top of Home and of the desktop sidebar. Only a
+// screen this role may open can be pinned (shared/screens.js, the same list the app offers); a saved pin the admin has hidden since is
+// left out of the answer.
+async function pinnableFor(role) {
+  const [visibility, bonusesEnabled] = await Promise.all([getQuickActionVisibility(), getBonusesEnabled()]);
+  return pinnableScreenIds(role, visibility, { bonusesEnabled });
+}
+meRouter.get("/pins", requireAuth, async (req, res) => {
+  const { rows } = await pool.query("SELECT pinned_screens FROM users WHERE id = $1", [req.user.id]);
+  res.json({ pins: cleanPins(rows[0]?.pinned_screens ?? [], await pinnableFor(req.user.role)), max: MAX_PINS });
+});
+meRouter.put("/pins", requireAuth, async (req, res) => {
+  const pins = req.body?.pins;
+  if (!Array.isArray(pins) || pins.length > MAX_PINS || !pins.every((id) => typeof id === "string" && id.length <= 60)) {
+    return res.status(400).json({ error: `Send at most ${MAX_PINS} screens as a list` });
+  }
+  const allowed = new Set(await pinnableFor(req.user.role));
+  const unknown = pins.filter((id) => !allowed.has(id));
+  if (unknown.length) return res.status(400).json({ error: "This screen cannot be pinned", ids: unknown });
+  const value = [...new Set(pins)];
+  await pool.query("UPDATE users SET pinned_screens = $2 WHERE id = $1", [req.user.id, value]);
+  res.json({ pins: value, max: MAX_PINS });
 });
 
 meRouter.patch("/profile", requireAuth, async (req, res) => {
