@@ -63,5 +63,5 @@ test("ordered-product-ids: everything the customer ever ordered (all time), most
   assert.deepEqual(res.data.map((r) => r.product_id), [p1.id, p3.id], "most ordered first");
   assert.equal(res.data[0].times, 2);
   const otherCookie = await loginAs(other.email);
-  assert.deepEqual((await apiRequest(`/api/customers/${customer.id}/ordered-product-ids`, { cookie: otherCookie })).data, [], "another rep sees nothing");
+  assert.equal((await apiRequest(`/api/customers/${customer.id}/ordered-product-ids`, { cookie: otherCookie })).status, 404, "another rep reaches nothing of it");
 });

@@ -86,13 +86,12 @@ test("Repeat last order: from=last resolves to the newest order without the clie
   assert.equal(res.data.lines.source, `erp:RO-${stamp}-6`);
   assert.deepEqual(res.data.lines.lines.map((l) => [l.product_id, l.quantity]), [[edge.id, 4]]);
   const none = await apiRequest(`/api/customers/${customer.id}/reorder-profile?from=last`, { cookie: otherCookie });
-  assert.equal(none.data.lines, null, "a rep without access gets nothing to repeat");
+  assert.equal(none.status, 404, "a rep without access gets nothing to repeat (the customer is not his)");
 });
 
 test("a rep without access to the customer gets no history; the list and map carry the reorder chip data", async () => {
   const empty = await apiRequest(`/api/customers/${customer.id}/reorder-profile`, { cookie: otherCookie });
-  assert.equal(empty.status, 200);
-  assert.deepEqual(empty.data.items, []);
+  assert.equal(empty.status, 404, "another rep's customer is not reachable at all");
 
   const list = await apiRequest("/api/customers", { cookie: repCookie });
   const row = list.data.find((c) => c.id === customer.id);

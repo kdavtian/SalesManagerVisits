@@ -1,11 +1,11 @@
-import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
+import { test, expect, loginViaUi, newIdentityPage, pool } from "./fixtures.mjs";
 
 // Staff birthdays (owner, 2026-11-03): the whole team sees "Birthday today" on Home and congratulates with one tap; the birthday person sees their own line;
 // the staff card has a day + month field and no year.
 const today = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
 const [, M, D] = today.split("-").map(Number);
 
-test("@iphone Home shows the birthday line, one tap congratulates; the staff form has day and month", async ({ page, fixtures }) => {
+test("@iphone Home shows the birthday line, one tap congratulates; the staff form has day and month", async ({ page, fixtures, browser }) => {
   const admin = await fixtures.createUser("admin");
   const colleague = await fixtures.createUser("sales_manager", { name: "E2E Birthday Colleague" });
   const rep = await fixtures.createUser("sales_manager", { name: "E2E Congratulator" });
@@ -25,16 +25,20 @@ test("@iphone Home shows the birthday line, one tap congratulates; the staff for
     await page.setViewportSize({ width: 320, height: 700 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // the staff form
-    await page.context().clearCookies();
-    await loginViaUi(page, admin.email);
-    await page.goto("/#/staff");
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.locator('[data-tab="people"]').click();
-    await page.locator(`[data-edit="${staffId}"]`).click();
-    const day = page.locator('input[name="birth_day"]');
-    await expect(day).toHaveValue(String(D));
-    await expect(page.locator('select[name="birth_month"]')).toHaveValue(String(M));
-    if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/birthday-staff-form.png` });
+    // a second person on a clean browser identity: a second login in the same webkit page met the "install the app" banner over the button
+    const { context: adminContext, page: adminPage } = await newIdentityPage(browser);
+    try {
+      await adminPage.setViewportSize({ width: 390, height: 844 });
+      await loginViaUi(adminPage, admin.email);
+      await adminPage.goto("/#/staff");
+      await adminPage.locator('[data-tab="people"]').click();
+      await adminPage.locator(`[data-edit="${staffId}"]`).click();
+      await expect(adminPage.locator('input[name="birth_day"]')).toHaveValue(String(D));
+      await expect(adminPage.locator('select[name="birth_month"]')).toHaveValue(String(M));
+      if (process.env.SHOTS) await adminPage.screenshot({ path: `${process.env.SHOTS}/birthday-staff-form.png` });
+    } finally {
+      await adminContext.close();
+    }
   } finally {
     await pool.query("DELETE FROM staff_members WHERE id = $1", [staffId]);
   }

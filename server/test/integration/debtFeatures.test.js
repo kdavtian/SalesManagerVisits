@@ -68,7 +68,7 @@ test("debt statement PDF: only with debt and only for people who see the debt", 
   assert.ok(String(res.data).startsWith("%PDF"));
   assert.equal((await apiRequest(`/api/customers/${old.id}/debt-statement`, { cookie: adminCookie })).status, 200);
   const other = await createUser("sales_manager");
-  assert.equal((await apiRequest(`/api/customers/${old.id}/debt-statement`, { cookie: await loginAs(other.email) })).status, 403);
+  assert.equal((await apiRequest(`/api/customers/${old.id}/debt-statement`, { cookie: await loginAs(other.email) })).status, 404); // another rep's customer: not found for him (customers.js param guard)
   const clean = await createCustomer({ created_by: admin.id, assigned_manager_id: rep.id, name: `DF clean ${stamp}` });
   assert.equal((await apiRequest(`/api/customers/${clean.id}/debt-statement`, { cookie: repCookie })).status, 400);
   assert.equal((await apiRequest("/api/customers/999999999/debt-statement", { cookie: adminCookie })).status, 404);
