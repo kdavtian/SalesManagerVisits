@@ -7,6 +7,7 @@
 //    sales director (Martin) when the customer has no sales manager;
 //  - one open automatic task per customer (unique index, migration 102);
 //  - after a rep closes one, no new one for the same customer for 14 days;
+//  - a customer whose overdue debt is all frozen credit (net debt, netDebt.js) gets no task and an open one is cancelled (closeFrozenDebtTasks);
 //  - when the debt is gone the open task is closed as done; when the debt is still there but
 //    not overdue (older tasks created by the previous, cruder rule) it is cancelled;
 //  - each rep gets ONE notification per run, not one per customer;
@@ -41,6 +42,32 @@ async function stillOverdueLive(rows, today) {
       return [{ ...r, debt_amd: l.debt_amd, days_open: l.aging.oldest_due_days != null ? l.aging.oldest_due_days + Number(r.term_days) : r.days_open }];
     })
     .sort((a, b) => Number(b.debt_amd) - Number(a.debt_amd));
+}
+
+// Frozen credit (owner, 2026-11-05: "the Max Oil customers have a frozen debt Vaghinak does not consider; he should close the tasks by
+// himself"). A new task already looks at the NET debt (stillOverdueLive); an OPEN one only looked at the Excel's gross debt, so it stayed
+// open for ever once the overdue part was frozen. Closes (cancelled, not "paid": nobody collected anything) every open automatic debt task
+// whose customer has frozen credit and no overdue debt left on the net live debt. `customerId` limits it to one customer (the moment the
+// frozen amount is saved); returns the closed ids.
+export const FROZEN_TASK_NOTE = "Սառեցված վարկ՝ ժամկետանց պարտք չկա";
+export async function closeFrozenDebtTasks(today = yerevanToday(), customerId = null) {
+  const { rows } = await pool.query(
+    `SELECT t.id AS task_id, c.id AS customer_id, c.erp_customer_id, erp.debt_amd, COALESCE(c.credit_term_days, 45) AS credit_term_days
+     FROM tasks t
+     JOIN customers c ON c.id = t.customer_id
+     JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE t.auto_kind = 'debt_collection' AND t.status = 'open' AND c.frozen_credit_amd > 0 AND ($1::int IS NULL OR c.id = $1)`,
+    [customerId]
+  );
+  if (!rows.length) return [];
+  const live = await liveDebtMap(pool, rows.map((r) => ({ id: r.customer_id, erp_customer_id: r.erp_customer_id, debt_amd: r.debt_amd, credit_term_days: r.credit_term_days })), today);
+  const ids = rows.filter((r) => { const l = live.get(r.customer_id); return l && !(l.aging.overdue_amd > 0); }).map((r) => r.task_id);
+  if (!ids.length) return [];
+  const { rows: closed } = await pool.query(
+    "UPDATE tasks SET status = 'cancelled', completion_note = $2, updated_at = now() WHERE id = ANY($1) AND status = 'open' RETURNING id",
+    [ids, FROZEN_TASK_NOTE]
+  );
+  return closed;
 }
 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
@@ -199,6 +226,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     [MIN_ERP_ROWS_TO_TRUST_ABSENCE]
   );
   closed.push(...droppedOut);
+  closed.push(...(await closeFrozenDebtTasks(today)));
 
   // Management decided this account is disputed / with lawyers / written off: no automatic chasing (Operations control).
   const { rows: onHold } = await pool.query(

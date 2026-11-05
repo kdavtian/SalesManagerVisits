@@ -109,7 +109,10 @@ function parkCurrent(ctx, { defer = false } = {}) {
 
 // A tap on another tab. Returns true when it was handled here (the tab's pages came back); false: the caller navigates as usual (the
 // tab opens fresh, as before), after the tab being left was parked.
-export function switchTab(ctx, tab) {
+// `homeRoot`: the Home tab was tapped to GO HOME (from a page inside Home, e.g. a product): a kept Home trail that ends on a page deeper than
+// the Home screen itself (a product opened from search, then another tab) is let go instead of being put back, so Home is what opens
+// (owner, 2026-11-03 and 2026-11-05: "from product page the user cannot go back to home").
+export function switchTab(ctx, tab, { homeRoot = false } = {}) {
   settleTabSwap();
   if (!tab || tab === currentTab) return false;
   // leaving the Map: its own parking happens in the router, as before
@@ -120,6 +123,10 @@ export function switchTab(ctx, tab) {
   currentTab = tab;
   if (!trail) return false;
   trails.delete(tab);
+  if (homeRoot && trail[trail.length - 1].hash.split("?")[0] !== tab) {
+    dispose(ctx, trail);
+    return false;
+  }
   // the router does not run when a tab's pages come back: the Map on screen is parked here the same way it parks it (app.js parkMap)
   if (leavingMap && ctx.lastRenderedHash?.startsWith(MAP)) {
     const map = takeScreen(ctx, { defer: true });

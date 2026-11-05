@@ -28,6 +28,7 @@ import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, 
 import { normalizeIncomingPlaces, recordPlaceReviews, placeNotice } from "../placeReviews.js";
 import { balanceBeforeVisit } from "../../orders/signedActs.js";
 import { getDocumentTexts, signStatement } from "../../shared/documentTexts.js";
+import { closeFrozenDebtTasks } from "../../money/debtCollectionTasks.js";
 
 export const customersRouter = Router();
 
@@ -1747,6 +1748,8 @@ customersRouter.put("/:id/credit-terms", async (req, res) => {
   if (frozen !== null && frozen !== oldFrozen) {
     await pool.query("UPDATE customers SET frozen_credit_amd = $2 WHERE id = $1", [customerId, frozen]);
     await pool.query("INSERT INTO customer_frozen_credit_log (customer_id, old_amount, new_amount, changed_by) VALUES ($1, $2, $3, $4)", [customerId, oldFrozen, frozen, req.user.id]);
+    // Vaghinak's open "collect the debt" task is closed at once when the overdue part is now frozen (not at the next ERP sync)
+    if (frozen > 0) await closeFrozenDebtTasks(undefined, customerId).catch((err) => console.error("Closing frozen-debt tasks failed:", err.message));
   }
   const oldLimit = beforeRows[0].credit_limit_amd === null ? null : Number(beforeRows[0].credit_limit_amd);
   const { rows } = await pool.query("UPDATE customers SET credit_limit_amd = $2 WHERE id = $1 RETURNING id, credit_limit_amd", [customerId, limit]);

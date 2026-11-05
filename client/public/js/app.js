@@ -407,7 +407,7 @@ function handleNavTap(target, tab = target.split("?")[0]) {
   const targetBase = target.split("?")[0];
   const currentBase = (location.hash || "#/dashboard").split("?")[0];
   if (currentBase !== targetBase || !NAV_TAB_ROOT_HASHES.has(targetBase)) {
-    if (switchTab(ctx, tab)) return;
+    if (switchTab(ctx, tab, { homeRoot: tab === "#/dashboard" && targetBase === "#/dashboard" })) return;
     navigate(target);
     return;
   }

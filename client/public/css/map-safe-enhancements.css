@@ -1,6 +1,6 @@
 /* Safe map usability additions — CSS-only marker visibility, no DOM observer. */
 
-/* Competitors are intelligence-only, so they are hidden from the default map.
+/* Competitors are shown by default (.kad-show-competitors on .map-view); the chip removes the class to hide them.
    :has() is supported by the iOS/Android browser versions targeted by this PWA. */
 #leaflet-map .leaflet-marker-icon:has(.pin-tier-competitor) {
   display: none !important;

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle } from "../../src/money/debtCollectionTasks.js";
+import { createDebtCollectionTasks, autoTaskDiagnostics, debtTaskTitle, closeFrozenDebtTasks, FROZEN_TASK_NOTE } from "../../src/money/debtCollectionTasks.js";
 import { isQuietHours } from "../../src/shared/quietHours.js";
 
 const stamp = Date.now();
@@ -253,4 +253,29 @@ test("the diagnostics put every overdue customer in exactly one line and say who
   assert.ok(after.has_open >= 1);
   assert.ok(after.tasks.debt_collection.last_7_days >= 1);
   assert.ok(waiting.id && kf.id);
+});
+
+// Owner, 2026-11-05 (the Max Oil customers): the overdue debt is frozen credit, so Vaghinak neither opens a task nor keeps one open.
+test("frozen credit: no new task when the whole debt is frozen, and an open task closes by itself (cancelled, not paid)", async () => {
+  const frozenAll = await debtor("fz1", { debt: 500000, days: 90 });
+  const open = await debtor("fz2", { debt: 500000, days: 90 });
+  const partly = await debtor("fz3", { debt: 500000, days: 90 });
+  await pool.query("UPDATE customers SET frozen_credit_amd = 500000 WHERE id = $1", [frozenAll.id]); // frozen from the start
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(frozenAll.id)).length, 0);
+  assert.equal((await openTasks(open.id)).filter((t) => t.status === "open").length, 1);
+  assert.equal((await openTasks(partly.id)).filter((t) => t.status === "open").length, 1);
+  // the frozen amount is saved later: the open task closes at once, without waiting for the next sync
+  await pool.query("UPDATE customers SET frozen_credit_amd = 500000 WHERE id = $1", [open.id]);
+  await pool.query("UPDATE customers SET frozen_credit_amd = 200000 WHERE id = $1", [partly.id]);
+  const closed = await closeFrozenDebtTasks(undefined, open.id);
+  assert.equal(closed.length, 1);
+  const after = (await openTasks(open.id))[0];
+  assert.equal(after.status, "cancelled");
+  assert.equal(after.completion_note, FROZEN_TASK_NOTE);
+  // the daily run: nothing new for the fully frozen customers; the partly frozen one still owes 300,000 overdue, so its task stays
+  await createDebtCollectionTasks();
+  assert.equal((await openTasks(frozenAll.id)).length, 0);
+  assert.equal((await openTasks(open.id)).filter((t) => t.status === "open").length, 0);
+  assert.equal((await openTasks(partly.id)).filter((t) => t.status === "open").length, 1);
 });

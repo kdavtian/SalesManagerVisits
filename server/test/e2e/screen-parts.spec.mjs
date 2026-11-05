@@ -21,10 +21,28 @@ test.describe("Screens build their own parts", () => {
     await page.locator('.map-filter-chip[data-filter="overdue"]').click();
     await expect(chip.locator(".map-filter-chip-icon")).toHaveJSProperty("innerHTML", shopIcon);
 
-    await expect(page.locator(".map-view")).not.toHaveClass(/kad-show-competitors/);
-    await chip.evaluate((el) => el.click());
+    // Owner, 2026-11-05: competitors are shown by default; the chip hides them.
     await expect(page.locator(".map-view")).toHaveClass(/kad-show-competitors/);
     await expect(chip).toHaveAttribute("aria-pressed", "true");
+    await chip.evaluate((el) => el.click());
+    await expect(page.locator(".map-view")).not.toHaveClass(/kad-show-competitors/);
+    await expect(chip).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("Map: a competitor's pin is on the map by default and the chip hides it (owner, 2026-11-05)", async ({ page, fixtures }) => {
+    await tiles(page);
+    const admin = await fixtures.createUser("admin");
+    const rival = await fixtures.createCustomer({ created_by: admin.id, assigned_manager_id: admin.id, name: "E2E Map Rival Shop", sales_channel: "SM YVN", lat: 40.18, lng: 44.5 });
+    await pool.query("UPDATE customers SET customer_tier = 'competitor' WHERE id = $1", [rival.id]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginViaUi(page, admin.email);
+    await page.goto("/#/map");
+    await page.reload();
+    const pin = page.locator("#leaflet-map .leaflet-marker-icon:has(.pin-tier-competitor)");
+    await expect(pin.first()).toBeVisible({ timeout: 15000 });
+    await page.screenshot({ path: "/tmp/map-competitors.png" });
+    await page.locator(".map-competitor-toggle").evaluate((el) => el.click());
+    await expect(pin.first()).toBeHidden();
   });
 
   test("New customer: the business-name label, and a sales manager's channel preset and hidden", async ({ page, fixtures }) => {
