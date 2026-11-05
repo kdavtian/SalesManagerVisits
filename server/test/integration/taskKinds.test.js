@@ -90,11 +90,12 @@ test("Check products closes when a check-in records the shop's brands, not on a 
   assert.equal((await status(check.id)).status, "done");
 });
 
-test("a typed Collect debt task requires an outcome to complete by hand, like the automatic one", async () => {
+test("a typed Collect debt task cannot be completed by hand: the rep records what the customer said and it stays open (owner, 2026-11-05)", async () => {
   const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
   const debt = (await give(customer, "collect_debt")).data;
-  const bad = await apiRequest(`/api/tasks/${debt.id}/complete`, { method: "POST", cookie: repCookie, body: { note: "done" } });
-  assert.equal(bad.status, 400, JSON.stringify(bad.data));
-  const good = await apiRequest(`/api/tasks/${debt.id}/complete`, { method: "POST", cookie: repCookie, body: { note: "", outcome: "refused" } });
+  const bad = await apiRequest(`/api/tasks/${debt.id}/complete`, { method: "POST", cookie: repCookie, body: { note: "done", outcome: "refused" } });
+  assert.equal(bad.status, 409, JSON.stringify(bad.data));
+  const good = await apiRequest(`/api/tasks/${debt.id}/record-result`, { method: "POST", cookie: repCookie, body: { note: "", outcome: "refused" } });
   assert.equal(good.status, 200, JSON.stringify(good.data));
+  assert.equal(good.data.status, "open");
 });

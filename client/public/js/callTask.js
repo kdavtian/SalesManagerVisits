@@ -10,7 +10,8 @@ import { activateDialog, escapeHtml, formatPhoneDisplay, formatDateDMY, showToas
 const PENDING_KEY = "fv_pending_call";
 const PENDING_MAX_AGE_MS = 6 * 3600 * 1000;
 const RESULTS = ["spoke", "no_answer", "call_back", "wrong_number"];
-const DEBT_OUTCOMES = COLLECTION_OUTCOMES.filter((o) => o !== "no_answer");
+// What the customer said on the phone: recorded on the task, which stays open until a payment closes it (owner, 2026-11-05)
+const DEBT_OUTCOMES = COLLECTION_OUTCOMES.filter((o) => o === "promised" || o === "refused");
 
 export const isCallTask = (task) => task?.task_kind === "call_customer";
 const isDebtTask = (task) => task?.auto_kind === "debt_collection" || task?.task_kind === "collect_debt";

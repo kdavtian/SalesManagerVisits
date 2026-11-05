@@ -259,5 +259,11 @@ export const hyField = {
     task_complete_note_prompt: "Արդյունք / նշում (ըստ ցանկության)",
     collect_outcome_title: "Ինչպե՞ս անցավ հավաքագրումը",
     collect_promise_date: "Խոստացված վճարման ամսաթիվ",
+    task_selfclose_visit: "Փակվում է ինքնուրույն, երբ այցելեք (check-in) այս հաճախորդին։",
+    task_selfclose_products: "Փակվում է ինքնուրույն, երբ այս հաճախորդի մոտ check-in-ի ժամանակ նշվում է՝ ինչ ապրանքներ կան խանութում։",
+    task_selfclose_debt: "Փակվում է ինքնուրույն, երբ այս հաճախորդից վճարում է գրանցվում։",
+    task_record_result: "Գրանցել արդյունքը",
+    task_cancel_reason_placeholder: "Չեղարկելու պատճառը (պարտադիր է)",
+    task_cancel_reason_required: "Գրեք չեղարկելու պատճառը",
     collect_choose_outcome: "Ընտրեք՝ ինչպես անցավ",
 };

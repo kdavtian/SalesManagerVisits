@@ -477,11 +477,12 @@ checkinsRouter.post("/", (req, res, next) => {
     autoCompleteCollectionTasks({ customerId, actorId: req.user.id, amountAmd: amountCollected }).catch((err) => console.error("Task auto-complete failed:", err.message));
   }
 
-  // The visit itself closes the "Visit" task given to this rep for this customer.
-  autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
+  // The visit itself closes the "Visit" task given to this rep for this customer -- only a check-in AT the customer's place counts
+  // (owner, 2026-11-05: a visit task cannot be closed without the visit; a far check-in never counts as the customer's visit).
+  if (withinRange) autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
 
   // Recording what the shop has (brand chips / available products) closes the customer's "check products" task.
-  if (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length)) {
+  if (withinRange && (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length))) {
     autoCompleteProductCheckTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
   }
 

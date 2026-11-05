@@ -4,7 +4,7 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { canCreateTasks, seesAllTasks, taskAssigneeRoles, sendsRequests, tasksAnyone } from "../../shared/roles.js";
+import { canCreateTasks, seesAllTasks, taskAssigneeRoles, sendsRequests, tasksAnyone, taskClosesItself, canCancelSelfClosingTask } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 
@@ -15,8 +15,11 @@ const MAX_ITEMS = 30;
 // Types a person can give (migration 125): each needs a customer and closes itself when the rep does what it asks.
 export const TASK_KINDS = ["collect_debt", "make_order", "check_products", "call_customer", "visit_customer"];
 export const CALL_RESULTS = ["spoke", "no_answer", "call_back", "wrong_number"];
-const DEBT_OUTCOMES = ["paid", "partial", "promised", "no_answer", "refused"];
 const MAX_PROMISE_DAYS = 60;
+// A self-closing task (roles.js taskClosesItself) is refused every way of closing it by hand.
+const CLOSES_ITSELF_ERROR = { error: "This task closes by itself when the work is recorded (check-in, payment). It cannot be marked done by hand.", code: "closes_itself" };
+// What a rep can record on a debt task WITHOUT closing it (only a payment closes it).
+const DEBT_RESULTS_OPEN = ["promised", "no_answer", "refused"];
 const isDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
 const isId = (v) => /^\d+$/.test(String(v));
 
@@ -237,8 +240,15 @@ tasksRouter.patch("/:id", async (req, res) => {
   if (!isId(req.params.id)) return res.status(404).json({ error: "Task not found" });
   const task = await loadTask(Number(req.params.id), req.user);
   if (!task) return res.status(404).json({ error: "Task not found" });
-  const mayEdit = task.creator_id === req.user.id || seesAllTasks(req.user.role);
+  const locked = taskClosesItself(task);
+  const cancelling = req.body?.status === "cancelled";
+  // A self-closing task: management above the sales manager may cancel it (reason required), whoever gave it, and only that
+  const mayCancelLocked = locked && cancelling && canCancelSelfClosingTask(req.user.role) && Object.keys(req.body).every((k) => k === "status" || k === "reason");
+  const mayEdit = task.creator_id === req.user.id || seesAllTasks(req.user.role) || mayCancelLocked;
   if (!mayEdit) return res.status(403).json({ error: "Only the creator can edit this task" });
+  if (locked && cancelling && !canCancelSelfClosingTask(req.user.role)) return res.status(403).json({ error: "Only management can cancel this task" });
+  const cancelReason = String(req.body?.reason ?? "").trim().slice(0, 300);
+  if (locked && cancelling && task.status === "open" && cancelReason.length < 3) return res.status(400).json({ error: "A reason is required to cancel this task", code: "reason_required" });
 
   const { title, assignee_id, customer_id, due_date, status, due_is_next_visit } = req.body ?? {};
   const items = cleanItems(req.body?.items);
@@ -279,6 +289,7 @@ tasksRouter.patch("/:id", async (req, res) => {
   if (status !== undefined) {
     if (!["open", "cancelled"].includes(status)) return res.status(400).json({ error: "Status can be set to open or cancelled" });
     add("status", status);
+    if (locked && status === "cancelled") add("completion_note", `Չեղարկված է՝ ${cancelReason}`);
     if (status === "open") {
       add("completed_at", null);
       add("completed_by", null);
@@ -336,29 +347,52 @@ function mayWork(task, user) {
   return task.assignee_id === user.id || task.creator_id === user.id || seesAllTasks(user.role);
 }
 
+// What the customer said about paying: { outcome, promiseDate } or { outcome: null, promiseDate: "bad_date" | null } when it is not valid.
+function parseDebtResult(body, allowed) {
+  const outcome = String(body?.outcome ?? "");
+  if (!allowed.includes(outcome)) return { outcome: null, promiseDate: null };
+  if (outcome !== "promised") return { outcome, promiseDate: null };
+  const promiseDate = String(body?.promise_date ?? "");
+  const limit = new Date(`${yerevanToday()}T00:00:00Z`).getTime() + MAX_PROMISE_DAYS * 86400000;
+  if (!isDate(promiseDate) || promiseDate <= yerevanToday() || new Date(`${promiseDate}T00:00:00Z`).getTime() > limit) return { outcome: null, promiseDate: "bad_date" };
+  return { outcome, promiseDate };
+}
+
+// The result is kept on the OPEN task (a promise moves its deadline to the promised date and keeps new reminders away until it passes).
+async function saveDebtResult(task, outcome, promiseDate, note) {
+  await pool.query(
+    `UPDATE tasks SET outcome = $2, promise_date = $3, completion_note = $4,
+       due_date = COALESCE($3::date, due_date), due_is_next_visit = CASE WHEN $3::date IS NULL THEN due_is_next_visit ELSE false END,
+       deadline_reminder_sent_on = CASE WHEN $3::date IS NULL THEN deadline_reminder_sent_on ELSE NULL END, updated_at = now() WHERE id = $1`,
+    [task.id, outcome, promiseDate, note || null]
+  );
+}
+
+// "Record result" on a collect-the-debt task (owner, 2026-11-05): the customer promised a date / did not answer / refused. The task
+// stays open: only a recorded payment closes it (taskAutoComplete.js).
+tasksRouter.post("/:id/record-result", async (req, res) => {
+  if (!isId(req.params.id)) return res.status(404).json({ error: "Task not found" });
+  const task = await loadTask(Number(req.params.id), req.user);
+  if (!task) return res.status(404).json({ error: "Task not found" });
+  if (!mayWork(task, req.user)) return res.status(403).json({ error: "Not allowed" });
+  if (task.status !== "open") return res.status(409).json({ error: "This task is not open" });
+  if (!(task.auto_kind === "debt_collection" || task.task_kind === "collect_debt")) return res.status(400).json({ error: "Only a collect-the-debt task takes a collection result" });
+  const { outcome, promiseDate } = parseDebtResult(req.body, DEBT_RESULTS_OPEN);
+  if (!outcome) return res.status(400).json({ error: promiseDate === "bad_date" ? `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` : "Choose how the collection went" });
+  await saveDebtResult(task, outcome, promiseDate, String(req.body?.note ?? "").trim().slice(0, 500));
+  res.json(await loadTask(task.id, req.user));
+});
+
 tasksRouter.post("/:id/complete", async (req, res) => {
   if (!isId(req.params.id)) return res.status(404).json({ error: "Task not found" });
   const task = await loadTask(Number(req.params.id), req.user);
   if (!task) return res.status(404).json({ error: "Task not found" });
   if (!mayWork(task, req.user)) return res.status(403).json({ error: "Not allowed" });
   if (task.status !== "open") return res.status(409).json({ error: "This task is not open" });
-  // A collect-the-debt task records how the visit went (and a promised date, which
-  // keeps new tasks away until it passes -- see debtCollectionTasks.js).
-  let outcome = null;
-  let promiseDate = null;
-  if (task.auto_kind === "debt_collection" || task.task_kind === "collect_debt") {
-    outcome = String(req.body?.outcome ?? "");
-    if (!DEBT_OUTCOMES.includes(outcome)) return res.status(400).json({ error: "Choose how the collection went" });
-    if (outcome === "promised") {
-      promiseDate = String(req.body?.promise_date ?? "");
-      const limit = new Date(`${yerevanToday()}T00:00:00Z`).getTime() + MAX_PROMISE_DAYS * 86400000;
-      if (!isDate(promiseDate) || promiseDate <= yerevanToday() || new Date(`${promiseDate}T00:00:00Z`).getTime() > limit) {
-        return res.status(400).json({ error: `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` });
-      }
-    }
-  }
+  if (taskClosesItself(task)) return res.status(409).json(CLOSES_ITSELF_ERROR);
+  // (A collect-the-debt task never gets here: it closes by itself when a payment is recorded; see recordDebtResult below.)
   await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
-  await finishTask(task, req.user, String(req.body?.note ?? "").trim().slice(0, 500), outcome, promiseDate);
+  await finishTask(task, req.user, String(req.body?.note ?? "").trim().slice(0, 500));
   res.json(await loadTask(task.id, req.user));
 });
 
@@ -384,22 +418,18 @@ tasksRouter.post("/:id/call-result", async (req, res) => {
   let promiseDate = null;
   const isDebtTask = task.auto_kind === "debt_collection" || task.task_kind === "collect_debt";
   if (result === "spoke" && isDebtTask) {
-    outcome = String(req.body?.outcome ?? "");
-    if (!DEBT_OUTCOMES.includes(outcome) || outcome === "no_answer") return res.status(400).json({ error: "Choose how the collection went" });
-    if (outcome === "promised") {
-      promiseDate = String(req.body?.promise_date ?? "");
-      const limit = new Date(`${yerevanToday()}T00:00:00Z`).getTime() + MAX_PROMISE_DAYS * 86400000;
-      if (!isDate(promiseDate) || promiseDate <= yerevanToday() || new Date(`${promiseDate}T00:00:00Z`).getTime() > limit) {
-        return res.status(400).json({ error: `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` });
-      }
-    }
+    // He spoke to the customer: what the customer said is recorded, the task stays open until a payment closes it
+    ({ outcome, promiseDate } = parseDebtResult(req.body, ["promised", "refused"]));
+    if (!outcome) return res.status(400).json({ error: promiseDate === "bad_date" ? `A promised date after today (within ${MAX_PROMISE_DAYS} days) is required` : "Choose how the collection went" });
   }
   await pool.query("INSERT INTO customer_calls (customer_id, task_id, user_id, result, note, callback_date) VALUES ($1, $2, $3, $4, $5, $6)", [
     task.customer_id, task.id, req.user.id, result, note || null, callbackDate,
   ]);
-  if (result === "spoke") {
+  if (result === "spoke" && isDebtTask) {
+    await saveDebtResult(task, outcome, promiseDate, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ");
+  } else if (result === "spoke") {
     await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
-    await finishTask(task, req.user, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ", outcome, promiseDate);
+    await finishTask(task, req.user, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ");
   } else if (result === "call_back") {
     await pool.query("UPDATE tasks SET due_date = $2, due_is_next_visit = false, deadline_reminder_sent_on = NULL, updated_at = now() WHERE id = $1", [task.id, callbackDate]);
   }
@@ -431,7 +461,8 @@ tasksRouter.post("/:id/items/:itemId", async (req, res) => {
   );
   if (!rowCount) return res.status(404).json({ error: "Item not found" });
   const { rows } = await pool.query("SELECT bool_and(done) AS all_done, count(*)::int AS n FROM task_items WHERE task_id = $1", [task.id]);
-  if (task.status === "open" && rows[0].n > 0 && rows[0].all_done) await finishTask(task, req.user, "");
+  // a self-closing task is never finished by its checklist: only the work itself closes it
+  if (task.status === "open" && rows[0].n > 0 && rows[0].all_done && !taskClosesItself(task)) await finishTask(task, req.user, "");
   else if (task.status === "done" && !done) {
     await pool.query(`UPDATE tasks SET status = 'open', completed_at = NULL, completed_by = NULL, updated_at = now() WHERE id = $1`, [task.id]);
   }

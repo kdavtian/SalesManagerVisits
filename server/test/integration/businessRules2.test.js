@@ -101,32 +101,37 @@ test("credit limit changes are logged with who changed them; unchanged saves are
   assert.equal((await apiRequest(`/api/customers/${customer.id}/credit-history`, { cookie: cookies.sales_manager })).status, 403);
 });
 
-test("collection outcome is required; a promised date holds new tasks until it passes, then escalates", async () => {
+test("a debt task records the customer's answer and stays open; a promised date holds the reminders until it passes, then the task is due again and the director is told", async () => {
   const customer = await erpCustomer("promise", 600000, 90);
   await createDebtCollectionTasks();
   const task = (await pool.query("SELECT id FROM tasks WHERE customer_id = $1 AND auto_kind = 'debt_collection'", [customer.id])).rows[0];
   assert.ok(task);
-  const complete = (body) => apiRequest(`/api/tasks/${task.id}/complete`, { method: "POST", cookie: cookies.sales_manager, body });
-  assert.equal((await complete({})).status, 400, "an outcome is required");
-  assert.equal((await complete({ outcome: "promised" })).status, 400, "a promise needs a date");
-  assert.equal((await complete({ outcome: "promised", promise_date: "2020-01-01" })).status, 400, "a past date is refused");
+  const record = (body) => apiRequest(`/api/tasks/${task.id}/record-result`, { method: "POST", cookie: cookies.sales_manager, body });
+  assert.equal((await record({})).status, 400, "an outcome is required");
+  assert.equal((await record({ outcome: "promised" })).status, 400, "a promise needs a date");
+  assert.equal((await record({ outcome: "promised", promise_date: "2020-01-01" })).status, 400, "a past date is refused");
   const future = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
-  const done = await complete({ outcome: "promised", promise_date: future });
-  assert.equal(done.status, 200, JSON.stringify(done.data));
-  assert.equal(done.data.outcome, "promised");
-  assert.equal(done.data.promise_date, future);
+  const saved = await record({ outcome: "promised", promise_date: future });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  assert.equal(saved.data.status, "open", "only a payment closes a debt task");
+  assert.equal(saved.data.outcome, "promised");
+  assert.equal(saved.data.promise_date, future);
 
-  // Promise still running: nothing new, even after the 14-day cooldown.
+  // Promise still running: nothing new and nothing reported.
   await pool.query("UPDATE tasks SET created_at = now() - interval '40 days' WHERE id = $1", [task.id]);
   const during = await createDebtCollectionTasks();
   assert.equal((await pool.query("SELECT 1 FROM tasks WHERE customer_id = $1 AND auto_kind = 'debt_collection'", [customer.id])).rowCount, 1);
   assert.ok(during.broken === 0);
 
-  // Promise date passed and the debt is still there: a new task at once, and a broken promise is reported.
+  // Promise date passed and the debt is still there: the same task is due again today, a broken promise is reported (once).
   await pool.query("UPDATE tasks SET promise_date = (now() AT TIME ZONE 'Asia/Yerevan')::date - 1 WHERE id = $1", [task.id]);
   const after = await createDebtCollectionTasks();
   assert.ok(after.broken >= 1);
-  assert.equal((await pool.query("SELECT 1 FROM tasks WHERE customer_id = $1 AND auto_kind = 'debt_collection'", [customer.id])).rowCount, 2);
+  const row = (await pool.query("SELECT status, outcome, promise_date FROM tasks WHERE id = $1", [task.id])).rows[0];
+  assert.equal(row.status, "open");
+  assert.equal(row.outcome, null);
+  assert.equal(row.promise_date, null);
+  assert.equal((await createDebtCollectionTasks()).broken, 0, "reported once");
 });
 
 test("reorder follow-up: a customer past their usual rhythm gets a task, unless a credit term is exceeded", async () => {

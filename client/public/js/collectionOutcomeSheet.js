@@ -6,7 +6,8 @@ import { t } from "./i18n.js";
 
 export const COLLECTION_OUTCOMES = ["paid", "partial", "promised", "no_answer", "refused"];
 
-export function openCollectionOutcomeSheet() {
+// `outcomes`: which answers are offered (a debt task is closed by a payment, never by hand: only what the customer said is recorded).
+export function openCollectionOutcomeSheet({ outcomes = COLLECTION_OUTCOMES } = {}) {
   return new Promise((resolve) => {
     let outcome = null;
     const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -17,7 +18,7 @@ export function openCollectionOutcomeSheet() {
       <div class="sheet" role="dialog" aria-modal="true">
         <h2>${t("collect_outcome_title")}</h2>
         <div id="collect-outcomes" role="group" style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
-          ${COLLECTION_OUTCOMES.map((o) => `<button type="button" class="btn" data-outcome="${o}" aria-pressed="false" style="min-height:44px;text-align:left">${t(`collect_outcome_${o}`)}</button>`).join("")}
+          ${outcomes.map((o) => `<button type="button" class="btn" data-outcome="${o}" aria-pressed="false" style="min-height:44px;text-align:left">${t(`collect_outcome_${o}`)}</button>`).join("")}
         </div>
         <label id="collect-date-wrap" style="display:flex;flex-direction:column;gap:4px;margin-top:8px" hidden>${t("collect_promise_date")}
           <input type="date" id="collect-date" min="${tomorrow}" max="${maxDate}" value="${tomorrow}" style="width:100%;min-height:44px" />
