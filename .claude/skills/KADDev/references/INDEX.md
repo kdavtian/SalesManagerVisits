@@ -126,7 +126,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L226 14. New KAD app - bootstrap, in this order - Owner brief -> docs/SPEC.md (who uses it, the 5 jobs per role, the main action for the centre tab, the trusted
 - L245 15. Release checklist (tick every item; copy into the PR when it is a new app or - [ ] Back closes a sheet and stays; Back never jumps tabs; deep link + Back goes to a sensible parent [ ] Re-ta
 
-## kad-os-gmm.md (8 KB, 64 lines)
+## kad-os-gmm.md (11 KB, 86 lines)
 - L7 Workflow differences from Field Visits - Same owner rules apply (draft PR -> subscribe -> CI test + e2e-smoke -> ready -> squash merge -> unsubscribe;
 - L22 Architecture (KAD OS side) - server/src/lib/kad.js talks to KAD Motors' /api/partner/ (link from the DB via lib/kadLink.js, AES-256-GCM; .e
 - L36 Wholesale price = KAD Bronze price (owner, 2026-10-23, 0.53.0) - The shop's wholesale price (the "Wholesale" switch of a sale line, Products page, Oil finder) is KAD Motors' B
@@ -136,6 +136,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L53 Logo - Orange tile (#ff8a3d) with a graphite K (reversed on 2026-10-23); icons client/public/icons/ are regenerated f
 - L56 Lessons - A model typed without its make ("Camry") used to become a make called "Camry": the make-less case needs infere
 - L62 Shared kit and navigation (0.95.0) - client/public/js/kit/ is the SAME kit as Field Visits (KADDev rule 60, kad-app-standard.md section 4).
+- L65 Rounds of 2026-11-05 / 06 (KAD OS 0.106.0 - 0.107.0) - Oil by the litre from its own pack (0.106.0, migration 063): a drum (>= 50 L) asks for litres on any tap; a bo
 
 ## ops-runbook.md (20 KB, 111 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
