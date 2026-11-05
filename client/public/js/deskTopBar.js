@@ -6,7 +6,7 @@ import { icons } from "./icons.js";
 import { escapeHtml, formatAmd, formatDateDMY } from "./util.js";
 import { canCreateTasks } from "./state.js";
 import { isDesktop } from "./deskTable.js";
-import { MAX_PER_GROUP, localResults, recent, recordResults } from "./searchSources.js";
+import { MAX_PER_GROUP, localResults, recent, recordResults, suggestions } from "./searchSources.js";
 import { state } from "./state.js";
 
 let navigateRef = null;
@@ -118,7 +118,11 @@ function wireSearch(root) {
     const settings = settingsRef?.() ?? null;
     let html = "";
     if (!query) {
-      html = group(t("search_recent"), recent.all(), (r) => itemHtml(escapeHtml(r.label), escapeHtml(r.hint || ""), "", go(r)));
+      const { actions, screens } = suggestions(settings, { screens: 5 });
+      html =
+        group(t("search_recent"), recent.all(), (r) => itemHtml(escapeHtml(r.label), escapeHtml(r.hint || ""), "", go(r))) +
+        group(t("search_actions"), actions, (x) => itemHtml(escapeHtml(x.label), "", "", go(x))) +
+        group(t("search_screens"), screens, (x) => itemHtml(escapeHtml(x.label), "", "", go(x)));
     } else {
       const local = localResults(query, settings);
       html =
@@ -139,7 +143,7 @@ function wireSearch(root) {
       return;
     }
     paint("", true);
-    const { customers, orders, tasks } = await recordResults(query);
+    const { customers, orders, tasks, products } = await recordResults(query);
     if (mine !== seq || input.value.trim() !== query) return;
     const rec = (hash, label, hint) => ({ kind: "record", id: hash, hash, label, hint });
     items = items.slice(0, (html.match(/data-result=/g) || []).length);
@@ -151,6 +155,10 @@ function wireSearch(root) {
       group(t("nav_orders"), orders.slice(0, MAX_PER_GROUP), (o) => {
         const hint = [o.customer_name, formatDateDMY(o.created_at)].filter(Boolean).join(" · ");
         return itemHtml(escapeHtml(o.order_code || `#${o.id}`), escapeHtml(hint), formatAmd(Number(o.total_amd)), go(rec(`#/orders?open=${o.id}`, o.order_code || `#${o.id}`, hint)));
+      }) +
+      group(t("qa_pricelist"), products.slice(0, MAX_PER_GROUP), (p) => {
+        const hint = [p.brand, p.unit].filter(Boolean).join(" · ");
+        return itemHtml(escapeHtml(p.name), escapeHtml(hint), "", go(rec(`#/product/${p.id}`, p.name, hint)));
       }) +
       group(t("qa_tasks"), tasks.slice(0, MAX_PER_GROUP), (r) => {
         const hint = [r.customer_name, r.assignee_name].filter(Boolean).join(" · ");

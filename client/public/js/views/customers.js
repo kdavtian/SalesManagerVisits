@@ -132,10 +132,10 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   root.innerHTML = `
     <div class="list-view">
       <div class="list-header">
-        <h1>${t("nav_customers")}</h1>
         <button type="button" class="settings-hint-icon cl-legend-btn" id="cl-legend-btn" aria-label="${t("cl_legend_title")}">!</button>
+        <h1>${t("nav_customers")}</h1>
         <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
-        <button class="list-header-add-btn" id="toggle-ours-btn" aria-label="${t("customers_only_ours")}" title="${t("customers_only_ours")}" aria-pressed="false">${icons.checkCircle}</button>
+        <button class="list-header-add-btn" id="toggle-ours-btn" aria-label="${t("customers_only_ours")}" title="${t("customers_only_ours")}" aria-pressed="false">${icons.customersAll}</button>
         <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}</button>
       </div>
 
@@ -275,9 +275,14 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
 
 
   const oursBtn = root.querySelector("#toggle-ours-btn");
+  // The icon shows what the list holds now: three people = all customers, the green middle person alone = our customers (with an ERP ID).
   const paintOurs = () => {
     oursBtn.classList.toggle("list-header-add-btn-active", onlyOurs);
     oursBtn.setAttribute("aria-pressed", String(onlyOurs));
+    oursBtn.innerHTML = onlyOurs ? icons.customersOurs : icons.customersAll;
+    const label = onlyOurs ? t("customers_show_all") : t("customers_only_ours");
+    oursBtn.setAttribute("aria-label", label);
+    oursBtn.title = label;
   };
   paintOurs();
   oursBtn.addEventListener("click", () => {

@@ -81,7 +81,7 @@ export async function renderPivot(root, navigate) {
     <div class="detail-view pv-view">
       <div class="detail-header">
         <button class="icon-btn" id="pv-back" aria-label="${t("back")}">${icons.chevronLeft}</button>
-        <div class="detail-header-title"><h1>${t("report_pivot_name")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="pv-hint" aria-label="${t("more_info")}">!</span></h1></div>
+        <div class="detail-header-title"><h1><span role="button" tabindex="0" class="settings-inline-hint-icon" id="pv-hint" aria-label="${t("more_info")}">!</span> ${t("report_pivot_name")}</h1></div>
         <div class="pv-head-actions">
           <button type="button" class="btn" id="pv-views" aria-label="${t("pv_saved")}">${icons.folder}<span>${t("pv_saved")}</span></button>
           <button type="button" class="btn btn-primary" id="pv-export" aria-label="${t("pv_export")}">${icons.download}<span>${t("pv_export")}</span></button>

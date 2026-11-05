@@ -5,6 +5,8 @@ import { api } from "./api.js";
 import { rankItems, recentList } from "./kit/palette.js";
 import { soundKey, matchKind, prepareSearchText } from "./shared/searchKey.js";
 import { actionItems, screenItems } from "./screenCatalog.js";
+import { searchProducts } from "./productSearch.js";
+import { pinnedItems } from "./pins.js";
 import { opsShellFor } from "./opsShell.js";
 import { state } from "./state.js";
 import { t } from "./i18n.js";
@@ -33,13 +35,32 @@ async function searchTasks(query) {
     .map((x) => x.r);
 }
 
-/** Records for `query` (2+ letters): { customers, orders, tasks }; a group this person's app does not have stays empty. */
+// Before anything is typed the search offers what is most likely wanted (owner, 2026-11-05: "improve search"): the quick actions, then
+// the person's pinned screens, then the main screens, so an empty box is a menu and not a blank page.
+export function suggestions(settings, { screens = 6, actions = 4 } = {}) {
+  const pins = pinnedItems(settings).map((p) => ({ ...p, kind: "screen" }));
+  const seen = new Set(pins.map((p) => p.id));
+  const rest = screenItems(settings).filter((s) => !seen.has(s.id));
+  return { actions: actionItems().slice(0, actions), screens: [...pins, ...rest].slice(0, screens) };
+}
+
+let productsCache = { at: 0, rows: null };
+// Products are loaded once five minutes at most (the catalogue the order screens already use) and searched here, by name, size, brand, SKU, HC code.
+async function searchCatalog(query) {
+  if (!productsCache.rows || Date.now() - productsCache.at > 300000) {
+    productsCache = { at: Date.now(), rows: (await api.listProducts()) ?? [] };
+  }
+  return searchProducts(productsCache.rows, query);
+}
+
+/** Records for `query` (2+ letters): { customers, orders, tasks, products }; a group this person's app does not have stays empty. */
 export async function recordResults(query) {
   const shell = opsShellFor(state.user?.role);
-  const [customers, orders, tasks] = await Promise.all([
+  const [customers, orders, tasks, products] = await Promise.all([
     shell ? [] : api.listCustomers({ search: query, limit: MAX_PER_GROUP }).catch(() => []),
     api.listOrders({ q: query, limit: MAX_PER_GROUP }, { fresh: true }).then((r) => r.rows ?? []).catch(() => []),
     searchTasks(query).catch(() => []),
+    searchCatalog(query).catch(() => []),
   ]);
-  return { customers: (customers || []).slice(0, MAX_PER_GROUP), orders: orders.slice(0, MAX_PER_GROUP), tasks: tasks.slice(0, MAX_PER_GROUP) };
+  return { customers: (customers || []).slice(0, MAX_PER_GROUP), orders: orders.slice(0, MAX_PER_GROUP), tasks: tasks.slice(0, MAX_PER_GROUP), products: products.slice(0, MAX_PER_GROUP) };
 }

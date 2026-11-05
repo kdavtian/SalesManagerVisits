@@ -80,8 +80,8 @@ test("Group by is remembered and a tapped group header folds its customers", asy
   // fold one subregion: only its customer leaves the list
   const sub = page.locator('.cl-group-sub[data-gkey="s:Yerevan::Ajapnyak"]');
   await expect(sub).toHaveAttribute("aria-expanded", "true");
-  const h = await sub.evaluate((el) => el.getBoundingClientRect().height);
-  expect(h).toBeGreaterThanOrEqual(43);
+  // polled: the list repaints once more when the live answer replaces the saved copy, a one-time read could catch the old node
+  await expect.poll(() => sub.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(43);
   await sub.click();
   await expect(sub).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator(".list-row", { hasText: "E2E GF Zed One" })).toHaveCount(0);

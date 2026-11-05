@@ -282,5 +282,6 @@ export const hyCustomers = {
   desk_col_address: "Հասցե",
   desk_col_last_payment: "Վերջին վճարում",
   desk_col_last_payment_amount: "Վերջին վճարման գումար",
+  customers_show_all: "Ցույց տալ բոլոր հաճախորդներին",
   customers_only_ours: "Միայն մեր հաճախորդները (ERP կոդով)",
 };

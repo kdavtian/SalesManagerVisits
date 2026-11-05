@@ -994,6 +994,16 @@ a {
   padding-bottom: var(--nav-reserve);
 }
 
+/* Phones and tablets: no screen scrolls SIDEWAYS (owner, 2026-11-05, "pages that scroll in an improper way"). With overflow-y: auto the other axis
+   became auto too, so ONE element wider than the screen (a long URL, a row of links) made the whole page draggable left-right and cut off its
+   left edge. A wide element is now clipped at the screen edge; it is still fixed at its own cause (e2e page-overflow). A table that must
+   scroll sideways has its own scrolling box. Computers (sidebar layout) keep the wide-table behaviour. */
+@media (max-width: 1023px) {
+  .app-main {
+    overflow-x: hidden;
+  }
+}
+
 /* Buttons */
 
 .btn {
@@ -2123,6 +2133,7 @@ label.checkbox-row input[type="checkbox"] {
 
 .user-row-meta {
   display: flex;
+  flex-wrap: wrap; /* never wider than the card */
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -9767,6 +9778,11 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .map-color-by .chip { flex: 1 1 0; min-height: 34px; padding: 4px 8px; font-size: 0.85rem; justify-content: center; }
 .settings-view h1 { padding: 8px 16px 0; font-size: 2rem; letter-spacing: -0.03em; }
 .settings-search-wrap { margin: 10px 16px 0; }
+/* iOS-style search (settings/searchCollapse.js): the title stays pinned and the field slides away under it */
+@media (max-width: 1023px) {
+  .settings-view .settings-aside > h1 { position: sticky; top: 0; z-index: 4; background: var(--bg); padding-bottom: 2px; }
+  .settings-search-wrap { position: relative; z-index: 1; margin-top: 8px; }
+}
 .settings-view .admin-search {
   margin: 0;
   min-height: 40px;
