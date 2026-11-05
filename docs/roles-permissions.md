@@ -116,3 +116,5 @@ Everything below is limited to `ceo` + `admin`; the sales director cannot do it.
 - The Pivot report over every data source (`usesPivot`).
 - Giving tasks to anyone in the company (`tasksAnyone`).
 - Performance plans: approving or rejecting a sales director's plan, revising an approved plan, closing a month (`isPerfCeo` rules; the operations director shares these).
+
+> The list above is also in code: the table `APPROVALS` in `client/public/js/shared/roles.js` (`ceoOnlyApprovals()` gives it). The rules for the items it covers read that table, and `server/test/approvalMatrix.test.js` checks every rule against it for every role. To change who approves something, change the table.

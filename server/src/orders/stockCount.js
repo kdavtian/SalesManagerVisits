@@ -19,7 +19,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { stockCountDirPath } from "../shared/upload.js";
 import { buildStockCountPdf, readIfExists, PDF_LAYOUT } from "./stockCountPdf.js";
-import { APP_STOCK_SQL } from "./appStock.js";
+import { APP_STOCK_SQL, appStockParts } from "./appStock.js";
 import { compareProducts } from "../../../client/public/js/productSort.js";
 
 export const AUTO_CLOSE_MIN = 20 * 60; // 20:00 Yerevan: an unclosed day is closed automatically
@@ -125,7 +125,7 @@ export async function dayNumbers(db, day) {
             count(*) FILTER (WHERE s.planned_date = $2)::int AS own,
             count(*) FILTER (WHERE s.planned_date < $2 AND (s.counted_at IS NULL OR s.counted_day = $2))::int AS carried,
             count(*) FILTER (WHERE s.counted_day = $2)::int AS counted,
-            count(*) FILTER (WHERE s.counted_day = $2 AND s.counted_qty <> COALESCE(s.expected_qty, 0))::int AS differences,
+            count(*) FILTER (WHERE s.counted_day = $2 AND s.expected_qty IS NOT NULL AND s.counted_qty <> s.expected_qty)::int AS differences,
             count(*) FILTER (WHERE s.planned_date <= $2 AND s.counted_at IS NULL)::int AS left_over,
             count(*)::int AS month_total,
             count(*) FILTER (WHERE s.counted_at IS NOT NULL)::int AS month_counted
@@ -146,7 +146,7 @@ export async function savePdf(db, day) {
   );
   if (!d) return null;
   const { rows: items } = await db.query(
-    `SELECT p.id, p.name, p.brand, p.family, p.unit, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty, s.note
+    `SELECT p.id, p.name, p.brand, p.family, p.unit, p.unit AS size, s.counted_qty, s.expected_qty, s.note
      FROM stock_counts s JOIN products p ON p.id = s.product_id WHERE s.counted_day = $1`,
     [day]
   );
@@ -201,10 +201,17 @@ export async function dayList(db, day, { showExpected }) {
     const item = { product_id: r.product_id, name: r.name, brand: r.brand, size: r.size, family: r.family, planned_date: r.planned_date, carried: r.carried, counted, counted_qty: r.counted_qty, note: r.note };
     if (reveal) {
       item.expected_qty = counted ? r.expected_qty : r.app_stock; // not counted yet: the app's stock of this moment
-      item.difference = counted ? r.counted_qty - (r.expected_qty ?? 0) : null;
+      // no stock figure for the product (unknown in Excel): there is nothing to compare with, so no difference
+      item.difference = counted && item.expected_qty != null ? r.counted_qty - item.expected_qty : null;
     }
     return item;
   });
+  // Where each "in app" number comes from (Excel stock, packed out, delivered but not in Excel yet, returns): for management, today only
+  // (it is the situation of NOW; an earlier day keeps only the number it was counted against).
+  if (reveal && day === yerevanToday()) {
+    const parts = await appStockParts(db, items.map((i) => i.product_id));
+    for (const item of items) item.parts = parts.get(item.product_id) ?? null;
+  }
   return { day, items, numbers: await dayNumbers(db, day), finished: closed, shows_expected: reveal };
 }
 
@@ -250,7 +257,7 @@ export async function closeDay(db, day, userId = null, evidence = {}) {
   const { rows: diffs } = await db.query(
     `SELECT s.id, p.name, p.brand, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty, s.note, s.counted_by
      FROM stock_counts s JOIN products p ON p.id = s.product_id
-     WHERE s.counted_day = $1 AND s.counted_qty <> COALESCE(s.expected_qty, 0) AND s.reported_at IS NULL
+     WHERE s.counted_day = $1 AND s.expected_qty IS NOT NULL AND s.counted_qty <> s.expected_qty AND s.reported_at IS NULL
      ORDER BY lower(COALESCE(p.brand, '')), lower(p.name)`,
     [day]
   );
@@ -372,7 +379,7 @@ export async function monthReport(db, month = yerevanMonthStart(), today = yerev
       `SELECT to_char(s.counted_day, 'YYYY-MM-DD') AS day, s.product_id, p.name, p.brand, p.unit AS size, s.counted_qty, COALESCE(s.expected_qty, 0) AS expected_qty,
               s.counted_qty - COALESCE(s.expected_qty, 0) AS difference, s.note, u.name AS counted_by
        FROM stock_counts s JOIN products p ON p.id = s.product_id LEFT JOIN users u ON u.id = s.counted_by
-       WHERE s.month = $1 AND s.counted_at IS NOT NULL AND s.counted_qty <> COALESCE(s.expected_qty, 0)
+       WHERE s.month = $1 AND s.counted_at IS NOT NULL AND s.expected_qty IS NOT NULL AND s.counted_qty <> s.expected_qty
        ORDER BY s.counted_day DESC, lower(p.name)`,
       [month]
     ),

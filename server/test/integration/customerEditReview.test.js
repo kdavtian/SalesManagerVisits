@@ -35,6 +35,9 @@ test("a rep proposes a tier change; the sales director sees the queue and approv
   const queue = await apiRequest("/api/edit-requests?status=pending", { cookie: cookies.director });
   assert.equal(queue.status, 200);
   assert.ok(queue.data.some((r) => r.id === id));
+  assert.equal(queue.data.find((r) => r.id === id).current.customer_tier, customer.customer_tier ?? "potential", "the reviewer sees what the field holds now");
+  const own = await apiRequest(`/api/edit-requests?customer_id=${customer.id}&status=pending`, { cookie: cookies.rep });
+  assert.equal(own.data[0].current, undefined, "the proposer only gets the banner, no current values");
   const badge = await apiRequest("/api/badges", { cookie: cookies.director });
   assert.ok(badge.data.editRequests >= 1);
 

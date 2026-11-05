@@ -79,7 +79,7 @@ export async function renderEditRequestsSection(container) {
     section.innerHTML = requests
       .map((r) => {
         const changesList = Object.entries(r.changes)
-          .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${escapeHtml(String(value))}</div>`)
+          .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${r.current && field in r.current ? `<span class="muted">${escapeHtml(String(r.current[field] ?? "–"))}</span> &rarr; ` : ""}${escapeHtml(String(value))}</div>`)
           .join("");
         return `
         <div class="card plan-approval-row" data-id="${r.id}">

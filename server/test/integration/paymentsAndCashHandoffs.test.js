@@ -81,6 +81,12 @@ test("POST /api/payments: a date later than tomorrow is refused; GET /pending-co
     [customer.id, users.sales_manager.id]
   );
   trackPayment(rows[0].id);
+  const listed = (await apiRequest("/api/payments?status=pending", { cookie: cookies.sales_director })).data.rows.find((r) => r.id === rows[0].id);
+  assert.equal(listed.days_back, 9, "entered today for a payment dated 9 days ago");
+  await pool.query("UPDATE payments SET created_at = now() + interval '5 days' WHERE id = $1", [rows[0].id]);
+  const backdated = (await apiRequest(`/api/payments/${rows[0].id}`, { cookie: cookies.sales_director })).data;
+  assert.ok(backdated.days_back >= 14, "entered 5 days later than 9 days ago = dated 14 days back");
+  await pool.query("UPDATE payments SET created_at = now() WHERE id = $1", [rows[0].id]);
   const after = (await apiRequest("/api/payments/pending-count", { cookie: cookies.sales_director })).data;
   assert.equal(after.count, before.count + 1);
   assert.equal(after.total_amd, before.total_amd + 777000);

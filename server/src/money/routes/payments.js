@@ -46,7 +46,8 @@ async function loadPaymentRow(id) {
             ch.name AS current_holder_name,
             pending_to.name AS pending_handoff_to_name,
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
-            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old
+            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
+            GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
      FROM payments p
      JOIN users sm ON sm.id = p.sales_manager_id
      JOIN users cb ON cb.id = p.created_by
@@ -445,7 +446,8 @@ paymentsRouter.get("/", async (req, res) => {
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
     `SELECT p.*, ch.name AS current_holder_name, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
-            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old
+            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
+            GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
      FROM payments p
      LEFT JOIN customers c ON c.id = p.customer_id
      LEFT JOIN users ch ON ch.id = p.current_holder_id
@@ -664,6 +666,8 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
 paymentsRouter.delete("/:id", async (req, res) => {
   if (!canDeletePayments(req.user.role)) return res.status(403).json({ error: "Only an admin can delete a payment" });
   const reason = String(req.body?.reason ?? "").trim().slice(0, 300);
+  // a payment is deleted for good (archived, but gone from every list): the audit trail says WHY (owner, 2026-11-05)
+  if (reason.length < 3) return res.status(400).json({ error: "A reason is required to delete a payment", code: "reason_required" });
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

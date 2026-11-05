@@ -55,7 +55,7 @@ export function buildStockCountPdf(data) {
   y += 16;
   // "left for the next day" only when something was left (owner, 2026-11-04)
   text(`Ըստ պլանի՝ ${data.planned}   Հաշվվել է՝ ${data.counted}${data.left_over > 0 ? `   Մնաց հաջորդ օրվան՝ ${data.left_over}` : ""}`, M, y, { width: W * 0.65 });
-  const diffs = data.items.filter((i) => Number(i.counted_qty) !== Number(i.expected_qty ?? 0)).length;
+  const diffs = data.items.filter((i) => i.expected_qty != null && Number(i.counted_qty) !== Number(i.expected_qty)).length; // no stock figure = nothing to compare
   text(diffs ? `Տարբերություններ՝ ${diffs}` : "Տարբերություններ չկան", M + W * 0.65, y, { bold: true, color: diffs ? RED : INK, width: W * 0.35, align: "right" });
   y += 24;
 
@@ -83,13 +83,13 @@ export function buildStockCountPdf(data) {
       text(`${COMPANY_NAME} · Գույքագրում ${dmy(data.day)}թ.`, M, M, { size: 8.5, color: MUTED });
       y = head(M + 16);
     }
-    const diff = Number(it.counted_qty) - Number(it.expected_qty ?? 0);
+    const diff = it.expected_qty == null ? 0 : Number(it.counted_qty) - Number(it.expected_qty);
     const label = `${it.brand ? `${it.brand} · ` : ""}${it.name}`;
     const cell = (i) => ({ size: 8.5, width: cols[i + 1] - cols[i] - 8 });
     text(String(n + 1), cols[0] + 4, y + 5, { ...cell(0), align: "center", color: MUTED });
     text(label.length > 48 ? `${label.slice(0, 47)}…` : label, cols[1] + 4, y + 5, cell(1));
     text(normalizeUnitLabel(it.size), cols[2] + 4, y + 5, cell(2));
-    text(String(it.expected_qty ?? 0), cols[3] + 4, y + 5, { ...cell(3), align: "right" });
+    text(it.expected_qty == null ? "—" : String(it.expected_qty), cols[3] + 4, y + 5, { ...cell(3), align: "right" });
     text(String(it.counted_qty), cols[4] + 4, y + 5, { ...cell(4), align: "right", bold: true });
     text(diff ? signed(diff) : "—", cols[5] + 4, y + 5, { ...cell(5), align: "right", bold: diff !== 0, color: diff ? RED : INK });
     if (it.note) text(it.note.length > 110 ? `${it.note.slice(0, 109)}…` : it.note, cols[1] + 4, y + 18, { size: 7, color: MUTED, width: W - (cols[1] - M) - 8 });

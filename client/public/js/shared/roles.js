@@ -13,6 +13,34 @@ export const ROLES = [
   "accountant",
 ];
 
+// ---- Who approves / decides what: ONE table (owner, 2026-11-05, optimization idea 1) -------------------------------------------------
+// Every rule below that is a plain list of roles reads this table, the discount policy reads it too, and docs/roles-permissions.md and
+// the RBAC test are checked against it. To change who may do something, change the list HERE.
+export const APPROVALS = {
+  // orders
+  orderPricingAny: { roles: ["admin", "ceo", "sales_director"], about: "Approve any discount, price change, line below net cost or below landing cost on an order" },
+  orderPricingAboveNetCost: { roles: ["operations_director"], about: "Approve an order discount while every line stays at or above net cost" },
+  returns: { roles: ["admin", "ceo", "operations_director", "sales_director", "accountant"], about: "Approve an order return or cancellation" },
+  // customers
+  customerEdits: { roles: ["admin", "ceo", "operations_director", "sales_director"], about: "Approve a customer card edit request, tier changes included" },
+  // money
+  paymentReview: { roles: ["admin", "ceo", "operations_director", "accountant"], about: "Approve / reject / reopen a submitted payment" },
+  countedPaymentVoid: { roles: ["admin", "ceo"], about: "Void a payment whose cash was already counted" },
+  cashDesks: { roles: ["admin", "ceo"], about: "Set up the cash desks" },
+  cashflowManagement: { roles: ["admin", "ceo"], about: "Change any ledger row at any age and decide the change requests" },
+  fuel: { roles: ["admin", "ceo"], about: "Fuel allowance: consumption, price, home addresses, day corrections" },
+  // management
+  routePlanSuggestions: { roles: ["admin", "ceo"], about: "Accept or dismiss Vaghinak's route-plan suggestions" },
+  appOrderPerks: { roles: ["admin", "ceo"], about: "KAD OS app-order perks and which account belongs to which customer" },
+  staffRules: { roles: ["admin", "ceo"], about: "Staff rules" },
+  signedDocuments: { roles: ["admin", "ceo"], about: "Change an order after the customer signed; delete or replace documents others added" },
+  pivot: { roles: ["admin", "ceo"], about: "Pivot report over every data source" },
+  tasksAnyone: { roles: ["admin", "ceo"], about: "Give a task to anyone in the company" },
+};
+export const approves = (key, role) => APPROVALS[key].roles.includes(role);
+/** The rules only the CEO (and admin, the owner's own account) holds: for the "CEO-only" list. */
+export const ceoOnlyApprovals = () => Object.entries(APPROVALS).filter(([, a]) => a.roles.every((r) => r === "admin" || r === "ceo")).map(([key, a]) => ({ key, about: a.about }));
+
 // Role names that are shown as their own role but carry another role's permissions exactly (owner, 2026-10-27: the Financial director,
 // "with the same permissions as the accountant"). Stored as users.role = the permission role + users.role_title = the name.
 export const ROLE_TITLES = { financial_director: "accountant" };
@@ -44,7 +72,7 @@ export function seesFinancialExports(role) {
 // Fuel allowance: consumption, fuel price, home addresses and day corrections
 // decide how much money is paid out, so only the owner-level roles change them.
 export function canManageFuel(role) {
-  return role === "admin" || role === "ceo";
+  return approves("fuel", role);
 }
 
 export function canDeleteOrEditDirectly(role) {
@@ -142,7 +170,7 @@ export function canPlanForOthers(role) {
 
 // Who accepts or dismisses Vaghinak's route-plan suggestions (owner, 2026-11-03: the CEO decides; the admin is the owner's own account).
 export function canReviewRoutePlanSuggestions(role) {
-  return role === "admin" || role === "ceo";
+  return approves("routePlanSuggestions", role);
 }
 
 // Who can LOOK at every rep's route plans (the overview grid and each rep's
@@ -172,7 +200,7 @@ export function canConfirmSubmittedOrders(role) {
 // Who approves or rejects a customer card edit request, tier changes included (owner, 2026-11-05: "the sales director can approve customer
 // card edits"; before that admin only). The sales manager only PROPOSES; a pin correction still applies at once (movesAnyPinAtOnce).
 export function canReviewCustomerEdits(role) {
-  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
+  return approves("customerEdits", role);
 }
 
 // Credit terms (a customer's credit limit): the accountant and the directors set them.
@@ -280,7 +308,7 @@ export function canCloseMonth(role) {
 // as a backstop. A Sales Director does not review payments (they submit
 // like a manager if they log one themselves, same as canSubmitPayments).
 export function canReviewPayments(role) {
-  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
+  return approves("paymentReview", role);
 }
 
 // Who can submit a payment on someone else's behalf (picking a sales
@@ -365,7 +393,7 @@ export function canManageWarehouse(role) {
 // Payments, redesigned (owner, 2026-11-02, answer 7): once a payment's cash is counted (or for a card / bank payment) only admin and CEO
 // may void it, with a reason; the books track (Excel matching, payments the Excel does not have) is read by admin, CEO and the accountant.
 export function canVoidCountedPayment(role) {
-  return role === "admin" || role === "ceo";
+  return approves("countedPaymentVoid", role);
 }
 export function seesPaymentBooks(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
@@ -383,7 +411,7 @@ export function closesCashShortfall(role) {
   return role === "sales_director" || role === "accountant" || role === "admin" || role === "ceo" || role === "operations_director";
 }
 export function canManageCashDesks(role) {
-  return role === "admin" || role === "ceo";
+  return approves("cashDesks", role);
 }
 
 // Stock count (Գույքագրում, owner 2026-10-30): the warehouse manager counts the day's plan; admin, CEO and the operations director can
@@ -540,7 +568,7 @@ export function seesAllTasks(role) {
 // task giver to the people below them in the Staff tree (direct and indirect; routes/tasks.js), and the accountant's requests
 // still go to the sales director.
 export function tasksAnyone(role) {
-  return role === "admin" || role === "ceo";
+  return approves("tasksAnyone", role);
 }
 
 // The roles a creator may assign a task to; null = any role. Since 2026-10-28 only the fallback for a task giver who has no
@@ -559,7 +587,7 @@ export function canManageCampaigns(role) {
   return role === "admin" || role === "ceo" || role === "sales_director";
 }
 export function canManageAppOrders(role) {
-  return role === "admin" || role === "ceo";
+  return approves("appOrderPerks", role);
 }
 
 // Cashflow (owner, 2026-10-23): every money movement of the company, salaries included -- the owner's own roles only.
@@ -572,7 +600,7 @@ export function canEditCashflow(role) {
 }
 // Who changes any ledger row the app made, at any age, and decides the change requests (owner, 2026-10-27: "management").
 export function isCashflowManagement(role) {
-  return role === "admin" || role === "ceo";
+  return approves("cashflowManagement", role);
 }
 // The accountant edits / deletes a row up to this many days after it was made; an older row needs a request to management.
 export const CASH_EDIT_WINDOW_DAYS = 3;
@@ -587,7 +615,7 @@ export function canManageStaff(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
 export function canSetStaffRules(role) {
-  return role === "admin" || role === "ceo";
+  return approves("staffRules", role);
 }
 
 // Potential Customer classification (owner, 2026-10-24). Management sets any customer's level; a sales manager only their own customers.
@@ -602,7 +630,7 @@ export function canResolveCounterfeit(role) {
 // Order returns and cancellations (owner, 2026-10-24): the rep asks, management / the accountant approves, the warehouse manager confirms the goods
 // are back, the accountant records it in Excel.
 export function canApproveReturns(role) {
-  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
+  return approves("returns", role);
 }
 export function canReceiveReturns(role) {
   return role === "warehouse_manager" || role === "admin";
@@ -623,7 +651,7 @@ export function seesAllCustomerFiles(role) {
 
 // Delete or replace a document that somebody else added; also the only people who may change an order after the customer signed for it.
 export function canManageSignedDocuments(role) {
-  return role === "admin" || role === "ceo";
+  return approves("signedDocuments", role);
 }
 
 // --- Operations control, Home numbers, places, Vaghinak, anti-fraud, expenses --------------------------------------------------------
@@ -646,7 +674,7 @@ export function seesHomeKpis(role) {
 }
 // The Pivot report over every data source (reports/pivot): admin and CEO only (owner, 2026-11-03), never widened by the per-role report settings.
 export function usesPivot(role) {
-  return role === "admin" || role === "ceo";
+  return approves("pivot", role);
 }
 // Who reviews a region / subregion the app could not place with confidence (placeReviews.js).
 export function reviewsPlaces(role) {

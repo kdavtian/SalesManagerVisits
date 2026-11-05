@@ -5,7 +5,7 @@
 // "Month": every working day with its result and every difference found (management, and the counter for his own history).
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { escapeHtml, activateDialog } from "../util.js";
+import { escapeHtml, activateDialog, openInfoPopup } from "../util.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { prepareSearchText, matchKind } from "../shared/searchKey.js";
 import { installInlineClearButton } from "../searchBar.js";
@@ -36,10 +36,25 @@ const writeCache = (d) => {
 // counts typed without signal that are still waiting to be sent (offlineQueue.js, one per product and day)
 const waiting = (day) => getQueue().filter((e) => e.type === "stock_count" && e.day === day);
 
+// "!" next to the app's number (management, today): where that number comes from (Excel stock, packed out, delivered but not in Excel yet, returns)
+const whyBtn = (item) => (item.parts ? `<button type="button" class="sc-why" data-why="${item.product_id}" aria-label="${t("stock_count_why")}">!</button>` : "");
+
 function diffChip(item) {
-  if (item.difference == null) return item.expected_qty != null ? `<span class="sc-excel">${t("stock_count_excel")} ${item.expected_qty}</span>` : "";
+  if (item.difference == null) return item.expected_qty != null ? `<span class="sc-excel">${t("stock_count_excel")} ${item.expected_qty}</span>${whyBtn(item)}` : "";
   const cls = item.difference === 0 ? "sc-diff-ok" : "sc-diff-bad";
-  return `<span class="sc-excel">${t("stock_count_excel")} ${item.expected_qty ?? 0}</span><span class="sc-diff ${cls}">${item.difference === 0 ? "✓" : signed(item.difference)}</span>`;
+  return `<span class="sc-excel">${t("stock_count_excel")} ${item.expected_qty ?? 0}</span>${whyBtn(item)}<span class="sc-diff ${cls}">${item.difference === 0 ? "✓" : signed(item.difference)}</span>`;
+}
+
+function whyHtml(item) {
+  const p = item.parts;
+  const line = (label, value) => `<li>${escapeHtml(label)}: <strong>${value}</strong></li>`;
+  return `<h3>${escapeHtml(item.name)}</h3><ul class="sc-why-list">
+    ${line(`${t("stock_count_why_excel")}${p.synced_at ? ` (${p.synced_at})` : ""}`, p.excel ?? "–")}
+    ${p.packed_out ? line(t("stock_count_why_packed"), `−${p.packed_out}`) : ""}
+    ${p.delivered_not_in_excel ? line(t("stock_count_why_delivered"), `−${p.delivered_not_in_excel}`) : ""}
+    ${p.returns_back ? line(t("stock_count_why_returns"), `+${p.returns_back}`) : ""}
+    ${line(t("stock_count_excel"), item.expected_qty ?? "–")}
+  </ul><p class="muted">${escapeHtml(t("stock_count_why_hint"))}</p>`;
 }
 
 function rowHtml(item, canCount) {
@@ -391,6 +406,12 @@ export async function renderStockCount(root, navigate, query) {
       body.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
       setTabs();
       await loadDay();
+      return;
+    }
+    const why = e.target.closest("[data-why]");
+    if (why) {
+      const item = data?.items?.find((i) => i.product_id === Number(why.dataset.why));
+      if (item?.parts) openInfoPopup(whyHtml(item));
       return;
     }
     const undo = e.target.closest("[data-undo]");

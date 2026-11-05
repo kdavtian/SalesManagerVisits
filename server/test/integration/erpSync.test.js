@@ -279,6 +279,24 @@ test("POST /api/erp-sync: tier prices and net cost refresh even for a manually e
   }
 });
 
+test("POST /api/erp-sync: stock follows the workbook even for a manually edited product; a blank stock never wipes it", async () => {
+  const erpId = `ITEST-STOCK-${Date.now()}`;
+  try {
+    await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Stock Test Oil", unit_price_amd: 9000, stock_qty: 40 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    await pool.query("UPDATE products SET manually_edited_at = now(), name = 'Renamed By Hand' WHERE erp_product_id = $1", [erpId]);
+    const res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Stock Test Oil", unit_price_amd: 9000, stock_qty: 25 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal(res.status, 200);
+    let row = (await pool.query("SELECT name, stock_qty FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.name, "Renamed By Hand", "the name stays gated");
+    assert.equal(row.stock_qty, 25, "the stock follows Excel (it used to stay at 40 for ever)");
+    await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "Stock Test Oil", unit_price_amd: 9000 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    row = (await pool.query("SELECT stock_qty FROM products WHERE erp_product_id = $1", [erpId])).rows[0];
+    assert.equal(row.stock_qty, 25, "a payload without stock leaves it");
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+  }
+});
+
 test("POST /api/erp-sync: SKU status decides what is active, family follows the workbook, inactive products are not created", async () => {
   const stamp = Date.now();
   const keep = `ITEST-ACT-KEEP-${stamp}`;

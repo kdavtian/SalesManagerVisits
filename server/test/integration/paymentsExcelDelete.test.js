@@ -60,6 +60,9 @@ test("only an admin can delete a payment; it is archived with its history and th
   const denied = await apiRequest(`/api/payments/${id}`, { method: "DELETE", cookie: repCookie, body: { reason: "x" } });
   assert.equal(denied.status, 403);
 
+  const noReason = await apiRequest(`/api/payments/${id}`, { method: "DELETE", cookie: adminCookie, body: { reason: " " } });
+  assert.equal(noReason.status, 400, "a payment is not deleted without saying why");
+  assert.equal(noReason.data.code, "reason_required");
   const ok = await apiRequest(`/api/payments/${id}`, { method: "DELETE", cookie: adminCookie, body: { reason: "entered twice" } });
   assert.equal(ok.status, 200);
   const { rows } = await pool.query("SELECT 1 FROM payments WHERE id = $1", [id]);
@@ -73,5 +76,5 @@ test("only an admin can delete a payment; it is archived with its history and th
   const list = await apiRequest("/api/payments/deleted/list", { cookie: adminCookie });
   assert.ok(list.data.some((r) => r.payment_id === id && Number(r.amount_amd) === 44444));
   assert.equal((await apiRequest("/api/payments/deleted/list", { cookie: repCookie })).status, 403);
-  assert.equal((await apiRequest(`/api/payments/${id}`, { method: "DELETE", cookie: adminCookie })).status, 404);
+  assert.equal((await apiRequest(`/api/payments/${id}`, { method: "DELETE", cookie: adminCookie, body: { reason: "again" } })).status, 404);
 });

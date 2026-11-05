@@ -6,6 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { uploadDirPath } from "../shared/upload.js";
+import { approves } from "../shared/roles.js";
 import { loadBlankOrders } from "./orderBlankData.js";
 import { liveBalance } from "../money/liveDebt.js";
 import { buildOrderBlanksPdf, buildPaymentSlipsPdf } from "./orderBlankPdf.js";
@@ -22,7 +23,7 @@ export function balanceBeforeVisit(db, customerId, options = {}) {
 }
 
 // admin and CEO keep the right to change a signed order.
-export const canChangeSignedOrder = (role) => ["admin", "ceo"].includes(role);
+export const canChangeSignedOrder = (role) => approves("signedDocuments", role);
 
 export const SIGNED_ORDER_ERROR = {
   error: "The customer already signed this order -- only the admin or the CEO can change it",
