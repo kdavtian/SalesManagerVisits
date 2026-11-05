@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
-import { requireAuth, requireAdmin } from "../../middleware/auth.js";
+import { requireAuth } from "../../middleware/auth.js";
 import { EDITABLE_FIELDS, isWithinArmenia } from "./customers.js";
 import { haversineMeters } from "../../utils/geo.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { normalizeIncomingPlaces, recordPlaceReviews } from "../placeReviews.js";
-import { movesAnyPinAtOnce } from "../../shared/roles.js";
+import { movesAnyPinAtOnce, canReviewCustomerEdits } from "../../shared/roles.js";
 
 export const editRequestsRouter = Router();
 
@@ -118,11 +118,11 @@ editRequestsRouter.get("/", async (req, res) => {
   const { customer_id } = req.query;
   let { status } = req.query;
 
-  // Non-admins can only look up requests for a specific customer (to show
+  // Anyone else can only look up requests for a specific customer (to show
   // a "pending edit" banner), and only the pending one — past approved/
   // rejected requests can reveal another user's proposed changes, so the
-  // full review queue and history are admin-only.
-  if (req.user.role !== "admin") {
+  // full review queue and history are for the reviewers (canReviewCustomerEdits).
+  if (!canReviewCustomerEdits(req.user.role)) {
     if (!customer_id) {
       return res.status(403).json({ error: "customer_id is required" });
     }
@@ -153,7 +153,8 @@ editRequestsRouter.get("/", async (req, res) => {
   res.json(rows);
 });
 
-editRequestsRouter.patch("/:id", requireAdmin, async (req, res) => {
+editRequestsRouter.patch("/:id", async (req, res) => {
+  if (!canReviewCustomerEdits(req.user.role)) return res.status(403).json({ error: "Only the sales director, the CEO or an admin can review customer edits" });
   const { action, note } = req.body ?? {};
   if (!["approve", "reject"].includes(action)) {
     return res.status(400).json({ error: "action must be 'approve' or 'reject'" });

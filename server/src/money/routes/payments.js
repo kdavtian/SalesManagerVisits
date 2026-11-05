@@ -9,7 +9,7 @@ import { Router } from "express";
 import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
@@ -212,6 +212,12 @@ paymentsRouter.post("/", proofUpload, async (req, res) => {
     dropFiles();
     return res.status(400).json({ error: "Invalid payment date" });
   }
+  // Money cannot be collected tomorrow: a date later than tomorrow (Yerevan; a day of slack for a phone in another time zone) is a typo
+  // that would put the payment on the wrong day of the cash reports.
+  if (paymentDateObj.getTime() > Date.now() + 2 * 86400000) {
+    dropFiles();
+    return res.status(400).json({ error: "The payment date cannot be in the future", code: "payment_date_future" });
+  }
 
   let salesManagerId = req.user.id;
   if (req.user.role === "sales_manager") {
@@ -348,16 +354,17 @@ paymentsRouter.post("/", proofUpload, async (req, res) => {
   autoCompleteCollectionTasks({ customerId: customer.id, actorId: req.user.id, amountAmd: amount }).catch((err) => console.error("Task auto-complete failed:", err.message));
 });
 
+// What waits for review: how many, how much money, and how long the oldest has waited (the number that decides what to do first).
+// Older clients read only `count`.
 paymentsRouter.get("/pending-count", async (req, res) => {
-  if (seesAllPayments(req.user.role)) {
-    const { rows } = await pool.query("SELECT count(*)::int AS count FROM payments WHERE status = 'pending'");
-    return res.json({ count: rows[0].count });
-  }
+  const own = !seesAllPayments(req.user.role);
   const { rows } = await pool.query(
-    "SELECT count(*)::int AS count FROM payments WHERE status = 'pending' AND sales_manager_id = $1",
-    [req.user.id]
+    `SELECT count(*)::int AS count, COALESCE(sum(amount_amd), 0)::float8 AS total_amd,
+            COALESCE(max((now() AT TIME ZONE 'Asia/Yerevan')::date - (payment_date AT TIME ZONE 'Asia/Yerevan')::date), 0)::int AS oldest_days
+     FROM payments WHERE status = 'pending' ${own ? "AND sales_manager_id = $1" : ""}`,
+    own ? [req.user.id] : []
   );
-  res.json({ count: rows[0].count });
+  res.json(rows[0]);
 });
 
 paymentsRouter.get("/", async (req, res) => {
@@ -655,7 +662,7 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
 // Admin only (owner, 2026-10-24). The payment and its history are copied to deleted_payments first, so nothing is ever lost.
 // A payment inside a cash handoff cannot be deleted until the handoff is settled (the handoff list points at it).
 paymentsRouter.delete("/:id", async (req, res) => {
-  if (req.user.role !== "admin") return res.status(403).json({ error: "Only an admin can delete a payment" });
+  if (!canDeletePayments(req.user.role)) return res.status(403).json({ error: "Only an admin can delete a payment" });
   const reason = String(req.body?.reason ?? "").trim().slice(0, 300);
   const client = await pool.connect();
   try {

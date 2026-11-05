@@ -6,7 +6,7 @@ import { reorderHash } from "../../reorder.js";
 import { activateDialog, erpLineDiscountRowHtml, escapeHtml, formatAmd, formatDateDMY, leaveSheetTo } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
-import { isAdmin, state } from "../../state.js";
+import { canReviewCustomerEdits, state } from "../../state.js";
 import { seesAmountPapers } from "../../shared/roles.js";
 import { openFileReadySheet } from "../../fileReadySheet.js";
 import { loadWithCache } from "../../listCache.js";
@@ -270,7 +270,7 @@ export function renderPendingRequest(slot, request, onDone) {
     return;
   }
 
-  if (isAdmin()) {
+  if (canReviewCustomerEdits()) {
     const changesList = Object.entries(request.changes)
       .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${escapeHtml(String(value))}</div>`)
       .join("");

@@ -1,10 +1,12 @@
-// Discount rules (owner, 2026-10-10):
-//  - a discount up to AUTO_APPROVE_PCT (3 %) is approved automatically,
-//    as long as no line drops below the product's net cost;
-//  - a bigger discount needs a director: the sales director / operations
-//    director may approve only while every line stays at or above net cost;
-//    the CEO and admin may approve any discount;
-//  - a line below LANDING cost needs the CEO or an admin whatever the discount (price floor, 2026-10-15).
+// Discount rules (owner, 2026-10-10; changed 2026-11-05):
+//  - EVERY discount a person types on an order needs approval, however small (owner, 2026-11-05: "any discount should be approved by
+//    the sales director, reps cannot give discount"): the order waits as 'pending' until the sales director, the CEO or an admin approves it;
+//  - the standing discount of the KAD OS app (a perk the owner configures, not a person's decision) keeps the old rule: up to
+//    AUTO_APPROVE_PCT (3 %) is automatic, as long as no line drops below net cost (callers pass autoPct);
+//  - the sales director, the CEO and admin approve ANYTHING on an order: a discount, a price change, a line below net cost, a line below
+//    LANDING cost (owner, 2026-11-05; before that landing needed the CEO or an admin). The operations director approves only while every
+//    line stays at or above net cost;
+//  - a line below LANDING cost always needs a person's approval, with or without a discount (price floor, 2026-10-15).
 // Net cost = products.net_cost_amd (per unit, same basis as the price). A line
 // whose product has no net cost is not checked.
 // The workbook's Net Cost (Products!AE) is computed at the Silver price and mixes a per-LITER landing
@@ -17,7 +19,7 @@
 import { netCost, litersOfUnit } from "../../../client/public/js/costModel.js";
 
 export const AUTO_APPROVE_PCT = 3;
-const UNLIMITED_APPROVER_ROLES = ["ceo", "admin"];
+const UNLIMITED_APPROVER_ROLES = ["ceo", "admin", "sales_director"];
 
 // Effective discount in percent of the subtotal (flat AMD discounts are converted).
 export function effectiveDiscountPct(subtotal, discountPct, discountAmd) {
@@ -83,11 +85,13 @@ export async function orderCostCheck(db, lines, subtotal, total, { customerId = 
 }
 
 // 'not_required' | 'approved' (automatic) | 'pending'
-export function decideDiscountApproval({ discountPct, discountAmd, subtotal, belowCost, belowLanding = false }) {
+// autoPct: the part of a discount that needs no approval. 0 for a discount a person typed (every one is approved by a director);
+// AUTO_APPROVE_PCT only for the KAD OS app's standing discount.
+export function decideDiscountApproval({ discountPct, discountAmd, subtotal, belowCost, belowLanding = false, autoPct = 0 }) {
   if (belowLanding) return "pending"; // below landing cost: never automatic, even without a discount
   if (!(Number(discountPct) > 0) && !(Number(discountAmd) > 0)) return "not_required";
   const pct = effectiveDiscountPct(subtotal, discountPct, discountAmd);
-  return pct <= AUTO_APPROVE_PCT && !belowCost ? "approved" : "pending";
+  return pct <= autoPct && !belowCost ? "approved" : "pending";
 }
 
 export function canApproveDiscountRole(role, belowCost, belowLanding = false) {

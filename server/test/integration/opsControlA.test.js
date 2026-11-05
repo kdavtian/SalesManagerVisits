@@ -33,7 +33,7 @@ test.after(async () => {
 const order = (productId, extra = {}) =>
   apiRequest("/api/orders", { method: "POST", cookie: repCookie, body: { customer_id: customer.id, payment_method: "cash", items: [{ product_id: productId, quantity: 1 }], ...extra } });
 
-test("price floor: a line below LANDING cost needs the CEO/admin even without a discount; a healthy line does not", async () => {
+test("price floor: a line below LANDING cost needs a director even without a discount; a healthy line does not", async () => {
   const ok = await order(normal.id);
   assert.equal(ok.status, 201);
   trackOrder(ok.data.id);
@@ -44,8 +44,9 @@ test("price floor: a line below LANDING cost needs the CEO/admin even without a 
   trackOrder(low.data.id);
   assert.equal(low.data.approval_status, "pending", "no discount, still pending: the price itself is below landing cost");
 
-  assert.equal((await apiRequest(`/api/orders/${low.data.id}/approve-discount`, { method: "POST", cookie: directorCookie })).status, 403, "a sales director cannot approve below landing");
-  const done = await apiRequest(`/api/orders/${low.data.id}/approve-discount`, { method: "POST", cookie: adminCookie });
+  assert.equal((await apiRequest(`/api/orders/${low.data.id}/approve-discount`, { method: "POST", cookie: accountantCookie })).status, 403, "the accountant cannot approve below landing");
+  // owner, 2026-11-05: the sales director approves everything on an order, below landing cost included
+  const done = await apiRequest(`/api/orders/${low.data.id}/approve-discount`, { method: "POST", cookie: directorCookie });
   assert.equal(done.status, 200);
   assert.equal(done.data.approval_status, "approved");
 

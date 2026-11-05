@@ -163,7 +163,7 @@ export function paintSettingsMarkup(ctx) {
             : ""
         }
         ${
-          ctx.admin
+          ctx.canReviewEdits
             ? `<h3 class="settings-subsection-title">${t("edit_requests_title")}</h3>
           <div id="edit-requests-slot"></div>`
             : ""

@@ -1353,7 +1353,9 @@ label.cf-f-row { flex-direction: column; align-items: stretch; gap: 4px; font-si
 .cf-pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 12px; border: 0; border-bottom: 1px solid var(--border);
   background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .cf-pick-on { color: var(--accent-dark, var(--accent)); font-weight: 700; }
-.payment-delete-box input { width: 100%; box-sizing: border-box; }
+.payment-delete-box input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); color: var(--text); font: inherit; }
+.payment-delete-box input:focus { outline: none; border-color: var(--accent); }
+.payment-delete-box input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .doc-row-thumb { flex: none; width: 56px; height: 72px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: var(--bg-card); }
 .doc-row-pdf { display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-dim); }
 .documents-selects select { min-width: 0; min-height: 44px; font-size: 0.9rem; }
@@ -1735,3 +1737,12 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .pay-warn { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--warning, #b26a00) 12%, var(--bg-card)); }
 .pay-warn p { margin: 0; font-size: 0.9rem; }
 .pay-warn .btn { min-height: 44px; }
+
+/* Payments: count and money next to a group heading (mobile list) */
+.list-group-heading .list-group-sum {
+  margin-inline-start: 8px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}

@@ -16,7 +16,7 @@ test.before(async () => {
   await startTestServer();
   users = {};
   cookies = {};
-  for (const role of ["admin", "ceo", "sales_director", "sales_manager", "accountant"]) {
+  for (const role of ["admin", "ceo", "sales_director", "sales_manager", "accountant", "operations_director"]) {
     users[role] = await createUser(role);
     cookies[role] = await loginAs(users[role].email);
   }
@@ -47,24 +47,32 @@ async function order(customer, product, quantity, extra = {}) {
   return res.data;
 }
 
-test("discounts: up to 3% auto-approved; the sales director may not go below net cost, the CEO may", async () => {
+test("discounts: EVERY discount waits for approval; the sales director approves anything, the operations director not below net cost (owner, 2026-11-05)", async () => {
   const customer = await erpCustomer("disc");
   const product = await createProduct({ unit_price_amd: 1000 });
-  await pool.query("UPDATE products SET net_cost_amd = 800, bronze_price_amd = 1000 WHERE id = $1", [product.id]);
+  await pool.query("UPDATE products SET net_cost_amd = 800, landing_cost_amd = 700, bronze_price_amd = 1000 WHERE id = $1", [product.id]);
 
-  const small = await order(customer, product, 10, { discount_pct: 2 });
-  assert.equal(small.approval_status, "approved");
+  const small = await order(customer, product, 10, { discount_pct: 1 });
+  assert.equal(small.approval_status, "pending", "even 1 % needs a director");
+  const plain = await order(customer, product, 10);
+  assert.equal(plain.approval_status, "not_required");
 
   const mid = await order(customer, product, 10, { discount_pct: 5 }); // price 950 >= 800
   assert.equal(mid.approval_status, "pending");
   assert.equal((await apiRequest(`/api/orders/${mid.id}/approve-discount`, { method: "POST", cookie: cookies.sales_director })).status, 200);
+  assert.equal((await apiRequest(`/api/orders/${small.id}/approve-discount`, { method: "POST", cookie: cookies.sales_manager })).status, 403, "a rep never approves");
 
-  const deep = await order(customer, product, 10, { discount_pct: 25 }); // price 750 < 800
+  const deep = await order(customer, product, 10, { discount_pct: 25 }); // price 750 < net cost 800, above landing 700
   assert.equal(deep.approval_status, "pending");
-  const blocked = await apiRequest(`/api/orders/${deep.id}/approve-discount`, { method: "POST", cookie: cookies.sales_director });
-  assert.equal(blocked.status, 403);
-  assert.match(blocked.data.error, /net cost/i);
-  assert.equal((await apiRequest(`/api/orders/${deep.id}/approve-discount`, { method: "POST", cookie: cookies.ceo })).status, 200);
+  const opsBlocked = await apiRequest(`/api/orders/${deep.id}/approve-discount`, { method: "POST", cookie: cookies.operations_director });
+  assert.equal(opsBlocked.status, 403);
+  assert.match(opsBlocked.data.error, /net cost/i);
+  assert.equal((await apiRequest(`/api/orders/${deep.id}/approve-discount`, { method: "POST", cookie: cookies.sales_director })).status, 200, "the sales director approves below net cost");
+
+  const floor = await order(customer, product, 10, { discount_pct: 40 }); // price 600 < landing 700
+  assert.equal(floor.approval_status, "pending");
+  assert.equal((await apiRequest(`/api/orders/${floor.id}/approve-discount`, { method: "POST", cookie: cookies.operations_director })).status, 403);
+  assert.equal((await apiRequest(`/api/orders/${floor.id}/approve-discount`, { method: "POST", cookie: cookies.sales_director })).status, 200, "and below landing cost");
 
   // The margin is internal: directors see it, the rep does not.
   const asDirector = await apiRequest(`/api/orders/${mid.id}`, { cookie: cookies.sales_director });

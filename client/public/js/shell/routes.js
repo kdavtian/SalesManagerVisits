@@ -355,9 +355,9 @@ export async function renderRoute(ctx) {
   } else if (path === "#/orders") {
     ctx.currentCleanup = (await fresh(import("../views/orders.js"))).renderOrders(ctx.app, ctx.navigate, query.get("open"), { startNew: query.get("new") === "1" });
   } else if (paymentDetailMatch) {
-    (await fresh(import("../views/payments.js"))).renderPayments(ctx.app, ctx.navigate, paymentDetailMatch[1]);
+    ctx.currentCleanup = (await fresh(import("../views/payments.js"))).renderPayments(ctx.app, ctx.navigate, paymentDetailMatch[1]);
   } else if (path === "#/payments") {
-    (await fresh(import("../views/payments.js"))).renderPayments(ctx.app, ctx.navigate, null, query);
+    ctx.currentCleanup = (await fresh(import("../views/payments.js"))).renderPayments(ctx.app, ctx.navigate, null, query);
   } else if (handoffDetailMatch) {
     (await fresh(import("../views/cashHandoffs.js"))).renderCashHandoffs(ctx.app, ctx.navigate, handoffDetailMatch[1]);
   } else if (path === "#/cash-handoffs") {

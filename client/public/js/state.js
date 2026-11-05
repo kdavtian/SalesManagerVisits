@@ -55,6 +55,7 @@ export const canDeliverOrders = () => R.canDeliverOrders(role());
 export const broadcastsLocation = () => R.broadcastsLocation(role());
 export const seesFinancialExports = () => R.seesFinancialExports(role());
 export const canPlanForOthers = () => R.canPlanForOthers(role());
+export const canReviewCustomerEdits = () => R.canReviewCustomerEdits(role());
 // everyone who can plan for others, plus the accountant (read-only)
 export const canViewAllRoutePlans = () => R.canViewAllRoutePlans(role());
 // who gives tasks to others; everybody receives and completes them

@@ -2,7 +2,7 @@
 // the last known counts kept on the device for the first paint, and the refresh calls. Moved out of app.js so a screen that repaints
 // a badge (Home, Money) does not import the app shell (docs/architecture-roadmap.md, step 2).
 import { api } from "./api.js";
-import { state, isAdmin, canPlanForOthers } from "./state.js";
+import { state, canPlanForOthers, canReviewCustomerEdits } from "./state.js";
 import { seesUnrecordedBadge } from "./shared/roles.js";
 
 // Every badge count below starts back at 0 on every single page load --
@@ -360,7 +360,7 @@ export async function refreshPlanApprovalBadge() {
 }
 
 export async function refreshEditRequestBadge() {
-  if (!state.user || !isAdmin()) return;
+  if (!state.user || !canReviewCustomerEdits()) return;
   try {
     const requests = await api.listEditRequests({ status: "pending" });
     editRequestBadgeCount = requests.length;

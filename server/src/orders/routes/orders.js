@@ -24,7 +24,7 @@ import { evaluateCredit } from "../creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { autoCompleteReorderTasks } from "../../team/taskAutoComplete.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole } from "../discountPolicy.js";
+import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_APPROVE_PCT } from "../discountPolicy.js";
 import { bullets } from "../../utils/bullets.js";
 import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
@@ -339,9 +339,9 @@ export async function createOrderHandler(req, res) {
   // A discount needs a director's sign-off before the order can move past
   // "submitted" into fulfillment (see the approval_status gate in PATCH
   // below) -- no discount means nothing to approve.
-  // Up to 3 % is approved automatically (unless a line would sell below net cost); see discountPolicy.js.
+  // Every discount a person types needs approval; only the KAD OS app's standing discount (up to 3 %) is automatic. See discountPolicy.js.
   const costCheck = await orderCostCheck(pool, lines, subtotalAmd, totalAmd, { customerId });
-  const approvalStatus = decideDiscountApproval({ discountPct, discountAmd, subtotal: subtotalAmd, belowCost: costCheck.belowCost, belowLanding: costCheck.belowLanding });
+  const approvalStatus = decideDiscountApproval({ discountPct, discountAmd, subtotal: subtotalAmd, belowCost: costCheck.belowCost, belowLanding: costCheck.belowLanding, autoPct: partner ? AUTO_APPROVE_PCT : 0 });
   // Credit limit (migration 101): an order that pushes the customer over their
   // limit also needs a director's sign-off. A draft (no ERP link yet, so no
   // debt known) is checked later, when it is submitted.
@@ -1019,8 +1019,9 @@ ordersRouter.patch("/:id", async (req, res) => {
           .subtotal;
     nextTotal = applyDiscount(Number(subtotal), nextDiscountPct, nextDiscountAmd);
 
-    // Discount policy (discountPolicy.js): a changed discount is decided again (up to 3 % is
-    // automatic); changed items re-check only an automatic approval, a person's decision stays.
+    // Discount policy (discountPolicy.js): a changed discount is decided again (every one needs a director's approval; only the
+    // KAD OS app's standing discount, left as it was, is automatic up to 3 %); changed items re-check only an automatic approval,
+    // a person's decision stays.
     const discountChanged = discount_pct !== undefined || discount_amd !== undefined;
     const wasAutoApproved = order.approval_status === "approved" && order.approved_by === null;
     const discounted = nextDiscountPct > 0 || nextDiscountAmd > 0;
@@ -1028,7 +1029,7 @@ ordersRouter.patch("/:id", async (req, res) => {
     const check = await orderCostCheck(pool, policyLines, Number(subtotal), nextTotal, { customerId: order.customer_id });
     if (discounted) {
       if (discountChanged || wasAutoApproved || check.belowLanding) {
-        nextApprovalStatus = decideDiscountApproval({ discountPct: nextDiscountPct, discountAmd: nextDiscountAmd, subtotal: Number(subtotal), belowCost: check.belowCost, belowLanding: check.belowLanding });
+        nextApprovalStatus = decideDiscountApproval({ discountPct: nextDiscountPct, discountAmd: nextDiscountAmd, subtotal: Number(subtotal), belowCost: check.belowCost, belowLanding: check.belowLanding, autoPct: order.placed_via_app && !discountChanged ? AUTO_APPROVE_PCT : 0 });
       }
     } else {
       // No discount: only the price floor (a line below landing cost) can need approval. A person's earlier
@@ -1322,7 +1323,7 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   const subtotal = costItems.reduce((sum, l) => sum + Number(l.unit_price_amd) * Number(l.quantity), 0);
   const check = await orderCostCheck(pool, costItems, subtotal, Number(order.total_amd), { customerId: order.customer_id });
   if (!canApproveDiscountRole(req.user.role, check.belowCost, check.belowLanding)) {
-    return res.status(403).json({ error: check.belowLanding ? "A line is sold below landing cost -- only the CEO or an admin can approve it" : "This discount takes a line below net cost -- only the CEO or an admin can approve it" });
+    return res.status(403).json({ error: check.belowLanding ? "A line is sold below landing cost -- only the sales director, the CEO or an admin can approve it" : "This discount takes a line below net cost -- only the sales director, the CEO or an admin can approve it" });
   }
 
   const { rows: updatedRows } = await pool.query(

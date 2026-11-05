@@ -4,18 +4,18 @@
 //   a-bonuses      = reward claims waiting for validation or payout (the roles that review / pay claims)
 //   a-system       = 1 when the Excel sync or the Excel file itself is stale (admin)
 import { pool } from "../db/pool.js";
-import { canPlanForOthers, canApproveBonusRewards, canRecordBonusPayouts } from "../shared/roles.js";
+import { canPlanForOthers, canApproveBonusRewards, canRecordBonusPayouts, canReviewCustomerEdits } from "../shared/roles.js";
 import { getSyncStatus } from "../erp/erpSyncStatus.js";
 
 export async function buildAdminCounts(user) {
   const counts = {};
   const jobs = [];
-  if (canPlanForOthers(user.role) || user.role === "admin") {
+  if (canPlanForOthers(user.role) || canReviewCustomerEdits(user.role)) {
     jobs.push(
       (async () => {
         let n = 0;
         if (canPlanForOthers(user.role)) n += (await pool.query("SELECT count(*)::int AS n FROM visit_plans WHERE status = 'pending'")).rows[0].n;
-        if (user.role === "admin") n += (await pool.query("SELECT count(*)::int AS n FROM customer_edit_requests WHERE status = 'pending'")).rows[0].n;
+        if (canReviewCustomerEdits(user.role)) n += (await pool.query("SELECT count(*)::int AS n FROM customer_edit_requests WHERE status = 'pending'")).rows[0].n;
         counts["a-sales"] = n;
       })()
     );
