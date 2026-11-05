@@ -12,7 +12,7 @@ import { repColor } from "../../repColors.js";
 
 export function passesAssignment(ctx, c) {
   if (c.checkin_for_all) return true; // an office is on the map for every rep whatever channel filter is on (owner, 2026-11-03)
-  // Default: every direction and rep, not filtered (owner, 2026-11-03). Competitors stay behind their own show/hide switch.
+  // Default: every direction and rep, not filtered (owner, 2026-11-03). Competitors have their own show/hide chip (shown by default).
   if (ctx.assignmentKeys === null) return true;
   return !ctx.assignmentKeys.size || ctx.assignmentKeys.has(ctx.assignmentKeyOf(c));
 }
@@ -21,7 +21,7 @@ export function currentAssignmentIds(ctx) {
   return ctx.assignmentKeys ?? new Set(); // nothing picked = no filter = everything shown
 }
 
-// Competitors stay hidden unless asked for; picking the Competitor tier (or a COMPETITORS
+// Competitors are shown by default; if the user hid them, picking the Competitor tier (or a COMPETITORS
 // channel) is that explicit ask, and un-picking it hides them again.
 export function syncCompetitorsForFilters(ctx) {
   const mapView = ctx.root.querySelector(".map-view");
@@ -241,7 +241,7 @@ export function applyFilter(ctx, { refit = true } = {}) {
   // no per-add clustering cost to batch away anyway.
   const markersToAdd = [];
   let searchMatchCount = 0;
-  // Competitors are hidden by default (see .map-competitor-toggle /
+  // Competitors are shown by default, the chip hides them (see .map-competitor-toggle /
   // map-safe-enhancements.css, which hides their individual pins via
   // CSS). Clustering happens in JS before that CSS rule ever applies, so
   // without this check a cluster badge would count competitors that are

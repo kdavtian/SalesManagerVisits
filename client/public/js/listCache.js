@@ -27,13 +27,32 @@ function scopedKey(key) {
   return `${state.user?.id ?? "anon"}:${key}`;
 }
 
+// Safari (iPhone) can leave indexedDB.open() pending for good when the app is opened cold from the icon (owner, 2026-11-05: Orders
+// "loads forever" right after reopening, a second tap fixed it). A pending open used to hold every list screen on its spinner, because
+// the screen waited for the saved copy before it asked the server. The open now gives up after OPEN_TIMEOUT_MS and the next call tries again.
+const OPEN_TIMEOUT_MS = 2500;
 function openDb() {
   if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
+    const attempt = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("indexedDB open timed out")), OPEN_TIMEOUT_MS);
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        clearTimeout(timer);
+        resolve(req.result);
+      };
+      req.onerror = () => {
+        clearTimeout(timer);
+        reject(req.error);
+      };
+      req.onblocked = () => {
+        clearTimeout(timer);
+        reject(new Error("indexedDB open blocked"));
+      };
+    });
+    dbPromise = attempt;
+    attempt.catch(() => {
+      if (dbPromise === attempt) dbPromise = null; // the next call opens again
     });
   }
   return dbPromise;
@@ -199,12 +218,28 @@ export function warmCache(key, fetcher) {
 // screen just keeps showing what it has -- useful offline, not just for
 // speed); network failure with nothing cached rethrows so the caller's
 // own .catch()/error state still fires like it always has.
+const NETWORK_FIRST = Symbol("network answered first");
 export async function loadWithCache(key, fetcher, onData) {
-  const cached = await getCached(key);
+  // The server request starts at once, in parallel with reading the saved copy: a saved copy that is slow to come (or never comes, see
+  // openDb) must not hold the request back. The saved copy is shown only if it arrives before the live answer.
+  const fetching = sharedFetch(key, fetcher);
+  const settled = fetching.then(() => NETWORK_FIRST, () => NETWORK_FIRST);
+  const cachedRead = getCached(key);
+  let cached = await Promise.race([cachedRead, settled]);
+  if (cached === NETWORK_FIRST) {
+    try {
+      onData(await fetching, { stale: false });
+    } catch (err) {
+      // offline: a saved copy that is still on its way gets a moment to show
+      cached = await Promise.race([cachedRead, new Promise((resolve) => setTimeout(resolve, 1500, undefined))]);
+      if (cached === undefined) throw err;
+      onData(cached, { stale: true });
+    }
+    return;
+  }
   if (cached !== undefined) onData(cached, { stale: true });
   try {
-    const fresh = await sharedFetch(key, fetcher);
-    onData(fresh, { stale: false });
+    onData(await fetching, { stale: false });
   } catch (err) {
     if (cached === undefined) throw err;
   }

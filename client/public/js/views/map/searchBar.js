@@ -232,7 +232,7 @@ function labels() {
   return { label: "Competitors", show: "Show competitors", hide: "Hide competitors" };
 }
 
-// The "Competitors" chip in the status filter: competitors are hidden on every Map entry, the chip shows them (was mapSafeUi.js,
+// The "Competitors" chip in the status filter: competitors are shown on every Map entry, the chip hides them (was mapSafeUi.js,
 // which mounted it from outside with retries after each route change; step 7b).
 export function attachCompetitorToggle(root = document) {
   const mapView = root.querySelector(".map-view");
@@ -241,7 +241,8 @@ export function attachCompetitorToggle(root = document) {
   if (!filterRow) return false;
 
   mapView.dataset.safeUiReady = "1";
-  mapView.classList.remove("kad-show-competitors"); // hidden by default on every Map entry
+  // Shown by default on every Map entry (owner, 2026-11-05: all customer types visible); the chip hides them.
+  if (!mapView.classList.contains("kad-show-competitors")) mapView.classList.add("kad-show-competitors");
 
   const copy = labels();
   const button = document.createElement("button");
@@ -274,6 +275,7 @@ export function attachCompetitorToggle(root = document) {
     }
   });
 
+  syncButton();
   filterRow.appendChild(button);
   return true;
 }

@@ -10,7 +10,7 @@ import { TASK_PIN_SVG } from "../map.js";
 // The map screen's markup: side list, map canvas, filter chips, legend and the bottom panels.
 export function mapViewHtml(ctx) {
   return `
-    <div class="map-view">
+    <div class="map-view kad-show-competitors">
       ${
         ctx.relocateCustomerId
           ? ""
