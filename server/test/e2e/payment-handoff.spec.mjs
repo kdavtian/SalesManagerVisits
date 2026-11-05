@@ -17,7 +17,6 @@ test.describe("Payment collection", () => {
       amount_amd: 25000,
     });
 
-    page.on("dialog", (d) => d.accept());
     await loginViaUi(page, accountant.email);
     await page.goto("/#/payments");
     // The row's outer card div and its inner .payment-row-main button both
@@ -25,9 +24,13 @@ test.describe("Payment collection", () => {
     // the visibility check itself (the click below already scopes further).
     await expect(page.locator(`[data-payment-id="${payment.id}"]`).first()).toBeVisible({ timeout: 10000 });
 
+    // two taps, no browser pop-up (owner): the first arms the button, the second approves
+    const approve = page.locator(`[data-payment-id="${payment.id}"] .payment-approve-btn`);
+    await approve.click();
+    await expect(approve).toHaveText(/Confirm\?|Հաստատե՞լ/);
     const [response] = await Promise.all([
       page.waitForResponse((res) => res.url().includes(`/payments/${payment.id}/approve`)),
-      page.locator(`[data-payment-id="${payment.id}"] .payment-approve-btn`).click(),
+      approve.click(),
     ]);
     expect(response.ok()).toBeTruthy();
   });

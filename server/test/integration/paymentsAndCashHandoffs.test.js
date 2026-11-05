@@ -69,6 +69,27 @@ test("POST /api/payments: amount_amd must be positive and under MAX_AMOUNT", asy
   assert.equal(tooLarge.status, 400, "amount_amd >= MAX_AMOUNT must be rejected");
 });
 
+test("POST /api/payments: a date later than tomorrow is refused; GET /pending-count says how many, how much and how old", async () => {
+  const far = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+  const bad = await apiRequest("/api/payments", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: customer.id, amount_amd: 12345, payment_date: far } });
+  assert.equal(bad.status, 400);
+  assert.equal(bad.data.code, "payment_date_future");
+  const before = (await apiRequest("/api/payments/pending-count", { cookie: cookies.sales_director })).data;
+  const { rows } = await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by, current_holder_id)
+     VALUES ($1, 'x', 777000, now() - interval '9 days', $2, 'x', 'pending', $2, $2) RETURNING id`,
+    [customer.id, users.sales_manager.id]
+  );
+  trackPayment(rows[0].id);
+  const after = (await apiRequest("/api/payments/pending-count", { cookie: cookies.sales_director })).data;
+  assert.equal(after.count, before.count + 1);
+  assert.equal(after.total_amd, before.total_amd + 777000);
+  assert.ok(after.oldest_days >= 9);
+  // a rep counts only their own
+  const mine = (await apiRequest("/api/payments/pending-count", { cookie: cookies.sales_manager2 })).data;
+  assert.equal(mine.total_amd, 0);
+});
+
 test("POST /api/payments: a nonexistent customer_id is a 400", async () => {
   const res = await apiRequest("/api/payments", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: 999999999, amount_amd: 1000 } });
   assert.equal(res.status, 400);

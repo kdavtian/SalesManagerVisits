@@ -13,7 +13,9 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments } from "../shared/roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments } from "../shared/roles.js";
+import { loadWithCache } from "../listCache.js";
+import { pickDate } from "../activityDatePicker.js";
 import { icons } from "../icons.js";
 import { SEARCH_ICONS, installClearButton, installInlineClearButton } from "../searchBar.js";
 
@@ -56,9 +58,27 @@ function monthLabel(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+// YYYY-MM-DD in Yerevan time (UTC+4 all year): the day the server counts the payment in. toISOString() alone gave YESTERDAY's date between
+// midnight and 04:00, so "Today" and the default payment date were a day behind in the early hours.
 function formatDateInput(date) {
   const d = date instanceof Date ? date : new Date(date);
-  return d.toISOString().slice(0, 10);
+  return new Date(d.getTime() + 4 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// Two taps, no browser pop-up (owner: no "are you sure?" dialogs): the first tap turns the button into "Confirm?", the second does it.
+function armedTap(btn, go) {
+  if (btn.dataset.armed === "1") {
+    clearTimeout(btn._armTimer);
+    btn.dataset.armed = "";
+    return go();
+  }
+  btn.dataset.armed = "1";
+  const label = btn.textContent;
+  btn.textContent = t("pay_tap_confirm");
+  btn._armTimer = setTimeout(() => {
+    btn.dataset.armed = "";
+    btn.textContent = label;
+  }, 4000);
 }
 
 // Does the Excel show this payment? Only said when it is worth saying: matched (green), or still missing after the grace days (amber).
@@ -79,7 +99,8 @@ function notifyPaymentsChanged() {
   window.dispatchEvent(new Event("payments-changed"));
 }
 
-export async function renderPayments(root, navigate, focusPaymentId, initialQuery) {
+// Plain (not async) so app.js keeps the returned cleanup and its onRestore refreshes the list when this screen comes back from the Back cache.
+export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   // A payment-detail sheet is appended to document.body, not to `root`, so
   // it survives a normal view re-render -- and this view can be re-entered
   // via a hash change alone (e.g. tapping a payment push notification while
@@ -172,9 +193,13 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       return;
     }
     try {
-      const { count } = await api.getPaymentsPendingCount();
+      const { count, total_amd, oldest_days } = await api.getPaymentsPendingCount();
       if (count > 0) {
-        summaryEl.textContent = t("payments_pending_summary").replace("{n}", count);
+        // how many, how much money, how long the oldest has waited: what decides what to review first
+        summaryEl.textContent =
+          t("payments_pending_summary").replace("{n}", count) +
+          (total_amd > 0 ? ` · ${formatAmd(Number(total_amd))}` : "") +
+          (oldest_days >= 1 ? ` · ${t("payments_pending_oldest").replace("{d}", oldest_days)}` : "");
         summaryEl.hidden = false;
       } else {
         summaryEl.hidden = true;
@@ -197,7 +222,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       params.from = formatDateInput(new Date());
       params.to = formatDateInput(new Date());
     } else if (activeFilter === "this_month") {
-      params.month = new Date().toISOString().slice(0, 7);
+      params.month = formatDateInput(new Date()).slice(0, 7);
     } else if (activeFilter === "excel_missing") {
       params.excel = "missing";
     }
@@ -253,19 +278,66 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     });
   }
 
-  async function load() {
-    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
-    try {
-      const result = await api.listPayments(buildParams());
-      payments = result.rows;
-      hasMore = result.has_more;
-    } catch (err) {
-      listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  // Stale-while-revalidate (listCache.js): the saved copy of this exact list paints at once, the live page replaces it; a quiet refresh
+  // (the screen coming back, the app back in front) changes nothing on screen when nothing changed.
+  let loadSeq = 0;
+  let lastLoadedAt = 0;
+  let lastSig = null;
+  let pagesLoaded = 1;
+  async function load({ silent = false } = {}) {
+    const mine = ++loadSeq;
+    const params = buildParams();
+    if (silent) {
+      try {
+        const result = await api.listPayments(params);
+        if (mine !== loadSeq) return;
+        lastLoadedAt = Date.now();
+        const sig = JSON.stringify([result.rows, result.has_more]);
+        if (sig === lastSig && pagesLoaded === 1) return;
+        lastSig = sig;
+        payments = result.rows;
+        hasMore = result.has_more;
+        pagesLoaded = 1;
+        paintActiveFilters();
+        paint();
+      } catch {
+        /* the next refresh tries again; the rows on screen stay */
+      }
       return;
     }
-    paintActiveFilters();
-    paint();
+    listEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
+    pagesLoaded = 1;
+    let painted = false;
+    try {
+      await loadWithCache(
+        `payments-list:${new URLSearchParams(params).toString()}`,
+        () => api.listPayments(params),
+        (result) => {
+          if (mine !== loadSeq) return;
+          lastLoadedAt = Date.now();
+          const sig = JSON.stringify([result.rows, result.has_more]);
+          if (painted && sig === lastSig) return;
+          lastSig = sig;
+          payments = result.rows;
+          hasMore = result.has_more;
+          paintActiveFilters();
+          paint();
+          painted = true;
+        }
+      );
+    } catch (err) {
+      if (!painted && mine === loadSeq) listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    }
   }
+
+  function refreshIfStale(maxAgeMs) {
+    if (!listEl.isConnected || document.visibilityState === "hidden" || pagesLoaded > 1) return;
+    if (Date.now() - lastLoadedAt < maxAgeMs) return;
+    load({ silent: true });
+    refreshPendingSummary();
+  }
+  const onVisible = () => document.visibilityState === "visible" && refreshIfStale(8000);
+  document.addEventListener("visibilitychange", onVisible);
 
   async function loadMore() {
     if (loadingMore || !hasMore) return;
@@ -276,6 +348,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       const result = await api.listPayments(buildParams({ offset: payments.length }));
       payments = payments.concat(result.rows);
       hasMore = result.has_more;
+      pagesLoaded += 1;
     } finally {
       loadingMore = false;
     }
@@ -462,6 +535,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     });
   }
 
+  // "3 · 1,250,000 AMD" next to a group's name: how many payments and how much money are in it (the desktop table already did this)
+  const groupSumHtml = (rows) => `<span class="muted list-group-sum">${rows.length} &middot; ${formatAmd(rows.reduce((n, r) => n + Number(r.amount_amd || 0), 0))}</span>`;
+
   function paint() {
     if (!payments.length) {
       listEl.classList.remove("dtl-list", "pay-desk-list");
@@ -486,7 +562,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         groups[groups.length - 1].rows.push(p);
       }
       listEl.innerHTML = groups
-        .map((g) => `<h3 class="list-group-heading">${g.label}</h3>${g.rows.map(paymentRowHtml).join("")}`)
+        .map((g) => `<h3 class="list-group-heading">${escapeHtml(g.label)} ${groupSumHtml(g.rows)}</h3>${g.rows.map(paymentRowHtml).join("")}`)
         .join("");
     } else {
       // Channel-then-date (server order) -- group by channel instead of month.
@@ -501,7 +577,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         groups[groups.length - 1].rows.push(p);
       }
       listEl.innerHTML = groups
-        .map((g) => `<h3 class="list-group-heading">${escapeHtml(g.label)}</h3>${g.rows.map(paymentRowHtml).join("")}`)
+        .map((g) => `<h3 class="list-group-heading">${escapeHtml(g.label)} ${groupSumHtml(g.rows)}</h3>${g.rows.map(paymentRowHtml).join("")}`)
         .join("");
     }
 
@@ -521,18 +597,20 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
     });
   }
 
-  async function quickApprove(paymentId, btn) {
-    if (!confirm(t("confirm_approve_payment"))) return;
-    btn.disabled = true;
-    try {
-      await api.approvePayment(paymentId);
-      notifyPaymentsChanged();
-      refreshPendingSummary();
-      load();
-    } catch (err) {
-      alert(err.message);
-      btn.disabled = false;
-    }
+  // One tap arms the button ("Confirm?"), the second approves; an error is a toast, not a browser alert.
+  function quickApprove(paymentId, btn) {
+    armedTap(btn, async () => {
+      btn.disabled = true;
+      try {
+        await api.approvePayment(paymentId);
+        notifyPaymentsChanged();
+        refreshPendingSummary();
+        load();
+      } catch (err) {
+        showToast(err.message);
+        btn.disabled = false;
+      }
+    });
   }
 
   root.querySelector("#payments-new-btn").addEventListener("click", () => openAddPaymentSheet());
@@ -621,7 +699,7 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       } else if (p.status !== "pending" && canReview) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }
-      if (state.user.role === "admin") buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
+      if (canDeletePayments(state.user.role)) buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
       buttons.push({ label: t("done"), action: "close", cls: "btn" });
 
       actionsEl.innerHTML = buttons
@@ -660,39 +738,55 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
             return;
           }
           if (action === "approve") {
-            if (!confirm(t("confirm_approve_payment"))) return;
-            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
-            try {
-              await api.approvePayment(p.id);
-              notifyPaymentsChanged();
-              refreshPendingSummary();
-              load();
-              payment = await api.getPayment(p.id);
-              renderDetail(payment);
-            } catch (err) {
-              errorEl.textContent = err.message;
-              errorEl.hidden = false;
-              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
-            }
+            armedTap(btn, async () => {
+              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+              try {
+                await api.approvePayment(p.id);
+                notifyPaymentsChanged();
+                refreshPendingSummary();
+                load();
+                payment = await api.getPayment(p.id);
+                renderDetail(payment);
+              } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+              }
+            });
             return;
           }
           if (action === "reject" || action === "return") {
-            const reason = prompt(action === "reject" ? t("reject_payment_reason_label") : t("return_to_pending_reason_label"));
-            if (!reason || !reason.trim()) return;
-            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
-            try {
-              if (action === "reject") await api.rejectPayment(p.id, reason.trim());
-              else await api.returnPaymentToPending(p.id, reason.trim());
-              notifyPaymentsChanged();
-              refreshPendingSummary();
-              load();
-              payment = await api.getPayment(p.id);
-              renderDetail(payment);
-            } catch (err) {
-              errorEl.textContent = err.message;
-              errorEl.hidden = false;
-              actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
-            }
+            // The reason is asked inline (a browser prompt() blocked the screen on the phone): a field and two buttons, like Delete.
+            const hint = t(action === "reject" ? "reject_payment_reason_label" : "return_to_pending_reason_label");
+            actionsEl.innerHTML = `<div class="payment-delete-box" style="width:100%;">
+                <input type="text" id="payment-reason" maxlength="300" placeholder="${escapeHtml(hint)}" aria-label="${escapeHtml(hint)}" />
+                <div class="sheet-actions" style="margin-top:8px;"><button type="button" class="btn" id="payment-reason-cancel">${t("cancel")}</button><button type="button" class="${action === "reject" ? "btn btn-danger" : "btn btn-primary"}" id="payment-reason-go">${t(action === "reject" ? "reject_payment" : "return_to_pending")}</button></div>
+              </div>`;
+            const reasonEl = actionsEl.querySelector("#payment-reason");
+            reasonEl.focus();
+            actionsEl.querySelector("#payment-reason-cancel").addEventListener("click", () => renderDetail(p));
+            actionsEl.querySelector("#payment-reason-go").addEventListener("click", async (ev) => {
+              const reason = reasonEl.value.trim();
+              if (!reason) {
+                errorEl.textContent = t("payment_reason_required");
+                errorEl.hidden = false;
+                return;
+              }
+              ev.currentTarget.disabled = true;
+              try {
+                if (action === "reject") await api.rejectPayment(p.id, reason);
+                else await api.returnPaymentToPending(p.id, reason);
+                notifyPaymentsChanged();
+                refreshPendingSummary();
+                load();
+                payment = await api.getPayment(p.id);
+                renderDetail(payment);
+              } catch (err) {
+                errorEl.textContent = err.message;
+                errorEl.hidden = false;
+                ev.currentTarget.disabled = false;
+              }
+            });
           }
         });
       });
@@ -821,8 +915,9 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
           <label for="payment-amount-input">${t("payment_amount_amd")}
             <input type="number" id="payment-amount-input" min="1" step="any" inputmode="numeric" />
           </label>
-          <label for="payment-date-input">${t("payment_date_label")}
-            <input type="date" id="payment-date-input" value="${formatDateInput(new Date())}" />
+          <label for="payment-date-btn">${t("payment_date_label")}
+            <input type="hidden" id="payment-date-input" value="${typed.date || formatDateInput(new Date())}" />
+            <button type="button" class="btn btn-block" id="payment-date-btn" style="text-align:left;">${formatDateDMY(typed.date || formatDateInput(new Date()))}</button>
           </label>
           <label for="payment-note-input">${t("payment_note_label")}
             <textarea id="payment-note-input" rows="2"></textarea>
@@ -854,10 +949,18 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
       `;
       // what was typed survives the repaint after a customer is picked
       if (typed.amount) overlay.querySelector("#payment-amount-input").value = typed.amount;
-      if (typed.date) overlay.querySelector("#payment-date-input").value = typed.date;
+      // the wheel date picker, not a native date field (owner: a date opens the wheel at once)
+      overlay.querySelector("#payment-date-btn").addEventListener("click", async () => {
+        const dateEl = overlay.querySelector("#payment-date-input");
+        const picked = await pickDate({ value: dateEl.value, title: t("payment_date_label") });
+        if (!picked) return;
+        dateEl.value = picked;
+        typed.date = picked;
+        overlay.querySelector("#payment-date-btn").textContent = formatDateDMY(picked);
+      });
       if (typed.note) overlay.querySelector("#payment-note-input").value = typed.note;
-      ["#payment-amount-input", "#payment-date-input", "#payment-note-input"].forEach((sel, i) =>
-        overlay.querySelector(sel).addEventListener("input", (e) => (typed[["amount", "date", "note"][i]] = e.target.value))
+      ["#payment-amount-input", "#payment-note-input"].forEach((sel, i) =>
+        overlay.querySelector(sel).addEventListener("input", (e) => (typed[["amount", "note"][i]] = e.target.value))
       );
       wireProof();
 
@@ -968,6 +1071,12 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
         errorEl.hidden = false;
         return;
       }
+      const chosenDate = overlay.querySelector("#payment-date-input").value;
+      if (chosenDate && chosenDate > formatDateInput(new Date(Date.now() + 86400000))) {
+        errorEl.textContent = t("payment_date_future");
+        errorEl.hidden = false;
+        return;
+      }
       if (canSubmitPaymentsForOthers(state.user.role) && !selectedManager) {
         errorEl.textContent = t("payment_manager_required");
         errorEl.hidden = false;
@@ -1066,6 +1175,14 @@ export async function renderPayments(root, navigate, focusPaymentId, initialQuer
   refreshPendingSummary();
 
   if (focusPaymentId) openPaymentDetail(Number(focusPaymentId));
+
+  const cleanup = () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    deskQuery.removeEventListener("change", onDeskChange);
+    clearTimeout(searchDebounce);
+  };
+  cleanup.onRestore = () => refreshIfStale(0);
+  return cleanup;
 }
 
 // Payments' search bar was still the older plain-input-plus-separate-button

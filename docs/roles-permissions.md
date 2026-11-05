@@ -37,6 +37,7 @@ for what that implies.
 | Direct edit/delete (bypassing the edit-request approval flow) | `canDeleteOrEditDirectly` | `admin` only. |
 | Reassign region/subregion/sales channel/manager | `canReassignCustomers` | `admin`, `sales_director`, `ceo`. |
 | Edit own sales channel on a customer they created | `canEditOwnSalesChannel` | `sales_manager` for customers with `created_by = self`; the reassign-capable roles above for any customer. |
+| Approve / reject a customer card edit request (tier changes included) | `canReviewCustomerEdits` | `admin`, `ceo`, `operations_director`, `sales_director` (owner, 2026-11-05; it was admin only). A sales manager only proposes; a pin correction still applies at once. |
 | Link a customer to its ERP record | `canAssignErpCustomerId` | `admin`/`ceo`/`accountant` for any customer; `sales_manager`/`sales_director` only for customers they created. |
 
 ## Products and pricing
@@ -50,6 +51,8 @@ for what that implies.
 | Action | Function | Behavior |
 |---|---|---|
 | Confirm/reject/edit a submitted order before fulfillment | `canConfirmOrders` | `admin`, `sales_director`, `ceo`. |
+| Approve a discount, a price change, a line below net cost or below landing cost | `canApproveDiscountRole` (`orders/discountPolicy.js`) | `admin`, `ceo`, `sales_director` approve anything (owner, 2026-11-05). `operations_director` only while every line stays at or above net cost. Nobody else. |
+| Discounts a person types | `decideDiscountApproval` | EVERY discount waits for approval, however small (before: up to 3 % was automatic). The KAD OS app's standing discount keeps the old 3 % automatic rule. |
 | Plan for another rep's route (day-of or recurring) | `canPlanForOthers` | `admin`, `sales_director`, `ceo`. A plain `sales_manager` only plans for themselves. |
 
 ## Warehouse and delivery
@@ -98,3 +101,18 @@ Every function above lives in `server/src/shared/roles.js` and is imported
 directly into route handlers (`server/src/routes/*.js`) — there is no
 central "permission table" separate from the code. If this doc and the
 code ever disagree, the code wins; open a PR to fix whichever is wrong.
+
+## What only the CEO (and admin, the owner's own account) decides (2026-11-05)
+
+Everything below is limited to `ceo` + `admin`; the sales director cannot do it.
+- Voiding a payment whose cash was already counted, with a reason (`canVoidCountedPayment`).
+- Fuel allowance: consumption, fuel price, home addresses, day corrections (`canManageFuel`).
+- Accepting or dismissing Vaghinak's route-plan suggestions (`canReviewRoutePlanSuggestions`).
+- Cash desks setup (`canManageCashDesks`).
+- Ledger (Cashflow) changes at any age and the decisions on change requests (`isCashflowManagement`).
+- KAD OS app-order perks and which account belongs to which customer (`canManageAppOrders`).
+- Staff rules (`canSetStaffRules`).
+- Changing an order after the customer signed for it, and deleting / replacing documents others added (`canManageSignedDocuments`, `canChangeSignedOrder`).
+- The Pivot report over every data source (`usesPivot`).
+- Giving tasks to anyone in the company (`tasksAnyone`).
+- Performance plans: approving or rejecting a sales director's plan, revising an approved plan, closing a month (`isPerfCeo` rules; the operations director shares these).

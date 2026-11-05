@@ -169,6 +169,12 @@ export function canConfirmSubmittedOrders(role) {
   return canConfirmOrders(role) || role === "accountant";
 }
 
+// Who approves or rejects a customer card edit request, tier changes included (owner, 2026-11-05: "the sales director can approve customer
+// card edits"; before that admin only). The sales manager only PROPOSES; a pin correction still applies at once (movesAnyPinAtOnce).
+export function canReviewCustomerEdits(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
+}
+
 // Credit terms (a customer's credit limit): the accountant and the directors set them.
 export function canSetCreditTerms(role) {
   return canConfirmSubmittedOrders(role);
@@ -283,6 +289,11 @@ export function canReviewPayments(role) {
 // another manager.
 export function canSubmitPaymentsForOthers(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant" || role === "sales_director";
+}
+
+// Deleting a payment for good (it is archived in deleted_payments first): admin only (owner, 2026-10-24). One rule for the route and the screen.
+export function canDeletePayments(role) {
+  return role === "admin";
 }
 
 // Payment visibility mirrors seesAllActivity -- a Sales Manager sees only
@@ -680,9 +691,9 @@ export function rolesWhere(rule) {
 // What the app SHOWS to a role where that is narrower or different from what the server allows; each names the server rule it sits under.
 
 // Editing an order: these roles approve their own price / discount changes, so the edit screen does not say "needs a director's approval"
-// (the server decides per change: discountPolicy.js canApproveDiscountRole).
+// (the server decides per change: discountPolicy.js canApproveDiscountRole; the sales director approves everything since 2026-11-05).
 export function approvesOwnOrderChanges(role) {
-  return role === "admin" || role === "ceo" || role === "operations_director";
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
 }
 
 // The "hand over on behalf of a rep" picker. The server allows canSubmitHandoffForOthers, but the only on-behalf case is the FIRST hop (a

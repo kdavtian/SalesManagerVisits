@@ -20,6 +20,7 @@ import {
   canPlanRoutes,
   canDeliverOrders,
   canPlanForOthers,
+  canReviewCustomerEdits,
 } from "../../shared/roles.js";
 
 export const badgesRouter = Router();
@@ -62,10 +63,9 @@ badgesRouter.get("/", async (req, res) => {
       ? pool.query("SELECT count(*)::int AS count FROM visit_plans WHERE status = 'pending'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
 
-    // Same admin-only queue as GET /edit-requests?status=pending -- only
-    // admin can review/approve these (see editRequestsRouter), so nobody
-    // else needs the count.
-    role === "admin"
+    // Same queue as GET /edit-requests?status=pending -- only the reviewers (canReviewCustomerEdits) can approve these
+    // (see editRequestsRouter), so nobody else needs the count.
+    canReviewCustomerEdits(role)
       ? pool.query("SELECT count(*)::int AS count FROM customer_edit_requests WHERE status = 'pending'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
 

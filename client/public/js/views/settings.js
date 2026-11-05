@@ -5,7 +5,7 @@ import { fromLaunchStart, launchTotal, readLaunchTimings } from "../launchTiming
 import { getTheme, setTheme } from "../theme.js";
 import { getPerfMode, setPerfMode } from "../perfMode.js";
 import { setTextSize } from "../textSize.js";
-import { state, isAdmin, canPlanForOthers, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
+import { state, isAdmin, canPlanForOthers, canReviewCustomerEdits, seesFinancialExports, canManageProducts, canReassignCustomers, isPerfCeo } from "../state.js";
 import { renderPlanApprovalsSection, renderEditRequestsSection, renderCompanyProfileSection } from "./admin.js";
 import { renderProductsSection } from "./admin/products.js";
 import { renderPinReviewSection } from "./pinReview.js";
@@ -86,6 +86,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     get admin() { return admin; },
     get root() { return root; },
     get canApprovePlans() { return canApprovePlans; },
+    get canReviewEdits() { return canReviewEdits; },
     get canExportFinancials() { return canExportFinancials; },
     get canManageArrival() { return canManageArrival; },
     get canManageCampaigns() { return canManageCampaigns; },
@@ -118,6 +119,8 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   // approve those reps' self-authored plans -- not just a superadmin
   // account. Kept separate from the strict admin-only section below.
   const canApprovePlans = canPlanForOthers();
+  // The sales director (and the CEO) review customer edit requests too, tier changes included (owner, 2026-11-05)
+  const canReviewEdits = canReviewCustomerEdits();
   const canExportFinancials = seesFinancialExports();
   // Mirrors server/src/shared/roles.js's canManageBonusChallenges (admin/ceo) --
   // broader than plain admin, so kept as its own flag rather than folded
@@ -132,7 +135,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   const canReviewBonusRewards = admin || canManageChallenges || state.user?.role === "accountant";
   // Mirrors canManageCampaigns (admin/ceo/sales_director): campaigns for the customers that order through KAD OS.
   const canManageCampaigns = canManageChallenges || state.user?.role === "sales_director";
-  const hasAdminWorkspace = admin || canApprovePlans || canExportFinancials || canManageChallenges || canReviewBonusRewards || canManageCampaigns;
+  const hasAdminWorkspace = admin || canApprovePlans || canReviewEdits || canExportFinancials || canManageChallenges || canReviewBonusRewards || canManageCampaigns;
 
   // Pages (iOS Settings / macOS System Settings structure): every page is a
   // group of related rows. Phone: Personal = one scrolling list of pages,
@@ -145,7 +148,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     { id: "p-data", tab: "personal", title: t("sp_data"), icon: ICON.cloud, color: "teal", show: true },
     { id: "p-about", tab: "personal", title: t("sp_about"), icon: ICON.info, color: "gray", show: true },
     { id: "a-team", tab: "admin", title: t("admin_group_team_roles"), icon: ICON.team, color: "blue", show: admin },
-    { id: "a-sales", tab: "admin", title: t("sa_sales"), icon: ICON.gps, color: "green", show: admin || canApprovePlans || canReassignCustomers() || canManageArrival },
+    { id: "a-sales", tab: "admin", title: t("sa_sales"), icon: ICON.gps, color: "green", show: admin || canApprovePlans || canReviewEdits || canReassignCustomers() || canManageArrival },
     { id: "a-finance", tab: "admin", title: t("sa_finance"), icon: ICON.coins, color: "orange", show: admin || canManageProducts() || canExportFinancials },
     { id: "a-bonuses", tab: "admin", title: t("sa_bonuses"), icon: ICON.star, color: "purple", show: canManageChallenges || canReviewBonusRewards },
     { id: "a-integrations", tab: "admin", title: t("sa_integrations"), icon: ICON.link, color: "indigo", show: admin || canManageCampaigns },
@@ -700,7 +703,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     renderPlanApprovalsSection(root.querySelector("#plan-approvals-slot"));
   }
 
-  if (admin) {
+  if (canReviewEdits) {
     renderEditRequestsSection(root.querySelector("#edit-requests-slot"));
   }
 
