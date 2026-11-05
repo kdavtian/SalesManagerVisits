@@ -237,6 +237,17 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   );
   closed.push(...onHold);
 
+  // A promise that ran out while the task stayed open (a debt task only closes on a payment, owner 2026-11-05): the promise is over, the
+  // task is due again today and the sales director is told, once.
+  const { rows: brokenOpen } = await pool.query(
+    `UPDATE tasks t SET outcome = NULL, promise_date = NULL, due_date = $1::date, due_is_next_visit = false, deadline_reminder_sent_on = NULL,
+       completion_note = 'Խոստումը չի կատարվել', updated_at = now()
+     FROM customers c
+     WHERE c.id = t.customer_id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.status = 'open'
+       AND t.outcome = 'promised' AND t.promise_date < $1::date
+     RETURNING c.name AS customer_name`,
+    [today]
+  );
   const perRep = new Map();
   const creatorId = await systemCreatorId(pool);
   if (!creatorId) return { created: 0, closed: closed.length, perRep };
@@ -272,7 +283,7 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     .filter((c) => c.rep_id);
 
   let created = 0;
-  const broken = [];
+  const broken = brokenOpen.map((r) => r.customer_name);
   const counts = new Map();
   for (const cand of candidates) {
     if ((counts.get(cand.rep_id) ?? 0) >= MAX_PER_REP) continue;

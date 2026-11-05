@@ -15,7 +15,7 @@ import { FILTER_ICONS } from "../filterIcons.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, canCreateTasks, sendsRequests } from "../state.js";
-import { seesAllTasks } from "../shared/roles.js";
+import { seesAllTasks, taskClosesItself, canCancelSelfClosingTask } from "../shared/roles.js";
 import { pickDate } from "../activityDatePicker.js";
 import { installClearButton } from "../searchBar.js";
 import { textMatches } from "../shared/searchKey.js";
@@ -602,6 +602,10 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
     const info = taskDueInfo(task, today);
     const isCreator = task.creator_id === state.user.id || seesAllTasks(state.user.role);
     const open = task.status === "open";
+    const selfClosing = taskClosesItself(task);
+    const isDebt = task.auto_kind === "debt_collection" || task.task_kind === "collect_debt";
+    // a self-closing task is cancelled by management only, with a reason; everything else as before
+    const mayCancel = selfClosing ? canCancelSelfClosingTask(state.user.role) : isCreator;
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2 class="task-sheet-title">${escapeHtml(task.title)}</h2>
@@ -636,16 +640,19 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       ${isCallTask(task) ? callHistoryHtml(task.calls) : ""}
       ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
-      ${open && !task.items.length && task.auto_kind !== "debt_collection" && task.task_kind !== "collect_debt" && !isCallTask(task) ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
+      ${open && selfClosing ? `<p class="muted task-hint" id="task-selfclose-hint">${escapeHtml(t(isDebt ? "task_selfclose_debt" : task.task_kind === "check_products" ? "task_selfclose_products" : "task_selfclose_visit"))}</p>` : ""}
+      ${open && selfClosing && mayCancel ? `<textarea id="task-cancel-reason" class="task-complete-note" rows="2" maxlength="300" placeholder="${escapeHtml(t("task_cancel_reason_placeholder"))}" aria-label="${escapeHtml(t("task_cancel_reason_placeholder"))}"></textarea>` : ""}
+      ${open && !selfClosing && !task.items.length && !isCallTask(task) ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
       <div class="sheet-actions" id="task-sheet-actions" style="flex-wrap:wrap;">
         ${open && (task.auto_kind === "reorder_followup" || task.task_kind === "make_order") && task.customer_id ? `<button type="button" class="btn btn-primary" data-action="order-usual">${t("usual_order_btn")}</button>` : ""}
         ${open && isCallTask(task) ? `<button type="button" class="btn btn-primary" data-action="call-result">${t("call_record_result")}</button>` : ""}
-        ${open && !isCallTask(task) ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" || task.task_kind === "make_order" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
+        ${open && isDebt && !isCallTask(task) ? `<button type="button" class="btn btn-primary" data-action="record-result">${t("task_record_result")}</button>` : ""}
+        ${open && !selfClosing && !isCallTask(task) ? `<button type="button" class="btn ${task.auto_kind === "reorder_followup" || task.task_kind === "make_order" ? "" : "btn-primary"}" data-action="complete">${t("task_mark_complete")}</button>` : ""}
         ${task.status === "done" ? `<button type="button" class="btn" data-action="reopen">${t("task_reopen")}</button>` : ""}
         ${isCreator && task.status !== "cancelled" ? `<button type="button" class="btn" data-action="edit">${t("edit")}</button>` : ""}
-        ${isCreator && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
-        ${isCreator && task.status === "cancelled" ? `<button type="button" class="btn" data-action="restore">${t("task_restore")}</button>` : ""}
+        ${mayCancel && open ? `<button type="button" class="btn btn-danger" data-action="cancel">${t("task_cancel")}</button>` : ""}
+        ${(isCreator || mayCancel) && task.status === "cancelled" ? `<button type="button" class="btn" data-action="restore">${t("task_restore")}</button>` : ""}
       </div>`;
     const errorEl = sheet.querySelector("#task-sheet-error");
     const fail = (err) => {
@@ -671,16 +678,15 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
     sheet.querySelectorAll("[data-item]").forEach((box) =>
       box.addEventListener("change", () => refresh(api.setTaskItemDone(task.id, Number(box.dataset.item), box.checked)))
     );
-    sheet.querySelector('[data-action="complete"]')?.addEventListener("click", async () => {
-      if (task.auto_kind === "debt_collection" || task.task_kind === "collect_debt") {
-        // How did the collection go? (a promised payment needs a date)
-        const result = await openCollectionOutcomeSheet();
-        if (result) refresh(api.completeTask(task.id, result.note, { outcome: result.outcome, promise_date: result.promise_date }));
-        return;
-      }
+    sheet.querySelector('[data-action="complete"]')?.addEventListener("click", () => {
       // The optional note is an inline field now (a native prompt() popup blocked the screen).
       const note = sheet.querySelector("#task-complete-note")?.value ?? "";
       refresh(api.completeTask(task.id, note.trim()));
+    });
+    // Collect debt: the task closes when a payment is recorded; the rep records what the customer said (promised date / refused).
+    sheet.querySelector('[data-action="record-result"]')?.addEventListener("click", async () => {
+      const result = await openCollectionOutcomeSheet({ outcomes: ["promised", "no_answer", "refused"] });
+      if (result) refresh(api.taskRecordResult(task.id, { outcome: result.outcome, promise_date: result.promise_date, note: result.note }));
     });
     // Call: the tel: link dials by itself; we only remember it so the result sheet opens when the app is shown again.
     sheet.querySelector('[data-action="call"]')?.addEventListener("click", () => rememberCall(task));
@@ -700,6 +706,12 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
     sheet.querySelector('[data-action="reopen"]')?.addEventListener("click", () => refresh(api.reopenTask(task.id)));
     sheet.querySelector('[data-action="cancel"]')?.addEventListener("click", () => {
       // No confirmation: a cancelled task can be restored with one tap.
+      if (selfClosing) {
+        const reason = sheet.querySelector("#task-cancel-reason")?.value.trim() ?? "";
+        if (reason.length < 3) return fail(new Error(t("task_cancel_reason_required")));
+        refresh(api.updateTask(task.id, { status: "cancelled", reason }));
+        return;
+      }
       refresh(api.updateTask(task.id, { status: "cancelled" }));
     });
     sheet.querySelector('[data-action="restore"]')?.addEventListener("click", () => refresh(api.updateTask(task.id, { status: "open" })));
