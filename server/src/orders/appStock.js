@@ -26,6 +26,14 @@ export const DELIVERED_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FRO
                 AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
                 AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)
                     > now() - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
+// FOR INFORMATION, never subtracted: delivered in the app 15..180 days ago and still not found in Excel. After MATCH_WINDOW_DAYS the app stops
+// subtracting an unmatched delivery (it takes it as already in the Excel stock). If Excel in fact never got that sale (a customer without an
+// ERP id, a sale the accountant forgot), the app's number is TOO HIGH by exactly this much: the shelf holds less than the app says.
+export const DELIVERED_OLDER_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+              WHERE oi.product_id = p.id AND o.cancelled_at IS NULL
+                AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+                AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)
+                    BETWEEN now() - interval '180 days' AND now() - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
 export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
               WHERE ri.product_id = p.id AND r.kind = 'return' AND r.status = 'done' AND COALESCE(ri.condition, 'good') = 'good'
                 AND (r.recorded_at IS NULL OR (r.recorded_via = 'manual' AND p.synced_at IS NOT NULL AND r.recorded_at > p.synced_at))), 0)`;
@@ -36,9 +44,9 @@ export async function appStockParts(db, productIds) {
   if (!productIds.length) return new Map();
   const { rows } = await db.query(
     `SELECT p.id, p.stock_qty AS excel, ${PACKED_OUT_SQL}::int AS packed_out, ${DELIVERED_NOT_IN_EXCEL_SQL}::int AS delivered_not_in_excel,
-            ${RETURNS_BACK_SQL}::int AS returns_back, to_char(p.synced_at AT TIME ZONE 'Asia/Yerevan', 'DD.MM HH24:MI') AS synced_at
+            ${RETURNS_BACK_SQL}::int AS returns_back, ${DELIVERED_OLDER_NOT_IN_EXCEL_SQL}::int AS older_not_in_excel, to_char(p.synced_at AT TIME ZONE 'Asia/Yerevan', 'DD.MM HH24:MI') AS synced_at
      FROM products p WHERE p.id = ANY($1)`,
     [productIds]
   );
-  return new Map(rows.map((r) => [r.id, { excel: r.excel, packed_out: r.packed_out, delivered_not_in_excel: r.delivered_not_in_excel, returns_back: r.returns_back, synced_at: r.synced_at }]));
+  return new Map(rows.map((r) => [r.id, { excel: r.excel, packed_out: r.packed_out, delivered_not_in_excel: r.delivered_not_in_excel, returns_back: r.returns_back, older_not_in_excel: r.older_not_in_excel, synced_at: r.synced_at }]));
 }

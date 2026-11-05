@@ -54,7 +54,9 @@ function whyHtml(item) {
     ${p.delivered_not_in_excel ? line(t("stock_count_why_delivered"), `−${p.delivered_not_in_excel}`) : ""}
     ${p.returns_back ? line(t("stock_count_why_returns"), `+${p.returns_back}`) : ""}
     ${line(t("stock_count_excel"), item.expected_qty ?? "–")}
-  </ul><p class="muted">${escapeHtml(t("stock_count_why_hint"))}</p>`;
+  </ul>
+  ${p.older_not_in_excel ? `<p class="sc-why-older"><strong>${p.older_not_in_excel}</strong> ${escapeHtml(t("stock_count_why_older"))}</p>` : ""}
+  <p class="muted">${escapeHtml(t("stock_count_why_hint"))}</p>`;
 }
 
 function rowHtml(item, canCount) {
