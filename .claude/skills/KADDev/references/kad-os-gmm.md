@@ -61,3 +61,25 @@ droplet app. The supplier-side half of the link lives in THIS repo (`docs/kad-os
 
 ## Shared kit and navigation (0.95.0)
 - `client/public/js/kit/` is the SAME kit as Field Visits (KADDev rule 60, `kad-app-standard.md` section 4). Tab bar / sidebar / More / G+letter replace history; Back closes the top sheet; a screen change closes every sheet; re-tap = top, twice = refresh; record addresses (`#/customers/<card>` ...) open their sheet; `/api/search` + palette (Ctrl K); pinned screens; slow-screens report from `/api/perf/nav`.
+
+## Rounds of 2026-11-05 / 06 (KAD OS 0.106.0 - 0.107.0)
+- **Oil by the litre from its own pack (0.106.0, migration 063):** a drum (>= 50 L) asks for litres on any tap; a bottle over 1 L has a «լ» button. The sale line is
+  that PART of the pack: `qty = litres / size` (6 decimals; `receipt_lines.qty` and `product_stats.sold/adjusted` are NUMERIC(16,6)), price = pack price / its litres,
+  the line name gets "(2.75 լ)". The old "pour a drum" step of a sale is gone (loose-litre cards show only while own loose stock is left). Stock text "4 հատ + 1.2 լ".
+- **Negative discount = price up (0.107.0):** a line discount may be negative (owner: price 10,000, discount -1,500 = 11,500), up to `MARKUP_PCT` (300 %) of the line;
+  the sheet has "− Զեղչ / + Հավելում". Server `priceReceipt` and client `sale/pricing.js` (signedValue) must stay twins (`sale-pricing.test.js` randomises both).
+- **Transfer between sources (0.107.0):** category group `transfer` (`TRANSFER = ['Transfer', 'Mutq Hashvin']`, `categoryClass` 'transfer', P&L 'transfer'):
+  "Մուտք հաշվին" is putting the cash desk into the bank, NOT an expense. `POST /api/cash/transfer {from,to,amount}` books two legs (`doc_ref` ref / ref#to),
+  cancelling one cancels both; Cash totals leave transfers out unless the Transfer category is filtered. Default Cash -> Acba Bank.
+- **Source balances:** `GET /api/dashboard/balances` (sum of `agg_cash_daily` by source, owner money included, only sums leave); management sees every source as
+  rounded cards on Cash, a seller sees only the cash desk (`canViewCashDesk`) on Home.
+- **Supplier rule:** Castrol / Lotos / Royal / Orlen OILS are supplied by "Kalantaryan Family CJSC" - enforced in `gmm_refresh_products()` (migration 064) because
+  every Excel import rewrites `supplier`; never set `app_edited` just to keep one field (it freezes the prices from Excel too).
+- **Windows mouse:** a global `wheel` handler in `app.js` turns the vertical wheel into sideways scroll over a strip that scrolls only sideways (chips, tabs,
+  balance cards, wide tables); touchpads (deltaX) and vertical scrollers keep their own behaviour.
+- **Lessons:** (1) a local `const draft` inside `mount()` shadowed the module-level `draft` object and blanked New sale (`draft.ready` of null) - lint does not
+  catch shadowing: open the screen in a browser after every refactor. (2) In the sandbox run Playwright with `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium`;
+  three e2e tests (theme, offline cash, Andranik) fail locally only because that newer Chromium logs a "preload ... cross-world" warning - they pass on `main` in CI.
+  (3) **GitHub Actions down** (every job ends in 3 s, `runner_id: 0`, logs 404, `main` red too): it is the account (minutes / billing), not the code. Re-run once,
+  comment once, tell the owner exactly where to look (Settings -> Billing and plans) and offer "fixed" / "merge anyway"; merge on local tests ONLY on the owner's
+  explicit "merge anyway".
