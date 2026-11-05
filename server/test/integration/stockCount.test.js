@@ -277,7 +277,7 @@ test("the counted quantity is compared with the app's stock, not the Excel numbe
   assert.equal(saved.item.counted_qty - saved.item.expected_qty, 0, "no difference: the shelf matches the app");
   // ...and the number can be explained: Excel 50 - packed out 7 - delivered but not in Excel yet 10 (4 + 6) + good returns not in Excel 2 = 35
   const parts = (await appStockParts(pool, [p.id])).get(p.id);
-  assert.deepEqual({ e: parts.excel, p: parts.packed_out, d: parts.delivered_not_in_excel, r: parts.returns_back }, { e: 50, p: 7, d: 10, r: 2 });
+  assert.deepEqual({ e: parts.excel, p: parts.packed_out, d: parts.delivered_not_in_excel, r: parts.returns_back, o: parts.older_not_in_excel }, { e: 50, p: 7, d: 10, r: 2, o: 11 }); // o: delivered 20 days ago, never found in Excel: NOT subtracted, shown as a warning
   assert.equal(parts.excel - parts.packed_out - parts.delivered_not_in_excel + parts.returns_back, 35);
   await clearCount(pool, p.id, day);
 });
