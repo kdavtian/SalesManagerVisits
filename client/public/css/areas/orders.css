@@ -191,6 +191,11 @@
 .sc-undo[hidden] { display: inline-block; visibility: hidden; }
 .sc-readonly { flex: none; min-width: 48px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .sc-excel { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; }
+.sc-why { min-width: 22px; height: 22px; padding: 0; margin: 0 4px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-dim); font-size: 0.75rem; font-weight: 700; line-height: 1; cursor: pointer; }
+.sc-why { position: relative; }
+.sc-why::after { content: ""; position: absolute; inset: -11px; }
+.sc-why-list { margin: 8px 0 12px; padding-left: 18px; }
+.sc-why-list li { margin: 4px 0; }
 .sc-diff { font-size: 0.8rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sc-diff-ok { color: var(--success); }
 .sc-diff-bad { color: var(--danger); }

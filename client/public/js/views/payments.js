@@ -90,6 +90,12 @@ function excelBadgeHtml(p) {
 }
 
 // A payment collected at a visit that the customer neither signed nor confirmed on a photographed slip (owner, 2026-10-27).
+// Dated several days before it was entered (owner, 2026-11-05: look at payments dated far back): a flag, never a block.
+const BACKDATED_FROM_DAYS = 3;
+function backdatedBadgeHtml(p) {
+  return p.days_back >= BACKDATED_FROM_DAYS ? ` <span class="badge badge-warning">${t("pay_backdated").replace("{n}", p.days_back)}</span>` : "";
+}
+
 function confirmationBadgeHtml(p) {
   return p.customer_confirmation === "none" ? ` <span class="badge badge-warning">${t("pay_conf_none")}</span>` : "";
 }
@@ -453,7 +459,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         </button>
         <div class="payment-row-bottom-line">
           <span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>
-          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}
+          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}
           <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
           ${
             p.status === "pending" && canReview
@@ -491,7 +497,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
       ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
-      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}`, "")}
+      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
       <div class="dtl-cell dtl-end">${p.status === "pending" && canReview ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
@@ -653,7 +659,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}</p>
+        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
@@ -722,6 +728,12 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
               </div>`;
             actionsEl.querySelector("#payment-delete-cancel").addEventListener("click", () => renderDetail(p));
             actionsEl.querySelector("#payment-delete-go").addEventListener("click", async (ev) => {
+              // a payment is deleted for good: the reason is written down (owner, 2026-11-05)
+              if (actionsEl.querySelector("#payment-delete-reason").value.trim().length < 3) {
+                errorEl.textContent = t("payment_reason_required");
+                errorEl.hidden = false;
+                return;
+              }
               ev.currentTarget.disabled = true;
               try {
                 await api.deletePayment(p.id, actionsEl.querySelector("#payment-delete-reason").value.trim());

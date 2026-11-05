@@ -389,7 +389,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
            name = EXCLUDED.name, brand = EXCLUDED.brand, unit = EXCLUDED.unit,
            unit_price_amd = EXCLUDED.unit_price_amd, family = EXCLUDED.family,
            bronze_price_amd = EXCLUDED.bronze_price_amd, silver_price_amd = EXCLUDED.silver_price_amd,
-           gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = EXCLUDED.stock_qty,
+           gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = COALESCE(EXCLUDED.stock_qty, products.stock_qty),
            net_cost_amd = COALESCE(EXCLUDED.net_cost_amd, products.net_cost_amd),
            synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
@@ -449,6 +449,16 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
            AS t(erp_product_id, unit_price_amd, bronze_price_amd, silver_price_amd, gold_price_amd, net_cost_amd, family)
          WHERE p.erp_product_id = t.erp_product_id AND p.manually_edited_at IS NOT NULL AND t.unit_price_amd > 0`,
         [prodErpIds, prodPrices, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodNetCosts, prodFamilies]
+      );
+      // STOCK follows the workbook for EVERY product (owner, 2026-11-05: stock count problem). It sat in the gated upsert above, so one hand
+      // edit of a product (a price from the pricelist import or builder, a name, a photo-less fix) froze its stock for good: the app kept
+      // showing the quantity of that day while Excel moved on, and the stock count compared the warehouse with a stale number. The workbook is
+      // the trusted source; a blank cell (an older bot without stock) never wipes a quantity. synced_at is the moment of this stock.
+      await client.query(
+        `UPDATE products p SET stock_qty = t.stock_qty, synced_at = now()
+         FROM unnest($1::text[], $2::int[]) AS t(erp_product_id, stock_qty)
+         WHERE p.erp_product_id = t.erp_product_id AND t.stock_qty IS NOT NULL AND p.stock_qty IS DISTINCT FROM t.stock_qty`,
+        [prodErpIds, prodStockQtys]
       );
       // SKU Status from the workbook decides what is sold: ACTIVE products are
       // active in the app, everything else is hidden from inventory, new orders

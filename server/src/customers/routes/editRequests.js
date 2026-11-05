@@ -150,6 +150,19 @@ editRequestsRouter.get("/", async (req, res) => {
      ORDER BY er.created_at DESC`,
     params
   );
+  // For the reviewers: what each field holds NOW, next to the proposed value ("Silver -> Gold"), read once per customer.
+  if (canReviewCustomerEdits(req.user.role) && rows.length) {
+    const wanted = [...new Set(rows.flatMap((r) => Object.keys(r.changes ?? {})))].filter((f) => EDITABLE_FIELDS.includes(f));
+    if (wanted.length) {
+      const cols = wanted.map((f) => `"${f}"`).join(", ");
+      const { rows: now } = await pool.query(`SELECT id, ${cols} FROM customers WHERE id = ANY($1)`, [[...new Set(rows.map((r) => r.customer_id))]]);
+      const byId = new Map(now.map((c) => [c.id, c]));
+      for (const r of rows) {
+        const c = byId.get(r.customer_id);
+        r.current = c ? Object.fromEntries(Object.keys(r.changes ?? {}).filter((f) => wanted.includes(f)).map((f) => [f, c[f] ?? null])) : {};
+      }
+    }
+  }
   res.json(rows);
 });
 

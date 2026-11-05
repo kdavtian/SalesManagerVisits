@@ -272,7 +272,7 @@ export function renderPendingRequest(slot, request, onDone) {
 
   if (canReviewCustomerEdits()) {
     const changesList = Object.entries(request.changes)
-      .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${escapeHtml(String(value))}</div>`)
+      .map(([field, value]) => `<div class="proposed-change"><strong>${escapeHtml(t(field))}</strong>: ${request.current && field in request.current ? `<span class="muted">${escapeHtml(String(request.current[field] ?? "–"))}</span> &rarr; ` : ""}${escapeHtml(String(value))}</div>`)
       .join("");
     slot.innerHTML = `
       <div class="card pending-request-card">

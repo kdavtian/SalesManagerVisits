@@ -17,9 +17,9 @@
 // from the cash ledger) + 20 % VAT on (price - landing) + 18 % profit tax on the rest. Where landing
 // cost or pack size is unknown the flat workbook net cost is used.
 import { netCost, litersOfUnit } from "../../../client/public/js/costModel.js";
+import { approves } from "../shared/roles.js";
 
 export const AUTO_APPROVE_PCT = 3;
-const UNLIMITED_APPROVER_ROLES = ["ceo", "admin", "sales_director"];
 
 // Effective discount in percent of the subtotal (flat AMD discounts are converted).
 export function effectiveDiscountPct(subtotal, discountPct, discountAmd) {
@@ -94,9 +94,9 @@ export function decideDiscountApproval({ discountPct, discountAmd, subtotal, bel
   return pct <= autoPct && !belowCost ? "approved" : "pending";
 }
 
+// Who may approve is the table APPROVALS in shared/roles.js (orderPricingAny / orderPricingAboveNetCost).
 export function canApproveDiscountRole(role, belowCost, belowLanding = false) {
-  if (UNLIMITED_APPROVER_ROLES.includes(role)) return true;
+  if (approves("orderPricingAny", role)) return true;
   if (belowLanding) return false;
-  if (role === "sales_director" || role === "operations_director") return !belowCost;
-  return false;
+  return approves("orderPricingAboveNetCost", role) && !belowCost;
 }

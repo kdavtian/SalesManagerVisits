@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackProduct, trackOrder } from "./helpers.js";
 import fs from "node:fs";
 import { pool } from "../../src/db/pool.js";
+import { appStockParts } from "../../src/orders/appStock.js";
 import { spreadOverDays, workingDaysOfMonth, ensurePlan, dayList, saveCount, clearCount, closeDay, closeOpenDays, monthReport } from "../../src/orders/stockCount.js";
 
 const MONTH = "2030-04-01"; // a future month nobody else plans: Monday the 1st
@@ -274,5 +275,23 @@ test("the counted quantity is compared with the app's stock, not the Excel numbe
   const saved = await saveCount(pool, users.warehouse_manager, { productId: p.id, qty: 35 }, day);
   assert.equal(saved.item.expected_qty, 35);
   assert.equal(saved.item.counted_qty - saved.item.expected_qty, 0, "no difference: the shelf matches the app");
+  // ...and the number can be explained: Excel 50 - packed out 7 - delivered but not in Excel yet 10 (4 + 6) + good returns not in Excel 2 = 35
+  const parts = (await appStockParts(pool, [p.id])).get(p.id);
+  assert.deepEqual({ e: parts.excel, p: parts.packed_out, d: parts.delivered_not_in_excel, r: parts.returns_back }, { e: 50, p: 7, d: 10, r: 2 });
+  assert.equal(parts.excel - parts.packed_out - parts.delivered_not_in_excel + parts.returns_back, 35);
+  await clearCount(pool, p.id, day);
+});
+
+test("a product with no stock figure in Excel is counted but never reported as a difference", async () => {
+  const day = "2030-04-23";
+  const { rows: [p] } = await pool.query("INSERT INTO products (name, brand, unit, unit_price_amd, active, stock_qty) VALUES ('ITEST stock unknown', 'ITEST', '4 L', 1000, true, NULL) RETURNING id");
+  trackProduct(p.id);
+  await pool.query("INSERT INTO stock_counts (month, product_id, planned_date) VALUES ($1, $2, $3)", [MONTH, p.id, day]);
+  const saved = await saveCount(pool, users.warehouse_manager, { productId: p.id, qty: 12 }, day);
+  assert.equal(saved.item.expected_qty, null);
+  const list = await dayList(pool, day, { showExpected: true });
+  const item = list.items.find((i) => i.product_id === p.id);
+  assert.equal(item.difference, null, "nothing to compare with");
+  assert.equal(list.numbers.differences, 0);
   await clearCount(pool, p.id, day);
 });

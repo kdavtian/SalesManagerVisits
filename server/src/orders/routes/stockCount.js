@@ -35,7 +35,7 @@ stockCountRouter.put("/items/:productId", counter, async (req, res) => {
   const r = await saveCount(pool, req.user, { productId: Number(req.params.productId), qty: typeof qty === "number" ? qty : Number.NaN, note: req.body?.note }, day);
   if (r.error) return res.status(r.status).json({ error: r.error });
   // the counter is told the difference only once the day is closed
-  res.json(seesStockCountExpected(req.user.role) ? { ...r.item, difference: r.item.counted_qty - (r.item.expected_qty ?? 0) } : { product_id: r.item.product_id, counted_qty: r.item.counted_qty });
+  res.json(seesStockCountExpected(req.user.role) ? { ...r.item, difference: r.item.expected_qty == null ? null : r.item.counted_qty - r.item.expected_qty } : { product_id: r.item.product_id, counted_qty: r.item.counted_qty });
 });
 
 stockCountRouter.delete("/items/:productId", counter, async (req, res) => {
