@@ -5,11 +5,21 @@ import { activateDialog, bindAmdInput, compressImage, escapeHtml, formatAmd, for
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { compareProducts } from "../../productSort.js";
+import { installInlineClearButton } from "../../searchBar.js";
 
 export async function renderProductsSection(container) {
   container.innerHTML = `
     <div id="product-sync-diagnostics"></div>
     <div id="product-duplicates"></div>
+    <div class="product-admin-tools">
+      <input type="search" id="product-admin-search" placeholder="${t("search")}" aria-label="${t("search")}" autocomplete="off" />
+      <div class="product-admin-filters" id="product-admin-filters" role="group">
+        <button type="button" class="map-filter-chip chip-active" data-pf="all" aria-pressed="true">${t("filter_all")}</button>
+        <button type="button" class="map-filter-chip" data-pf="manual" aria-pressed="false">${t("catalog_filter_manual")}</button>
+        <button type="button" class="map-filter-chip" data-pf="synced" aria-pressed="false">${t("catalog_filter_synced")}</button>
+      </div>
+      <p class="muted product-admin-count" id="product-admin-count" aria-live="polite"></p>
+    </div>
     <div id="product-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     <div class="team-add-btn-wrap product-section-actions">
       <button type="button" class="btn" id="bulk-price-edit-btn">${t("bulk_price_edit")}</button>
@@ -62,37 +72,53 @@ export async function renderProductsSection(container) {
     `;
   })();
 
+  // The whole list is loaded once; search and the filter chips work on it at once (no request, no flash).
+  let allProducts = [];
+  let productFilter = "all";
+  const searchEl = container.querySelector("#product-admin-search");
+  installInlineClearButton(searchEl);
+  searchEl.addEventListener("input", paintProducts);
+  container.querySelectorAll("[data-pf]").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      productFilter = chip.dataset.pf;
+      container.querySelectorAll("[data-pf]").forEach((c) => {
+        c.classList.toggle("chip-active", c === chip);
+        c.setAttribute("aria-pressed", String(c === chip));
+      });
+      paintProducts();
+    })
+  );
+
   async function loadProducts() {
     const fetched = await api.listAllProducts();
     // Only active products are listed (the workbook's SKU Status decides what
     // is sold) in brand/family/viscosity/size order -- see productSort.js,
     // shared with Pricelist, Order creation and Warehouse Inventory.
-    const products = fetched.filter((p) => p.active).sort(compareProducts);
+    allProducts = fetched.filter((p) => p.active).sort(compareProducts);
+    paintProducts();
+  }
+
+  function paintProducts() {
+    const q = searchEl.value.trim().toLowerCase();
+    const products = allProducts.filter((p) => {
+      if (productFilter === "manual" && !p.manually_edited_at) return false;
+      if (productFilter === "synced" && p.manually_edited_at) return false;
+      return !q || [p.name, p.brand, p.unit, p.erp_product_id].filter(Boolean).join(" ").toLowerCase().includes(q);
+    });
+    container.querySelector("#product-admin-count").textContent = t("products_count").replace("{n}", products.length);
+    // A row: name, size and price; tap it to edit; "..." opens the other actions (they were five links in one line and ran off the screen).
     listEl.innerHTML = products.length
       ? products
           .map(
             (p) => `
-        <div class="card user-row">
-          <div class="user-row-top">
-            <div>
-              <strong>${escapeHtml(p.name)}</strong>
-              <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
-            </div>
-            <span class="badge ${p.active ? "badge-success" : "badge-neutral"}">${formatAmd(Number(p.silver_price_amd > 0 ? p.silver_price_amd : p.unit_price_amd))}</span>
-          </div>
-          <div class="user-row-meta">
-            <span class="muted">
-              ${p.active ? t("active") : t("inactive")}
-              ${p.erp_product_id ? (p.manually_edited_at ? ` · ${t("catalog_manual")}` : ` · ${t("catalog_synced")}`) : ""}
-            </span>
-            <span class="user-row-actions">
-              ${p.erp_product_id && p.manually_edited_at ? `<button class="btn-link" data-action="resync" data-id="${p.id}">${t("catalog_resync")}</button>` : ""}
-              <button class="btn-link" data-action="promo" data-id="${p.id}">${t("promo_price_label")}</button>
-              <button class="btn-link" data-action="history" data-id="${p.id}">${t("price_history")}</button>
-              <button class="btn-link" data-action="edit" data-id="${p.id}">${t("edit")}</button>
-              ${p.active ? `<button class="btn-link btn-link-danger" data-action="delete" data-id="${p.id}" data-name="${escapeHtml(p.name)}">${t("deactivate")}</button>` : ""}
-            </span>
-          </div>
+        <div class="card product-admin-row" data-id="${p.id}">
+          <button type="button" class="product-admin-main" data-action="edit" data-id="${p.id}">
+            <strong>${escapeHtml(p.name)}</strong>
+            <span class="muted">${[p.brand, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
+            <span class="muted product-admin-state">${p.erp_product_id ? (p.manually_edited_at ? t("catalog_manual_short") : t("catalog_synced_short")) : t("inactive")}</span>
+          </button>
+          <span class="badge badge-success product-admin-price">${formatAmd(Number(p.silver_price_amd > 0 ? p.silver_price_amd : p.unit_price_amd))}</span>
+          <button type="button" class="icon-btn product-admin-more" data-action="more" data-id="${p.id}" aria-label="${escapeHtml(t("nav_more"))}">${icons.more ?? "&hellip;"}</button>
         </div>
       `
           )
@@ -100,30 +126,66 @@ export async function renderProductsSection(container) {
       : `<p class="empty-state">${t("no_products_found")}</p>`;
 
     listEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
-      const product = products.find((p) => p.id === Number(btn.dataset.id));
+      const product = allProducts.find((p) => p.id === Number(btn.dataset.id));
       btn.addEventListener("click", () => openProductSheet(product));
     });
-    listEl.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+    listEl.querySelectorAll('[data-action="more"]').forEach((btn) => {
+      const product = allProducts.find((p) => p.id === Number(btn.dataset.id));
+      btn.addEventListener("click", () => openProductActions(product));
+    });
+  }
+
+  // The other actions of one product, in a bottom sheet with 44 px buttons; "Deactivate" needs a second tap (no browser pop-up).
+  function openProductActions(product) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${escapeHtml(product.name)}</h2>
+        <p class="muted">${[product.brand, product.unit].filter(Boolean).map(escapeHtml).join(" · ")}</p>
+        <div class="product-action-list">
+          <button type="button" class="btn btn-block" data-act="promo">${t("promo_price_label")}</button>
+          <button type="button" class="btn btn-block" data-act="history">${t("price_history")}</button>
+          ${product.erp_product_id && product.manually_edited_at ? `<button type="button" class="btn btn-block" data-act="resync">${t("catalog_resync")}</button>` : ""}
+          <button type="button" class="btn btn-block btn-danger" data-act="delete">${t("deactivate")}</button>
+        </div>
+        <p class="form-error" id="product-actions-error" hidden></p>
+        <div class="sheet-actions"><button type="button" class="btn" data-act="close">${t("done")}</button></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+    const errorEl = overlay.querySelector("#product-actions-error");
+    overlay.querySelectorAll("[data-act]").forEach((btn) =>
       btn.addEventListener("click", async () => {
-        if (!confirm(`${t("confirm_delete_product")} ${btn.dataset.name}?`)) return;
-        await api.deleteProduct(btn.dataset.id);
-        loadProducts();
-      });
-    });
-    listEl.querySelectorAll('[data-action="resync"]').forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        await api.resyncProduct(btn.dataset.id);
-        loadProducts();
-      });
-    });
-    listEl.querySelectorAll('[data-action="promo"]').forEach((btn) => {
-      const product = products.find((p) => p.id === Number(btn.dataset.id));
-      btn.addEventListener("click", () => openPromoSheet(product));
-    });
-    listEl.querySelectorAll('[data-action="history"]').forEach((btn) => {
-      const product = products.find((p) => p.id === Number(btn.dataset.id));
-      btn.addEventListener("click", () => openPriceHistorySheet(product));
-    });
+        const act = btn.dataset.act;
+        if (act === "close") return close();
+        if (act === "promo") return (close(), openPromoSheet(product));
+        if (act === "history") return (close(), openPriceHistorySheet(product));
+        try {
+          if (act === "delete") {
+            if (btn.dataset.armed !== "1") {
+              btn.dataset.armed = "1";
+              btn.textContent = t("product_deactivate_confirm");
+              setTimeout(() => {
+                btn.dataset.armed = "";
+                btn.textContent = t("deactivate");
+              }, 4000);
+              return;
+            }
+            await api.deleteProduct(product.id);
+          } else if (act === "resync") {
+            await api.resyncProduct(product.id);
+          }
+          close();
+          loadProducts();
+        } catch (err) {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+        }
+      })
+    );
   }
 
   // Date-ranged "special period" promo pricing (item 6) -- shows any

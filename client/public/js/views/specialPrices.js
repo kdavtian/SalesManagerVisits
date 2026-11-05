@@ -59,7 +59,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="detail-header-title oc-title">
-        <div class="sales-heading-with-hint"><h1>${t("sp_title")}</h1><button type="button" class="settings-hint-icon" id="sp-info" aria-label="${t("more_info")}">!</button></div>
+        <div class="sales-heading-with-hint"><button type="button" class="settings-hint-icon" id="sp-info" aria-label="${t("more_info")}">!</button><h1>${t("sp_title")}</h1></div>
         <span class="oc-customer">${escapeHtml(customer.name)} ${tierBadgeHtml("gold")}</span>
       </div>
     </div>

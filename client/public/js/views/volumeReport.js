@@ -87,7 +87,7 @@ export async function renderVolumeReport(root, navigate) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title">
-          <div class="sales-heading-with-hint"><h1>${t("report_product_liters_name")}</h1><button type="button" class="settings-hint-icon" id="vol-info-btn" aria-label="${t("more_info")}">!</button></div>
+          <div class="sales-heading-with-hint"><button type="button" class="settings-hint-icon" id="vol-info-btn" aria-label="${t("more_info")}">!</button><h1>${t("report_product_liters_name")}</h1></div>
         </div>
         <button type="button" class="icon-btn" id="vol-export-btn" aria-label="${t("export_excel")}">${icons.send}</button>
       </div>

@@ -282,5 +282,6 @@ export const enCustomers = {
   desk_col_address: "Address",
   desk_col_last_payment: "Last payment",
   desk_col_last_payment_amount: "Last payment amount",
+  customers_show_all: "Show all customers",
   customers_only_ours: "Only our customers (with an ERP ID)",
 };

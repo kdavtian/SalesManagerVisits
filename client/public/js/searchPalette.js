@@ -4,7 +4,7 @@
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { escapeHtml, formatAmd, formatDateDMY, activateDialog } from "./util.js";
-import { localResults, recent, recordResults } from "./searchSources.js";
+import { localResults, recent, recordResults, suggestions } from "./searchSources.js";
 import { bindPinButtons, pinButtonHtml } from "./pins.js";
 import { pinnableIds } from "./screenCatalog.js";
 
@@ -73,11 +73,15 @@ export function openSearch({ navigate, settings }) {
 
   function paintStatic(query) {
     items = [];
-    active = 0;
+    active = query ? 0 : -1; // an empty box is a menu: Enter does nothing until a row is chosen with the arrows
     if (!query) {
       const recents = recent.all();
+      const { actions, screens } = suggestions(settings);
+      // an empty box is a menu: what was opened last, the quick actions, then the pinned / main screens, and a line saying what can be typed
       box.innerHTML =
-        group(t("search_recent"), recents.map((r) => ({ ...r, icon: icons.history }))) ||
+        group(t("search_recent"), recents.map((r) => ({ ...r, icon: icons.history }))) +
+        group(t("search_actions"), actions) +
+        group(t("search_screens"), screens) +
         `<p class="search-note">${escapeHtml(t("search_hint_all"))}</p>`;
       return;
     }
@@ -91,7 +95,7 @@ export function openSearch({ navigate, settings }) {
 
   async function paintRecords(query) {
     const mine = ++seq;
-    const { customers, orders, tasks } = await recordResults(query);
+    const { customers, orders, tasks, products } = await recordResults(query);
     if (mine !== seq || !overlay.isConnected || input.value.trim() !== query) return;
     const slot = box.querySelector(".search-records");
     if (!slot) return;
@@ -103,6 +107,10 @@ export function openSearch({ navigate, settings }) {
       group(
         t("nav_orders"),
         orders.map((o) => ({ kind: "record", id: `o${o.id}`, label: o.order_code || `#${o.id}`, hint: [o.customer_name, formatDateDMY(o.created_at)].filter(Boolean).join(" · "), trailing: formatAmd(Number(o.total_amd)), icon: icons.cart, hash: `#/orders?open=${o.id}` }))
+      ) +
+      group(
+        t("qa_pricelist"),
+        products.map((p) => ({ kind: "record", id: `p${p.id}`, label: p.name, hint: [p.brand, p.unit].filter(Boolean).join(" · "), icon: icons.box, hash: `#/product/${p.id}` }))
       ) +
       group(
         t("qa_tasks"),
@@ -136,9 +144,9 @@ export function openSearch({ navigate, settings }) {
   input.addEventListener("keydown", (e) => {
     if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
       e.preventDefault();
-      active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      active = active < 0 ? (e.key === "ArrowDown" ? 0 : items.length - 1) : (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
       paintActive();
-    } else if (e.key === "Enter" && items.length) {
+    } else if (e.key === "Enter" && items.length && active >= 0) {
       e.preventDefault();
       open(active);
     }

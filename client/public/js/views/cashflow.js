@@ -34,7 +34,7 @@ export async function renderCashflow(root, navigate) {
   root.innerHTML = `
     <div class="cf-view">
       <div class="cf-head">
-        <h1>${t("cf_title")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span></h1>
+        <h1><span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span> ${t("cf_title")}</h1>
         <div class="cf-head-actions">
           <button type="button" class="btn" id="cf-requests" hidden>${t("cf_requests")} <span class="count-badge" id="cf-requests-badge"></span></button>
           <button type="button" class="btn" id="cf-bank" hidden>${t("bk_btn")} <span class="count-badge" id="cf-bank-badge" hidden></span></button>

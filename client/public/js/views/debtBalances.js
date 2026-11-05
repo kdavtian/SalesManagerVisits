@@ -85,7 +85,7 @@ export function renderDebtBalances(root, navigate) {
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <div class="detail-header-title"><div class="sales-heading-with-hint"><h1>${t("debt_balances_title")}</h1><button type="button" class="settings-hint-icon" id="debt-sync-hint-btn" aria-label="${t("more_info")}" hidden>!</button></div></div>
+        <div class="detail-header-title"><div class="sales-heading-with-hint"><button type="button" class="settings-hint-icon" id="debt-sync-hint-btn" aria-label="${t("more_info")}" hidden>!</button><h1>${t("debt_balances_title")}</h1></div></div>
         <div class="debt-as-of-filter-wrap" id="debt-as-of-filter-wrap">
           <button type="button" class="debt-as-of-filter-btn" tabindex="-1" aria-hidden="true">
             ${icons.calendar}

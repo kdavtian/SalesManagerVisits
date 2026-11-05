@@ -23,6 +23,7 @@ import * as settingsAdmin from "./settings/adminRows.js";
 import * as settingsMarkup from "./settings/markup.js";
 import { ICON, formatStorageMb } from "./settings/rows.js";
 import { loadNotificationPreferences } from "./settings/notifications.js";
+import { installSearchCollapse } from "./settings/searchCollapse.js";
 import { openGuideOverlay, openAdminSection, openChangePasswordSheet, openHomeOrderSheet, loadSalesPerformance } from "./settings/sheets.js";
 
 // Who hands over delivery-acceptance acts and so has a signature on the profile (owner, 2026-10-26).
@@ -230,6 +231,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   const routeDriven = !!wantedPage;
   const remembered = {};
   let searching = false;
+  let collapseSearch = null; // iOS-style hide / show of the search field (settings/searchCollapse.js)
 
   function applyState() {
     const wide = wideQuery.matches;
@@ -268,6 +270,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     }
     logoutWrap.hidden = wide && nav.page !== "p-account";
     root.querySelectorAll("[data-nav-page]").forEach((item) => item.classList.toggle("settings-list-row-active", wide && item.dataset.navPage === nav.page));
+    collapseSearch?.();
   }
 
   function closeDrill() {
@@ -385,6 +388,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   });
 
   applyState();
+  collapseSearch = installSearchCollapse({ app: root, view, wrap: searchWrap, input: searchInput });
   if (wantedPage?.tab === "personal") requestAnimationFrame(() => root.querySelector(`[data-page="${wantedPage.id}"]`)?.scrollIntoView({ block: "start" }));
   // What is waiting, beside each category (and the total on the tab): plans to approve, edit requests, reward claims, a stale Excel file.
   // Fetched once per render and again when plans / edit requests change (the sidebar stays on screen while you approve on a computer).
