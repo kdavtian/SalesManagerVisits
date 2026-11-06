@@ -79,6 +79,14 @@ A "no" or "not sure" becomes an item in block 1 (Problems) or 2 (Risks) of the o
     the server, re-check while the page is open, show the refusal inside the sheet with the next step (call / retry).
   - Feedback only in a short toast behind a closing sheet = "button does nothing" for the user.
   - Duplicate controls (two close buttons, two search fields) on one panel.
+  - A coloured button that overrides only its background: the base button style keeps its dark text, so red / green
+    buttons showed black text (website, 33 places, 2026-11-06). Search every `bg-<brand colour>` button for a text colour.
+  - A see-through fixed bar (bottom buy bar, tab bar) over long text: the text behind shows through; make it solid.
+  - Old page after a deploy: script files of the previous build are gone and the host answers with the app page, so the
+    next screen fails ("Something went wrong"). Every app that splits its code (website, any lazy-loaded screen) needs a
+    one-time reload on that error, and its service worker must never store an HTML answer under a script address.
+  - Big photos in small cards: the card must load a small copy (srcset / thumbnails), and the photos of the next likely
+    tap (other pack sizes) load in the background.
 
 ## 10. Compatibility
 - Old client (cached by the service worker for hours) against the new server; offline queue items written by the old client.
