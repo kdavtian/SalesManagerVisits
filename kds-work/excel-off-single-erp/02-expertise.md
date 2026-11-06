@@ -5,7 +5,7 @@ Registry checked: `kds-agents/registry.md` did not exist in this project → new
 | role / skill | decision (rule #) | reason |
 |---|---|---|
 | ERP product owner (owner) | LEARN (3) | decides every switch; needs ~10 h to read reconciliation reports and go/no-go criteria |
-| Chief accountant / financial director (Mane) | HIRE-in-place (1) | licensed-type decisions (VAT, settlement documents, opening balances, period close) — already employed; time must be allocated |
+| Chief accountant / financial director | HIRE-in-place (1) | licensed-type decisions (VAT, settlement documents, opening balances, period close) — already employed; time must be allocated |
 | Armenian tax / legal adviser | HIRE (1) | confirm C1/C2, e-document legal weight, cash-register scope for B2B field collection, PD law — 4–8 h engagement |
 | Software engineer (sole developer) | AGENT (2): **KAD Builder** = Claude with KADDev + kad-edit | public knowledge, repeatable, every change reviewed + CI + owner sees it before merge |
 | Data-migration / reconciliation analyst | AGENT (2): **Reconciler** | repeatable daily diff; low liability (reports only, never edits data) |

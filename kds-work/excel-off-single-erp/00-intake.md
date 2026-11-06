@@ -20,7 +20,7 @@ risk 35 · quality 25 · speed 15 · reversibility 15 · cost 10 (owner chose "z
 ## Current state (from repos and skills, 2026-11-06)
 - Field Visits app 1.523.0 (Node 22 / Express / Postgres / vanilla PWA), on a DigitalOcean droplet; CEO bot (Python) on the same droplet reads the workbook posted to Telegram and syncs customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, reports.
 - App already records natively: visits, orders (draft→confirmed→packed→delivered with signed act), payments + cash custody chain, returns requests, tasks, staff/pay rules, route plans, documents, cashflow rows (manual add allowed), price edits with history, landing-cost calculation. Excel is still the trusted source for debt, sales, plan, prices, HC codes, stock, cash ledger.
-- Team: owner (non-programmer), accountant (Mane), sales director, reps, warehouse, drivers; one developer = Claude.
+- Team: owner (non-programmer), accountant, sales director, reps, warehouse, drivers; one developer = Claude.
 
 ## Constraints
 - No business data / secrets in repo, chat or docs. Deploy = one SSH command block. Every change: kad-edit review, version bump, CI green, squash-merge.
