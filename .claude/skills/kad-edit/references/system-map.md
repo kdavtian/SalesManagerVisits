@@ -19,6 +19,12 @@ KAD OS (kad-gmm)  the customers' own free ERP; GMM = Garage Mall = ERP customer 
 Droplet shared by all: `/opt/field-visits`, `/opt/castrol-ceo-bot`, `/opt/gmm-app`. A change in one app's deploy, nginx, cron, docker
 or disk use can hurt the others. Never touch another app's directory from this app's deploy block.
 
+Fourth repo: the public website **KAD-Motors/KAD-Motors-Platform** (kadmotors.am; TanStack + React static SPA on Cloudflare, own
+Supabase project). Fed one way by Field Visits `server/src/erp/platformSync.js` -> edge function `kad-sync` (products, prices, wholesale
+customers by ERP id). Its shared UI: `src/components/layout/` (Header + phone menu, CartDrawer, MobileTabBar), `src/components/ui/`
+(Radix sheets/dialogs), `src/lib/scrollLock.ts`; booking self-service `src/routes/booking.$code.tsx` <-> SQL `get_booking` /
+`cancel_booking` (the screen mirrors the SQL rule). Its own workflow: README (CI "Build and code-quality checks", Cloudflare deploys main).
+
 ## Contracts between systems (changing one side = changing both)
 | Contract | Producer -> consumer | Break risk |
 |---|---|---|
