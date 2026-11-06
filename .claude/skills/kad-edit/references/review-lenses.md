@@ -70,6 +70,15 @@ A "no" or "not sure" becomes an item in block 1 (Problems) or 2 (Risks) of the o
 - Was any behaviour, validation, permission, column, notification or default removed or changed? It must be listed and owner-approved.
 - Tests that cover the touched flow still pass unchanged; if a test had to change, why (behaviour change = owner decision).
 - KAD OS refactor: `shots:base` before, `shots` after - no pixel change.
+- Same-pattern sweep done (SKILL Step 3b)? Every copy of the fixed code, sibling screen/sheet and the same flow in the other apps
+  searched; each one fixed or listed. Patterns found so far (search these first):
+  - Overlay / menu / drawer / hand-made sheet without a page-scroll lock: on iPhone `overflow: hidden` alone does not stop the page
+    scrolling underneath; use the shared lock (website `src/lib/scrollLock.ts` `useScrollLock`; Radix sheets lock themselves).
+  - A full-screen backdrop that covers the control that opened it (z-order): the close/toggle button must stay on top.
+  - A button the server will refuse (booking already started, order already confirmed, limit reached): hide it with the same rule as
+    the server, re-check while the page is open, show the refusal inside the sheet with the next step (call / retry).
+  - Feedback only in a short toast behind a closing sheet = "button does nothing" for the user.
+  - Duplicate controls (two close buttons, two search fields) on one panel.
 
 ## 10. Compatibility
 - Old client (cached by the service worker for hours) against the new server; offline queue items written by the old client.

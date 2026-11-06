@@ -1,6 +1,6 @@
 ---
 name: kad-edit
-description: Mandatory whole-system change review for the owner's KAD apps - Field Visits (kdavtian/SalesManagerVisits), the Castrol CEO bot / ERP sync (kdavtian/castrol_ceo_report) and KAD OS (kdavtian/kad-gmm). Acts as product architect, engineer, security reviewer, UX/UI lead, QA and business analyst. Use BEFORE approving or building ANY change, improvement or feature in these apps (and again on the finished diff), and when the owner says kad_edit / kad-edit, "review this change", "is this safe", "check the impact". Sizes the change (S/M/L), maps its blast radius across modules and repos, runs the 13-lens review (architecture, dependency, business logic, security, privacy, performance, UX/UI, data integrity, regression, compatibility, maintainability, cost, release risk), challenges the request with a simpler/safer alternative, sets acceptance tests and answers in five short blocks. Companion to KADDev, kadprocesses and Castrol-file.
+description: Mandatory whole-system change review for the owner's KAD apps - Field Visits (kdavtian/SalesManagerVisits), the Castrol CEO bot / ERP sync (kdavtian/castrol_ceo_report) and KAD OS (kdavtian/kad-gmm), plus the public website KAD-Motors/KAD-Motors-Platform. Acts as product architect, engineer, security reviewer, UX/UI lead, QA and business analyst. Use BEFORE approving or building ANY change, improvement or feature in these apps (and again on the finished diff), and when the owner says kad_edit / kad-edit, "review this change", "is this safe", "check the impact". Sizes the change (S/M/L), maps its blast radius across modules and repos, runs the 13-lens review (architecture, dependency, business logic, security, privacy, performance, UX/UI, data integrity, regression, compatibility, maintainability, cost, release risk), challenges the request with a simpler/safer alternative, SWEEPS every similar place in all apps for the same bug or the same improvement (Step 3b), sets acceptance tests and answers in five short blocks. Companion to KADDev, kadprocesses and Castrol-file.
 ---
 
 # kad-edit - protect the whole product on every change
@@ -21,7 +21,8 @@ Read with: **KADDev** (how to build and ship, owner's taste, hard rules), **kadp
 ## When it runs (two passes)
 1. **Before code** (design pass): on the request. Size it, map the blast radius, challenge it, write acceptance criteria. Policy questions
    go to the owner now, not after the code is written.
-2. **Before "done"** (diff pass): on the actual diff. Re-run the lenses that the diff touches, confirm every acceptance criterion has a
+2. **Before "done"** (diff pass): on the actual diff. Re-run the lenses that the diff touches, confirm the Step 3b sweep (every similar place
+   fixed or listed), confirm every acceptance criterion has a
    passing check, and that nothing existing was silently removed or weakened. This pass is the QA gate of `CLAUDE.md` / KADDev rule 6
    with the whole-system view added; do not run two separate reviews.
 
@@ -30,7 +31,7 @@ A 13-lens essay on a colour fix is noise, and the owner dislikes long outputs. S
 
 | Size | Typical change | Depth | Owner sees |
 |---|---|---|---|
-| **S** | text, colour, spacing, icon, one-screen layout; no data, no roles, no API | lenses UX/UI + Regression + Compatibility; 1 line each in your head | one line: "kad-edit: S, no system risk" |
+| **S** | text, colour, spacing, icon, one-screen layout; no data, no roles, no API | lenses UX/UI + Regression + Compatibility; 1 line each in your head; **Step 3b sweep still required** | one line: "kad-edit: S, no system risk" + "Also fixed: ..." |
 | **M** | new screen/filter/field, new endpoint, change inside one module, new setting, report change | all 13 lenses, quickly; blast-radius table from `system-map.md` | the five blocks, 1-3 bullets each |
 | **L** | anything below - always L, even when the diff looks small | all 13 lenses in depth + release plan (Step 6) | the five blocks + release/rollback plan |
 
@@ -59,6 +60,23 @@ server rules, reports, jobs, notifications, the bot, Lily, KAD OS, the Excel rec
 code** for the function, column, endpoint, setting key or i18n key you will change - the map is a guide, the code is the truth. A change
 to a shared rule (`roles.js`, `orderStock.js`, `paymentExcelMatch.js`, `discountPolicy.js`, `creditLimit.js`, `workingDays.js`, KAD OS
 `lib/money.js`, `lib/bonus.js`, ...) is a change to every caller: list the callers.
+
+## Step 3b - Sweep every similar place (owner, 2026-11-06: mandatory, every size, S included)
+Owner: "When any problem, bug, issue is detected anywhere, check all possible places as well ... Same for improvements and updates."
+A fix or improvement made in one place only is **not done**. Before coding, list the siblings; before "done", show they were handled.
+1. **Name the pattern, not the spot**: the root cause or the improvement in one line ("overlay without scroll lock", "button offered
+   when the server will refuse", "error shown only in a toast that vanishes", "no 44 px target", "select('*') on a public table").
+2. **Search for it everywhere** it can live: the same component/helper and its copies, sibling screens and sheets, the same flow in the
+   other apps (Field Visits <-> KAD OS <-> website <-> bot), the admin side of a customer flow and the reverse, all three languages,
+   phone AND desktop layouts, dark mode. `grep` the code (class names, helper names, RPC names, i18n keys, copy-pasted blocks); do not
+   rely on memory or on the system map alone.
+3. **Fix the same way, through one shared helper** when there are 2+ places (one hook/function, not three copies); a sibling in another
+   repo gets the same fix in that repo's PR in the same task (or a clear "found, not fixed: why" line).
+4. **Client rule = server rule**: when the server refuses something (time passed, status changed, limit), the screen must not offer it,
+   must re-check it while the page stays open, and must explain the refusal next to the button (not only in a toast).
+5. **Report it**: the summary has an "Also fixed (same pattern)" line listing each sibling, and "checked, not affected" for places
+   searched that were fine. Nothing found = say what you searched.
+6. Lessons from sweeps go into `references/review-lenses.md` (Regression) so the next search starts from them.
 
 ## Step 4 - The 13-lens review
 Go through each lens (questions in `references/review-lenses.md`); for M write one honest line per lens in your notes, for L work each
@@ -99,6 +117,7 @@ criterion has a passing check you ran (or a real-browser screenshot you looked a
 - Never skip, disable or weaken a test or check to get green; never hand-edit production outside a merged PR (`docs/governance/
   change-management-policy.md`).
 - Never call it done on "should work": show the check.
+- Never fix or improve one place and leave the same pattern elsewhere (Step 3b).
 
 ## Output - five short blocks, plain words
 The owner reads on a phone. Numbered, scannable, no jargon without a two-word explanation, most important first. Size S = one line.
