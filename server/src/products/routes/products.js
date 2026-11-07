@@ -13,6 +13,7 @@ import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
 import { normalizeErpText, normalizeErpUnitKey } from "../../erp/erpTransform.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
 // served back, so there's no reason to write it to disk first.
@@ -185,7 +186,7 @@ productsRouter.get("/export/xlsx", async (req, res) => {
   }
 
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${yerevanToday()}.xlsx"`);
   await workbook.xlsx.write(res);
   res.end();
 });

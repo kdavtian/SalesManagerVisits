@@ -1,7 +1,7 @@
 // Settings > Administration > Products: the product list, bulk price edit and the import sheet (moved out of admin.js with the
 // refactor tool, docs/architecture-roadmap.md step 6).
 import { api } from "../../api.js";
-import { activateDialog, bindAmdInput, compressImage, escapeHtml, formatAmd, formatDateTime, groupDigits, labelColon, parseAmd } from "../../util.js";
+import { activateDialog, bindAmdInput, compressImage, escapeHtml, formatAmd, formatDateTime, groupDigits, labelColon, parseAmd, yerevanToday } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { compareProducts } from "../../productSort.js";
@@ -222,7 +222,7 @@ export async function renderProductsSection(container) {
     const promoListEl = overlay.querySelector("#promo-list");
     async function loadPromos() {
       const promos = await api.listProductPromos(product.id);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = yerevanToday();
       // DATE columns come back over JSON as a full ISO timestamp
       // ("2026-09-01T00:00:00.000Z") -- trim to just the date for both the
       // active-range comparison and the display.

@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl, yerevanToday } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
 import { seesTierPrices } from "../shared/roles.js";
@@ -674,7 +674,7 @@ export async function renderPricelist(root, navigate) {
       btn.disabled = true;
       try {
         // Downloaded in place (not by navigating to the file) so the app stays on this page.
-        await downloadFromUrl(api.productsExportXlsxUrl(params), `kad-pricelist-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        await downloadFromUrl(api.productsExportXlsxUrl(params), `kad-pricelist-${yerevanToday()}.xlsx`);
         overlay.remove();
       } catch (err) {
         btn.disabled = false;
@@ -750,7 +750,7 @@ export async function renderPricelist(root, navigate) {
           include_photos: overlay.querySelector("#pdf-photos").checked,
           include_commercial: overlay.querySelector("#pdf-commercial").checked,
         });
-        await saveBlob(blob, `kad-pricelist-${new Date().toISOString().slice(0, 10)}.pdf`);
+        await saveBlob(blob, `kad-pricelist-${yerevanToday()}.pdf`);
         overlay.remove();
       } catch (err) {
         errorEl.textContent = err.message;

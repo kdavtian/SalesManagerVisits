@@ -3,7 +3,7 @@
 // headings, a column picker remembered per page, a density toggle, a row count with CSV export, a checkbox column with a
 // bulk bar, and arrow / Enter / Esc keys. Every function here is inert on a phone: the markup is hidden by desktop.css
 // and the page only calls the rest behind isDesktop().
-import { escapeHtml } from "./util.js";
+import { escapeHtml, yerevanToday } from "./util.js";
 import { t } from "./i18n.js";
 
 export const isDesktop = () => Boolean(window.matchMedia?.("(min-width: 1024px)").matches);
@@ -655,7 +655,7 @@ export function createDeskTable(opts) {
   function exportCsv(list) {
     const vis = visibleColumns();
     downloadCsv(
-      `${csvName}-${new Date().toISOString().slice(0, 10)}.csv`,
+      `${csvName}-${yerevanToday()}.csv`,
       [...csvLead.header, ...vis.map((c) => c.label)],
       list.map((r) => [...csvLead.row(r), ...vis.map((c) => (c.csv ? c.csv(r) : c.html ? String(c.cell(r)).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : c.cell(r)))])
     );

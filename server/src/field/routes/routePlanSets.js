@@ -15,6 +15,7 @@ import {
   setSetFrequency,
 } from "../routePlanSets.js";
 import { parseScope } from "../planScopes.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 
 // Route plan sets: several whole route plans, one of them active. Reading is for everyone who may see all route
 // plans (the accountant read-only); creating, editing and switching is for the planning roles.
@@ -25,7 +26,7 @@ const canRead = (req, res, next) => (canViewAllRoutePlans(req.user.role) ? next(
 const canWrite = (req, res, next) => (canPlanForOthers(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" }));
 
 const cleanName = (raw, fallback) => String(raw ?? "").trim().slice(0, 80) || fallback;
-const todayLabel = () => new Date().toISOString().slice(0, 10);
+const todayLabel = () => yerevanToday();
 
 function setId(req, res) {
   const id = Number(req.params.id);

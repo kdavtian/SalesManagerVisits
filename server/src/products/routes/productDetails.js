@@ -16,6 +16,7 @@ import { fetchPricedProducts } from "./products.js";
 import { buildPricelistPdf, PDF_COLUMN_ORDER, PDF_INTERNAL_COLUMNS, OFFICE_PHONE } from "../pricelistPdf.js";
 import { parsePricelistWorkbook, matchGroupsToProducts } from "../pricelistImport.js";
 import { applyMatchedGroups } from "../pricelistApply.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 
 export const productDetailsRouter = Router();
 productDetailsRouter.use(requireAuth);
@@ -223,7 +224,7 @@ productDetailsRouter.post("/pricelist.pdf", async (req, res) => {
     uploadDir: uploadDirPath,
   });
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${new Date().toISOString().slice(0, 10)}.pdf"`);
+  res.setHeader("Content-Disposition", `attachment; filename="kad-pricelist-${yerevanToday()}.pdf"`);
   doc.pipe(res);
   doc.end();
 });

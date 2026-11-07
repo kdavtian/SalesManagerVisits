@@ -2,7 +2,7 @@
 // filtered by period, rep and type, with "Not linked" (no order / payment yet) and "Problems" (found by the AI check, when it is on).
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateTime } from "../util.js";
+import { escapeHtml, formatDateTime, yerevanToday } from "../util.js";
 import { openFileViewer, fileKindLabel } from "../fileViewer.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
 import { deskSelectChip } from "../deskTable.js";
@@ -83,7 +83,7 @@ export function renderDocuments(root, navigate) {
     try {
       const ids = rows.filter((r) => r.kind === "payment_slip" && r.mime === "application/pdf").map((r) => r.id);
       const blob = await api.printPaymentSlips(ids);
-      openFileReadySheet(blob, `Payment-slips-${new Date().toISOString().slice(0, 10)}.pdf`);
+      openFileReadySheet(blob, `Payment-slips-${yerevanToday()}.pdf`);
     } catch (err) {
       listEl.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(err.message)}</p>`);
     } finally {

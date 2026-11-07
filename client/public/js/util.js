@@ -895,6 +895,12 @@ export function formatLiters(value) {
 // Reads the y/m/d digits straight out of the ISO string (rather than going
 // through `Date`) so a date-only value like "2024-01-15" can't shift to the
 // previous/next day under a negative/positive UTC offset.
+/** Today's date in Yerevan as "YYYY-MM-DD". Never `new Date().toISOString().slice(0, 10)`: that is the UTC date, a day behind
+ * from 00:00 to 04:00 in Yerevan (a campaign made then started "yesterday" and showed as Ended, 2026-11-08). */
+export function yerevanToday(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Yerevan" }).format(now);
+}
+
 export function formatDateDMY(value) {
   if (!value) return "";
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
