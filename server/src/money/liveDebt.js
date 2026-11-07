@@ -201,7 +201,7 @@ export function liveSummary(live) {
 // accountant has not entered them. Matched the same way the customer card's "Payments received" sheet does it: same
 // amount, within 5 days, one ERP line per payment. A payment the ERP sync already settled ("From ERP") is recorded.
 // A sales manager only counts their own collections.
-const UNRECORDED_DAYS = 60;
+export const UNRECORDED_DAYS = 60;
 const MATCH_DAYS = 5;
 export async function loadUnrecordedPayments(rows, user, db = pool) {
   const result = new Map();

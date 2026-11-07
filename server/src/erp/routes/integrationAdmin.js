@@ -1,9 +1,9 @@
-// Admin-only management of integration tokens (create once / list / revoke)
+// Admin-only management of integration tokens (create once / list / revoke; Lily's and the ops feed's)
 // and a view of the audit log of calls made with them.
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { createIntegrationToken, listIntegrationTokens, revokeIntegrationToken } from "../integrationTokens.js";
+import { createIntegrationToken, listIntegrationTokens, revokeIntegrationToken, TOKEN_SCOPES } from "../integrationTokens.js";
 
 export const integrationAdminRouter = Router();
 integrationAdminRouter.use(requireAuth, requireAdmin);
@@ -15,7 +15,10 @@ integrationAdminRouter.get("/", async (req, res) => {
 integrationAdminRouter.post("/", async (req, res) => {
   const name = String(req.body?.name ?? "").trim();
   if (!name) return res.status(400).json({ error: "name is required" });
-  const created = await createIntegrationToken({ name, testMode: Boolean(req.body?.test_mode), createdBy: req.user.id });
+  // scope: 'accounting' (Lily, the default) or 'ops-read' (the read-only feed of the Claude agents, docs/ops-api.md)
+  const scope = req.body?.scope == null ? "accounting" : String(req.body.scope);
+  if (!TOKEN_SCOPES.includes(scope)) return res.status(400).json({ error: `scope must be one of: ${TOKEN_SCOPES.join(", ")}` });
+  const created = await createIntegrationToken({ name, testMode: Boolean(req.body?.test_mode), createdBy: req.user.id, scope });
   // The plaintext token is only ever returned here, once.
   res.status(201).json(created);
 });
