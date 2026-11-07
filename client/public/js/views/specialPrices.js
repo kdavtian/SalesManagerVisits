@@ -170,7 +170,7 @@ export async function renderSpecialPrices(root, navigate, customerId) {
       <div class="order-product-info">
         <strong>${escapeHtml(p.name)}</strong>
         <span class="muted">${[mixedBrands() ? p.brand : null, p.unit].filter(Boolean).map(escapeHtml).join(" · ")}</span>
-        <span class="muted sp-lists">${t("tier_silver")} ${groupDigits(silver)} · ${t("tier_gold")} ${groupDigits(gold)}</span>
+        <span class="muted sp-lists">${t("tier_silver")} ${groupDigits(silver)}</span>
       </div>
       <div class="sp-side">
         <div class="sp-field">

@@ -44,9 +44,10 @@ test("tier prices, silver fallback and individual gold prices", async () => {
   assert.equal(price(await order(dCookie, (await mk("bronze")).id, noBronze.id)), 700);
 
   const gold = await mk("gold");
-  assert.equal(price(await order(dCookie, gold.id, product.id)), 800);
+  // Gold pays the Silver list until someone sets a special price (owner, 2026-11-07)...
+  assert.equal(price(await order(dCookie, gold.id, product.id)), 900);
   // A rep cannot set a price...
-  assert.equal(price(await order(mCookie, gold.id, product.id, { unit_price_amd: 1, price_override: true })), 800);
+  assert.equal(price(await order(mCookie, gold.id, product.id, { unit_price_amd: 1, price_override: true })), 900);
   // ...a director can, and it is remembered for that customer.
   assert.equal(price(await order(dCookie, gold.id, product.id, { unit_price_amd: 750, price_override: true })), 750);
   assert.equal(price(await order(mCookie, gold.id, product.id)), 750);

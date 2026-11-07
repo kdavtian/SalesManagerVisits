@@ -1301,7 +1301,7 @@ customersRouter.get("/:id/product-prices", async (req, res) => {
 });
 
 // Special pricelist of a Gold customer (Customer settings -> Special pricelist): one request saves what the user
-// changed -- [{ product_id, price_amd }], price_amd null = back to the Gold list price. Directors / admin / CEO only.
+// changed -- [{ product_id, price_amd }], price_amd null = back to the list price (Gold pays the Silver list). Directors / admin / CEO only.
 customersRouter.put("/:id/product-prices", async (req, res) => {
   if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const id = Number(req.params.id);
