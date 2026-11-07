@@ -1,10 +1,12 @@
 // /api/purchases -- the Purchases module (products/purchases.js): supplier invoices typed in the app and compared with the Excel
 // Purchase_IN rows. Costs are in it: admin, CEO, operations director and the accountant (canManagePurchases).
 import { Router } from "express";
+import multer from "multer";
 import { requireAuth } from "../../middleware/auth.js";
 import { canManagePurchases, canDeletePurchases } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
-import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoice, PurchaseError } from "../purchases.js";
+import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoice, excelStatus, productHistory, applyExcelPurchases, PurchaseError } from "../purchases.js";
+import { parsePurchaseWorkbook } from "../purchaseExcel.js";
 
 export const purchasesRouter = Router();
 purchasesRouter.use(requireAuth);
@@ -12,9 +14,12 @@ purchasesRouter.use((req, res, next) => (canManagePurchases(req.user.role) ? nex
 
 const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? "")) ? String(v) : null);
 const fail = (res, err) => {
+  // the same supplier's same invoice number and date again: 409 with the one that exists (the form shows "open it" and "Save anyway")
+  if (err instanceof PurchaseError && err.code === "duplicate") return res.status(409).json({ error: err.message, code: "duplicate", existing_id: err.existingId });
   if (err instanceof PurchaseError) return res.status(400).json({ error: err.message });
   throw err;
 };
+const workbookUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
 
 purchasesRouter.get("/", async (req, res) => {
   const supplierId = Number(req.query.supplier_id) || null;
@@ -34,6 +39,36 @@ purchasesRouter.post("/suppliers", async (req, res) => {
     [name.slice(0, 120), req.body?.brands ? String(req.body.brands).slice(0, 200) : null]
   );
   res.status(201).json(rows[0]);
+});
+
+// What the Excel copy holds and when it arrived (the screen says so, and offers the file import while it is empty).
+purchasesRouter.get("/status", async (_req, res) => {
+  res.json(await excelStatus());
+});
+
+// What was bought before, per product (?ids=1,2,3): last purchase, the one before, 12-month totals, stock now -- shown beside each form line.
+purchasesRouter.get("/product-history", async (req, res) => {
+  const ids = String(req.query.ids ?? "").split(",").map(Number).filter(Number.isInteger);
+  // ?exclude_no=&exclude_date= leaves one invoice out (the one being edited or copied: its own lines are not "bought before")
+  res.json(await productHistory(ids, { excludeNo: req.query.exclude_no ? String(req.query.exclude_no) : null, excludeDate: day(req.query.exclude_date) }));
+});
+
+// The Purchase_IN sheet from the Castrol workbook, uploaded by hand: replaces the Excel copy exactly as the bot's push does (owner, 2026-11-07).
+purchasesRouter.post("/import-excel", (req, res, next) => {
+  workbookUpload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? "The file is larger than 25 MB" : "The file could not be uploaded" });
+    next();
+  });
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose the Excel file" });
+  try {
+    const parsed = await parsePurchaseWorkbook(req.file.buffer);
+    const stored = await applyExcelPurchases(parsed.rows);
+    const status = await excelStatus();
+    res.json({ ...stored, skipped: stored.skipped + parsed.skipped, sheet: parsed.sheet, invoices: status.excel_invoices, from: status.from, to: status.to });
+  } catch (err) {
+    fail(res, err);
+  }
 });
 
 // One invoice as the Excel has it (?invoice_no=&date=): for an invoice that is only in the Excel, and for copying it into the app.

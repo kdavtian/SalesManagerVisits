@@ -3,12 +3,20 @@
 // (erp_purchase_lines). Excel stays the source of stock until the owner switches the module over (docs/KDS-excel-off-single-erp.md, P4).
 // An invoice is matched app <-> Excel by its number (case and spaces ignored) and date; it "matches" when the packs and the USD total agree.
 import { pool } from "../db/pool.js";
+import { APP_STOCK_SQL } from "../orders/appStock.js";
 
 const USD_TOLERANCE = 0.05; // rounding in the workbook's own SUM column
 const keyOf = (invoiceNo, date) => `${String(invoiceNo ?? "").trim().toLowerCase().replace(/\s+/g, " ")}|${String(date).slice(0, 10)}`;
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
 
-export class PurchaseError extends Error {}
+export class PurchaseError extends Error {
+  constructor(message, extra = {}) {
+    super(message);
+    Object.assign(this, extra); // code ("duplicate"), existingId
+  }
+}
+// The same invoice number the Excel copy is compared by: case and extra spaces ignored (SQL form of keyOf)
+const SQL_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
 
 function cleanLines(lines) {
   if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");
@@ -52,6 +60,15 @@ export async function savePurchase(body, userId, id = null, db = pool) {
         [name.slice(0, 120)]
       );
       supplierId = rows[0].id;
+    }
+    // The same supplier's same invoice number on the same day is almost always a second typing of one invoice (owner, 2026-11-07: ultra
+    // version). Refused with the existing one named; the form offers "Save anyway" for the rare real repeat (allow_duplicate).
+    if (!body?.allow_duplicate) {
+      const { rows: same } = await client.query(
+        `SELECT id FROM purchase_invoices WHERE supplier_id = $1 AND invoice_date = $2::date AND ${SQL_KEY("invoice_no")} = ${SQL_KEY("$3::text")} AND id <> $4 LIMIT 1`,
+        [supplierId, date, invoiceNo, id ?? 0]
+      );
+      if (same[0]) throw new PurchaseError("This supplier's invoice with this number and date is already entered", { code: "duplicate", existingId: same[0].id });
     }
     // each line keeps the product's name, brand and size as they were (the catalog can change later)
     const ids = lines.map((l) => l.product_id).filter(Boolean);
@@ -218,15 +235,92 @@ export async function getPurchase(id, db = pool) {
 
 export async function listSuppliers(db = pool) {
   const { rows } = await db.query(
-    `SELECT s.id, s.name, s.brands, s.active, max(i.invoice_date) AS last_invoice_date,
-            (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate
+    `SELECT s.id, s.name, s.brands, s.active, to_char(max(i.invoice_date), 'YYYY-MM-DD') AS last_invoice_date, count(i.id)::int AS invoices,
+            (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate,
+            (SELECT invoice_no FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_invoice_no
        FROM suppliers s LEFT JOIN purchase_invoices i ON i.supplier_id = s.id
       GROUP BY s.id ORDER BY s.active DESC, max(i.invoice_date) DESC NULLS LAST, s.name`
   );
-  // the Excel's supplier names not yet in the list, so the first invoices can pick them
-  const { rows: excelNames } = await db.query("SELECT DISTINCT supplier FROM erp_purchase_lines WHERE supplier IS NOT NULL AND supplier <> ''");
+  // the Excel's suppliers: each one's latest invoice number (the next number is suggested from it) and the names not yet in the list,
+  // so the first invoices can pick them
+  const { rows: excelLast } = await db.query(
+    `SELECT DISTINCT ON (lower(supplier)) supplier, invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date
+       FROM erp_purchase_lines WHERE supplier IS NOT NULL AND supplier <> '' ORDER BY lower(supplier), invoice_date DESC, excel_row DESC`
+  );
+  const excelBy = new Map(excelLast.map((r) => [r.supplier.toLowerCase(), r]));
+  for (const r of rows) {
+    const e = excelBy.get(r.name.toLowerCase());
+    const appDay = r.last_invoice_date ?? "";
+    // the newer of the app's and the Excel's last invoice names the number to continue from
+    if (e && (!r.last_invoice_no || e.invoice_date > appDay)) {
+      r.last_invoice_no = e.invoice_no;
+      r.last_invoice_date = e.invoice_date;
+    }
+  }
   const known = new Set(rows.map((r) => r.name.toLowerCase()));
-  return { suppliers: rows, excel_names: excelNames.map((r) => r.supplier).filter((n) => !known.has(n.toLowerCase())).sort() };
+  const excelNames = excelLast.map((r) => r.supplier).filter((n) => !known.has(n.toLowerCase())).sort();
+  const extra = excelNames.map((name) => {
+    const e = excelBy.get(name.toLowerCase());
+    return { name, last_invoice_no: e.invoice_no, last_invoice_date: e.invoice_date };
+  });
+  const { rows: [recent] } = await db.query("SELECT usd_rate::float8 AS usd_rate FROM purchase_invoices ORDER BY invoice_date DESC, id DESC LIMIT 1");
+  return { suppliers: rows, excel_names: excelNames, excel_suppliers: extra, default_usd_rate: recent?.usd_rate ?? null };
+}
+
+/** What the Excel copy holds and when it arrived: the Purchases screen says so, and offers the file import when it is empty. */
+export async function excelStatus(db = pool) {
+  const { rows: [r] } = await db.query(
+    `SELECT count(*)::int AS lines, count(DISTINCT (invoice_no, invoice_date))::int AS invoices, to_char(min(invoice_date), 'YYYY-MM-DD') AS from_date,
+            to_char(max(invoice_date), 'YYYY-MM-DD') AS to_date, max(synced_at) AS synced_at FROM erp_purchase_lines`
+  );
+  const { rows: [a] } = await db.query("SELECT count(*)::int AS invoices FROM purchase_invoices");
+  return { excel_lines: r.lines, excel_invoices: r.invoices, from: r.from_date, to: r.to_date, synced_at: r.synced_at, app_invoices: a.invoices };
+}
+
+/**
+ * What was bought before, per product (the Purchases form shows it beside each line, owner 2026-11-07: "I don't see the already bought
+ * products data"): the last purchase (date, supplier, packs, USD per pack), the one before it (for the price change), what was bought in the
+ * last 12 months, and the stock the app knows now. App and Excel purchases together; an invoice in both counts once.
+ */
+export async function productHistory(ids, { excludeNo = null, excludeDate = null } = {}, db = pool) {
+  const wanted = [...new Set((ids ?? []).map(Number).filter(Number.isInteger))].slice(0, 100);
+  if (!wanted.length) return {};
+  const [{ rows: lines }, { rows: stock }] = await Promise.all([
+    db.query(
+      `SELECT l.product_id AS pid, to_char(i.invoice_date, 'YYYY-MM-DD') AS day, l.qty::float8 AS qty, l.cost_usd::float8 AS cost_usd, s.name AS supplier, i.invoice_no, 'app' AS source
+         FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id JOIN suppliers s ON s.id = i.supplier_id
+        WHERE l.product_id = ANY($1) AND NOT ($2::text IS NOT NULL AND i.invoice_date = $3::date AND ${SQL_KEY("i.invoice_no")} = ${SQL_KEY("$2::text")})
+       UNION ALL
+       SELECT p.id, to_char(e.invoice_date, 'YYYY-MM-DD'), e.qty::float8, e.cost_usd::float8, e.supplier, e.invoice_no, 'excel'
+         FROM erp_purchase_lines e JOIN products p ON p.erp_product_id = e.erp_product_id
+        WHERE p.id = ANY($1) AND e.qty > 0 AND e.cost_usd IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM purchase_invoices x WHERE x.invoice_date = e.invoice_date AND ${SQL_KEY("x.invoice_no")} = ${SQL_KEY("e.invoice_no")})
+          AND NOT ($2::text IS NOT NULL AND e.invoice_date = $3::date AND ${SQL_KEY("e.invoice_no")} = ${SQL_KEY("$2::text")})
+        ORDER BY 2 DESC`,
+      [wanted, excludeNo && excludeDate ? excludeNo : null, excludeNo && excludeDate ? excludeDate : null]
+    ),
+    db.query(`SELECT p.id, (${APP_STOCK_SQL})::float8 AS stock FROM products p WHERE p.id = ANY($1)`, [wanted]),
+  ]);
+  const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const out = {};
+  for (const id of wanted) out[id] = { product_id: id, last: null, prev_cost_usd: null, purchases: 0, packs_12m: 0, usd_12m: 0, stock_qty: null };
+  for (const r of stock) if (out[r.id]) out[r.id].stock_qty = r.stock == null ? null : Math.round(r.stock * 1000) / 1000;
+  for (const r of lines) {
+    const o = out[r.pid];
+    if (!o) continue;
+    o.purchases += 1;
+    if (!o.last) o.last = { day: r.day, supplier: r.supplier, qty: r.qty, cost_usd: r.cost_usd, invoice_no: r.invoice_no, source: r.source };
+    else if (o.prev_cost_usd == null) o.prev_cost_usd = r.cost_usd;
+    if (r.day >= yearAgo) {
+      o.packs_12m += r.qty;
+      o.usd_12m += r.qty * r.cost_usd;
+    }
+  }
+  for (const o of Object.values(out)) {
+    o.packs_12m = Math.round(o.packs_12m * 1000) / 1000;
+    o.usd_12m = round2(o.usd_12m);
+  }
+  return out;
 }
 
 /** The Excel lines of one invoice (number + date), each with the app product it names (by the Excel ProductID), to copy it into the app. */

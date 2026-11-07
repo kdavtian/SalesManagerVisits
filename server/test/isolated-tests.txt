@@ -29,3 +29,4 @@ test/integration/erpSyncPause.test.js
 test/integration/productAdd.test.js
 test/integration/purchases.test.js
 test/integration/cashCategoryTree.test.js
+test/integration/purchasesPlus.test.js
