@@ -7,6 +7,10 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent
 repo = root.parents[2]
+# The usability gate is authored once (KADDev) and bundled identically in kad-edit; never upload a zip whose two copies differ.
+_a, _b = root.parent / "KADDev" / "references" / "usability-gate.md", root.parent / "kad-edit" / "references" / "usability-gate.md"
+if _a.exists() and _b.exists() and _a.read_bytes() != _b.read_bytes():
+    sys.exit("usability-gate.md differs between KADDev and kad-edit: run `python3 sync-skills.py` in KD-Mozg first")
 out_dir = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else repo / "dist"
 out_dir.mkdir(parents=True, exist_ok=True)
 files = [root / "SKILL.md"] + sorted((root / "references").glob("*.md"))
