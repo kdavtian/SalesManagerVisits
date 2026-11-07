@@ -33,3 +33,24 @@ Excel stays the main ledger for now, so a bank line and its Excel row are the **
 * **Reconciliation** (computed from the current ledger every time, because the Excel refresh replaces its rows): a line is **matched** when the ledger has a row of the same account, the same signed amount and currency within 3 days (nearest date first, every row used once). Matched ledger rows show a green "bank" mark. Lines with no row are **To check**: *Add to Cashflow* makes a manual row (origin `bank`; the category is chosen, the customer ID optional) or *Ignore* (can be reopened). If the Excel row arrives later, the line turns into a match by itself. The red number on "Bank" is the count of lines to check.
 * API: `POST /api/cashflow/bank/preview|import`, `GET /bank/lines`, `POST /bank/lines/:id/add|ignore|reopen`.
 * Phase 3b (next): the bot picks the statement up from the Telegram group and posts it to the same import (owner: "now upload in the app and then automatically to Telegram").
+
+## Categories as a tree (1.527.0, migration 193, owner 2026-11-07)
+Model: the direct-method cash flow statement (IAS 7). A row is **IN / OUT / Transfer -> category -> subcategory**.
+* **Categories** (`cash_categories.is_group`): Customer payments, Other income (IN) · Goods & import, Taxes, Payroll, Running costs, Equipment (OUT) ·
+  Loans & interest, Owner (IN and OUT) · Transfers between accounts (Transfer: never counted as money in or out). Each has a `direction`
+  (in / out / both / transfer) and a cash flow `section` (operating / investing / financing / owner / internal); its subcategories follow both.
+* **Subcategories** are the Excel "For" names (Oil order, Purchase, Customs, Fuel, Salary, ...), so the bot's ledger lands where it did. A name the
+  Excel invents goes to **Unsorted** until the admin places it.
+* **Admin / CEO** (`canManageCashCategories`, Cashflow -> Categories): add a category or subcategory, rename, note, move a subcategory, change a
+  category's direction / section, remove. Removing a category with rows (or subcategories) asks where they go; the removed or old name is kept
+  in `cash_category_aliases`, so the Excel rows that still carry it land in the new place. "Oil order" and "Salary" are read by the app
+  (payments, commission, payroll): they can be moved and noted, not renamed or removed.
+* **Add a row**: In / Out / Transfer (a transfer then asks: into this account or out of it) -> category -> subcategory (the list opens by
+  itself when there is a choice; "New subcategory..." adds one under the chosen category).
+
+### Excel clean-up proposal (owner decides)
+1. Give the Cashflow sheet's `For` column a dropdown with exactly the subcategory names above (typos then cannot create new categories).
+2. Rename the unclear names, in the app (the Excel keeps working through the aliases) and then in the Excel: `Divident` -> Dividend,
+   `Poxarutyun` -> Loan received (short-term), `Veradarcvox` -> Refundable deposit, `Balance` -> Opening balance correction.
+3. Keep the credit line as an account (`Evoca Credit Line`) and record drawdowns / repayments as transfers; interest as `Interest`.
+4. Give `Source` a dropdown too (EvocaBank AMD / Evocabank AMD are the same account written two ways).

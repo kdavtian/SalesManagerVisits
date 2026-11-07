@@ -34,10 +34,11 @@ export async function renderCashflow(root, navigate) {
   root.innerHTML = `
     <div class="cf-view">
       <div class="cf-head">
-        <h1><span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span> ${t("cf_title")}</h1>
+        <h1>${t("cf_title")} <span role="button" tabindex="0" class="settings-inline-hint-icon" id="cf-hint-btn" aria-expanded="false" aria-controls="cf-hint-text" aria-label="${t("more_info")}">!</span></h1>
         <div class="cf-head-actions">
           <button type="button" class="btn" id="cf-requests" hidden>${t("cf_requests")} <span class="count-badge" id="cf-requests-badge"></span></button>
           <button type="button" class="btn" id="cf-bank" hidden>${t("bk_btn")} <span class="count-badge" id="cf-bank-badge" hidden></span></button>
+          <button type="button" class="btn" id="cf-categories-btn" hidden>${t("ccm_title")}</button>
           <button type="button" class="btn btn-primary" id="cf-add" hidden>${t("cf_add")}</button>
         </div>
       </div>
@@ -136,14 +137,15 @@ export async function renderCashflow(root, navigate) {
   function paintCategories(sum) {
     const picked = new Set(st.categories.map(String));
     $("#cf-categories").innerHTML = KINDS.map((k) => {
-      const rows = sum.by_category.filter((c) => c.kind === k && (c.in_amd || c.out_amd));
+      // within a kind, the rows of one category (group) stay together: "Running costs › Fuel"
+      const rows = sum.by_category.filter((c) => c.kind === k && (c.in_amd || c.out_amd)).sort((a, b) => String(a.parent ?? a.name).localeCompare(String(b.parent ?? b.name)));
       if (!rows.length) return "";
       const kin = rows.reduce((s, r) => s + r.in_amd, 0);
       const kout = rows.reduce((s, r) => s + r.out_amd, 0);
       return `<details class="cf-kind" ${k === "internal" ? "" : "open"}>
         <summary><span>${t(`cf_kind_${k}`)}</span><span class="cf-kind-total">${kin ? `<span class="cf-in">+${nf(kin)}</span>` : ""}${kout ? `<span class="cf-out">−${nf(kout)}</span>` : ""}</span></summary>
         ${rows
-          .map((r) => `<button type="button" class="cf-cat ${picked.has(String(r.id)) ? "cf-cat-active" : ""}" data-category="${r.id}" aria-pressed="${picked.has(String(r.id))}"><span>${escapeHtml(r.name)} <small class="muted">${r.n}</small></span><span>${r.in_amd ? `<span class="cf-in">+${nf(r.in_amd)}</span>` : ""}${r.out_amd ? `<span class="cf-out">−${nf(r.out_amd)}</span>` : ""}</span></button>`)
+          .map((r) => `<button type="button" class="cf-cat ${picked.has(String(r.id)) ? "cf-cat-active" : ""}" data-category="${r.id}" aria-pressed="${picked.has(String(r.id))}"><span>${r.parent ? `<small class="muted">${escapeHtml(r.parent)} › </small>` : ""}${escapeHtml(r.name)} <small class="muted">${r.n}</small></span><span>${r.in_amd ? `<span class="cf-in">+${nf(r.in_amd)}</span>` : ""}${r.out_amd ? `<span class="cf-out">−${nf(r.out_amd)}</span>` : ""}</span></button>`)
           .join("")}
       </details>`;
     }).join("");
@@ -228,6 +230,7 @@ export async function renderCashflow(root, navigate) {
       paintFoot();
       $("#cf-import").hidden = !meta.can_edit;
       $("#cf-add").hidden = !meta.can_edit;
+      $("#cf-categories-btn").hidden = !meta.can_manage_categories;
       $("#cf-bank").hidden = !meta.can_edit;
       $("#cf-requests").hidden = !meta.pending_requests;
       $("#cf-requests-badge").textContent = String(meta.pending_requests || "");
@@ -410,24 +413,58 @@ export async function renderCashflow(root, navigate) {
     const accById = new Map(meta.accounts.map((a) => [String(a.id), a]));
     const oil = meta.categories.find((c) => c.name.toLowerCase() === "oil order");
     const cash = meta.accounts.find((a) => a.name.toLowerCase() === "cash") ?? meta.accounts[0];
+    // IN / OUT / Transfer -> category (a group) -> subcategory (owner, 2026-11-07). Groups say which way their money goes; "both" groups
+    // (owner, loans) are offered under IN and OUT. A subcategory the Excel invented and nobody sorted yet sits under "Unsorted".
+    const cats = meta.categories.filter((c) => c.active !== false || String(c.id) === String(e?.category_id));
+    const groupOk = (g, dir) => (dir === "transfer" ? g.direction === "transfer" : g.direction === dir || g.direction === "both");
+    const groupsFor = (dir) => {
+      const list = cats.filter((c) => c.is_group && groupOk(c, dir));
+      const unsorted = cats.some((c) => !c.is_group && !c.parent_id && (dir === "transfer" ? c.kind === "internal" : c.kind !== "internal"));
+      return unsorted ? [...list, { id: "unsorted", name: t("cf_unsorted"), is_group: true }] : list;
+    };
+    const subsOf = (gid) =>
+      gid === "unsorted"
+        ? cats.filter((c) => !c.is_group && !c.parent_id)
+        : cats.filter((c) => !c.is_group && String(c.parent_id) === String(gid));
+    const groupOf = (leafId) => {
+      const c = catById.get(String(leafId));
+      if (!c) return "";
+      if (c.is_group) return String(c.id);
+      return c.parent_id ? String(c.parent_id) : "unsorted";
+    };
+    const startLeaf = String(e?.category_id ?? oil?.id ?? "");
+    const startGroup = catById.get(groupOf(startLeaf));
     const f = {
       date: e?.date ?? localToday(),
       account: String(e?.account_id ?? cash?.id ?? ""),
       currency: e?.currency ?? (/usd/i.test(cash?.name ?? "") ? "USD" : "AMD"),
-      category: String(e?.category_id ?? oil?.id ?? meta.categories[0]?.id ?? ""),
-      dir: e ? (e.amount < 0 ? "out" : "in") : null,
+      dir: startGroup?.direction === "transfer" || catById.get(startLeaf)?.kind === "internal" ? "transfer" : e ? (e.amount < 0 ? "out" : "in") : "in",
+      flow: e ? (e.amount < 0 ? "out" : "in") : "out", // a transfer: into this account, or out of it
+      group: groupOf(startLeaf),
+      category: startLeaf,
     };
-    const kindOf = () => catById.get(f.category)?.kind ?? "expense";
     const isOil = () => (catById.get(f.category)?.name ?? "").toLowerCase() === "oil order";
     const isSalary = () => (catById.get(f.category)?.name ?? "").toLowerCase() === "salary";
-    // income = money in, expense = money out; owner / between-our-accounts rows can go either way: only then the In / Out toggle shows.
-    const dirOf = () => (kindOf() === "income" ? "in" : kindOf() === "expense" ? "out" : f.dir ?? "out");
+    // the sign of the row: IN = in, OUT = out, a transfer = the way it goes for the chosen account
+    const dirOf = () => (f.dir === "transfer" ? f.flow : f.dir);
+    // a direction change keeps the category when it still fits, otherwise the first category of that direction
+    const fitGroup = () => {
+      const groups = groupsFor(f.dir);
+      if (!groups.some((g) => String(g.id) === f.group)) {
+        f.group = groups[0] ? String(groups[0].id) : "";
+        const subs = subsOf(f.group);
+        f.category = subs.length === 1 ? String(subs[0].id) : subs.length ? "" : f.group;
+      }
+    };
     const title = mode === "request" ? t("cf_request_edit") : e ? t("cf_edit_entry") : t("cf_add");
     const overlay = openSheet(`
       <form id="cf-form" class="cf-form">
         <div class="cf-f-row cf-f-row1">
           <h2>${title}</h2>
           <label class="cf-chip cf-date-chip">${icons.calendar}<span id="cf-date-text"></span><input type="date" name="date" required value="${f.date}" aria-label="${escapeHtml(t("cf_f_date"))}" /></label>
+        </div>
+        <div class="cf-dir3" id="cf-dir3" role="group" aria-label="${escapeHtml(t("cf_dir_label"))}">
+          <button type="button" data-dir="in">${t("cf_dir_in")}</button><button type="button" data-dir="out">${t("cf_dir_out")}</button><button type="button" data-dir="transfer">${t("cf_dir_transfer")}</button>
         </div>
         <div class="cf-f-row cf-f-chips">
           <button type="button" class="cf-chip cf-chip-grow" id="cf-acc-chip"><span class="cf-chip-label">${t("cf_pick_account")}</span><strong id="cf-acc-text"></strong></button>
@@ -443,14 +480,14 @@ export async function renderCashflow(root, navigate) {
         </div>
         <label class="cf-f-row" id="cf-fx-row" hidden>${t("cf_f_rate")}<input name="fx_rate" inputmode="decimal" value="${e?.fx_rate ?? meta.usd_rate ?? ""}" /></label>
         <div class="cf-f-row cf-f-chips">
-          <button type="button" class="cf-chip cf-chip-grow" id="cf-cat-chip"><span class="cf-chip-label">${t("cf_pick_category")}</span><strong id="cf-cat-text"></strong></button>
-          <div class="cf-dir" id="cf-dir" role="group" hidden>
-            <button type="button" data-dir="in">${t("cf_dir_in")}</button><button type="button" data-dir="out">${t("cf_dir_out")}</button>
-          </div>
+          <button type="button" class="cf-chip cf-chip-grow" id="cf-group-chip"><span class="cf-chip-label">${t("cf_pick_category")}</span><strong id="cf-group-text"></strong></button>
+          <button type="button" class="cf-chip cf-chip-grow" id="cf-cat-chip"><span class="cf-chip-label">${t("cf_pick_subcategory")}</span><strong id="cf-cat-text"></strong></button>
+        </div>
+        <div class="cf-dir" id="cf-flow" role="group" hidden>
+          <button type="button" data-flow="in">${t("cf_flow_in")}</button><button type="button" data-flow="out">${t("cf_flow_out")}</button>
         </div>
         <div id="cf-new-category" class="cf-f-row cf-f-chips" hidden>
-          <input name="new_category" maxlength="60" placeholder="${escapeHtml(t("cf_f_name"))}" aria-label="${escapeHtml(t("cf_f_name"))}" />
-          <select name="new_category_kind" aria-label="${escapeHtml(t("cf_f_category_kind"))}">${KINDS.map((k) => `<option value="${k}" ${k === "expense" ? "selected" : ""}>${escapeHtml(t(`cf_kind_${k}`))}</option>`).join("")}</select>
+          <input name="new_category" maxlength="60" placeholder="${escapeHtml(t("cf_new_subcategory_ph"))}" aria-label="${escapeHtml(t("cf_f_name"))}" />
         </div>
         <div id="cf-salary" class="cf-f-row cf-f-chips" hidden>
           <select name="staff" aria-label="${escapeHtml(t("cf_f_staff"))}"><option value="">${escapeHtml(t("cf_f_staff"))}</option></select>
@@ -493,15 +530,22 @@ export async function renderCashflow(root, navigate) {
       overlay.querySelector("#cf-acc-text").textContent = f.account === "__new" ? t("cf_new_account") : accById.get(f.account)?.name ?? "—";
       overlay.querySelector("#cf-cur-text").textContent = f.currency;
       overlay.querySelector("#cf-amount-cur").textContent = f.currency === "USD" ? "USD" : "AMD";
-      overlay.querySelector("#cf-cat-text").textContent = f.category === "__new" ? t("cf_new_category") : catById.get(f.category)?.name ?? "—";
+      overlay.querySelectorAll("#cf-dir3 [data-dir]").forEach((b) => {
+        b.classList.toggle("cf-dir-on", b.dataset.dir === f.dir);
+        b.setAttribute("aria-pressed", String(b.dataset.dir === f.dir));
+      });
+      overlay.querySelector("#cf-group-text").textContent = f.group === "unsorted" ? t("cf_unsorted") : catById.get(f.group)?.name ?? "—";
+      const subs = subsOf(f.group);
+      // a category without subcategories is chosen as it is: the second chip says so
+      overlay.querySelector("#cf-cat-chip").hidden = !subs.length && f.category !== "__new";
+      overlay.querySelector("#cf-cat-text").textContent = f.category === "__new" ? t("cf_new_subcategory") : f.category && f.category !== f.group ? catById.get(f.category)?.name ?? "—" : t("cf_choose");
       overlay.querySelector("#cf-fx-row").hidden = f.currency !== "USD";
       overlay.querySelector("#cf-new-account").hidden = f.account !== "__new";
       overlay.querySelector("#cf-new-category").hidden = f.category !== "__new";
       overlay.querySelector("#cf-salary").hidden = !isSalary();
-      const twoWay = f.category === "__new" || ["owner", "internal"].includes(kindOf());
-      const dirEl = overlay.querySelector("#cf-dir");
-      dirEl.hidden = !twoWay;
-      dirEl.querySelectorAll("[data-dir]").forEach((b) => b.classList.toggle("cf-dir-on", b.dataset.dir === dirOf()));
+      const flowEl = overlay.querySelector("#cf-flow");
+      flowEl.hidden = f.dir !== "transfer";
+      flowEl.querySelectorAll("[data-flow]").forEach((b) => b.classList.toggle("cf-dir-on", b.dataset.flow === f.flow));
       // Customer ID: active for Oil order, a ghost otherwise (kept, not cleared, so switching back does not lose it)
       const oilRow = isOil();
       overlay.querySelector("#cf-customer-row").classList.toggle("cf-ghost", !oilRow);
@@ -531,17 +575,37 @@ export async function renderCashflow(root, navigate) {
       f.currency = v;
       paint();
     });
-    overlay.querySelector("#cf-cat-chip").addEventListener("click", async () => {
-      const opts = KINDS.flatMap((k) => meta.categories.filter((c) => c.kind === k).map((c) => ({ value: String(c.id), label: c.name, group: t(`cf_kind_${k}`) })));
-      const v = await pickOne(t("cf_pick_category"), [...opts, { value: "__new", label: t("cf_new_category") }], f.category);
-      if (v == null) return;
-      f.category = v;
-      paint();
-    });
-    overlay.querySelector("#cf-dir").addEventListener("click", (ev) => {
+    overlay.querySelector("#cf-dir3").addEventListener("click", (ev) => {
       const b = ev.target.closest("[data-dir]");
       if (!b) return;
       f.dir = b.dataset.dir;
+      fitGroup();
+      paint();
+    });
+    overlay.querySelector("#cf-flow").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-flow]");
+      if (!b) return;
+      f.flow = b.dataset.flow;
+      paint();
+    });
+    overlay.querySelector("#cf-group-chip").addEventListener("click", async () => {
+      const groups = groupsFor(f.dir);
+      const v = await pickOne(t("cf_pick_category"), groups.map((g) => ({ value: String(g.id), label: g.name })), f.group);
+      if (v == null) return;
+      f.group = v;
+      const subs = subsOf(v);
+      f.category = subs.length === 1 ? String(subs[0].id) : subs.length ? "" : v;
+      paint();
+      // straight on to the subcategory when there is a choice to make
+      if (subs.length > 1) overlay.querySelector("#cf-cat-chip").click();
+    });
+    overlay.querySelector("#cf-cat-chip").addEventListener("click", async () => {
+      const subs = subsOf(f.group);
+      const opts = subs.map((c) => ({ value: String(c.id), label: c.name }));
+      const canAdd = f.group && f.group !== "unsorted";
+      const v = await pickOne(t("cf_pick_subcategory"), canAdd ? [...opts, { value: "__new", label: t("cf_new_subcategory") }] : opts, f.category);
+      if (v == null) return;
+      f.category = v;
       paint();
     });
 
@@ -595,10 +659,11 @@ export async function renderCashflow(root, navigate) {
         let accountId = f.account;
         if (accountId === "__new") accountId = (await api.addCashAccount({ name: el.new_account.value, kind: el.new_account_kind.value })).id;
         let categoryId = f.category;
-        if (categoryId === "__new") categoryId = (await api.addCashCategory({ name: el.new_category.value, kind: el.new_category_kind.value })).id;
+        if (!categoryId) throw new Error(t("cf_need_subcategory"));
+        if (categoryId === "__new") categoryId = (await api.addCashCategory({ name: el.new_category.value, parent_id: Number(f.group) })).id;
         const oilRow = isOil();
         const data = {
-          date: el.date.value, direction: f.category === "__new" ? f.dir ?? (el.new_category_kind.value === "income" ? "in" : "out") : dirOf(),
+          date: el.date.value, direction: dirOf(),
           amount: parseAmd(el.amount.value) || Number(String(el.amount.value).replace(/,/g, "")),
           currency: f.currency, fx_rate: f.currency === "USD" ? Number(el.fx_rate.value) : null,
           account_id: Number(accountId), category_id: Number(categoryId),
@@ -622,6 +687,8 @@ export async function renderCashflow(root, navigate) {
   }
 
   // --- wiring ---
+  // the IN / OUT -> category -> subcategory tree (admin / CEO): cashflowCategories.js
+  $("#cf-categories-btn").addEventListener("click", async () => (await import("./cashflowCategories.js")).openCashCategoryManager({ onChanged: () => reload() }));
   const hintBtn = $("#cf-hint-btn");
   const hintText = $("#cf-hint-text");
   const toggleHint = () => {
@@ -683,17 +750,22 @@ export async function renderCashflow(root, navigate) {
   $("#cf-cat-btn").addEventListener("click", () => {
     if (!meta) return;
     const counts = new Map((lastSummary?.by_category ?? []).map((c) => [String(c.id), c.n]));
-    const tree = KINDS.map((k, i) => {
-      const cats = meta.categories.filter((c) => c.kind === k);
-      return {
-        key: `k${i}`,
-        name: t(`cf_kind_${k}`),
-        allIds: cats.map((c) => String(c.id)),
-        customerCount: cats.reduce((s, c) => s + (counts.get(String(c.id)) ?? 0), 0),
-        leaves: cats.map((c) => ({ id: String(c.id), name: `${c.name}${counts.get(String(c.id)) ? ` (${counts.get(String(c.id))})` : ""}` })),
-        children: null,
-      };
-    }).filter((n) => n.leaves.length);
+    // one branch per category (group), its subcategories as the leaves; a group's own rows count as one more leaf; the Excel names nobody
+    // sorted yet sit under "Unsorted"
+    const groups = [...meta.categories.filter((c) => c.is_group), { id: null, name: t("cf_unsorted") }];
+    const tree = groups
+      .map((g, i) => {
+        const cats = meta.categories.filter((c) => (g.id ? String(c.parent_id) === String(g.id) || c.id === g.id : !c.is_group && !c.parent_id));
+        return {
+          key: `g${i}`,
+          name: g.name,
+          allIds: cats.map((c) => String(c.id)),
+          customerCount: cats.reduce((s, c) => s + (counts.get(String(c.id)) ?? 0), 0),
+          leaves: cats.map((c) => ({ id: String(c.id), name: `${c.name}${counts.get(String(c.id)) ? ` (${counts.get(String(c.id))})` : ""}` })),
+          children: null,
+        };
+      })
+      .filter((n) => n.leaves.length);
     openTriStateTreeSheet(t("cf_filter_categories"), {
       tree,
       initialSelectedIds: st.categories.map(String),

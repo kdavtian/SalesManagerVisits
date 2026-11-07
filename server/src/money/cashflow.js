@@ -136,6 +136,8 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
     for (const a of accountRows) for (const alias of a.excel_aliases ?? []) accounts.set(alias.toLowerCase(), a.id);
     for (const a of accountRows) accounts.set(a.name.toLowerCase(), a.id);
     const categories = new Map((await client.query("SELECT id, name FROM cash_categories")).rows.map((c) => [c.name.toLowerCase(), c.id]));
+    // a renamed or removed category's old Excel name still lands where it was moved (cash_category_aliases, migration 193)
+    for (const a of (await client.query("SELECT name, category_id FROM cash_category_aliases")).rows) if (!categories.has(a.name)) categories.set(a.name, a.category_id);
     let accountsAdded = 0;
     let categoriesAdded = 0;
     for (const name of new Set(clean.map((r) => r.account).filter(Boolean))) {
