@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { nextInvoiceNo, priceChangePct, sinceText } from "../../client/public/js/purchaseNumbers.js";
+import { nextInvoiceNo, parseAmount, priceChangePct, sinceText } from "../../client/public/js/purchaseNumbers.js";
 
 test("the next invoice number keeps the prefix, the year and the zero padding", () => {
   assert.equal(nextInvoiceNo("3/26"), "4/26");
@@ -29,4 +29,20 @@ test("since text", () => {
   assert.equal(sinceText("2026-11-08T09:00:00Z", now, EN), "3 h");
   assert.equal(sinceText("2026-11-04T12:00:00Z", now, EN), "4 d");
   assert.equal(sinceText("bad", now, EN), "");
+});
+
+test("a typed amount is read as a person means it; an empty box is null; text is NaN, never a silent 0", () => {
+  assert.equal(parseAmount("385"), 385);
+  assert.equal(parseAmount("15,24"), 15.24);
+  assert.equal(parseAmount("15.24"), 15.24);
+  assert.equal(parseAmount("1 250,50"), 1250.5);
+  assert.equal(parseAmount("1,250.50"), 1250.5);
+  assert.equal(parseAmount("1.250,50"), 1250.5);
+  assert.equal(parseAmount("1,200,000"), 1200000);
+  assert.equal(parseAmount("0"), 0);
+  assert.equal(parseAmount(""), null);
+  assert.equal(parseAmount("  "), null);
+  assert.ok(Number.isNaN(parseAmount("abc")));
+  assert.ok(Number.isNaN(parseAmount("12x")));
+  assert.ok(Number.isNaN(parseAmount("1.2.3")));
 });

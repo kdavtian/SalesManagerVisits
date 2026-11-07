@@ -12,14 +12,18 @@ import { pickDate } from "../../activityDatePicker.js";
 import { getProductCatalog } from "../../productCatalog.js";
 import { searchProducts } from "../../productSearch.js";
 import { compareProducts } from "../../productSort.js";
-import { nextInvoiceNo, priceChangePct } from "../../purchaseNumbers.js";
+import { nextInvoiceNo, parseAmount, priceChangePct } from "../../purchaseNumbers.js";
 
 const DRAFT_KEY = "fv_pu_draft";
 const DRAFT_MAX_AGE_MS = 7 * 86400000;
 const pad = (n) => String(n).padStart(2, "0");
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const usd = (n) => `$${(Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const num = (v) => Number(String(v ?? "").replace(/\s/g, "").replace(",", ".")) || 0;
+// a typed amount for sums: empty and text count as 0 here; the save step checks the raw boxes first (parseAmount: null empty, NaN text)
+const num = (v) => {
+  const n = parseAmount(v);
+  return Number.isFinite(n) ? n : 0;
+};
 const sizeOf = (p) => (p ? Number(p.size_l) || Number(String(p.unit ?? "").replace(",", ".").match(/[\d.]+/)?.[0]) || 0 : 0);
 const productLabel = (p) => `${p.brand ? `${p.brand} ` : ""}${p.name}${p.unit ? ` · ${p.unit}` : ""}`;
 const keyOfNo = (no) => String(no ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -58,7 +62,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const source = draft ?? invoice ?? {};
   let supplierName = source.supplier ?? source.supplierName ?? "";
   let date = source.invoice_date ?? source.date ?? isoDay(new Date());
-  const lines = (source.lines ?? []).map((l) => ({ product_id: l.product_id, product_name: l.product_name, qty: Number(l.qty) || 0, cost_usd: Number(l.cost_usd) || 0 }));
+  const lines = (source.lines ?? []).map((l) => ({ product_id: l.product_id, product_name: l.product_name, qty: Number(l.qty) || null, cost_usd: l.cost_usd === null || l.cost_usd === undefined || l.cost_usd === "" ? null : Number(l.cost_usd) }));
   const clientRef = `pu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const history = new Map(); // product_id -> GET /purchases/product-history entry
   let allowDuplicate = false;
@@ -80,7 +84,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const byId = new Map(products.map((p) => [p.id, p]));
   // everyone who can be picked: the app's suppliers, then the ones only the Excel knows; the invoice's own supplier is always there
   const known = [...suppliersData.suppliers.filter((s) => s.active !== false), ...(suppliersData.excel_suppliers ?? [])];
-  if (supplierName && !known.some((s) => s.name.toLowerCase() === supplierName.toLowerCase())) known.push({ name: supplierName });
+  if (supplierName && supplierName !== "__new" && !known.some((s) => s.name.toLowerCase() === supplierName.toLowerCase())) known.push({ name: supplierName });
   const supplierOf = (name) => known.find((s) => s.name.toLowerCase() === String(name).toLowerCase());
   const defaultRate = suppliersData.default_usd_rate;
 
@@ -265,11 +269,12 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     scheduleDraft();
   });
   $("#pu-note").addEventListener("input", scheduleDraft);
-  $("#pu-date").addEventListener("click", async (e) => {
+  $("#pu-date").addEventListener("click", async () => {
+    const button = $("#pu-date"); // not e.currentTarget: it is null once the click has been dispatched and the picker answers
     const picked = await pickDate({ value: date, title: t("pu_date") });
     if (picked) {
       date = picked;
-      e.currentTarget.textContent = formatDateDMY(date);
+      button.textContent = formatDateDMY(date);
       checkDuplicate();
       scheduleDraft();
     }
@@ -346,7 +351,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
                 <span class="pu-fl-hist">${h ? histText(h) : ""}</span>
               </div>
               <label class="pu-fl-num"><span>${t("pu_packs")}</span><input data-f="qty" inputmode="decimal" aria-label="${t("pu_packs")}" value="${l.qty || ""}" /></label>
-              <label class="pu-fl-num"><span>${t("pu_cost_usd")}</span><input data-f="cost_usd" inputmode="decimal" aria-label="${t("pu_cost_usd")}" value="${l.cost_usd || l.cost_usd === 0 ? l.cost_usd : ""}" />
+              <label class="pu-fl-num"><span>${t("pu_cost_usd")}</span><input data-f="cost_usd" inputmode="decimal" aria-label="${t("pu_cost_usd")}" value="${l.cost_usd === null || l.cost_usd === undefined ? "" : l.cost_usd}" />
                 ${change !== null && change !== 0 ? `<em class="pu-delta ${change > 0 ? "pu-delta-up" : "pu-delta-down"}">${change > 0 ? "+" : ""}${change}%</em>` : ""}</label>
               <span class="pu-fl-sum"><span class="pu-fl-sum-label">${t("pu_line_sum")}</span><strong>${usd(sum)}</strong></span>
               <button type="button" class="icon-btn icon-btn-danger" data-remove aria-label="${t("pu_remove")}">${icons.trash}</button>
@@ -360,7 +365,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       const inputs = [...row.querySelectorAll("[data-f]")];
       inputs.forEach((input, k) => {
         input.addEventListener("input", () => {
-          lines[i][input.dataset.f] = num(input.value);
+          lines[i][input.dataset.f] = parseAmount(input.value); // null empty, NaN text: the checks at Save say so
           input.setAttribute("aria-invalid", "false");
           row.querySelector("[data-err]").hidden = true;
           fieldErr("lines", "");
@@ -397,7 +402,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     resultsEl.querySelectorAll("[data-pid]").forEach((b) => b.addEventListener("click", () => add(Number(b.dataset.pid))));
   }
   function add(id) {
-    lines.push({ product_id: id, qty: 0, cost_usd: 0 });
+    lines.push({ product_id: id, qty: null, cost_usd: null });
     searchEl.value = "";
     found = [];
     resultsEl.innerHTML = "";
@@ -455,8 +460,8 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       flag(noInput, true);
       bad(noInput);
     }
-    const rate = num(rateInput.value);
-    if (!(rate > 0)) {
+    const rate = parseAmount(rateInput.value);
+    if (!(Number.isFinite(rate) && rate > 0)) {
       fieldErr("rate", t("pu_err_rate"));
       flag(rateInput, true);
       bad(rateInput);
@@ -470,12 +475,12 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       const qtyInput = row.querySelector('[data-f="qty"]');
       const costInput = row.querySelector('[data-f="cost_usd"]');
       const problems = [];
-      if (!(Number(l.qty) > 0)) {
+      if (!(Number.isFinite(l.qty) && l.qty > 0)) {
         problems.push(t("pu_err_qty"));
         flag(qtyInput, true);
         bad(qtyInput);
       }
-      if (costInput.value.trim() === "" || !(Number(l.cost_usd) >= 0)) {
+      if (!(Number.isFinite(l.cost_usd) && l.cost_usd >= 0)) {
         problems.push(t("pu_err_cost"));
         flag(costInput, true);
         bad(costInput);

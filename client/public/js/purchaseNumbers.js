@@ -12,6 +12,21 @@ export function nextInvoiceNo(last) {
   return text.slice(0, m.index) + next + text.slice(m.index + m[0].length);
 }
 
+/**
+ * A typed amount: "385", "15,24", "1 250,50", "1,250.50" and "1.250,50" all read as a person means them; an empty box is null; text that
+ * is not a number is NaN (never a silent 0 -- a price must not be saved as $0 because of a typo).
+ */
+export function parseAmount(value) {
+  const text = String(value ?? "").replace(/[\s\u00a0]/g, "");
+  if (text === "") return null;
+  const lastComma = text.lastIndexOf(",");
+  const lastDot = text.lastIndexOf(".");
+  let clean = text;
+  if (lastComma >= 0 && lastDot >= 0) clean = lastComma > lastDot ? text.replace(/\./g, "").replace(",", ".") : text.replace(/,/g, ""); // the last mark is the decimal one
+  else if (lastComma >= 0) clean = (text.match(/,/g) ?? []).length > 1 ? text.replace(/,/g, "") : text.replace(",", ".");
+  return /^-?\d*\.?\d+$|^-?\d+\.$/.test(clean) ? Number(clean) : Number.NaN;
+}
+
 /** The change from the previous price to the new one, in whole percent (+3, -12); null when either is missing or the previous is 0. */
 export function priceChangePct(previous, current) {
   const a = Number(previous);

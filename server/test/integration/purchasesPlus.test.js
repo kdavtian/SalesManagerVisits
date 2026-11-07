@@ -143,3 +143,42 @@ test("suppliers: the next number is continued from the newer of the app's and th
   assert.equal(typeof s.default_usd_rate, "number");
   assert.equal(s.excel_suppliers.find((x) => x.name === "GT Group")?.last_invoice_no, "14");
 });
+
+test("an import with an impossible date skips that row (no 500); a sheet found only by its columns must look like purchases", async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Purchase_IN");
+  ws.addRow([]);
+  ws.addRow(["No", "InvoiceID", "Date", "Supplier", "ProductID", "Brand", "Product_Name", "Size", "QTY", "Cost USD"]);
+  ws.addRow([1, "OK1", "17.09.2026", "Sole Trans", "P", "Castrol", "Edge", 4, 10, 15]);
+  ws.addRow([2, "BAD1", "31.02.2026", "Sole Trans", "P", "Castrol", "Edge", 4, 10, 15]);
+  ws.addRow([3, "BAD2", "2026-13-01", "Sole Trans", "P", "Castrol", "Edge", 4, 10, 15]);
+  ws.addRow([4, "BAD3", "09/17/2026", "Sole Trans", "P", "Castrol", "Edge", 4, 10, 15]);
+  const r = await upload(Buffer.from(await wb.xlsx.writeBuffer()));
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.rows, 1);
+  assert.equal(r.data.skipped, 3);
+  // a sales sheet with similar headers but no supplier / product is not taken for purchases
+  const sales = new ExcelJS.Workbook();
+  sales.addWorksheet("Orders").addRow(["InvoiceID", "Date", "QTY", "Cost USD", "Customer"]);
+  sales.getWorksheet("Orders").addRow(["A1", new Date(Date.UTC(2026, 8, 1)), 2, 5, "x"]);
+  const refused = await upload(Buffer.from(await sales.xlsx.writeBuffer()));
+  assert.equal(refused.status, 400);
+  assert.equal((await apiRequest("/api/purchases/status", { cookie: accCookie })).data.excel_lines, 1, "the copy is untouched");
+});
+
+test("two people saving the same invoice at the same moment: one is saved, the other is told it exists", async () => {
+  const body = (ref) => ({ invoice_no: "RACE-1", invoice_date: "2026-04-04", supplier_name: "Race Supplier", usd_rate: 385, client_ref: ref, lines: [{ product_id: p1.id, qty: 1, cost_usd: 10 }] });
+  const [a, b] = await Promise.all([
+    apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: body("race-a") }),
+    apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: body("race-b") }),
+  ]);
+  assert.deepEqual([a.status, b.status].sort(), [201, 409]);
+  const { rows } = await pool.query("SELECT count(*)::int AS n FROM purchase_invoices WHERE invoice_no = 'RACE-1'");
+  assert.equal(rows[0].n, 1);
+});
+
+test("a product id beyond the database range is ignored, not a 500", async () => {
+  const r = await apiRequest("/api/purchases/product-history?ids=99999999999,-5,abc", { cookie: accCookie });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.data, {});
+});

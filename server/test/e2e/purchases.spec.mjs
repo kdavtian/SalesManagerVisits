@@ -188,6 +188,28 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
       await pool.query("DELETE FROM purchase_invoices WHERE invoice_no = $1", [newNo]);
       await page.evaluate(() => localStorage.removeItem("fv_pu_draft"));
     }
+    // the date can be changed: the button shows the new day, and a price left empty is refused (not saved as $0)
+    await page.goto("/#/purchases");
+    await page.locator("#pu-new").click();
+    await page.locator('[data-supplier="E2E Hist Supplier"]').click();
+    await page.locator("#pu-no").fill("DATE-1");
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const before = await page.locator("#pu-date").textContent();
+    await page.locator("#pu-date").click();
+    await page.locator("[data-date-today]").click();
+    await page.locator("[data-date-done]").click();
+    await expect(page.locator(".activity-date-picker, [data-date-done]")).toHaveCount(0);
+    expect(errors, "choosing a date raises no script error").toEqual([]);
+    await expect(page.locator("#pu-date")).toHaveText(before);
+    await page.locator("#pu-search").fill("Hist");
+    await page.locator("#pu-search").press("Enter");
+    await page.keyboard.type("5");
+    await expect(page.locator('.pu-fl [data-f="cost_usd"]')).toHaveValue(""); // no silent 0
+    await page.locator("#pu-save").click();
+    await expect(page.locator(".pu-fl-err")).toContainText("Enter the USD price");
+    await page.locator("#pu-cancel").click();
+    await page.evaluate(() => localStorage.removeItem("fv_pu_draft"));
     // an empty form says what is missing next to each field, not in one line at the bottom
     await page.goto("/#/purchases");
     await page.locator("#pu-new").click();

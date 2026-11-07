@@ -47,14 +47,22 @@ const num = (v) => {
   const n = typeof x === "number" ? x : Number(String(x).replace(/[\s,]/g, ""));
   return Number.isFinite(n) ? n : null;
 };
+// a real calendar day or nothing (31.02.2026 and 2026-13-01 are not days: the row is skipped, the import goes on)
+function real(y, m, d) {
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return y >= 2000 && y <= 2100 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null;
+}
 function day(v) {
   const x = plain(v);
-  if (x instanceof Date && !Number.isNaN(x.getTime())) return x.toISOString().slice(0, 10);
-  if (typeof x === "number" && x > 20000 && x < 80000) return new Date(Math.round((x - 25569) * 86400000)).toISOString().slice(0, 10); // an Excel serial date
-  const m = String(x ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})/) ?? null;
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  const d = String(x ?? "").trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/); // 17.09.2026
-  return d ? `${d[3]}-${d[2].padStart(2, "0")}-${d[1].padStart(2, "0")}` : null;
+  if (x instanceof Date && !Number.isNaN(x.getTime())) return real(x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate());
+  if (typeof x === "number" && x > 20000 && x < 80000) {
+    const t = new Date(Math.round((x - 25569) * 86400000)); // an Excel serial date
+    return real(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+  }
+  const m = String(x ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return real(Number(m[1]), Number(m[2]), Number(m[3]));
+  const d = String(x ?? "").trim().match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/); // 17.09.2026 (day first, as the workbook writes it)
+  return d ? real(Number(d[3]), Number(d[2]), Number(d[1])) : null;
 }
 
 /** The Purchase_IN rows of an .xlsx (a Buffer), in the bot's push shape. Throws a PurchaseError the screen can show. */
@@ -78,6 +86,8 @@ export async function parsePurchaseWorkbook(buffer) {
         if (field && columns[field] === undefined) columns[field] = col;
       });
       if (!(columns.invoice_id && columns.date && columns.qty && columns.cost_usd)) continue;
+      // a sheet found by its columns (not by the name Purchase_IN) must also look like purchases: a supplier and a product beside the invoice
+      if (!named && !(columns.supplier && (columns.product_id || columns.product_name))) continue;
       const rows = [];
       let skipped = 0;
       let index = 0;

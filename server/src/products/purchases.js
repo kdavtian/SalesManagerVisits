@@ -64,6 +64,8 @@ export async function savePurchase(body, userId, id = null, db = pool) {
     // The same supplier's same invoice number on the same day is almost always a second typing of one invoice (owner, 2026-11-07: ultra
     // version). Refused with the existing one named; the form offers "Save anyway" for the rare real repeat (allow_duplicate).
     if (!body?.allow_duplicate) {
+      // two people saving the same paper invoice at the same moment: one waits for the other, then sees it (the lock ends with the transaction)
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`purchase:${supplierId}:${keyOf(invoiceNo, date)}`]);
       const { rows: same } = await client.query(
         `SELECT id FROM purchase_invoices WHERE supplier_id = $1 AND invoice_date = $2::date AND ${SQL_KEY("invoice_no")} = ${SQL_KEY("$3::text")} AND id <> $4 LIMIT 1`,
         [supplierId, date, invoiceNo, id ?? 0]
@@ -283,7 +285,7 @@ export async function excelStatus(db = pool) {
  * last 12 months, and the stock the app knows now. App and Excel purchases together; an invoice in both counts once.
  */
 export async function productHistory(ids, { excludeNo = null, excludeDate = null } = {}, db = pool) {
-  const wanted = [...new Set((ids ?? []).map(Number).filter(Number.isInteger))].slice(0, 100);
+  const wanted = [...new Set((ids ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0 && n <= 2147483647))].slice(0, 100); // a product id is an int4
   if (!wanted.length) return {};
   const [{ rows: lines }, { rows: stock }] = await Promise.all([
     db.query(

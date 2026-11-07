@@ -191,14 +191,13 @@ export function renderPurchases(root) {
       if (!months.has(k)) months.set(k, []);
       months.get(k).push(r);
     }
-    const rowKey = (r) => `${r.id ?? ""}|${r.invoice_no}|${r.invoice_date}`;
     listEl.innerHTML = [...months.entries()]
       .map(
         ([k, list]) => `
       <div class="pu-month"><strong>${escapeHtml(monthTitle(`${k}-01`))}</strong><span>${list.length} · ${usd(list.reduce((a, r) => a + r.usd, 0))}</span></div>
       <div class="card pu-group">${list
         .map(
-          (r) => `<button type="button" class="pu-row" data-key="${escapeHtml(rowKey(r))}">
+          (r) => `<button type="button" class="pu-row" data-idx="${shown.indexOf(r)}">
             <span class="pu-row-main"><strong>${escapeHtml(r.supplier || "—")}</strong><span class="muted">${escapeHtml(formatDateDMY(r.invoice_date))} · № ${escapeHtml(r.invoice_no)} · ${liters(r.liters)}</span></span>
             <span class="pu-row-cols">
               <span class="pu-col-date">${escapeHtml(formatDateDMY(r.invoice_date))}</span>
@@ -213,10 +212,10 @@ export function renderPurchases(root) {
         .join("")}</div>`
       )
       .join("");
-    listEl.querySelectorAll("[data-key]").forEach((btn) =>
+    listEl.querySelectorAll("[data-idx]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const [id, invoiceNo, date] = btn.dataset.key.split("|");
-        openPurchaseSheet({ id: id ? Number(id) : null, invoiceNo, date, row: shown.find((r) => rowKey(r) === btn.dataset.key) }, { onSaved: load, rows, openInvoice });
+        const row = shown[Number(btn.dataset.idx)]; // by position: an invoice number may hold any character
+        openPurchaseSheet({ id: row.id, invoiceNo: row.invoice_no, date: row.invoice_date, row }, { onSaved: load, rows, openInvoice });
       })
     );
   }
