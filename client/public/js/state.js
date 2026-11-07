@@ -1,8 +1,18 @@
 import * as R from "./shared/roles.js";
+import { APP_VERSION } from "./version.js";
+import { reloadOnVersionMix } from "./shell/versionMix.js";
 
-export const state = {
-  user: null,
-};
+// ONE state per page, whichever copy of this file asks (owner, 2026-11-07: after an update a screen opened for the first time came from the
+// new files, got its own empty state and failed with "null is not an object (evaluating 'qe.user.role')"). A second copy that finds the page
+// already running, or another version's scripts, starts the app clean on the new version (shell/versionMix.js).
+const page = globalThis;
+const runningVersion = page.__fvVersion;
+const lateCopy = !page.__fvState && typeof document !== "undefined" && document.documentElement?.dataset?.fvBooted === "1";
+export const state = (page.__fvState ??= { user: null });
+page.__fvVersion ??= APP_VERSION;
+if (lateCopy || (runningVersion && runningVersion !== APP_VERSION)) {
+  reloadOnVersionMix(lateCopy ? "an older page is running" : `app ${runningVersion} and ${APP_VERSION}`);
+}
 
 const USER_CACHE_KEY = "fieldvisits_cached_user";
 

@@ -19,7 +19,7 @@ test("@smoke tasks table: the status chip stays out of the Due column and does n
       const row = page.locator(`.list-row[data-task-id="${ids[0]}"]`);
       await expect(row).toBeVisible({ timeout: 15000 });
       const chip = row.locator(".list-row-bottom .badge").first();
-      await expect(chip).toContainText("28");
+      await expect(chip).toContainText(/\b(28|29)\b/); // 28 days; 29 when the test runs after midnight in Yerevan (UTC date in the row)
       await expect(chip).not.toContainText("-20"); // no date in the chip: the Due column has it
       const [chipBox, dueBox] = await Promise.all([chip.boundingBox(), row.locator(".desk-cell").first().boundingBox()]);
       expect(chipBox.x + chipBox.width, `chip ends before the Due column at ${w}`).toBeLessThanOrEqual(dueBox.x + 1);
