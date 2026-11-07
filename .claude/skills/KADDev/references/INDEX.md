@@ -27,7 +27,7 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L28 Debt-as-of-date logic (owner-specified) - debt(customer, D) = Balance0 (Debits/Customers sheet) + SUM(ORDERS revenue up to D) - SUM(Cashflow "Oil order"
 - L31 Bot dev notes - No tests dir; verify by running the builders against a sample workbook and by python -c "import ast..." syntax
 
-## domain-rules.md (127 KB, 478 lines)
+## domain-rules.md (125 KB, 472 lines)
 - L3 Company - KAD Motors (Armenia), distributes Castrol (also Lotos, Orlen, Royal) lubricants.
 - L6 Customers - Category (customers.category, stored as Armenian text, label via categoryLabel): oil change point (Յուղման կետ
 - L17 Pricing (v1.244.0) - Products carry bronzepriceamd (+unitpriceamd mirror), silverpriceamd, goldpriceamd, retailpriceamd, landingcos
@@ -107,7 +107,6 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L459 Desktop v3.1: Activity and Tasks column headings (1.367.0) - Same deskTable.js headings now on all four desktop tables.
 - L463 Orders: server-side column sort (1.368.0, migration 129, owner 2026-10-18 "yes w - GET /api/orders?sort=date|amount|customer|status[&reverse=1] (whitelist in ORDERSORTS, routes/orders.js; unkno
 - L468 Typing masks and iPhone Safari (1.372.0, owner 2026-10-19: "I tap on 6 and it is - Desktop Chromium never reproduced it (fuzzed 700 digit/caret combinations, all fine); the stuck spot is the ke
-- L473 Purchases, order corrections, Excel sync pause, new products (1.526.0, owner 202 - Purchases (#/purchases, server/src/products/purchases.js, migration 192): supplier invoices typed in the app w
 
 ## kad-app-standard.md (23 KB, 257 lines)
 - L12 0. How to use this file - New app: follow section 14 top to bottom, then tick section 15 before the first release.
