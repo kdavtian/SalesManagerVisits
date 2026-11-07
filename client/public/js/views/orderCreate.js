@@ -633,22 +633,20 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
   });
 
   // "!" next to the total: what this order would cost on each price list, so the rep (and the customer) can see
-  // how much the customer's tier saves, and what another tier would change. Before discount. A role that cannot see
-  // the gold list (sales managers) simply gets no gold row.
+  // how much the customer's tier saves, and what another tier would change. Before discount. Gold pays the silver
+  // list (its own prices are the special prices), so there is no separate gold row: the silver row says "Silver · Gold".
   function openTierComparison() {
     const lines = [...cart.values()].map((l) => ({ line: l, product: catalogById.get(l.product_id) })).filter((x) => x.product);
     if (!lines.length) return;
     const current = cartSubtotalAmd();
     const total = (priceOf) => lines.reduce((sum, { line, product }) => sum + priceOf(product) * line.quantity, 0);
-    const hasGold = lines.every(({ product }) => Number(product.gold_price_amd) > 0);
     const retail = total((p) => Number(p.effective_retail_amd ?? p.retail_price_amd) || tierPrice(p, "bronze"));
     const rows = [
       { key: "retail", label: t("price_retail"), amount: retail },
       { key: "bronze", label: t("tier_bronze"), amount: total((p) => tierPrice(p, "bronze")) },
-      { key: "silver", label: t("tier_silver"), amount: total((p) => tierPrice(p, "silver")) },
-      ...(hasGold ? [{ key: "gold", label: t("tier_gold"), amount: total((p) => tierPrice(p, "gold")) }] : []),
+      { key: "silver", label: `${t("tier_silver")} · ${t("tier_gold")}`, amount: total((p) => tierPrice(p, "silver")) },
     ];
-    const customerTierKey = tier === "silver" || tier === "gold" ? tier : "bronze";
+    const customerTierKey = tier === "silver" || tier === "gold" ? "silver" : "bronze";
     const hasSpecial = lines.some(({ product }) => individualPrices.has(product.id));
     const signed = (n) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${groupDigits(Math.abs(n))}`;
     const saved = Math.round(retail - current);

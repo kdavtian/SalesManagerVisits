@@ -1,3 +1,6 @@
+import { refuseWhilePaused, getSyncPause, setSyncPause } from "../erpSyncPause.js";
+import { applyExcelPurchases } from "../../products/purchases.js";
+import { canPauseErpSync } from "../../shared/roles.js";
 import { markWishesBackInStock } from "../../orders/productWishes.js";
 import { cashSheetFilename, cashSheetText, cashSheetXlsx, closeSheetsFoundInExcel, loadCashSheet } from "../../money/cashSheets.js";
 import crypto from "node:crypto";
@@ -101,7 +104,7 @@ export async function optionalSyncStep(client, label, fn, warnings = []) {
   }
 }
 
-erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async (req, res) => {
   const { customers, order_lines, cashflow_lines, sales_performance, products, brand_volume, customer_legal, meta } = req.body ?? {};
   if (!Array.isArray(customers)) {
     return res.status(400).json({ error: "customers must be an array" });
@@ -579,7 +582,7 @@ function isPlainArray(value) {
 // pipeline pushing it, just on its own schedule.
 // The whole Cashflow sheet (every money movement, not just the customer payments of the main sync): replaces the ledger rows that came from
 // Excel (owner, 2026-10-23). Body: { rows: [{ date, amount, currency, for, id, source, info, currency_rate, amount_amd, sales_rep, transaction_id }] }.
-erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async (req, res) => {
   const rows = req.body?.rows;
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: "rows must be a non-empty array" });
   try {
@@ -592,6 +595,18 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, async (re
     res.json(applied);
   } catch (err) {
     await recordSyncAttempt({ endpoint: "/api/erp-sync/cashflow-ledger", ok: false, error: err.message });
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// The Excel Purchase_IN sheet (owner, 2026-11-07: the Purchases module runs side by side with it): replaces the app's copy, which the
+// Purchases screen compares invoice by invoice with what was typed in the app. Body: { rows: [{ invoice_id, date, supplier, product_id,
+// brand, product_name, size_l, qty, cost_usd, amount_amd, info, excel_row }] }. Refused while the Excel sync is paused, like the others.
+erpSyncRouter.post("/purchases", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async (req, res) => {
+  try {
+    res.json(await applyExcelPurchases(req.body?.rows));
+  } catch (err) {
+    await recordSyncAttempt({ endpoint: "/api/erp-sync/purchases", ok: false, error: err.message });
     res.status(400).json({ error: err.message });
   }
 });
@@ -841,7 +856,15 @@ const pollLimiter = rateLimit({
 
 erpSyncRouter.get("/status", requireAuth, async (req, res) => {
   if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  res.json(await getSyncStatus());
+  const [status, pause] = await Promise.all([getSyncStatus(), getSyncPause()]);
+  res.json({ ...status, pause, can_pause: canPauseErpSync(req.user.role) });
+});
+
+// The pause switch (erpSyncPause.js): { paused: true|false }. Admin / CEO only.
+erpSyncRouter.put("/pause", requireAuth, async (req, res) => {
+  if (!canPauseErpSync(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  if (typeof req.body?.paused !== "boolean") return res.status(400).json({ error: "paused must be true or false" });
+  res.json(await setSyncPause(req.body.paused, req.user.id));
 });
 
 erpSyncRouter.post("/request", requireAuth, async (req, res) => {

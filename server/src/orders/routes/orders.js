@@ -15,7 +15,7 @@ import { pdfBufferPreview } from "../../shared/pdfPreview.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { tierListPrice } from "../../products/tierPricing.js";
-import { seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSetAccountingStatus, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, seesAmountPapers, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { canCorrectOrders, seesAllActivity, canConfirmOrders, canConfirmSubmittedOrders, canRequestAccountingDocs, canSetAccountingStatus, canSubmitOrdersForOthers, canAssignErpCustomerId, canRecordOrders, seesUnrecordedBadge, canMarkDeliveredWithoutRoute, seesProductCosts, seesOnlyRecentAccountingDocs, seesAmountPapers, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { notifyTelegram, escapeHtml } from "../../shared/telegram.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { ORDER_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES, DELIVERY_OUTCOME_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
@@ -795,7 +795,7 @@ ordersRouter.get("/:id", async (req, res) => {
       can_approve_discount: canApproveDiscountRole(req.user.role, check.belowCost, check.belowLanding),
     };
   }
-  res.json({ ...order, items, history, pricing_check });
+  res.json({ ...order, items, history, pricing_check, corrections: order.corrected_at ? await orderCorrections(order.id) : [] });
 });
 
 // Moves a draft order to "submitted" -- the only path that transition can
@@ -1687,6 +1687,134 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
     }
   })();
 });
+
+// Correct an order after it left review (owner, 2026-11-07: "let admin change the order in all stages, even packed or delivered ... keep the
+// records"): admin, CEO and the accountant change the lines (products, quantities), the discount and the payment terms of a confirmed,
+// packed or delivered order. A reason is required; the order before and after is kept in order_corrections; the rep who placed it and the
+// accountants are told (an order already in the Excel must be fixed there too). Lines already on the order keep their price; a product
+// added now gets the customer's price, the way a new order would. Stock and live debt follow by themselves: both are read from the lines.
+ordersRouter.post("/:id/correct", async (req, res) => {
+  if (!canCorrectOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+  const order = rows[0];
+  if (!order) return res.status(404).json({ error: "Order not found" });
+  if (order.cancelled_at) return res.status(409).json({ error: "This order was cancelled -- it can no longer be changed", code: "cancelled_by_customer" });
+  if (!["confirmed", "packed_stock_out", "delivered"].includes(order.status)) {
+    return res.status(409).json({ error: "A draft or submitted order is changed with Edit, not corrected", code: "use_edit" });
+  }
+  const reason = String(req.body?.reason ?? "").trim();
+  if (reason.length < 3) return res.status(400).json({ error: "Say why the order is corrected", code: "reason_required" });
+  const { items, discount_pct, discount_amd, payment_method, payment_term_days } = req.body ?? {};
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: "At least one item is required" });
+
+  const { rows: before } = await pool.query("SELECT product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
+  const keptPrice = new Map(before.map((l) => [l.product_id, l]));
+  let lines;
+  try {
+    const { rows: tierRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [order.customer_id]);
+    const priced = await buildOrderLines(
+      items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+      { customerId: order.customer_id, tier: tierRows[0]?.customer_tier, dryRun: true }
+    );
+    lines = priced.map((l) => {
+      const was = keptPrice.get(l.product_id);
+      const price = was ? Number(was.unit_price_amd) : l.unit_price_amd;
+      return { ...l, unit_price_amd: price, line_total_amd: price * l.quantity, campaign_id: was?.campaign_id ?? null, list_price_amd: was?.list_price_amd ?? l.list_price_amd ?? null };
+    });
+  } catch (err) {
+    if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+  let pct = Number(order.discount_pct) || 0;
+  let amd = Number(order.discount_amd) || 0;
+  if (discount_pct !== undefined || discount_amd !== undefined) {
+    pct = Number(discount_pct) || 0;
+    amd = Number(discount_amd) || 0;
+    if (pct < 0 || pct > 100 || amd < 0) return res.status(400).json({ error: "discount_pct must be 0-100 and discount_amd not negative" });
+    if (pct > 0) amd = 0;
+  }
+  let method = order.payment_method;
+  let term = order.payment_term_days;
+  if (payment_method !== undefined) {
+    if (payment_method !== "cash" && payment_method !== "invoice") return res.status(400).json({ error: "payment_method must be 'cash' or 'invoice'" });
+    method = payment_method;
+  }
+  if (payment_term_days !== undefined) {
+    term = payment_term_days === null || payment_term_days === "" ? null : Number(payment_term_days);
+    const minDays = method === "invoice" ? 1 : 0;
+    if (term !== null && (!Number.isInteger(term) || term < minDays || term > 365)) return res.status(400).json({ error: `payment_term_days must be a whole number of days between ${minDays} and 365` });
+  }
+  const subtotal = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
+  const total = applyDiscount(subtotal, pct, amd);
+  const snapshot = (ls, o) => ({
+    items: ls.map((l) => ({ product_id: l.product_id, product_name: l.product_name, quantity: Number(l.quantity), unit_price_amd: Number(l.unit_price_amd) })),
+    total_amd: Number(o.total_amd),
+    discount_pct: Number(o.discount_pct) || 0,
+    discount_amd: Number(o.discount_amd) || 0,
+    payment_method: o.payment_method,
+    payment_term_days: o.payment_term_days,
+  });
+
+  const client = await pool.connect();
+  let updated;
+  try {
+    await client.query("BEGIN");
+    const { rows: up } = await client.query(
+      `UPDATE orders SET total_amd = $2, discount_pct = $3, discount_amd = $4, payment_method = $5, payment_term_days = $6, corrected_at = now(), updated_at = now(),
+              downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END
+        WHERE id = $1 AND status = $7 AND cancelled_at IS NULL RETURNING *`,
+      [order.id, total, pct, amd, method, term, order.status]
+    );
+    updated = up[0];
+    if (!updated) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+    }
+    await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
+    for (const line of lines) {
+      await client.query(
+        `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
+      );
+    }
+    await client.query(
+      "INSERT INTO order_corrections (order_id, corrected_by, reason, before, after) VALUES ($1, $2, $3, $4, $5)",
+      [order.id, req.user.id, reason.slice(0, 1000), JSON.stringify(snapshot(before, order)), JSON.stringify(snapshot(lines, updated))]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  const { rows: items2 } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
+  res.json({ ...updated, items: items2, corrections: await orderCorrections(order.id) });
+
+  // the rep who placed it and the accountants hear about it (not the person who made the change)
+  (async () => {
+    try {
+      const { rows: [c] } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+      const inExcel = Boolean(order.erp_matched_order_id || order.delivered_from_erp);
+      const body = `${c?.name || ""} · ${order.order_code || `#${order.id}`}: ${Math.round(Number(order.total_amd)).toLocaleString("en-US")} → ${Math.round(Number(total)).toLocaleString("en-US")} դր։ Պատճառ՝ ${reason}${inExcel ? "։ Ուղղեք նաև Excel-ում։" : ""}`;
+      const { rows: people } = await pool.query("SELECT id FROM users WHERE status = 'active' AND (role = 'accountant' OR id = $1) AND id <> $2", [order.user_id, req.user.id]);
+      for (const p of people) notifyUser(p.id, "order_corrected", { title: "Պատվերն ուղղվել է", body, url: `/#/orders?open=${order.id}` });
+    } catch (err) {
+      console.error("Order correction notification failed:", err);
+    }
+  })();
+});
+
+// Who corrected the order, when, why, and the total before and after: newest first (shown on the order).
+async function orderCorrections(orderId) {
+  const { rows } = await pool.query(
+    `SELECT oc.id, oc.corrected_at, oc.reason, oc.before, oc.after, u.name AS corrected_by_name
+       FROM order_corrections oc LEFT JOIN users u ON u.id = oc.corrected_by WHERE oc.order_id = $1 ORDER BY oc.corrected_at DESC, oc.id DESC`,
+    [orderId]
+  );
+  return rows;
+}
 
 ordersRouter.patch("/:id/recorded", async (req, res) => {
   if (!canRecordOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });

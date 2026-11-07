@@ -67,7 +67,7 @@ export async function dataChase({ db, day, settings, pick }) {
     const { rows: dirRows } = directors.length ? await db.query("SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE id = ANY($1)", [directors]) : { rows: [] };
     for (const d of dirRows) {
       if (settings.mode === "live") {
-        if (await createOpsTask({ kind: "data_missing", title: `Նշանակիր պատասխանատու կամ ալիք՝ ${unowned.length} հաճախորդի համար`, assigneeId: d.id, items: unowned.slice(0, 8).map((c) => c.name), notify: false, db })) created++;
+        if (await createOpsTask({ kind: "data_missing", title: `Նշանակիր պատասխանատու կամ ուղղություն՝ ${unowned.length} հաճախորդի համար`, assigneeId: d.id, items: unowned.slice(0, 8).map((c) => c.name), notify: false, db })) created++;
       }
       await createMessage(db, d, { kind: "data_chase_owner", level: 1, day, ctx: { n: unowned.length }, audience: "management", settings, pick });
     }

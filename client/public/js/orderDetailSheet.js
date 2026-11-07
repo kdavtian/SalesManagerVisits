@@ -11,7 +11,7 @@ import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTim
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
-import { canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts, seesAmountPapers } from "./shared/roles.js";
+import { canCorrectOrders, canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts, seesAmountPapers } from "./shared/roles.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
@@ -127,6 +127,24 @@ function accountingSectionHtml(order) {
 // Plain-language "what happens next" for statuses that wait on someone else.
 // Shown with the matching timeline step instead of as a huge disabled button.
 const WAITING_HINT = { confirmed: "confirmed_awaiting_warehouse", packed_stock_out: "packed_awaiting_route" };
+
+// The order's corrections after confirmation (owner, 2026-11-07): who, when, why, and the total before -> after. Newest first.
+function correctionsHtml(order) {
+  const list = Array.isArray(order.corrections) ? order.corrections : [];
+  if (!list.length) return "";
+  return `<div class="order-corrections">
+    <h3 class="section-title section-title-tight">${t("ocr_title")}</h3>
+    ${list
+      .map(
+        (c) => `<div class="order-correction">
+          <div class="order-correction-head"><strong>${escapeHtml(c.corrected_by_name || "")}</strong><span class="muted">${escapeHtml(formatDateTime(c.corrected_at))}</span></div>
+          <p class="order-correction-reason">${escapeHtml(c.reason)}</p>
+          ${showsAmounts() ? `<p class="muted order-correction-total">${formatAmd(Number(c.before?.total_amd) || 0)} → ${formatAmd(Number(c.after?.total_amd) || 0)}</p>` : ""}
+        </div>`
+      )
+      .join("")}
+  </div>`;
+}
 
 function orderTimelineHtml(history, currentStatus) {
   if (!history?.length) return "";
@@ -291,6 +309,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       <div id="order-signed-docs"></div>
       <div id="order-files-slot"></div>
       <div id="order-returns-slot"></div>
+      ${correctionsHtml(order)}
       ${orderTimelineHtml(order.history, order.status)}
       </div>
       </div>
@@ -366,6 +385,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
     if (canEditThisOrder) {
       buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
+    }
+    // After review (confirmed, packed, delivered) admin, CEO and the accountant can still correct a mistake, with a reason that is kept.
+    if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered"].includes(order.status) && canCorrectOrders(state.user.role)) {
+      buttons.push({ label: t("ocr_btn"), action: "correct-order", cls: "btn" });
     }
     // Permanent delete (distinct from a director's reject, which keeps
     // the order as a record back at draft) -- admin only, for a
@@ -495,6 +518,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           renderEditMode(order);
           return;
         }
+        if (btn.dataset.action === "correct-order") {
+          renderEditMode(order, { correct: true });
+          return;
+        }
         if (btn.dataset.action === "order-return") {
           openReturnSheet(orderId, async () => {
             renderView(await api.getOrder(orderId));
@@ -602,7 +629,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
   // total and the product results are re-rendered individually. (It used to
   // rebuild the whole sheet on every tap and every search keystroke, which
   // was slow, dropped the keyboard focus and reset the scroll position.)
-  function renderEditMode(order) {
+  function renderEditMode(order, { correct = false } = {}) {
     const lines = order.items.map((i) => ({ ...i }));
     let discountType = Number(order.discount_amd) > 0 ? "amd" : "pct";
     let discountValue = discountType === "amd" ? Number(order.discount_amd) : Number(order.discount_pct);
@@ -630,7 +657,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // while the add-product list is open.
     overlay.querySelector(".sheet").innerHTML = `
      <div class="edit-sheet" id="edit-sheet">
-      <h2 class="edit-sheet-header">${t("edit_order")}</h2>
+      <h2 class="edit-sheet-header">${t(correct ? "ocr_sheet_title" : "edit_order")}</h2>
+      ${correct ? `<p class="muted oc-correct-note">${t("ocr_note")}</p>` : ""}
       <div class="edit-sheet-scroll">
       <div class="card-list" id="edit-order-lines" style="margin:12px 0;"></div>
       <button type="button" class="btn btn-block" id="edit-add-product-btn" aria-expanded="false">${t("add_product_to_order")}</button>
@@ -657,7 +685,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       </div>
       <div class="edit-sheet-footer">
       <div class="edit-price-change">
-        <span class="edit-price-label">${t(selfApproves ? "discount_pct_label" : "request_price_change")}</span>
+        <span class="edit-price-label">${t(selfApproves || correct ? "discount_pct_label" : "request_price_change")}</span>
         <div class="edit-price-controls">
           <input type="number" id="edit-discount-input" min="0" step="1" value="${discountValue || 0}" inputmode="numeric" aria-label="${t(selfApproves ? "discount_pct_label" : "request_price_change")}" />
           <div class="unit-toggle" id="edit-discount-type" role="group" aria-label="${t("discount_pct_label")}">
@@ -666,8 +694,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           </div>
         </div>
       </div>
-      ${selfApproves ? "" : `<p class="muted price-change-hint">${t("price_change_hint")}</p>`}
+      ${selfApproves || correct ? "" : `<p class="muted price-change-hint">${t("price_change_hint")}</p>`}
       <p>${t("total")}${labelColon()}<span id="edit-order-total" class="text-amount"></span></p>
+      ${correct ? `<label class="oc-correct-reason">${t("ocr_reason")}<textarea id="edit-correct-reason" rows="2" maxlength="1000" placeholder="${t("ocr_reason_hint")}"></textarea></label>` : ""}
       <p class="form-error" id="order-detail-error" hidden></p>
       <div class="sheet-actions">
         <button type="button" class="btn" id="edit-order-cancel">${t("cancel_edit")}</button>
@@ -899,12 +928,19 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         dueInputEl.focus();
         return;
       }
+      const reasonEl = overlay.querySelector("#edit-correct-reason");
+      if (correct && reasonEl.value.trim().length < 3) {
+        errorEl.textContent = t("ocr_reason_needed");
+        errorEl.hidden = false;
+        reasonEl.focus();
+        return;
+      }
       errorEl.hidden = true;
       const saveBtn = overlay.querySelector("#edit-order-save");
       saveBtn.disabled = true;
       saveBtn.textContent = t("saving");
       try {
-        const updated = await api.updateOrder(orderId, {
+        const updated = await (correct ? (payload) => api.correctOrder(orderId, { ...payload, reason: reasonEl.value.trim() }) : (payload) => api.updateOrder(orderId, payload))({
           items: lines.map((l) => ({
             product_id: l.product_id,
             product_name: l.product_name,
@@ -928,6 +964,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       }
     });
 
+    // the "write a reason" message goes away as soon as one is typed
+    overlay.querySelector("#edit-correct-reason")?.addEventListener("input", () => {
+      overlay.querySelector("#order-detail-error").hidden = true;
+    });
     renderLines();
   }
 }

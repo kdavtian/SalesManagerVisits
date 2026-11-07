@@ -1138,7 +1138,8 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
 // inline preview on the customer detail page; scope=all removes that
 // filter for the "show all orders" screen.
 customersRouter.get("/:id/erp-orders", async (req, res) => {
-  const scope = req.query.scope === "all" ? "all" : "recent";
+  // recent = the last 3 months (the card's list); year = this calendar year in Yerevan (the card's totals); all = the whole history.
+  const scope = ["all", "year"].includes(req.query.scope) ? req.query.scope : "recent";
   const { rows: customerRows } = await pool.query("SELECT erp_customer_id, assigned_manager_id FROM customers WHERE id = $1", [
     req.params.id,
   ]);
@@ -1146,9 +1147,18 @@ customersRouter.get("/:id/erp-orders", async (req, res) => {
   if (!erpCustomerId) return res.json([]);
   if (!seesCustomerErpData(req.user.role, customerRows[0].assigned_manager_id, req.user.id)) return res.json([]);
 
-  const dateFilter = scope === "recent" ? "AND order_date >= now() - interval '3 months'" : "";
+  const dateFilter =
+    scope === "recent"
+      ? "AND order_date >= now() - interval '3 months'"
+      : scope === "year"
+        ? "AND order_date >= date_trunc('year', (now() AT TIME ZONE 'Asia/Yerevan'))::date"
+        : "";
+  // items, liters and brands per order (owner, 2026-11-07: the full list shows them; returns count negative)
   const { rows } = await pool.query(
-    `SELECT order_id, order_date, to_char(order_date, 'YYYY-MM-DD') AS date_key, sum(revenue_amd) AS total_amd
+    `SELECT order_id, order_date, to_char(order_date, 'YYYY-MM-DD') AS date_key, sum(revenue_amd) AS total_amd,
+            COALESCE(sum(qty), 0)::float8 AS items_qty,
+            COALESCE(sum(qty * NULLIF(regexp_replace(COALESCE(size_l, ''), '[^0-9.]', '', 'g'), '')::numeric), 0)::float8 AS liters,
+            array_remove(array_agg(DISTINCT NULLIF(trim(brand), '')), NULL) AS brands
      FROM erp_order_lines
      WHERE erp_customer_id = $1 ${dateFilter}
      GROUP BY order_id, order_date
@@ -1301,7 +1311,7 @@ customersRouter.get("/:id/product-prices", async (req, res) => {
 });
 
 // Special pricelist of a Gold customer (Customer settings -> Special pricelist): one request saves what the user
-// changed -- [{ product_id, price_amd }], price_amd null = back to the Gold list price. Directors / admin / CEO only.
+// changed -- [{ product_id, price_amd }], price_amd null = back to the list price (Gold pays the Silver list). Directors / admin / CEO only.
 customersRouter.put("/:id/product-prices", async (req, res) => {
   if (!canConfirmOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const id = Number(req.params.id);

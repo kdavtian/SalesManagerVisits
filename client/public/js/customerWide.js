@@ -116,16 +116,21 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
   el.querySelector("[data-panel-all]").addEventListener("click", () => navigate(`#/customers/${customer.id}/orders`));
   const body = el.querySelector(".cd-panel-body");
   const excel = (Array.isArray(erpOrders) ? erpOrders : []).map((o) => ({ kind: "erp", date: o.order_date, code: o.order_id, amount: o.total_amd, row: o }));
+  const thisYear = new Date().getFullYear();
+  let yearExcelTotal = null;
+  let lastApp = [];
   const paint = (appRows) => {
+    lastApp = appRows;
     if (!body.isConnected && !el.isConnected) return;
     const rows = [...appRows, ...excel].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, ORDER_ROWS);
     if (!rows.length) {
       body.innerHTML = `<p class="muted cd-panel-empty">${t("no_orders_found")}</p>`;
       return;
     }
-    // the total of the orders in this list (the last 3 months), not only of the five shown
-    const all = [...appRows, ...excel];
-    const total = all.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    // this calendar year's orders (owner, 2026-11-07; it was the last 3 months): the Excel orders of the year + the app orders the Excel
+    // does not have yet, dated this year
+    const appYear = appRows.filter((r) => String(r.date || "").startsWith(String(thisYear)));
+    const total = (yearExcelTotal ?? excel.filter((r) => String(r.date || "").startsWith(String(thisYear))).reduce((sum, r) => sum + (Number(r.amount) || 0), 0)) + appYear.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
     body.innerHTML = rows
       .map(
         (r, i) => `<button type="button" class="cd-row" data-order-row="${i}">
@@ -134,7 +139,7 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
           <span class="cd-row-amount">${formatAmd(Number(r.amount) || 0)}</span>
         </button>`
       )
-      .join("") + `<div class="cd-row cd-row-total"><span>${t("orders_total_3m")}</span><span></span><span class="cd-row-amount">${formatAmd(total)}</span></div>`;
+      .join("") + `<div class="cd-row cd-row-total"><span>${t("total_year").replace("{year}", thisYear)}</span><span></span><span class="cd-row-amount">${formatAmd(total)}</span></div>`;
     body.querySelectorAll("[data-order-row]").forEach((btn) =>
       btn.addEventListener("click", () => {
         const r = rows[Number(btn.dataset.orderRow)];
@@ -144,6 +149,11 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
     );
   };
   paint([]);
+  // the year's Excel orders (the list above holds only the last 3 months)
+  loadWithCache(`cust-orders-year:${customer.id}`, () => api.getErpOrders(customer.id, "year"), (rows) => {
+    yearExcelTotal = (Array.isArray(rows) ? rows : []).reduce((sum, r) => sum + (Number(r.total_amd) || 0), 0);
+    paint(lastApp);
+  }).catch(() => {});
   api
     .listOrders({ customer_id: customer.id }, { fresh: true })
     .then(async (result) => {
@@ -173,6 +183,7 @@ function paymentsPanel({ customer, openPayments }) {
   el.querySelector("[data-panel-all]").addEventListener("click", () => openPayments());
   const body = el.querySelector(".cd-panel-body");
   const source = paymentsSource(customer.id);
+  const thisYear = new Date().getFullYear(); // the total under the list is this year's payments (owner, 2026-11-07)
   loadWithCache(source.key, source.fetch, (data) => {
     const rows = data?.rows ?? [];
     if (!rows.length) {
@@ -193,7 +204,10 @@ function paymentsPanel({ customer, openPayments }) {
             <span class="cd-row-amount">${formatAmd(r.amount_amd)}</span>
           </button>`
         )
-        .join("") + `<div class="cd-row cd-row-total"><span>${t("total")}</span><span></span><span class="cd-row-amount">${formatAmd(data.total_amd)}</span></div>`;
+        .join("") +
+      `<div class="cd-row cd-row-total"><span>${t("total_year").replace("{year}", thisYear)}</span><span></span><span class="cd-row-amount">${formatAmd(
+        rows.filter((r) => String(r.date || "").startsWith(String(thisYear))).reduce((sum, r) => sum + (Number(r.amount_amd) || 0), 0)
+      )}</span></div>`;
     body.querySelectorAll("[data-payment-row]").forEach((b) => b.addEventListener("click", () => openPayments()));
   }).catch((err) => {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;

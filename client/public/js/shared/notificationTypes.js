@@ -11,6 +11,7 @@ export const NOTIFICATION_GROUPS = [
     types: [
       { type: "order_placed", roles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager", "accountant"] },
       { type: "order_status_changed", roles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager", "accountant"] },
+      { type: "order_corrected", roles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager", "accountant"] },
       { type: "order_warehouse_review", roles: ["admin", "warehouse_manager"] },
       { type: "order_stock_issue", roles: ["admin", "ceo", "operations_director", "sales_director"] },
       { type: "order_packed", roles: ["admin", "delivery_manager"] },

@@ -44,13 +44,16 @@ for what that implies.
 
 | Action | Function | Behavior |
 |---|---|---|
-| Create/edit products, set prices, manage promos, edit company profile | `canManageProducts` | `admin`, `ceo`, `accountant`. Sales roles can browse/generate a pricelist but not touch master pricing. |
+| Create/edit products, set prices, manage promos, edit company profile | `canManageProducts` | `admin`, `ceo`, `operations_director`, `accountant`. Sales roles can browse/generate a pricelist but not touch master pricing. "New product" (1.526.0): brand, name, size L, family, Bronze / Silver / Retail, HC code; the same brand + name + size is refused unless confirmed; the Excel sync links to it later. |
+| See and type purchases (supplier invoices beside the Excel Purchase_IN) | `canManagePurchases` | `admin`, `ceo`, `operations_director`, `accountant` (1.526.0). Delete a purchase: `canDeletePurchases` = `admin`, `ceo`. |
+| Pause / resume the Excel sync | `canPauseErpSync` | `admin`, `ceo` (System health > Excel sync, 1.526.0). While paused the bot's syncs are refused (423) and change nothing. |
 
 ## Orders
 
 | Action | Function | Behavior |
 |---|---|---|
 | Confirm/reject/edit a submitted order before fulfillment | `canConfirmOrders` | `admin`, `sales_director`, `ceo`. |
+| Correct a confirmed / packed / delivered order (lines, discount, payment terms) | `canCorrectOrders` | `admin`, `ceo`, `accountant` (owner 2026-11-07, 1.526.0). A reason is required; before / after kept in `order_corrections`; the rep and the accountants are notified (`order_corrected`). Kept lines keep their price; added products get the customer's price. |
 | Approve a discount, a price change, a line below net cost or below landing cost | `canApproveDiscountRole` (`orders/discountPolicy.js`) | `admin`, `ceo`, `sales_director` approve anything (owner, 2026-11-05). `operations_director` only while every line stays at or above net cost. Nobody else. |
 | Discounts a person types | `decideDiscountApproval` | EVERY discount waits for approval, however small (before: up to 3 % was automatic). The KAD OS app's standing discount keeps the old 3 % automatic rule. |
 | Plan for another rep's route (day-of or recurring) | `canPlanForOthers` | `admin`, `sales_director`, `ceo`. A plain `sales_manager` only plans for themselves. |

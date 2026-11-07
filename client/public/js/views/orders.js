@@ -333,17 +333,25 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
   let accountingFilter = "";
   // Reopened after the app was closed (viewMemory.js): the tab, sort, filters and search the person had.
   const restored = takeViewState("orders");
+  // Saved by an older version, the settings may hold values this one no longer knows: each is checked, an unknown one is the default.
+  const text = (v) => (typeof v === "string" ? v : "");
   if (restored) {
-    activeStatus = restored.activeStatus ?? activeStatus;
-    channelFilter = restored.channelFilter ?? "";
-    accountingFilter = restored.accountingFilter ?? "";
-    repFilter = restored.repFilter ?? "";
-    periodFilter = restored.periodFilter ?? "";
-    paymentFilter = restored.paymentFilter ?? "";
+    if (STATUS_FILTERS.includes(restored.activeStatus)) activeStatus = restored.activeStatus;
+    channelFilter = text(restored.channelFilter);
+    accountingFilter = ACCOUNTING_FILTERS.includes(restored.accountingFilter) ? restored.accountingFilter : "";
+    repFilter = /^\d+$/.test(String(restored.repFilter ?? "")) ? String(restored.repFilter) : "";
+    periodFilter = ORDER_PERIODS.includes(restored.periodFilter) ? restored.periodFilter : "";
+    paymentFilter = ["cash", "invoice"].includes(restored.paymentFilter) ? restored.paymentFilter : "";
     attentionFilter = Boolean(restored.attentionFilter);
-    sortKey = restored.sortKey ?? sortKey;
+    if (SERVER_SORTS.has(restored.sortKey)) sortKey = restored.sortKey;
     sortReversed = Boolean(restored.sortReversed);
-    searchInput.value = restored.q ?? "";
+    searchInput.value = text(restored.q);
+    // the status chip of the reopened tab is the highlighted one (it used to stay on Submitted while the list showed another tab)
+    filterRow.querySelectorAll("[data-status]").forEach((b) => {
+      const on = b.dataset.status === activeStatus;
+      b.classList.toggle("chip-active", on);
+      b.setAttribute("aria-pressed", String(on));
+    });
   }
   let orders = [];
   let hasMore = false;

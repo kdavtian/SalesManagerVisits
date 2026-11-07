@@ -10,6 +10,13 @@ export const productsApi = {
   getProductSyncDiagnostics: () => request("/products/sync-diagnostics"),
   getProductDuplicates: () => request("/products/duplicates"),
   createProduct: (data) => json("/products", "POST", data),
+  // Purchases (server/src/products/routes/purchases.js)
+  listPurchases: (params = {}) => request(`/purchases?${new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()}`, { fresh: true }),
+  getPurchase: (id) => request(`/purchases/${id}`, { fresh: true }),
+  getExcelPurchase: (invoiceNo, date) => request(`/purchases/excel-invoice?${new URLSearchParams({ invoice_no: invoiceNo, date }).toString()}`, { fresh: true }),
+  savePurchase: (id, data) => json(id ? `/purchases/${id}` : "/purchases", id ? "PUT" : "POST", data),
+  deletePurchase: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
+  listSuppliers: () => request("/purchases/suppliers", { fresh: true }),
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),
   resyncProduct: (id) => request(`/products/${id}/resync`, { method: "POST" }),
