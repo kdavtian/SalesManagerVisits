@@ -104,8 +104,12 @@ test("accountant adds (chips sheet), opens the details with history, edits and d
     await expect(page.locator("#cf-cust-input")).toBeEnabled();
     await page.locator("#cf-acc-chip").click();
     await page.locator(".cf-pick", { hasText: "Cash E2E" }).click();
-    await page.locator("#cf-cat-chip").click();
-    await page.locator(".cf-pick", { hasText: /^Salary$/ }).click();
+    // since 1.527.0 (#591): Out first, then the category (Salary), then its subcategory if it has several
+    await page.locator('#cf-dir3 [data-dir="out"]').click();
+    await page.locator("#cf-group-chip").click();
+    await page.locator(".cf-pick", { hasText: /^Payroll$/ }).click();
+    // Payroll fills in its subcategory Salary by itself
+    await expect(page.locator("#cf-cat-text")).toHaveText("Salary");
     await expect(page.locator("#cf-cust-input")).toBeDisabled(); // a ghost when the category is not Oil order
     await expect(page.locator("#cf-salary")).toBeVisible();
     await expect(page.locator("#cf-dir")).toBeHidden(); // an expense is money out: no In / Out buttons
