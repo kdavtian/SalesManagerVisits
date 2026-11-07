@@ -34,12 +34,13 @@ test.describe("Payments received sheet", () => {
       const box = await amount.boundingBox();
       expect(box.height).toBeLessThan(26); // one line
     }
-    const first = list.locator(".payments-received-row").first();
+    // the first payment row (since 1.525.0, #589, the list opens with a year heading row, which has no date)
+    const first = list.locator(".payments-received-row:not(.pr-year-row):not(.payments-received-total)").first();
     const date = await first.locator(".payments-received-date").boundingBox();
     const chip = await first.locator(".badge").boundingBox();
     expect(date.x).toBeGreaterThanOrEqual(0);
     expect(chip.y).toBeGreaterThan(date.y + date.height - 2); // chip under the date
     await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = $1", [erpId]);
-    await page.screenshot({ path: "/tmp/claude-0/-home-user-SalesManagerVisits/08fd2df5-8bf9-5eeb-b90f-88ec5281d22b/scratchpad/shots/pay-recv.png" });
+    await page.screenshot({ path: `${process.env.PR_SHOTS ?? "/tmp"}/pay-recv.png` });
   });
 });
