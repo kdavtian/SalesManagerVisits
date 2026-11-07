@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # + labeled/unlabeled: adding or removing the "ui-change" label re-runs CI, so the screen check below is skipped or run again
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch: {}   # the weekly dependency-fix workflow starts CI on its own branch this way (a push by GITHUB_TOKEN does not)
 
 # A new push to the same branch / PR cancels the run that is still going.
@@ -352,24 +354,94 @@ jobs:
           path: server/playwright-report/
           retention-days: 7
 
+  # "You judge by what you see, so make the tests judge that way too" (owner, 2026-11-07): every key screen of the admin and of a rep
+  # (bottom tabs, the "Your order" sheet, the customer card, a payment being entered) on 390 px iPhone hy/light and en/dark, 440 px
+  # iPhone hy/light and 1440 px desktop is pictured on the base branch's code, then this code is compared with the pictures; any changed
+  # pixel fails (server/scripts/shots-vs-main.mjs). Nothing is stored in the repository. A meant change: label the PR "ui-change" and this
+  # job is skipped (the label re-runs CI). Pull requests only; skipped for documentation-only changes like the other browser jobs.
+  shots:
+    name: e2e (screens vs base)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ui-change')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: mirror.gcr.io/library/postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fieldvisits_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/fieldvisits_test
+      JWT_SECRET: ci-test-secret-not-used-anywhere-real
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Playwright version (cache key)
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - run: npx playwright install --with-deps chromium
+
+      # both sides run the deploy build (CLIENT_BUILD=1), each built by the script
+      - name: Every key screen against the base branch
+        run: npm run shots:main -- origin/${{ github.base_ref }}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: screen-differences
+          path: server/test-results-shots/
+          retention-days: 7
+
   # The one check name the repository has always required for the browser tests: green when both Chrome shards and the iPhone run passed
   # (or were skipped because only documentation changed).
   e2e-smoke:
     name: e2e-smoke
-    needs: [changes, e2e, iphone]
+    needs: [changes, e2e, iphone, shots]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Both Chrome shards and the iPhone run passed
+      - name: Both Chrome shards, the iPhone run and the screen check passed
         env:
           CODE: ${{ needs.changes.outputs.code }}
           CHANGES: ${{ needs.changes.result }}
           E2E: ${{ needs.e2e.result }}
           IPHONE: ${{ needs.iphone.result }}
+          SHOTS: ${{ needs.shots.result }}
         run: |
-          echo "changes: $CHANGES (code=$CODE), e2e: $E2E, iphone: $IPHONE"
+          echo "changes: $CHANGES (code=$CODE), e2e: $E2E, iphone: $IPHONE, shots: $SHOTS"
           [ "$CHANGES" = "success" ] || exit 1
           for r in "$E2E" "$IPHONE"; do
             [ "$r" = "success" ] || { [ "$CODE" = "false" ] && [ "$r" = "skipped" ]; } || exit 1
           done
+          # skipped on purpose: documentation only, a push (no base to compare), or the PR is labelled "ui-change"
+          [ "$SHOTS" = "success" ] || [ "$SHOTS" = "skipped" ] || exit 1
