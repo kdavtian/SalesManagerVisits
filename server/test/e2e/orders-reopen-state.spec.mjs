@@ -12,7 +12,7 @@ test("@iphone @smoke Orders reopens with saved settings, ignores unknown ones an
   // a reload interrupts requests on their way: Safari reports each as "TypeError: Load failed" (Chrome "Failed to fetch"); those are not
   // errors of the screen (and since 1.525.0 the app no longer takes them for a broken app file either)
   // (and a blocked map tile -- the test machine has no internet -- "... due to access control checks"): network, not the screen
-  page.on("pageerror", (e) => !/^(TypeError: )?(Load failed|Failed to fetch)$|due to access control checks|Fetch API cannot load/.test(e.message) && errors.push(e.message));
+  page.on("pageerror", (e) => !/due to access control checks|^(TypeError: )?(Load failed|Failed to fetch)$|Failed to load resource|Fetch API cannot load|\.png\.?$/.test(e.message) && errors.push(e.message)); // the same filter as iphone.spec.mjs
   await page.setViewportSize({ width: 390, height: 844 });
   // the app saves where it is when the page goes away, so the record under test is written at the start of the next load
   await page.addInitScript(() => {
