@@ -17,7 +17,7 @@ function fileAgeText(hours) {
 
 // true when something needs attention: no sync yet, the sync or the file is older than the limit, or the newest call failed
 export function syncNeedsAttention(st) {
-  return !st.last_success || st.sync_stale || st.workbook_stale || Boolean(st.last_failure);
+  return Boolean(st.pause?.paused) || !st.last_success || st.sync_stale || st.workbook_stale || Boolean(st.last_failure);
 }
 
 function row(label, value, extra = "") {
@@ -39,8 +39,17 @@ function cardHtml(st) {
     ${last?.warnings?.length ? row(t("es_skipped"), String(last.warnings.length)) : ""}
     ${st.last_failure ? `<div class="es-problem"><strong>${t("es_problem")}</strong> ${escapeHtml(formatDateTime(st.last_failure.at))}<br>${escapeHtml(st.last_failure.error ?? "")}</div>` : ""}
     ${lastReq}
+    ${
+      st.can_pause
+        ? `<div class="es-pause-row">
+            <span class="health-label">${t("es_pause_label")}${st.pause?.paused && st.pause.paused_at ? `<span class="muted es-pause-since">${escapeHtml(t("es_paused_since").replace("{d}", formatDateTime(st.pause.paused_at)).replace("{who}", st.pause.paused_by_name || ""))}</span>` : ""}</span>
+            <button type="button" class="toggle-switch" id="es-pause" role="switch" aria-checked="${st.pause?.paused ? "true" : "false"}" aria-label="${t("es_pause_label")}"><span class="toggle-thumb"></span></button>
+          </div>`
+        : ""
+    }
+    ${st.pause?.paused ? `<div class="es-problem es-paused">${t("es_paused_note")}</div>` : ""}
     <p class="muted health-note" id="es-state" role="status" hidden></p>
-    <button type="button" class="btn btn-primary health-update-btn" id="es-sync-now">${t("es_sync_now")}</button>`;
+    <button type="button" class="btn btn-primary health-update-btn" id="es-sync-now" ${st.pause?.paused ? "disabled" : ""}>${t("es_sync_now")}</button>`;
 }
 
 // Fills `container` (a .card) and keeps itself current; returns nothing.
@@ -51,6 +60,18 @@ export async function renderErpSyncCard(container) {
     container.innerHTML = cardHtml(st);
     container.querySelector("#es-hint").addEventListener("click", () => openInfoPopup(`<p>${t("es_hint")}</p>`));
     container.querySelector("#es-sync-now").addEventListener("click", () => syncNow(container, paint));
+    // the pause switch (owner, 2026-11-07): one tap each way, the card redraws from the server's answer
+    const pauseBtn = container.querySelector("#es-pause");
+    pauseBtn?.addEventListener("click", async () => {
+      pauseBtn.disabled = true;
+      try {
+        await api.setErpSyncPaused(pauseBtn.getAttribute("aria-checked") !== "true");
+        paint(await api.getErpSyncStatus());
+      } catch (err) {
+        pauseBtn.disabled = false;
+        showToast(err.message, { ms: 4000 });
+      }
+    });
   };
   try {
     paint(await api.getErpSyncStatus());
@@ -106,6 +127,6 @@ export async function renderErpSyncHomeLine(slot, navigate) {
   const text = last
     ? `${t("es_home_label")}: ${formatDateTime(last.at)}${last.workbook_modified_at ? ` · ${t("es_home_file").replace("{d}", formatDateDMY(last.workbook_modified_at))} (${fileAgeText(st.workbook_age_hours)})` : ""}`
     : `${t("es_home_label")}: ${t("es_never")}`;
-  slot.innerHTML = `<button type="button" class="card es-home ${bad ? "es-home-bad" : ""}" aria-label="${escapeHtml(t("es_title"))}"><span class="es-home-dot" aria-hidden="true"></span><span class="es-home-text">${escapeHtml(text)}${st.last_failure ? ` · ${escapeHtml(t("es_failed"))}` : ""}</span><span class="chevron">&#8250;</span></button>`;
+  slot.innerHTML = `<button type="button" class="card es-home ${bad ? "es-home-bad" : ""}" aria-label="${escapeHtml(t("es_title"))}"><span class="es-home-dot" aria-hidden="true"></span><span class="es-home-text">${st.pause?.paused ? `${escapeHtml(t("es_paused_short"))} · ` : ""}${escapeHtml(text)}${st.last_failure ? ` · ${escapeHtml(t("es_failed"))}` : ""}</span><span class="chevron">&#8250;</span></button>`;
   slot.querySelector(".es-home").addEventListener("click", () => navigate("#/settings?section=system-health"));
 }

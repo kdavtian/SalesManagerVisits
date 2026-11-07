@@ -24,6 +24,7 @@ export const SIDEBAR_ITEM_ICON = {
   qa_pricelist: { icon: icons.tag, colorClass: "quick-action-icon-pricelist" },
   qa_warehouse: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
   qa_cashflow: { icon: icons.wallet, colorClass: "quick-action-icon-debt" },
+  qa_purchases: { icon: icons.purchase, colorClass: "quick-action-icon-warehouse" },
   qa_staff: { icon: icons.person, colorClass: "quick-action-icon-team" },
   qa_returns: { icon: icons.undo, colorClass: "quick-action-icon-debt" },
   qa_wh_home: { icon: icons.box, colorClass: "quick-action-icon-warehouse" },
@@ -63,7 +64,7 @@ export const SIDEBAR_ONLY_ITEMS = [
 export const SIDEBAR_GROUPS = [
   { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
   { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_bank_desk", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
-  { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_returns", "qa_documents", "qa_pricelist"] },
+  { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_purchases", "qa_returns", "qa_documents", "qa_pricelist"] },
   { key: "admin", label: "sidebar_group_admin", ids: ["qa_staff", "qa_ask_kad", "qa_company_dashboard"] },
 ];
 

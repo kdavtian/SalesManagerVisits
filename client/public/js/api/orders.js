@@ -54,6 +54,7 @@ export const ordersApi = {
   updateOrderItems: (id, items) => json(`/orders/${id}`, "PATCH", { items }),
   updateOrderStatus: (id, status) => json(`/orders/${id}`, "PATCH", { status }),
   updateOrder: (id, data) => json(`/orders/${id}`, "PATCH", data),
+  correctOrder: (id, data) => json(`/orders/${id}/correct`, "POST", data),
   setAccountingStatus: (id, status) => json(`/orders/${id}/accounting-status`, "POST", { status }),
   markAccountingSigned: (id, number) => json(`/orders/${id}/accounting-signed`, "POST", number ? { number } : {}),
   requestAccountingDocument: (id, paymentMethod) => json(`/orders/${id}/accounting-request`, "POST", { payment_method: paymentMethod }),

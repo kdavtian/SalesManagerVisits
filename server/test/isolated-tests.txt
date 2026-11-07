@@ -25,3 +25,6 @@ test/integration/stockCount.test.js
 test/integration/taskAutoComplete.test.js
 test/integration/vaghinak.test.js
 test/integration/vaghinakFullDigest.test.js
+test/integration/erpSyncPause.test.js
+test/integration/productAdd.test.js
+test/integration/purchases.test.js

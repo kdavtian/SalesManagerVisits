@@ -20,6 +20,25 @@ export const FIRST_ROWS = 40;
 // plus payments recorded in the app (pending / approved), newest first.
 // Opens at once from the last copy kept on this phone and corrects itself when the fresh list lands (owner, 2026-10-26: "it loads every
 // time user taps"); only the first rows are drawn until "Show more", so a customer with hundreds of payments does not freeze the sheet.
+// Rows grouped by calendar year, newest first (owner, 2026-11-07): a header row with the year and the whole year's subtotal goes in front of
+// each year's first row. `rows` = what is drawn (maybe only the first page); `all` = every row, for the subtotal.
+function withYearHeaders(rows, all, dateOf, amountOf, rowHtml) {
+  const totals = new Map();
+  for (const r of all) {
+    const y = String(dateOf(r) || "").slice(0, 4);
+    totals.set(y, (totals.get(y) || 0) + (Number(amountOf(r)) || 0));
+  }
+  let year = null;
+  return rows
+    .map((r, i) => {
+      const y = String(dateOf(r) || "").slice(0, 4);
+      const head = y !== year ? `<div class="payments-received-row pr-year-row"><strong>${escapeHtml(y || "—")}</strong><span></span><strong class="text-amount">${formatAmd(totals.get(y) || 0)}</strong></div>` : "";
+      year = y;
+      return head + rowHtml(r, i);
+    })
+    .join("");
+}
+
 export async function openPaymentsReceivedSheet(customer) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -46,15 +65,17 @@ export async function openPaymentsReceivedSheet(customer) {
     ${
       data.rows.length
         ? `<div class="card erp-card payments-received-list">
-            ${visible
-              .map(
-                (r) => `<div class="payments-received-row${r.source === "excel" ? "" : " payments-received-row-app"}">
+            ${withYearHeaders(
+              visible,
+              data.rows,
+              (r) => r.date,
+              (r) => r.amount_amd,
+              (r) => `<div class="payments-received-row${r.source === "excel" ? "" : " payments-received-row-app"}">
                   <span class="payments-received-date">${escapeHtml(formatDateDMY(r.date))}</span>
                   ${sourceBadge(r)}
                   <strong class="text-amount">${formatAmd(r.amount_amd)}</strong>
                 </div>`
-              )
-              .join("")}
+            )}
             ${hidden > 0 ? `<button type="button" class="btn btn-block" data-action="show-more-payments">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
             <div class="payments-received-row payments-received-total"><span>${t("total")}</span><span></span><strong class="text-amount">${formatAmd(data.total_amd)}</strong></div>
           </div>`
@@ -133,16 +154,18 @@ export async function openOrdersSheet(customer) {
       ${
         orders.length
           ? `<div class="card erp-card payments-received-list">
-              ${visible
-                .map(
-                  (o, i) => `<button type="button" class="orders-sheet-row ${unpaidRowClass(o)}" data-order-index="${i}">
+              ${withYearHeaders(
+                visible,
+                orders,
+                (o) => o.order_date,
+                (o) => o.total_amd,
+                (o, i) => `<button type="button" class="orders-sheet-row ${unpaidRowClass(o)}" data-order-index="${i}">
                     <span class="payments-received-date">${escapeHtml(formatDateDMY(o.order_date))}</span>
                     <span class="orders-sheet-code">${escapeHtml(o.order_id)}</span>
                     <strong class="text-amount">${formatAmd(o.total_amd)}</strong>
                     ${Number(o.unpaid_amd) > 0 ? `<span class="orders-sheet-chips">${partialChipHtml(o)} ${dueChipHtml(o.due_days)}</span>` : ""}
                   </button>`
-                )
-                .join("")}
+              )}
               ${hidden > 0 ? `<button type="button" class="btn btn-block" data-action="show-more-orders">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}
               <div class="payments-received-row payments-received-total"><span>${t("total")}</span><span></span><strong class="text-amount">${formatAmd(total)}</strong></div>
             </div>`

@@ -60,6 +60,8 @@ export const icons = {
   truck: uiSvg(`<rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>`),
   warning: uiSvg(`<path d="M10.3 4.2 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/>`),
   mapWarning: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M10.25 4.35 2.7 17.5a2.2 2.2 0 0 0 1.9 3.3h14.8a2.2 2.2 0 0 0 1.9-3.3L13.75 4.35a2 2 0 0 0-3.5 0Z"/><path d="M12 9v4.25M12 17h.01"/></svg>`,
+  // Purchases (a box coming in, lucide "package-plus")
+  purchase: uiSvg(`<path d="M16 16h6"/><path d="M19 13v6"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><path d="m7.5 4.27 9 5.15"/><path d="M3.29 7 12 12l8.71-5"/><path d="M12 22V12"/>`),
   box: uiSvg(`<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.73Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>`),
   more: uiSvg(`<circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/>`),
   // Printer: sheet going in (top), body with a status dot, sheet coming out (bottom, with a text line).

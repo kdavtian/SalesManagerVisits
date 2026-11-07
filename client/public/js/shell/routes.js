@@ -6,7 +6,7 @@ import { dropTabTrails, noteScreen, settleTabSwap } from "./tabs.js";
 import { state } from "../state.js";
 import { markShellShown } from "../launchTiming.js";
 import { shellAllows } from "../opsShell.js";
-import { canSeeCashflow, canRecordBankPayments } from "../shared/roles.js";
+import { canSeeCashflow, canRecordBankPayments, canManagePurchases } from "../shared/roles.js";
 import { mountInstallPrompt } from "../install.js";
 import { preloadArmeniaTiles, preloadCoreViews } from "./preload.js";
 import { applyUpdate, controllerChanged, isUpdatePending } from "../updateBanner.js";
@@ -121,6 +121,11 @@ export async function renderRoute(ctx) {
   // Cashflow holds salaries and every money movement: only the owner's own roles open it (server: canSeeCashflow); anyone else who types or follows the
   // address lands on Home instead of an empty page with an error (a deep link from an old notification, a bookmark).
   if (/^#\/cashflow(\?|$)/.test(location.hash) && !canSeeCashflow(state.user.role)) {
+    location.replace("#/dashboard");
+    return;
+  }
+  // Purchases hold the supplier costs: admin, CEO, operations director and the accountant (server: canManagePurchases)
+  if (/^#\/purchases(\?|$)/.test(location.hash) && !canManagePurchases(state.user.role)) {
     location.replace("#/dashboard");
     return;
   }
@@ -316,6 +321,8 @@ export async function renderRoute(ctx) {
     ctx.currentCleanup = await (await fresh(import("../views/warehouseHome.js"))).renderWarehouseHome(ctx.app, ctx.navigate);
   } else if (path === "#/driver-home") {
     ctx.currentCleanup = await (await fresh(import("../views/driverHome.js"))).renderDriverHome(ctx.app, ctx.navigate);
+  } else if (path === "#/purchases") {
+    (await fresh(import("../views/purchases.js"))).renderPurchases(ctx.app, ctx.navigate);
   } else if (path === "#/cashflow") {
     (await fresh(import("../views/cashflow.js"))).renderCashflow(ctx.app, ctx.navigate);
   } else if (path === "#/returns") {

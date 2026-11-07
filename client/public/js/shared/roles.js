@@ -116,6 +116,26 @@ export function canAssignErpCustomerId(role, customerCreatedBy, userId) {
 // day to day, same as the ERP-linking authority above. Sales director and
 // sales manager can browse the catalog and generate a pricelist, but not
 // touch master pricing.
+// Correct an order after it was confirmed, packed or delivered (owner, 2026-11-07: staff make mistakes; every correction is logged).
+export function canCorrectOrders(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+
+// Purchases (supplier invoices, owner 2026-11-07): see and type them -- costs are in them, so the cost-seeing management and the accountant.
+export function canManagePurchases(role) {
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
+}
+
+// Delete a purchase typed by mistake: the admin and the CEO.
+export function canDeletePurchases(role) {
+  return role === "admin" || role === "ceo";
+}
+
+// Pause / resume the Excel sync (Settings > Integrations, owner 2026-11-07).
+export function canPauseErpSync(role) {
+  return role === "admin" || role === "ceo";
+}
+
 export function canManageProducts(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }

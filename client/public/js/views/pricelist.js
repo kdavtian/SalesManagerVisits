@@ -177,6 +177,7 @@ export async function renderPricelist(root, navigate) {
         <h1>${t("products_page_title")}</h1>
       </div>
       <div class="detail-header-actions">
+        ${canManageProducts() ? `<button type="button" class="icon-btn" id="add-product-btn" aria-label="${t("pa_title")}" title="${t("pa_title")}">${icons.plus}</button>` : ""}
         <button type="button" class="icon-btn" id="method-btn" aria-label="${t("meth_stock_link")}" title="${t("meth_stock_link")}">${icons.info}</button>
         ${seesProductCosts() ? `<button type="button" class="icon-btn" id="calc-btn" aria-label="${t("cc_title")}" title="${t("cc_title")}">${icons.calculator}</button>` : ""}
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
@@ -256,6 +257,10 @@ export async function renderPricelist(root, navigate) {
 
   // --- Expiring-soon banner (item 39) -- surfaces specials ending within
   // 3 days so a manager can decide whether to renew before they lapse.
+  // New product (owner, 2026-11-07: admin and accountants add one in a few taps); the list reloads with it
+  container.querySelector("#add-product-btn")?.addEventListener("click", async () =>
+    (await import("../productAddSheet.js")).openAddProductSheet({ onSaved: () => renderPricelist(root, navigate) })
+  );
   if (canManageProducts()) {
     const expiring = products.filter((p) => p.special_valid_to && daysUntil(p.special_valid_to) >= 0 && daysUntil(p.special_valid_to) <= 3);
     if (expiring.length) {
