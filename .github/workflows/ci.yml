@@ -72,7 +72,8 @@ jobs:
       # CHANGELOG entry for the server version + CLAUDE.md rule 1: a change under client/public/ must bump APP_VERSION AND CACHE_VERSION.
       - run: npm run check:version
         env:
-          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+          # PR: the base branch. Push (main): the commit before the push, so a direct push is checked too (origin/main is HEAD there).
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before || '' }}
 
       - run: npm run verify:ui
 

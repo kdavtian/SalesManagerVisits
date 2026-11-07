@@ -110,8 +110,8 @@ costs in practice.
 The same script (same `npm run check:version`, in the CI `static` job and
 in `scripts/local-ci.sh`, `--quick` included) also enforces `CLAUDE.md`
 rule 1: when any file under `client/public/` changed against the base
-(`BASE_REF`, which CI sets to `origin/<PR base branch>`, else
-`origin/main`), `APP_VERSION` in `client/public/js/version.js` AND the
+(`BASE_REF`, which CI sets to `origin/<PR base branch>` on a PR and to
+the pre-push commit on a push to main, else `origin/main`), `APP_VERSION` in `client/public/js/version.js` AND the
 number in `CACHE_VERSION` (`field-visits-vNNN`) in `client/public/sw.js`
 must both be greater than the base's. A change with nothing under
 `client/public/` needs no bump. Locally it also sees uncommitted and
