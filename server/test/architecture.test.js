@@ -173,6 +173,26 @@ test("no setInterval in the server outside the job scheduler", () => {
   assert.deepEqual(offenders, [], "add a job to server/src/jobs/index.js instead");
 });
 
+// ---- "today" is a Yerevan day -------------------------------------------------------------------------------------------------------
+// new Date().toISOString().slice(0, 10) is the UTC date: a day behind from 00:00 to 04:00 in Yerevan (2026-11-08: a KAD OS campaign made
+// then started "yesterday" and showed as Ended; found by the nightly run at 00:15 Yerevan). Use yerevanToday(): js/util.js in the app,
+// server/src/utils/yerevanDate.js on the server.
+test("'today' is never the UTC date (new Date().toISOString().slice(0, 10))", () => {
+  const offenders = [];
+  const files = [...walk(path.join(SERVER, "src")), ...walk(path.join(PUBLIC, "js"))].filter((f) => f.endsWith(".js"));
+  for (const file of files) {
+    eachNode(parse(file), (n) => {
+      // <new Date() with no arguments>.toISOString().slice(...) / .split("T")
+      if (n.type !== "CallExpression" || n.callee.type !== "MemberExpression" || !["slice", "split", "substring"].includes(n.callee.property.name)) return;
+      const iso = n.callee.object;
+      if (iso?.type !== "CallExpression" || iso.callee.type !== "MemberExpression" || iso.callee.property.name !== "toISOString") return;
+      const d = iso.callee.object;
+      if (d?.type === "NewExpression" && d.callee.name === "Date" && d.arguments.length === 0) offenders.push(`${path.relative(path.resolve(SERVER, ".."), file)}:${n.loc.start.line}`);
+    });
+  }
+  assert.deepEqual(offenders, [], "use yerevanToday() (client/public/js/util.js, server/src/utils/yerevanDate.js)");
+});
+
 // ---- 7. business folders -----------------------------------------------------------------------------------------------------------
 // server/src holds the entry points and folders only (docs/architecture-roadmap.md, step 5): a new module goes into the folder of its
 // area (orders, customers, field, money, products, erp, reports, team, bonus, system, shared), a route file into <area>/routes/.

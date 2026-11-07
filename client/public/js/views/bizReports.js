@@ -1,7 +1,7 @@
 // Weekly scorecard per sales rep and the new-customer pipeline (server: scorecard.js,
 // routes/bizReports.js). Both are plain read-only report pages.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, formatDateDMY, labelColon } from "../util.js";
+import { escapeHtml, formatAmd, formatDateDMY, labelColon, yerevanToday } from "../util.js";
 import { t } from "../i18n.js";
 import { dueChipHtml } from "../debtChip.js";
 
@@ -28,7 +28,7 @@ function metric(label, value, sub = "") {
 }
 
 export async function renderWeeklyScorecard(root, navigate) {
-  let week = new Date().toISOString().slice(0, 10);
+  let week = yerevanToday();
   const controls = `
     <div style="display:flex;align-items:center;gap:8px;margin:8px 0">
       <button type="button" class="icon-btn" id="week-prev" aria-label="${t("scorecard_prev_week")}">&lsaquo;</button>

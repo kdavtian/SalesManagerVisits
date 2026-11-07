@@ -3,7 +3,7 @@
 // (discount, queue priority, delivery promise, progress levels), links each customer's KAD account, and runs campaigns / bundles.
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { activateDialog, escapeHtml, formatAmd, formatDateDMY, showToast } from "../util.js";
+import { activateDialog, escapeHtml, formatAmd, formatDateDMY, showToast, yerevanToday } from "../util.js";
 import { getProductCatalog } from "../productCatalog.js";
 import { searchProducts } from "../productSearch.js";
 
@@ -397,7 +397,7 @@ export async function renderKadOsCampaignsSection(container) {
 
 async function openCampaignSheet(onSaved) {
   const catalog = await getProductCatalog();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = yerevanToday();
   const draft = { kind: "discount", audience: "all", products: [], customers: [] };
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";

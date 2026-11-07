@@ -6,11 +6,12 @@
 import { pool } from "../db/pool.js";
 import { enabled as pushEnabled } from "../shared/push.js";
 import { notifyUser } from "../shared/notifications.js";
+import { yerevanToday } from "../utils/yerevanDate.js";
 
 const lastNotifiedDate = new Map(); // user_id -> "YYYY-MM-DD" already notified
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return yerevanToday();
 }
 
 export async function checkOverdueReminders() {

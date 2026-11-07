@@ -9,7 +9,7 @@
 // Every change runs again by itself (a short pause after the last tap); a stale answer never paints over a newer one.
 import { api } from "../api.js";
 import { t, getLang, hasText, loadAllTexts } from "../i18n.js";
-import { activateDialog, escapeHtml, openInfoPopup, regionLabelHy, saveBlob, showToast, subregionLabelHy } from "../util.js";
+import { activateDialog, escapeHtml, openInfoPopup, regionLabelHy, saveBlob, showToast, subregionLabelHy, yerevanToday } from "../util.js";
 import { icons } from "../icons.js";
 import { installInlineClearButton } from "../searchBar.js";
 import { downloadCsv } from "../deskTable.js";
@@ -655,7 +655,7 @@ export async function renderPivot(root, navigate) {
       if (!b) return;
       const tbl = flatTable();
       const title = viewName || L(cur().label);
-      const base = `${title.replace(/[^\p{L}\p{N} _-]/gu, "").trim() || "pivot"} ${new Date().toISOString().slice(0, 10)}`;
+      const base = `${title.replace(/[^\p{L}\p{N} _-]/gu, "").trim() || "pivot"} ${yerevanToday()}`;
       const plain = (r) => r.map((v, i) => (tbl.numeric[i] ? v : (v ?? "")));
       if (b.dataset.fmt === "csv") {
         downloadCsv(`${base}.csv`, tbl.header, [...tbl.rows.map(plain), ...(tbl.total ? [plain(tbl.total)] : [])]);

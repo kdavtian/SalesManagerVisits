@@ -6,7 +6,7 @@
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
-import { escapeHtml, activateDialog, openInfoPopup, formatDateDMY, planTitle } from "../util.js";
+import { escapeHtml, activateDialog, openInfoPopup, formatDateDMY, planTitle, yerevanToday } from "../util.js";
 import { canPlanForOthers } from "../state.js";
 import { routePlansPage } from "./routePlans.js";
 
@@ -112,7 +112,7 @@ export function openAutoPlanSheet(navigate) {
     createBtn.disabled = true;
     createBtn.textContent = t("rps_creating");
     try {
-      const plan = await api.autoRoutePlanSet({ frequency_days: frequency, days, name: overlay.querySelector("#rps-name").value.trim() || `${t("rps_auto_short")} · ${frequency} ${t("rps_days_unit")} · ${formatDateDMY(new Date().toISOString().slice(0, 10))}` });
+      const plan = await api.autoRoutePlanSet({ frequency_days: frequency, days, name: overlay.querySelector("#rps-name").value.trim() || `${t("rps_auto_short")} · ${frequency} ${t("rps_days_unit")} · ${formatDateDMY(yerevanToday())}` });
       close();
       routePlansPage.refresh?.();
       navigate(`#/route-plan-sets/${plan.id}`);
@@ -165,7 +165,7 @@ export async function renderPlanSetsCard(el, navigate) {
   el.querySelector("#rps-snapshot")?.addEventListener("click", async (e) => {
     e.currentTarget.disabled = true;
     try {
-      const snap = await api.snapshotRoutePlanSet(`${t("rps_current_plan")} ${new Date().toISOString().slice(0, 10)}`);
+      const snap = await api.snapshotRoutePlanSet(`${t("rps_current_plan")} ${yerevanToday()}`);
       routePlansPage.refresh?.();
       navigate(`#/route-plan-sets/${snap.id}`);
     } catch (err) {
@@ -314,7 +314,7 @@ export async function renderRoutePlanSet(root, navigate, id) {
     $("#rps-activate")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       try {
-        await api.activateRoutePlanSet(set.id, `${t("rps_previous_plan")} ${new Date().toISOString().slice(0, 10)}`);
+        await api.activateRoutePlanSet(set.id, `${t("rps_previous_plan")} ${yerevanToday()}`);
         changed();
         set = await api.getRoutePlanSet(set.id);
         paint();

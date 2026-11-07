@@ -7,7 +7,7 @@
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
-import { escapeHtml } from "./util.js";
+import { escapeHtml, yerevanToday } from "./util.js";
 import { downloadCsv } from "./deskTable.js";
 import { periodLabel, periodKey } from "./periodButtons.js";
 
@@ -171,7 +171,7 @@ function addTools(pane, key, title) {
   tools.addEventListener("click", (e) => {
     const tool = e.target.closest("[data-report-tool]")?.dataset.reportTool;
     if (tool === "print") window.print();
-    else if (tool === "export") downloadCsv(`report-${key}-${new Date().toISOString().slice(0, 10)}.csv`, [title], reportRows(pane));
+    else if (tool === "export") downloadCsv(`report-${key}-${yerevanToday()}.csv`, [title], reportRows(pane));
   });
 }
 
