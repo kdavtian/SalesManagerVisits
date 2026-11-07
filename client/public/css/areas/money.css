@@ -1746,3 +1746,27 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
   letter-spacing: 0;
   white-space: nowrap;
 }
+
+/* Add a cash row (owner, 2026-11-07): IN / OUT / Transfer first, then category, then subcategory */
+.cf-dir3 { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--control-border, var(--border)); border-radius: 12px; overflow: hidden; margin: 4px 0 10px; }
+.cf-dir3 button { min-height: 48px; border: 0; border-left: 1px solid var(--border); background: var(--bg-card); color: var(--text-dim); font: inherit; font-weight: 700; cursor: pointer; }
+.cf-dir3 button:first-child { border-left: 0; }
+.cf-dir3 button.cf-dir-on[data-dir="in"] { background: color-mix(in srgb, var(--success, #2ea043) 16%, var(--bg-card)); color: var(--success, #2ea043); }
+.cf-dir3 button.cf-dir-on[data-dir="out"] { background: color-mix(in srgb, var(--danger, #e33b43) 14%, var(--bg-card)); color: var(--danger, #e33b43); }
+.cf-dir3 button.cf-dir-on[data-dir="transfer"] { background: var(--accent-soft, rgba(10, 132, 255, 0.12)); color: var(--accent-dark, var(--accent)); }
+#cf-flow { margin-bottom: 8px; }
+
+/* Categories manager (cashflowCategories.js) */
+.ccm-hint { font-size: 0.85rem; }
+.ccm-dir { margin: 16px 0 6px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
+.ccm-group { padding: 0; overflow: hidden; margin-bottom: 8px; }
+.ccm-row { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 10px; min-height: 48px; padding: 8px 12px; border: 0; border-top: 1px solid var(--border); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ccm-row.ccm-head { border-top: 0; background: var(--bg-muted, rgba(120, 120, 128, 0.06)); }
+.ccm-sub { padding-left: 26px; }
+.ccm-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.ccm-note { font-size: 0.78rem; }
+.ccm-n { font-variant-numeric: tabular-nums; flex: none; }
+.ccm-add-sub { display: block; width: 100%; min-height: 44px; padding: 8px 26px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--accent); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.ccm-sheet form label, #ccm-form label { display: block; margin-bottom: 8px; }
+.ccm-name .badge { align-self: flex-start; }
+.ccm-sheet h2 { display: flex; align-items: center; gap: 6px; padding-right: 52px; }

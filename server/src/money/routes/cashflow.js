@@ -4,7 +4,7 @@ import { Router } from "express";
 import multer from "multer";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { canSeeCashflow, canEditCashflow, isCashflowManagement, CASH_EDIT_WINDOW_DAYS } from "../../shared/roles.js";
+import { canSeeCashflow, canEditCashflow, isCashflowManagement, canManageCashCategories, CASH_EDIT_WINDOW_DAYS } from "../../shared/roles.js";
 import { readCashWorkbook, applyCashLedger, cleanEntry } from "../cashflow.js";
 import { bankRouter } from "./bankStatements.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
@@ -31,7 +31,11 @@ cashflowRouter.get("/meta", async (req, res) => {
        GROUP BY a.id ORDER BY a.sort_order, a.name`,
       [asOf]
     ),
-    pool.query("SELECT id, name, kind, sort_order FROM cash_categories ORDER BY sort_order, name"),
+    pool.query(
+      `SELECT c.id, c.name, c.kind, c.sort_order, c.parent_id, c.is_group, c.direction, c.section, c.note, c.active,
+              (SELECT count(*)::int FROM cash_entries e WHERE e.category_id = c.id) AS n
+         FROM cash_categories c ORDER BY c.sort_order, c.name`
+    ),
     pool.query("SELECT at, via, rows_in, rows_skipped, file_name FROM cash_syncs ORDER BY at DESC LIMIT 1"),
     pool.query("SELECT MIN(entry_date)::text AS first, MAX(entry_date)::text AS last, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE origin = 'excel')::int AS excel_rows FROM cash_entries"),
     pool.query("SELECT fx_rate::float8 AS rate FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1"),
@@ -40,7 +44,7 @@ cashflowRouter.get("/meta", async (req, res) => {
   const { rows: [pending] } = await pool.query("SELECT COUNT(*)::int AS n FROM cash_entry_requests WHERE status = 'pending'" + (management ? "" : " AND requested_by = $1"), management ? [] : [req.user.id]);
   res.json({
     as_of: asOf, accounts, categories, last_sync: sync ?? null, range, usd_rate: rate?.rate ?? null, can_edit: canEditCashflow(req.user.role),
-    is_management: management, edit_window_days: CASH_EDIT_WINDOW_DAYS, pending_requests: pending.n,
+    is_management: management, edit_window_days: CASH_EDIT_WINDOW_DAYS, pending_requests: pending.n, can_manage_categories: canManageCashCategories(req.user.role),
   });
 });
 
@@ -50,7 +54,11 @@ function filters(q, params) {
   if (DATE.test(String(q.from ?? ""))) where.push(`e.entry_date >= $${params.push(q.from)}`);
   if (DATE.test(String(q.to ?? ""))) where.push(`e.entry_date <= $${params.push(q.to)}`);
   if (q.account) where.push(`e.account_id = $${params.push(Number(q.account))}`);
-  if (q.category) where.push(`e.category_id = $${params.push(Number(q.category))}`);
+  // a group stands for itself and its subcategories
+  if (q.category) {
+    const p = params.push(Number(q.category));
+    where.push(`(e.category_id = $${p} OR c.parent_id = $${p})`);
+  }
   const cats = String(q.categories ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0);
   if (cats.length) where.push(`e.category_id = ANY($${params.push(cats)}::int[])`);
   // In / Out cards: money that really came in or went out -- moves between our own accounts are not counted (same rule as the totals).
@@ -108,11 +116,11 @@ cashflowRouter.get("/summary", async (req, res) => {
   const where = filters({ from: req.query.from, to: req.query.to, account: req.query.account }, params);
   const [{ rows: byCategory }, { rows: byMonth }] = await Promise.all([
     pool.query(
-      `SELECT c.id, c.name, c.kind,
+      `SELECT c.id, c.name, c.kind, c.parent_id, pc.name AS parent, c.section,
               COALESCE(SUM(e.amount_amd) FILTER (WHERE e.amount > 0), 0)::float8 AS in_amd,
               COALESCE(-SUM(e.amount_amd) FILTER (WHERE e.amount < 0), 0)::float8 AS out_amd,
               COUNT(*)::int AS n
-       ${FROM} ${where} GROUP BY c.id, c.name, c.kind ORDER BY c.kind, SUM(ABS(e.amount_amd)) DESC`,
+       ${FROM} LEFT JOIN cash_categories pc ON pc.id = c.parent_id ${where} GROUP BY c.id, c.name, c.kind, c.parent_id, pc.name, c.section ORDER BY c.kind, SUM(ABS(e.amount_amd)) DESC`,
       params
     ),
     pool.query(
@@ -373,16 +381,131 @@ cashflowRouter.post("/accounts", async (req, res) => {
     throw err;
   }
 });
+const DIRECTIONS = ["in", "out", "both", "transfer"];
+const SECTIONS = ["operating", "investing", "financing", "owner", "internal"];
+// a group's direction decides what a new subcategory under it is
+// names the app itself reads (payroll: "Salary"; customer payments, commission, last payment: "Oil order"): they can be moved and noted,
+// not renamed or removed
+const SYSTEM_CATEGORIES = new Set(["oil order", "salary"]);
+const kindFor = (direction, section) => (section === "internal" || direction === "transfer" ? "internal" : section === "owner" ? "owner" : direction === "in" ? "income" : "expense");
+
+// New category: a group (admin / CEO) or a subcategory under a group (anyone who adds cash rows, from the Add form).
 cashflowRouter.post("/categories", async (req, res) => {
   if (!canEditCashflow(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const name = String(req.body?.name ?? "").trim().slice(0, 60);
   if (!name) return res.status(400).json({ error: "Enter the name" });
-  if (!["income", "expense", "owner", "internal"].includes(req.body?.kind)) return res.status(400).json({ error: "Choose what kind of category it is" });
+  const parentId = req.body?.parent_id ? Number(req.body.parent_id) : null;
+  let parent = null;
+  if (parentId) {
+    parent = (await pool.query("SELECT * FROM cash_categories WHERE id = $1 AND is_group", [parentId])).rows[0];
+    if (!parent) return res.status(400).json({ error: "Choose the category it belongs to" });
+  } else if (req.body?.is_group) {
+    if (!canManageCashCategories(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  }
+  const direction = parent?.direction ?? (DIRECTIONS.includes(req.body?.direction) ? req.body.direction : null);
+  const section = parent?.section ?? (SECTIONS.includes(req.body?.section) ? req.body.section : null);
+  const kind = ["income", "expense", "owner", "internal"].includes(req.body?.kind) && !parent ? req.body.kind : kindFor(direction ?? "out", section ?? "operating");
+  if (!parent && !direction && !["income", "expense", "owner", "internal"].includes(req.body?.kind)) return res.status(400).json({ error: "Choose what kind of category it is" });
   try {
-    const { rows } = await pool.query("INSERT INTO cash_categories (name, kind) VALUES ($1, $2) RETURNING id", [name, req.body.kind]);
+    const { rows } = await pool.query(
+      `INSERT INTO cash_categories (name, kind, parent_id, is_group, direction, section, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [name, kind, parent?.id ?? null, Boolean(req.body?.is_group) && !parent, direction ?? (kind === "income" ? "in" : kind === "expense" ? "out" : kind === "internal" ? "transfer" : "both"), section ?? (kind === "internal" ? "internal" : kind === "owner" ? "owner" : "operating"), req.body?.note ? String(req.body.note).slice(0, 500) : null]
+    );
     res.status(201).json({ id: rows[0].id });
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ error: "This category already exists" });
     throw err;
   }
+});
+
+// Rename, note, move under another group, direction / section of a group, on / off (admin / CEO).
+cashflowRouter.patch("/categories/:id", async (req, res) => {
+  if (!canManageCashCategories(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const { rows: [cat] } = await pool.query("SELECT * FROM cash_categories WHERE id = $1", [id]);
+  if (!cat) return res.status(404).json({ error: "Category not found" });
+  const b = req.body ?? {};
+  const next = { name: cat.name, note: cat.note, parent_id: cat.parent_id, direction: cat.direction, section: cat.section, active: cat.active, kind: cat.kind };
+  if (b.name !== undefined && String(b.name).trim().toLowerCase() !== cat.name.toLowerCase() && SYSTEM_CATEGORIES.has(cat.name.toLowerCase())) {
+    return res.status(409).json({ error: "This category is used by the app (payments, payroll): it keeps its name", code: "system_category" });
+  }
+  if (b.name !== undefined) {
+    next.name = String(b.name).trim().slice(0, 60);
+    if (!next.name) return res.status(400).json({ error: "Enter the name" });
+  }
+  if (b.note !== undefined) next.note = b.note ? String(b.note).slice(0, 500) : null;
+  if (b.active !== undefined) next.active = Boolean(b.active);
+  if (b.parent_id !== undefined && !cat.is_group) {
+    const parent = b.parent_id ? (await pool.query("SELECT * FROM cash_categories WHERE id = $1 AND is_group", [Number(b.parent_id)])).rows[0] : null;
+    if (b.parent_id && !parent) return res.status(400).json({ error: "Choose the category it belongs to" });
+    next.parent_id = parent?.id ?? null;
+    if (parent) Object.assign(next, { direction: parent.direction, section: parent.section, kind: kindFor(parent.direction, parent.section) });
+  }
+  if (cat.is_group && (b.direction !== undefined || b.section !== undefined)) {
+    if (b.direction !== undefined && !DIRECTIONS.includes(b.direction)) return res.status(400).json({ error: "Unknown direction" });
+    if (b.section !== undefined && !SECTIONS.includes(b.section)) return res.status(400).json({ error: "Unknown section" });
+    next.direction = b.direction ?? next.direction;
+    next.section = b.section ?? next.section;
+    next.kind = kindFor(next.direction, next.section);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("UPDATE cash_categories SET name = $2, note = $3, parent_id = $4, direction = $5, section = $6, active = $7, kind = $8 WHERE id = $1", [id, next.name, next.note, next.parent_id, next.direction, next.section, next.active, next.kind]);
+    // a group's direction / section go down to its subcategories
+    if (cat.is_group) await client.query("UPDATE cash_categories SET direction = $2, section = $3, kind = $4 WHERE parent_id = $1", [id, next.direction, next.section, next.kind]);
+    // the old name keeps working for the Excel rows that still carry it
+    if (next.name.toLowerCase() !== cat.name.toLowerCase()) {
+      await client.query("INSERT INTO cash_category_aliases (name, category_id) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id", [cat.name.toLowerCase(), id]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") return res.status(409).json({ error: "This category already exists" });
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true });
+});
+
+// Remove a category (admin / CEO). Its rows -- and, for a group, its subcategories -- go to `move_to` first; the removed name stays as an
+// alias of `move_to`, so an Excel row that still says it lands there. A category with nothing in it is simply removed.
+cashflowRouter.delete("/categories/:id", async (req, res) => {
+  if (!canManageCashCategories(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  const moveTo = req.body?.move_to ? Number(req.body.move_to) : req.query.move_to ? Number(req.query.move_to) : null;
+  const { rows: [cat] } = await pool.query("SELECT * FROM cash_categories WHERE id = $1", [id]);
+  if (!cat) return res.status(404).json({ error: "Category not found" });
+  if (SYSTEM_CATEGORIES.has(cat.name.toLowerCase())) return res.status(409).json({ error: "This category is used by the app (payments, payroll): it stays", code: "system_category" });
+  const { rows: [{ n }] } = await pool.query("SELECT count(*)::int AS n FROM cash_entries WHERE category_id = $1", [id]);
+  const { rows: children } = await pool.query("SELECT id FROM cash_categories WHERE parent_id = $1", [id]);
+  if ((n || children.length) && !moveTo) return res.status(400).json({ error: "Choose where its rows go", code: "move_to_required", rows: n, subcategories: children.length });
+  let target = null;
+  if (moveTo) {
+    if (moveTo === id) return res.status(400).json({ error: "Choose another category" });
+    target = (await pool.query("SELECT * FROM cash_categories WHERE id = $1", [moveTo])).rows[0];
+    if (!target) return res.status(400).json({ error: "Choose where its rows go" });
+    if (children.length && !target.is_group) return res.status(400).json({ error: "The subcategories need a category to move to", code: "group_required" });
+    if (!cat.is_group && target.parent_id === id) return res.status(400).json({ error: "Choose another category" });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (target) {
+      await client.query("UPDATE cash_entries SET category_id = $2 WHERE category_id = $1", [id, target.id]);
+      await client.query("UPDATE cash_categories SET parent_id = $2, direction = $3, section = $4, kind = $5 WHERE parent_id = $1", [id, target.id, target.direction, target.section, kindFor(target.direction, target.section)]);
+      await client.query("UPDATE cash_category_aliases SET category_id = $2 WHERE category_id = $1", [id, target.id]);
+      await client.query("INSERT INTO cash_category_aliases (name, category_id) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET category_id = EXCLUDED.category_id", [cat.name.toLowerCase(), target.id]);
+    }
+    await client.query("DELETE FROM cash_categories WHERE id = $1", [id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ ok: true, moved: n });
 });

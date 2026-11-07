@@ -24,6 +24,8 @@ export const moneyApi = {
   getCashCustomers: () => request("/cashflow/customers"),
   addCashAccount: (data) => json("/cashflow/accounts", "POST", data),
   addCashCategory: (data) => json("/cashflow/categories", "POST", data),
+  updateCashCategory: (id, data) => json(`/cashflow/categories/${id}`, "PATCH", data),
+  deleteCashCategory: (id, moveTo = null) => json(`/cashflow/categories/${id}`, "DELETE", moveTo ? { move_to: moveTo } : {}),
   // Bank statements (see server/src/money/routes/bankStatements.js)
   previewBankStatement: (file, accountId, mapping) => request("/cashflow/bank/preview", { method: "POST", body: bankForm(file, accountId, mapping) }),
   importBankStatement: (file, accountId, mapping) => request("/cashflow/bank/import", { method: "POST", body: bankForm(file, accountId, mapping) }),

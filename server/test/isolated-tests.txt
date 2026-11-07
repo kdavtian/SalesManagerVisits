@@ -28,3 +28,4 @@ test/integration/vaghinakFullDigest.test.js
 test/integration/erpSyncPause.test.js
 test/integration/productAdd.test.js
 test/integration/purchases.test.js
+test/integration/cashCategoryTree.test.js

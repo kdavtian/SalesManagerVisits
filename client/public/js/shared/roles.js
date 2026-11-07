@@ -131,6 +131,11 @@ export function canDeletePurchases(role) {
   return role === "admin" || role === "ceo";
 }
 
+// Cashflow categories (the IN / OUT -> category -> subcategory tree): add, rename, move, remove with a target (owner, 2026-11-07: admin).
+export function canManageCashCategories(role) {
+  return role === "admin" || role === "ceo";
+}
+
 // Pause / resume the Excel sync (Settings > Integrations, owner 2026-11-07).
 export function canPauseErpSync(role) {
   return role === "admin" || role === "ceo";
