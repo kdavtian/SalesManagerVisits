@@ -57,7 +57,7 @@ When unsure between two sizes, pick the larger.
 - If the request is unclear, ask short concrete questions (numbered, with a default you would choose). Otherwise decide and state the
   assumption.
 
-## Step 3 - Map the blast radius (whole system, three repos)
+## Step 3 - Map the blast radius (whole system, four repos)
 Open `references/system-map.md`, find every module the change touches, and list what **depends on** it: other screens, shared modules,
 server rules, reports, jobs, notifications, the bot, Lily, KAD OS, the Excel reconcile, the offline queue, caches, tests. Then **grep the
 code** for the function, column, endpoint, setting key or i18n key you will change - the map is a guide, the code is the truth. A change
