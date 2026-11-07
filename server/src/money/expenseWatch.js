@@ -311,10 +311,17 @@ export async function expenseOverview(now = new Date(), db = pool) {
     db.query(`SELECT count(*)::int AS n FROM expense_alerts WHERE status = 'open' AND kind = 'no_description'`),
     db.query(`SELECT count(*)::int AS n FROM expense_alerts WHERE status = 'open' AND kind = 'app_expense_not_in_excel'`),
     db.query(
-      `SELECT COALESCE(u.name_hy, u.name) AS rep, SUM(ce.amount_amd) AS spend, count(*)::int AS n,
-              count(*) FILTER (WHERE NOT ${APP_EXPENSE_IN_EXCEL_SQL} AND ${APP_EXPENSE_DAYS_OLD_SQL} >= ${MATCH_DAYS})::int AS not_in_excel
-         FROM cash_expenses ce JOIN users u ON u.id = ce.user_id
-        WHERE ce.created_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan') GROUP BY 1 ORDER BY 2 DESC LIMIT 15`
+      // spend = this month; "not in Excel" = every expense the Excel still does not show (the same 120-day window as the alert),
+      // so on the 1st-5th of a month a rep's unmatched expense from late last month does not vanish from this card
+      `WITH rx AS (
+         SELECT ce.*, (ce.created_at >= (date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')) AS this_month,
+                (NOT ${APP_EXPENSE_IN_EXCEL_SQL} AND ${APP_EXPENSE_DAYS_OLD_SQL} >= ${MATCH_DAYS}) AS missing
+           FROM cash_expenses ce WHERE ce.created_at > now() - interval '120 days'
+       )
+       SELECT COALESCE(u.name_hy, u.name) AS rep, COALESCE(SUM(rx.amount_amd) FILTER (WHERE rx.this_month), 0) AS spend,
+              (count(*) FILTER (WHERE rx.this_month))::int AS n, (count(*) FILTER (WHERE rx.missing))::int AS not_in_excel
+         FROM rx JOIN users u ON u.id = rx.user_id
+        WHERE rx.this_month OR rx.missing GROUP BY 1 ORDER BY 2 DESC, 4 DESC LIMIT 15`
     ),
   ]);
   return {
