@@ -32,6 +32,7 @@ import { volumeReportRouter } from "./reports/routes/volumeReport.js";
 import { locationsRouter } from "./field/routes/locations.js";
 import { integrationRouter } from "./erp/routes/integration.js";
 import { integrationAdminRouter } from "./erp/routes/integrationAdmin.js";
+import { opsApiRouter } from "./reports/routes/opsApi.js";
 import { erpSyncRouter } from "./erp/routes/erpSync.js";
 import { geocodeRouter } from "./customers/routes/geocode.js";
 import { visitPlansRouter } from "./field/routes/visitPlans.js";
@@ -220,6 +221,8 @@ app.use("/api/locations", express.json(), locationsRouter);
 // A signed PDF from Lily arrives as the raw request body (<= 15 MB).
 app.use("/api/integration/v1", express.raw({ type: "application/pdf", limit: "15mb" }), express.json({ limit: "2mb" }), integrationRouter);
 app.use("/api/integration-tokens", express.json(), integrationAdminRouter);
+// The Claude scheduled agents' read-only, pseudonymised feed (ops-read token; docs/ops-api.md). Ahead of /api/ops (Operations control).
+app.use("/api/ops/v1", opsApiRouter);
 app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
 app.use("/api/geocode", geocodeRouter);
 app.use("/api/visit-plans", express.json(), visitPlansRouter);

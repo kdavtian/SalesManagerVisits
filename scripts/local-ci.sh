@@ -3,7 +3,8 @@
 # Starts Postgres if it is down, gives every job its own fresh test database (like CI), runs the static checks, the test shards in
 # parallel and the isolated tests, and ends with ONE summary line. Full logs: /tmp/local-ci/*.log (override with LOCAL_CI_LOG).
 #   --quick     static checks only (version, ui, lint, audit): about 30 s
-#   --e2e       also the browser smoke tests (Chrome) and the iPhone tests (Safari's engine, WebKit, installed on first use)
+#   --e2e       also the browser smoke tests (Chrome), the iPhone tests (Safari's engine, WebKit, installed on first use) and the screen
+#               pictures against origin/main (shots)
 #   --no-audit  skip `npm audit` (no network)
 # Env: SHARDS (default 4), PGBASE (default: tries postgres://gmm:gmm@127.0.0.1:5432 then postgres://postgres:postgres@localhost:5432).
 set -uo pipefail
@@ -63,12 +64,15 @@ iphone() {
   fresh_db fieldvisits_ci_iphone && DATABASE_URL="$PGBASE/fieldvisits_ci_iphone" CLIENT_BUILD=1 E2E_PORT=3201 PLAYWRIGHT_BROWSERS_PATH="$WEBKIT_DIR" npm run test:e2e:iphone -- --output=test-results-iphone
 }
 # (its own output folder: each Playwright run empties its folder at start, and the Chrome run beside it uses test-results/)
+# Every key screen pictured on origin/main's code and on this code (npm run shots:main, server/scripts/shots-vs-main.mjs): any changed pixel
+# fails. A meant change: CI skips it when the PR has the label "ui-change"; here, read its result as information then.
+shots()  { DATABASE_URL="$PGBASE/fieldvisits_ci_shots" SHOTS_BUILT=1 npm run shots:main; }
 
 jobs=(static); run static static &
 if [ "$QUICK" = 0 ]; then
   for i in $(seq 1 "$SHARDS"); do jobs+=("shard$i"); run "shard$i" shard "$i" & done
   jobs+=(isolated); run isolated isolated &
-  [ "$E2E" = 1 ] && { npm run build:client >/dev/null || exit 1; jobs+=(e2e iphone); run e2e e2e & run iphone iphone & }
+  [ "$E2E" = 1 ] && { npm run build:client >/dev/null || exit 1; jobs+=(e2e iphone shots); run e2e e2e & run iphone iphone & run shots shots & }
 fi
 wait
 # alone, on a quiet machine (see SPEED_TESTS above)

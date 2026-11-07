@@ -19,7 +19,8 @@
     "test:e2e:iphone": "playwright test --project=iphone-webkit",
     "audit:ui": "playwright test ui-audit",
     "check:version": "node scripts/check-version-consistency.mjs",
-    "find:orphan-uploads": "node scripts/find-orphan-uploads.mjs"
+    "find:orphan-uploads": "node scripts/find-orphan-uploads.mjs",
+    "shots:main": "node scripts/shots-vs-main.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

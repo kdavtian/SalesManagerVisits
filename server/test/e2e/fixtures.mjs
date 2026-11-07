@@ -228,6 +228,9 @@ export async function newIdentityPage(browser) {
   return { context, page };
 }
 
+// A 1x1 PNG, the stand-in map tile (see the page fixture below).
+const TILE_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+
 export const test = base.extend({
   // App defaults to Armenian (i18n.js's getLang()) unless localStorage
   // already says "en" -- forced here, before the app's own first script
@@ -236,6 +239,20 @@ export const test = base.extend({
   page: async ({ page }, use) => {
     await page.addInitScript(() => {
       localStorage.setItem("fieldvisits_lang", "en");
+    });
+    // Map tiles come from outside servers (OSM, Wikimedia). A test machine that cannot reach them, or that they refuse, made the
+    // app show "The map couldn't load" over the map and failed map tests at random (nightly, 2026-11). Every test gets local
+    // tiles instead; a spec's own page.route() for the same hosts still wins. Each tile has its own byte size: identical tiles
+    // look like a provider's "blocked" image to the app's check (views/map/tiles.js) and would switch providers.
+    let tileNo = 0;
+    await page.context().route(/tile\.openstreetmap\.org|maps\.wikimedia\.org/, (route) => {
+      tileNo += 1;
+      route.fulfill({
+        status: 200,
+        contentType: "image/png",
+        headers: { "Access-Control-Allow-Origin": "*" },
+        body: Buffer.concat([TILE_PNG, Buffer.alloc(tileNo % 997)]), // bytes after the image's end are ignored by browsers
+      });
     });
     await use(page);
   },

@@ -26,10 +26,11 @@ function eachNode(node, visit) {
 }
 
 // ---- 1. every API route needs a login -------------------------------------------------------------------------------------------------
-// A route counts as guarded when requireAuth (a person's session), requireSyncKey (the CEO bot) or requireIntegrationToken (Lily) runs
+// A route counts as guarded when requireAuth (a person's session), requireSyncKey (the CEO bot), requireIntegrationToken (Lily) or
+// requireOpsToken (the Claude agents' read-only feed, ops-read scope: reports/routes/opsApi.js) runs
 // before it: in the route itself or as router.use() earlier in its router. The few routes that must work without a login are listed here
 // with the reason; anything else unguarded fails.
-const GUARDS = new Set(["requireAuth", "requireSyncKey", "requireIntegrationToken"]);
+const GUARDS = new Set(["requireAuth", "requireSyncKey", "requireIntegrationToken", "requireOpsToken"]);
 const PUBLIC_ROUTES = new Map([
   ["app.js GET /api/health", "load balancer / deploy check"],
   ["app.js GET /api/ready", "deploy check: database reachable"],

@@ -160,6 +160,9 @@ async function clearGone(db, kind, activeKeys) {
   );
 }
 
+// how far back "recorded in the app, still not in the Excel" looks (also the ops feed's reconcile, reports/opsFeed/reconcile.js)
+export const NOT_IN_EXCEL_LOOKBACK_DAYS = 120;
+
 const sevByAge = (days) => (days >= 14 ? 3 : days >= 7 ? 2 : 1);
 
 // 1) recorded in the app, still not in the Excel
@@ -169,7 +172,7 @@ async function detectNotInExcel(db, s, created) {
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name
        FROM payments p LEFT JOIN customers c ON c.id = p.customer_id
       WHERE p.status IN ('pending', 'approved') AND p.erp_customer_id_snapshot IS NOT NULL
-        AND ${DAYS_OLD_SQL} >= $1 AND NOT ${IN_EXCEL_SQL} AND p.payment_date > now() - interval '120 days'`,
+        AND ${DAYS_OLD_SQL} >= $1 AND NOT ${IN_EXCEL_SQL} AND p.payment_date > now() - interval '${NOT_IN_EXCEL_LOOKBACK_DAYS} days'`,
     [s.unmatchedDays]
   );
   const keys = [];

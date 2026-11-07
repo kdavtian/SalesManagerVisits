@@ -11,7 +11,8 @@ import { bullets } from "../utils/bullets.js";
 import { rolesWhere, seesExpenseWatch } from "../shared/roles.js";
 
 export const EXPENSE_ROLES = rolesWhere(seesExpenseWatch);
-const MATCH_DAYS = 5;
+export const MATCH_DAYS = 5;
+export const EXPENSE_LOOKBACK_DAYS = 120; // older field expenses are not chased (also the ops feed's reconcile)
 const SPIKE_FACTOR = 1.5;
 const SPIKE_MIN_AMD = 300000;
 const BIG_MIN_AMD = 500000;
@@ -189,7 +190,7 @@ export async function runExpenseWatch(now = new Date(), db = pool) {
   const missing = await db.query(
     `SELECT ce.id, ce.amount_amd, ce.purpose, COALESCE(u.name_hy, u.name) AS rep, ${APP_EXPENSE_DAYS_OLD_SQL}::int AS days
        FROM cash_expenses ce JOIN users u ON u.id = ce.user_id
-      WHERE ${APP_EXPENSE_DAYS_OLD_SQL} >= ${MATCH_DAYS} AND ce.created_at > now() - interval '120 days' AND NOT ${APP_EXPENSE_IN_EXCEL_SQL}`
+      WHERE ${APP_EXPENSE_DAYS_OLD_SQL} >= ${MATCH_DAYS} AND ce.created_at > now() - interval '${EXPENSE_LOOKBACK_DAYS} days' AND NOT ${APP_EXPENSE_IN_EXCEL_SQL}`
   );
   const missKeys = [];
   for (const r of missing.rows) {

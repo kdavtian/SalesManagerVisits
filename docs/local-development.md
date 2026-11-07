@@ -46,6 +46,19 @@ npm run test:e2e        # full Playwright suite (slower; this is what runs night
 against your local Postgres, not a mock. It truncates/reseeds tables it
 touches; don't point it at anything you care about.
 
+### Screen pictures: "did any screen change by accident?"
+
+`npm run shots:main [-- <git ref, default origin/main>]` (`server/scripts/shots-vs-main.mjs`) photographs every key screen of the admin
+and of a sales rep (bottom tabs, Payments and its "+" sheet, the customer card, a new order and its "Your order" sheet, Settings ...)
+on a 390 px iPhone in Armenian/light and English/dark, a 440 px iPhone (Armenian/light) and a 1440 px desktop: first on the code of the
+ref (a temporary git worktree), then on this code, and fails on any changed pixel. Both sides use the deploy build, a fresh database
+`<DATABASE_URL name>_shots` with fixed data (`server/test/e2e/shots-seed.mjs`), a fixed clock (today 11:00 Yerevan), no animations,
+no background jobs and a plain map tile. Nothing is stored in the repository. The diff pictures land in `server/test-results-shots/`
+(CI: artifact `screen-differences`). About 1.5 minutes; `bash scripts/local-ci.sh --e2e` runs it too.
+
+CI runs it on every pull request as `e2e (screens vs base)`, inside the required `e2e-smoke`. When a screen is MEANT to change (a new
+look, a new feature), add the label **`ui-change`** to the pull request: CI re-runs and skips this check. Remove the label to run it again.
+
 Playwright needs a matching browser build:
 ```bash
 npx playwright install --with-deps chromium

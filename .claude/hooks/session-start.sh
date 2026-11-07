@@ -5,6 +5,28 @@
 # Remote sessions only; idempotent; never prints secrets (the values below are CI's throw-away test constants).
 set -euo pipefail
 [ "${CLAUDE_CODE_REMOTE:-}" = "true" ] || exit 0
+
+# 0. A branch whose work is already merged starts again from main (2026-11 analysis: 128 "restart the branch" commits by hand).
+#    Only when the working tree is clean and merging the branch into origin/main would change nothing (squash-merged work):
+#    the branch then becomes origin/main plus a "keep history" merge of its remote copy, so the next push is a normal one.
+(
+  cd "${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+  br="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+  [ "$br" = "HEAD" ] || [ "$br" = "main" ] && exit 0
+  [ -z "$(git status --porcelain 2>/dev/null)" ] || exit 0
+  git fetch -q origin main 2>/dev/null || exit 0
+  git merge-base --is-ancestor origin/main HEAD 2>/dev/null && exit 0   # already up to date with main
+  if git merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+    git merge -q --ff-only origin/main && echo "session-start: $br fast-forwarded to main"
+    exit 0
+  fi
+  tree="$(git merge-tree --write-tree origin/main HEAD 2>/dev/null | head -1)" || exit 0
+  [ "$tree" = "$(git rev-parse origin/main^{tree})" ] || exit 0       # the branch still has work main does not: leave it alone
+  old="$(git rev-parse HEAD)"
+  git checkout -q -B "$br" origin/main
+  git -c user.name="session-start" -c user.email="session-start@users.noreply.github.com" merge -q -s ours --no-edit "$old" \
+    -m "Keep the merged history of the branch" && echo "session-start: $br restarted from main (its work was already merged)"
+) || true
 cd "${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}/server"
 
 # 1. dependencies (npm install, not ci: the container state is cached after this hook)
@@ -19,6 +41,10 @@ fi
 
 # 3. the disposable test database, migrated (skipped quietly when there is no local Postgres)
 PGBASE=""
+# a brand-new container's Postgres has no password: give the local superuser the throw-away test password once (root only)
+if [ "$(id -u)" = 0 ] && command -v psql >/dev/null 2>&1 && ! psql "postgres://postgres:postgres@localhost:5432/postgres" -tAc 'select 1' >/dev/null 2>&1; then
+  su postgres -c "psql -qc \"ALTER USER postgres PASSWORD 'postgres'\"" >/dev/null 2>&1 || true
+fi
 for c in "postgres://gmm:gmm@127.0.0.1:5432" "postgres://postgres:postgres@localhost:5432"; do
   psql "$c/postgres" -tAc 'select 1' >/dev/null 2>&1 && { PGBASE="$c"; break; }
 done

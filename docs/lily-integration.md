@@ -121,6 +121,8 @@ returned, not created). Seed it from Lily's list of ~120 HC codes.
   `GET /api/integration-tokens/audit`.
 - Only a SHA-256 of the token is stored. A token can read orders/products and write accounting
   status only; it cannot edit items, prices, customers or anything else.
+- Lily's tokens have scope `accounting` (the default). The Claude agents' read-only feed uses tokens of
+  scope `ops-read` (`create "..." --ops`, docs/ops-api.md); each API answers 403 to the other's token.
 
 ## Test mode
 
