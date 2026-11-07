@@ -4,6 +4,8 @@
 // open. A fresh start (the phone closed the app, an update reloaded it) opens that screen instead of Home, only for the same signed-in person
 // and only within MAX_AGE_MS. A screen's address never carries anything private: the saved record has no customer data, only settings of the
 // list (which tab, which filters).
+import { state } from "./state.js";
+
 const KEY = "fv_last_view";
 const MAX_AGE_MS = 12 * 60 * 60 * 1000;
 // Screens that are in the middle of doing something (a new order, a check-in, adding a place on the map): never reopened by themselves.
@@ -57,19 +59,25 @@ export function viewToReopen(userId, currentHash) {
     // The app was opened ON a screen (a link, a notification, or a reload onto the same screen after an update): that screen stays; a reload of
     // the very screen that was just left (the page saves itself as it goes) also gets its scroll, search and filters back.
     if (record && record.userId === userId && Date.now() - record.savedAt < SAME_SCREEN_MS && record.hash.split("?")[0] === base) {
-      pending = { hash: record.hash, scroll: Number(record.scroll) || 0, state: record.state ?? null, until: Date.now() + STATE_WAIT_MS };
+      pending = { userId: record.userId, hash: record.hash, scroll: Number(record.scroll) || 0, state: record.state ?? null, until: Date.now() + STATE_WAIT_MS };
     }
     return null;
   }
   if (!record || record.userId !== userId || Date.now() - record.savedAt > MAX_AGE_MS) return null;
   if (record.hash.split("?")[0] === "#/dashboard" || NOT_RESTORED.test(record.hash)) return null;
-  pending = { hash: record.hash, scroll: Number(record.scroll) || 0, state: record.state ?? null, until: Date.now() + STATE_WAIT_MS };
+  pending = { userId: record.userId, hash: record.hash, scroll: Number(record.scroll) || 0, state: record.state ?? null, until: Date.now() + STATE_WAIT_MS };
   return record.hash;
 }
 
 /** The list settings saved for the screen named `name` (one of customers / orders / activity); null when the screen was not just reopened. */
 export function takeViewState(name, hash = location.hash) {
   if (!pending?.state || Date.now() > pending.until || pending.hash.split("?")[0] !== hash.split("?")[0] || pending.state.screen !== name) return null;
+  // Saved for somebody else: a session ended and another person signed in on this device within the few seconds the state waits
+  // (2026-11-07: the previous rep's "follow-up due" filter opened on the sales director's Customers).
+  if (state.user && pending.userId != null && pending.userId !== state.user.id) return null;
+  // A link that brings its own filter (?potential=3 from the company dashboard, ?visited=..., ?status=...) wins over what was saved;
+  // the same address again (a reload onto the screen) still gets its filters back.
+  if (hash.includes("?") && hash !== pending.hash) return null;
   return pending.state;
 }
 

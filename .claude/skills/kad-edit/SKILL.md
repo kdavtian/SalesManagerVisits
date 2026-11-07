@@ -32,7 +32,7 @@ A 13-lens essay on a colour fix is noise, and the owner dislikes long outputs. S
 
 | Size | Typical change | Depth | Owner sees |
 |---|---|---|---|
-| **S** | text, colour, spacing, icon, one-screen layout; no data, no roles, no API | lenses UX/UI + Regression + Compatibility; 1 line each in your head; **Step 3b sweep still required** | one line: "kad-edit: S, no system risk, gate B" + "Also fixed: ..." |
+| **S** | text, colour, spacing, icon, one-screen layout; no data, no roles, no API | **fast path**: skip Step 2's challenge, Step 3's table, the 13 lenses and Step 6; think UX/UI + Regression + Compatibility in your head; only the Step 3b sweep is written down; no independent review needed | at most 2 lines: "kad-edit: S, no system risk, gate B" + "Also fixed: ..." |
 | **M** | new screen/filter/field, new endpoint, change inside one module, new setting, report change | all 13 lenses, quickly; blast-radius table from `system-map.md` | the five blocks, 1-3 bullets each |
 | **L** | anything below - always L, even when the diff looks small | all 13 lenses in depth + release plan (Step 6) | the five blocks + release/rollback plan |
 
@@ -43,6 +43,10 @@ queue, service worker, cache layers; backups, deploy scripts, cron/jobs, Telegra
 When unsure between two sizes, pick the larger.
 
 **Size is not test depth.** S/M/L sets how deep the REVIEW goes; the usability gate class A/B/C (Step 5b) sets how deep the TESTING goes. Decide both up front. S is usually gate A or B; anything in the Always-L list that moves money or stock, changes permissions or deletes data is gate C.
+
+**Do not re-review what CI checks** (version bump, APP_SHELL, route auth, roles, en/hy keys, lint, build, speed budgets, kit, skill copies, "did a screen change?"; list in KADDev "Machine-checked rules"): keep those checks green and spend the review on what no machine checks (business rules, data meaning, UX, blast radius). When you find a repeatable rule a machine could check, add the check in the same PR.
+
+**Independent review (M/L, money/permissions; KADDev rule 63):** your own diff pass does not count as the review. Before merge a subagent that sees ONLY the diff runs `/code-review` at high effort, and the Codex review on the PR (if it runs) is answered.
 
 ## Step 2 - Understand the goal, then challenge the request
 - Restate the **business result** the owner wants (not the feature they named). The owner's words for good process: **simpler, faster,
@@ -57,7 +61,7 @@ When unsure between two sizes, pick the larger.
 - If the request is unclear, ask short concrete questions (numbered, with a default you would choose). Otherwise decide and state the
   assumption.
 
-## Step 3 - Map the blast radius (whole system, three repos)
+## Step 3 - Map the blast radius (whole system, four repos)
 Open `references/system-map.md`, find every module the change touches, and list what **depends on** it: other screens, shared modules,
 server rules, reports, jobs, notifications, the bot, Lily, KAD OS, the Excel reconcile, the offline queue, caches, tests. Then **grep the
 code** for the function, column, endpoint, setting key or i18n key you will change - the map is a guide, the code is the truth. A change

@@ -3,7 +3,7 @@
 A guide, not the truth: always `grep` the code for the function, column, endpoint, setting key or i18n key before deciding the blast
 radius. Paths verified 2026-11-02; when a path moved, update this file in the same PR.
 
-## The whole picture (three repos, one droplet)
+## The whole picture (four repos; three apps on one droplet, the website on Cloudflare)
 
 ```
 Castrol Excel (accountant, daily -> Telegram group)
