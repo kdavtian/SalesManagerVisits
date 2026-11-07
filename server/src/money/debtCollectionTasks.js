@@ -212,6 +212,31 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
     [today]
   );
 
+  // 1b) The customer PAID after the task was made (a payment line in the workbook's cashflow, or a newer last-payment date) but still
+  //     owes overdue money: step 1 leaves the task open, because the debt is still overdue. The app closes the same task for ANY amount
+  //     it records itself ("any amount counts", taskAutoComplete.js), so the workbook's payments close it the same way: partial while
+  //     something is left on the Excel debt, paid when nothing is. Both the automatic task and the one a person gave (type "Collect
+  //     debt"). Owner, 2026-11-08: customer 10136, task of 10/10/2026, payments after it, the task stayed open.
+  const { rows: paidAfter } = await pool.query(
+    `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Ավտոմատ՝ վճարում է ստացվել (Excel)',
+       outcome = CASE WHEN COALESCE(erp.debt_amd, 0) > 1 THEN 'partial' ELSE 'paid' END, updated_at = now()
+     FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.status = 'open'
+       AND c.erp_customer_id IS NOT NULL AND ${PAID_SINCE_TASK_SQL}
+     RETURNING t.id, t.assignee_id, c.name AS customer_name`
+  );
+  for (const r of paidAfter) {
+    await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [r.id]);
+    if (r.assignee_id) {
+      await notifyUser(r.assignee_id, "task_completed", {
+        title: "Առաջադրանքը ավտոմատ կատարվեց",
+        body: `${r.customer_name} · վճարում է ստացվել (Excel)`,
+        url: `/#/tasks?open=${r.id}`,
+      }).catch((err) => console.error("Auto-complete notification failed:", err.message));
+    }
+  }
+  closed.push(...paidAfter);
+
   // The workbook extract REPLACES the whole customer table on every sync: a customer whose debt is fully paid and who
   // has no recent orders simply drops out of it. Such a customer has no row to compare with, so the rule above never
   // saw them and their task stayed open for ever (customer 10167, 2026-10-15). Absent from a real extract = paid up.
@@ -317,11 +342,12 @@ const REORDER_MAX_PER_REP = 10;
 export async function createReorderFollowupTasks(now = new Date(), { notify = true } = {}) {
   const today = yerevanToday(now);
   // The customer ordered again, but through the workbook (accountant / direct order), not through the app: the app's
-  // own order hook never fires for those, so close the task from the ERP order lines.
+  // own order hook never fires for those, so close the task from the ERP order lines -- the automatic task and the "Make an order"
+  // one a person gave (the app's own hook closes both kinds too).
   const { rows: ordered } = await pool.query(
     `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Ավտոմատ՝ պատվեր է ստացվել (Excel)', updated_at = now()
      FROM customers c
-     WHERE t.customer_id = c.id AND t.auto_kind = 'reorder_followup' AND t.status = 'open' AND c.erp_customer_id IS NOT NULL
+     WHERE t.customer_id = c.id AND (t.auto_kind = 'reorder_followup' OR t.task_kind = 'make_order') AND t.status = 'open' AND c.erp_customer_id IS NOT NULL
        AND EXISTS (SELECT 1 FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id
                      AND l.order_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date AND COALESCE(l.qty, 0) > 0 AND COALESCE(l.revenue_amd, 0) > 0)
      RETURNING t.id`
