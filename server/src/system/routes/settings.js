@@ -213,6 +213,12 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       }
       const cleaned = {};
       for (const [role, ids] of Object.entries(value)) {
+        // `_known`: the tile ids that existed when the admin saved (quickActions.js visibleQuickActionIds), not a role
+        if (role === "_known") {
+          if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) return res.status(400).json({ error: "quick_action_visibility._known must be an array of ids" });
+          cleaned._known = [...new Set(ids)];
+          continue;
+        }
         if (!ROLES.includes(role)) {
           return res.status(400).json({ error: `Unknown role: ${role}` });
         }

@@ -3260,7 +3260,8 @@
   }
   .cd-row {
     display: grid;
-    grid-template-columns: 76px minmax(0, 1fr) auto;
+    /* the date column grows for a date with its year ("12 Dec 2025"): a fixed 76 px let it run under the Excel chip */
+    grid-template-columns: minmax(4.6em, max-content) minmax(0, 1fr) auto;
     align-items: center;
     column-gap: 10px;
     width: 100%;
@@ -3507,3 +3508,9 @@ a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px
 /* the year headers of a customer's payments / orders sheets: year and its subtotal */
 .pr-year-row { background: var(--bg-muted, rgba(120, 120, 128, 0.08)); border-radius: 8px; margin-top: 6px; }
 .pr-year-row:first-child { margin-top: 0; }
+
+/* A customer's orders sheet on a phone: the order number gets its own line under the date instead of being cut to "202…" */
+@media (max-width: 520px) {
+  .orders-sheet-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "date amount" "code amount" "chips chips"; row-gap: 2px; }
+  .orders-sheet-row > :nth-child(2) { font-size: 0.82rem; color: var(--text-dim); white-space: normal; overflow-wrap: anywhere; }
+}

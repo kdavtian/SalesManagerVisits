@@ -91,14 +91,16 @@ export async function renderWarehouse(root, navigate) {
               <span class="badge ${cls}">${t(key)}</span>
             </div>
             <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}${labelColon()}${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}${labelColon()}${r.reserved_qty})` : ""}${days}</p>
-            <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}${labelColon()}${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong></p>
+            <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}${labelColon()}${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong>${
+              r.pack_kind === "bottle" && r.pack_size > 1 ? ` <span class="muted">(${r.packs} × ${r.pack_size})</span>` : ""
+            }</p>
           </div>`;
           })
           .join("")}
       </div>
       <button type="button" class="btn btn-block" id="reorder-copy" style="margin-top:12px">${t("warehouse_reorder_copy")}</button>`;
     contentEl.querySelector("#reorder-copy").addEventListener("click", async () => {
-      const text = rows.map((r) => `${r.name} ${normalizeUnitLabel(r.unit)} — ${r.suggested_qty} ${t("warehouse_pcs_suffix")}`).join("\n");
+      const text = rows.map((r) => `${r.name} ${normalizeUnitLabel(r.unit)} — ${r.suggested_qty} ${t("warehouse_pcs_suffix")}${r.pack_kind === "bottle" && r.pack_size > 1 ? ` (${r.packs} × ${r.pack_size})` : ""}`).join("\n");
       try {
         await navigator.clipboard.writeText(text);
         contentEl.querySelector("#reorder-copy").textContent = t("warehouse_reorder_copied");

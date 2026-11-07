@@ -1,3 +1,4 @@
+import { sendProductImage } from "../productImageSend.js";
 import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
@@ -196,9 +197,7 @@ productsRouter.get("/:id/image", async (req, res) => {
   const { rows } = await pool.query("SELECT image_path FROM products WHERE id = $1", [req.params.id]);
   const imagePath = rows[0]?.image_path;
   if (!imagePath) return res.status(404).json({ error: "No image set" });
-  res.sendFile(path.join(uploadDirPath, imagePath), (err) => {
-    if (err && !res.headersSent) res.status(404).json({ error: "Image not found" });
-  });
+  await sendProductImage(req, res, imagePath);
 });
 
 productsRouter.use(requireProductManager);

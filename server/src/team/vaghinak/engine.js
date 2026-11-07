@@ -10,7 +10,7 @@ import { dropRecentlyVisited } from "../../utils/planSkipRecent.js";
 import { evaluateRep, flagsOf } from "./evaluate.js";
 import { getVaghinakSettings } from "./settings.js";
 import { addressFor, clock, durationHy, pickVariant, QUESTION_CHOICES } from "./phrases.js";
-import { dataChase, orderChase, downpaymentChase } from "./chasers.js";
+import { dataChase, orderChase, downpaymentChase, purchaseChase } from "./chasers.js";
 import { clusterChase } from "./cluster.js";
 import { bullets } from "../../utils/bullets.js";
 import { humanDelayPassed, jitteredDue } from "./humanDelay.js";
@@ -179,6 +179,7 @@ export async function tick(now = new Date(), db = pool, { pick, delayMaxMs } = {
     created += await chase("data", () => dataChase({ db, day, settings, pick }));
     created += await chase("order", () => orderChase({ db, day, settings, pick }));
     created += await chase("downpayment", () => downpaymentChase({ db, day, settings, pick, now }));
+    created += await chase("purchase", () => purchaseChase({ db, day, settings, pick }));
   }
   return { created };
 }

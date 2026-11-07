@@ -61,7 +61,6 @@ const checks = [
   ["map cleanup restores the global navigation state", "js/views/map.js", /document\.body\.classList\.remove\("map-active"\)/],
   ["map filters expose their selected state", "js/views/map.js", /aria-pressed=/],
   ["secondary map controls (team/plan day) are directly visible, not tucked behind a flyout", "js/views/map.js", /id="team-locations-btn"[\s\S]*id="plan-day-btn"/],
-  ["dashboard analytics use progressive disclosure", "js/views/dashboard.js", /<details class="dashboard-insights">/],
   ["settings separates personal and admin workspaces", "js/views/settings.js", /class="settings-workspace-tabs"[^>]+role="tablist"/],
   ["filled accents use a dedicated contrast token", "css/styles.css", /--accent-fill:\s*#[0-9a-f]{6}/i],
   ["interactive boundaries use a dedicated contrast token", "css/styles.css", /--control-border:\s*#[0-9a-f]{6}/i],
@@ -81,6 +80,8 @@ for (const [label, file, pattern] of checks) {
 const forbidden = [
   ["retired hamburger drawer markup is absent", "index.html", /id="side-drawer"|id="drawer-backdrop"/],
   ["retired map tools flyout markup is absent", "js/views/map.js", /id="map-tools-panel"/],
+  // owner, 2026-11-07: "remove Results and analysis from Home" (the visit trends block)
+  ["Home has no Results & analysis block", "js/views/dashboard.js", /class="dashboard-insights"/],
   // Colour policy: blue is the action colour and lives in --accent / --accent-fill only.
   ["no hard-coded action blue in the stylesheet (use var(--accent))", "css/styles.css", /#0a84ff|#2563eb/i],
 ];

@@ -138,3 +138,34 @@ export function computeReorderSuggestion({ stockQty, reservedQty = 0, status, da
   if (!suggested) return null;
   return { urgency: status, suggested_qty: suggested, daily_demand: demand, days_of_stock: daysOfStock };
 }
+
+// Purchase packs (owner, 2026-11-07): bottles are bought in whole packs, at least MIN_BOTTLE_PACKS of them (1 L and 0.5 L: 12 a pack,
+// 4 L / 5 L: 4, 7 L: 3); a drum (20 L and up) is bought by the piece, at least one. The Excel "Items per Pack" wins when it is known.
+export const MIN_BOTTLE_PACKS = 5;
+export const DRUM_FROM_LITERS = 20;
+export function sizeLiters(product) {
+  const direct = Number(product?.size_l);
+  if (direct > 0) return direct;
+  const m = String(product?.unit ?? "").replace(",", ".").match(/(\d+(?:\.\d+)?)\s*l/i);
+  return m ? Number(m[1]) : null;
+}
+export function packRule(product) {
+  const liters = sizeLiters(product);
+  if (liters != null && liters >= DRUM_FROM_LITERS) return { kind: "drum", packSize: 1, minPacks: 1 };
+  const known = Number(product?.items_per_pack);
+  let packSize = known > 0 ? Math.round(known) : null;
+  if (!packSize) {
+    if (liters == null) packSize = 1;
+    else if (liters <= 1) packSize = 12;
+    else if (liters <= 2) packSize = 6;
+    else if (liters <= 5) packSize = 4;
+    else packSize = 3;
+  }
+  return { kind: "bottle", packSize, minPacks: liters == null ? 1 : MIN_BOTTLE_PACKS };
+}
+/** Pieces needed -> what is really ordered: whole packs, at least the minimum. */
+export function roundToPacks(pieces, product) {
+  const rule = packRule(product);
+  const packs = Math.max(rule.minPacks, Math.ceil(Math.max(0, pieces) / rule.packSize));
+  return { ...rule, packs, pieces: packs * rule.packSize };
+}

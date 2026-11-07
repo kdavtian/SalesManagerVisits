@@ -5,12 +5,13 @@ import { groupDigits } from "./util.js";
 // Category filter groups, from the Product Family recorded in the workbook:
 // the non-engine families are categories of their own, every other family
 // (Edge, Magnatec, GTX, CRB, Vecton, ON, Engine Oil, ...) is engine oil.
-export const NON_ENGINE_CATEGORIES = ["Transmission", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Merch", "Other"];
+export const NON_ENGINE_CATEGORIES = ["Transmission", "Brake fluid", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Merch", "Other"];
 // Workbook family -> category where the names differ (Castrol ON = EV fluids).
 const FAMILY_TO_CATEGORY = { on: "EV fluids" };
 export const CATEGORY_LABEL_KEY = {
   "Engine oil": "category_engine_oil",
   Transmission: "category_transmission",
+  "Brake fluid": "category_brake_fluid",
   Hydraulic: "category_hydraulic",
   Antifreeze: "category_antifreeze",
   Grease: "category_grease",

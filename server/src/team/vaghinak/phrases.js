@@ -168,6 +168,14 @@ const BANK = {
       ],
     },
   },
+  purchase_check: {
+    1: {
+      management: [
+        "{addr}, Գնումներում {n} հաշիվ չի համընկնում Excel-ի հետ (միայն Excel-ում՝ {excel_only}, տարբերվում է՝ {diff})։\n{list}\nՆայեք Գնումներ բաժնում․ Excel-ի հաշիվը մեկ սեղմումով կմուտքագրվի հավելվածում։",
+        "{addr}, Excel-ի Purchase_IN-ի և հավելվածի միջև {n} հաշիվ տարբեր է։\n{list}\nԲացեք Գնումներ բաժինը։",
+      ],
+    },
+  },
   data_chase_owner: {
     1: {
       management: [

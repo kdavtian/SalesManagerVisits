@@ -773,6 +773,8 @@ export const enCommon = {
     show_all_orders: "Show all orders",
     all_orders: "All orders",
     excel_orders_title: "Excel orders",
+    no_orders_for_erp_id: "The Excel has no order for Customer ID {id}.",
+    no_orders_no_erp_id: "This customer has no Excel Customer ID linked.",
     no_orders_found: "No orders found.",
     erp_brand_unspecified: "Other",
     amd: "AMD",

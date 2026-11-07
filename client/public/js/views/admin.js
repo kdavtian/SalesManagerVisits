@@ -3,7 +3,7 @@ import { escapeHtml, formatDateTime, regionLabelHy, parseDateOnly, formatPhoneDi
 import { t } from "../i18n.js";
 import { placeLabel } from "../places.js";
 import { ownsSalesChannels } from "../shared/roles.js";
-import { ALL_ROLES, QUICK_ACTIONS, defaultQuickActionIds, withMergedTiles } from "../quickActions.js";
+import { ALL_ROLES, QUICK_ACTIONS, visibleQuickActionIds } from "../quickActions.js";
 export { renderProductsSection } from "./admin/products.js";
 export { renderTeamSection } from "./admin/team.js";
 
@@ -323,9 +323,15 @@ export async function renderQuickActionVisibilitySection(container) {
   const settings = await api.getSettings();
   const visibility = { ...(settings.quick_action_visibility ?? {}) };
 
+  // what the role really sees (a tile added after the last save shows by default, quickActions.js)
   function effectiveIds(role) {
-    return Array.isArray(visibility[role]) ? withMergedTiles(visibility[role]) : defaultQuickActionIds(role);
+    return visibleQuickActionIds(role, visibility);
   }
+
+  // Opened here, a saved list is written out as what the role sees now (tiles added since are in it), and every tile that exists now
+  // becomes "known": from here on, unticking one hides it for good.
+  for (const role of ALL_ROLES) if (Array.isArray(visibility[role])) visibility[role] = effectiveIds(role);
+  visibility._known = QUICK_ACTIONS.map((a) => a.id);
 
   container.innerHTML = `
     <p class="muted radius-help">${t("quick_action_visibility_hint")}</p>

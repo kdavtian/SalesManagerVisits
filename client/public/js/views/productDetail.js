@@ -3,7 +3,7 @@
 // specifications. Product managers can add/change photos and edit the
 // details; everyone else just reads.
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, compressImage } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts } from "../state.js";
 import { seesTierPrices } from "../shared/roles.js";
@@ -60,7 +60,7 @@ export async function renderProductDetail(root, navigate, productId) {
 
       <div class="pd-gallery">
         <button type="button" class="pd-main-image ${active ? "" : "pd-main-image-empty"}" id="pd-main-image" ${active ? "" : "disabled"} aria-label="${t("product_photos")}">
-          ${active ? `<img src="${active.url}" alt="${escapeHtml(p.name)}" />` : `<span class="pd-no-photo">${icons.box}</span>`}
+          ${active ? `<img src="${active.url}?w=800" alt="${escapeHtml(p.name)}" decoding="async" />` : `<span class="pd-no-photo">${icons.box}</span>`}
         </button>
         ${
           images.length > 1 || manage
@@ -68,7 +68,7 @@ export async function renderProductDetail(root, navigate, productId) {
                 ${images
                   .map(
                     (i) => `<button type="button" class="pd-thumb ${i.id === activeImageId ? "pd-thumb-active" : ""}" data-image-id="${i.id}" aria-label="${t(KIND_LABEL[i.kind])}">
-                      <img src="${i.url}" alt="" loading="lazy" />
+                      <img src="${i.url}?w=160" alt="" loading="lazy" decoding="async" />
                       ${i.is_main ? `<span class="pd-thumb-badge">${t("photo_main")}</span>` : ""}
                     </button>`
                   )
@@ -204,7 +204,8 @@ export async function renderProductDetail(root, navigate, productId) {
       if (!file) return;
       const form = new FormData();
       form.append("kind", overlay.querySelector('input[name="kind"]:checked').value);
-      form.append("image", file);
+      // a phone photo is several MB: sent at most 1600 px (still sharp when zoomed), the screens use the server's small copies
+      form.append("image", await compressImage(file, { maxDimension: 1600, quality: 0.82 }).catch(() => file), "photo.jpg");
       const errorEl = overlay.querySelector("#photo-error");
       try {
         const res = await api.uploadProductPhoto(product.id, form);

@@ -246,3 +246,14 @@
 .pu-form-total { font-variant-numeric: tabular-nums; }
 .pu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 16px 0; }
 .pu-head h1 { margin: 0; font-size: var(--fs-title); }
+
+/* Products header (owner, 2026-11-07): the "!" sits after the title; on a phone the action buttons stay on the title's row */
+.pricelist-title { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+@media (max-width: 480px) {
+  .pricelist-no-print.detail-header .detail-header-actions { gap: 6px; }
+  .pricelist-no-print.detail-header .detail-header-actions .icon-btn { width: 40px; height: 40px; min-width: 40px; }
+}
+@media (min-width: 361px) and (max-width: 480px) {
+  .pricelist-no-print.detail-header { flex-wrap: nowrap; gap: 10px; }
+  .pricelist-no-print.detail-header .detail-header-title { min-width: 0; flex: 1 1 auto; }
+}

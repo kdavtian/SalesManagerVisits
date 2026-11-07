@@ -2,6 +2,7 @@
 // per-user pricelist PDF, and the pricelist-workbook importer. Mounted on
 // /api/products BEFORE productsRouter (whose router-wide manager gate would
 // otherwise swallow these); numeric-id guards let anything else fall through.
+import { sendProductImage } from "../productImageSend.js";
 import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
@@ -55,9 +56,7 @@ productDetailsRouter.get("/:id/images/:imageId", async (req, res, next) => {
   if (!isId(req.params.id) || !isId(req.params.imageId)) return next();
   const { rows } = await pool.query("SELECT path FROM product_images WHERE id = $1 AND product_id = $2", [req.params.imageId, req.params.id]);
   if (!rows[0]) return res.status(404).json({ error: "Image not found" });
-  res.sendFile(path.join(uploadDirPath, rows[0].path), (err) => {
-    if (err && !res.headersSent) res.status(404).json({ error: "Image not found" });
-  });
+  await sendProductImage(req, res, rows[0].path);
 });
 
 // ---- photo management (product managers) ---------------------------------

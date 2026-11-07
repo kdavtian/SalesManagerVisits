@@ -11,7 +11,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canManageWarehouse } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
-import { computeReorderSuggestion } from "../../products/stockForecast.js";
+import { computeReorderSuggestion, roundToPacks } from "../../products/stockForecast.js";
 import { computeDemandForecast } from "../../products/demandModel.js";
 import { getDemandSettings } from "../../products/demandSettings.js";
 import { loadDemandInputs } from "../../products/demandInputs.js";
@@ -288,7 +288,7 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
               MAX(order_date) AS last_sale_date
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
-     SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
+     SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
             COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
                       WHERE oi.product_id = p.id AND o.status IN ('submitted', 'confirmed', 'packed_stock_out')), 0)::int AS reserved_qty
      FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
@@ -304,7 +304,9 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
     });
     if (!suggestion) continue;
-    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, demand_trend: forecast.trend, ...suggestion });
+    // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
+    const packs = roundToPacks(suggestion.suggested_qty, row);
+    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
   }
   const rank = { out: 0, critical: 1, low: 2 };
   out.sort((a, b) => rank[a.urgency] - rank[b.urgency] || (a.days_of_stock ?? 0) - (b.days_of_stock ?? 0));
