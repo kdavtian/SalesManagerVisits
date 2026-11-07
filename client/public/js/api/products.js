@@ -43,7 +43,8 @@ export const productsApi = {
     }
     return res.blob();
   },
-  productImageUrl: (id) => `/api/products/${id}/image`,
+  // { w: 160 | 320 | 800 } a resized copy; { v } the stored file name, so a changed photo gets a new address (the photo is cached a year)
+  productImageUrl: (id, { w, v } = {}) => `/api/products/${id}/image${w || v ? `?${new URLSearchParams({ ...(w ? { w } : {}), ...(v ? { v } : {}) })}` : ""}`,
   uploadProductImage: (id, formData) => request(`/products/${id}/image`, { method: "POST", body: formData }),
   deleteProductImage: (id) => request(`/products/${id}/image`, { method: "DELETE" }),
   previewBulkPriceUpdate: (data) => json("/products/bulk-price-update", "POST", { ...data, apply: false }),

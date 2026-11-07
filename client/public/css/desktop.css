@@ -287,7 +287,11 @@
     column-gap: 20px;
     align-items: start;
   }
-  .customer-detail-view > .customer-detail-header {
+  /* the header and the "needs attention" strip (3 unpaid orders...) span both columns: the strip used to take a cell of its own and push
+     the two columns out of place (owner, 2026-11-07: overlaps on the customer card, 1024-1399 px) */
+  .customer-detail-view > .customer-detail-header,
+  .customer-detail-view > .cd-attention,
+  .customer-detail-view > :not(.cd-col):not(.cd-wide) {
     grid-column: 1 / -1;
   }
   .customer-detail-view > .cd-col {

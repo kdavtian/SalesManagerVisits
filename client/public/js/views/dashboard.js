@@ -2,7 +2,7 @@ import { renderMyDay } from "../homeDay.js";
 import { renderBirthdayLine } from "../birthdayLine.js";
 import { mountPinnedRow } from "../pins.js";
 import { api } from "../api.js";
-import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, formatDayMonth, labelColon } from "../util.js";
+import { fitTileLabels, escapeHtml, formatDistance, formatRelative, formatAmd, getCurrentPosition, haversineMeters, categoryLabel, labelColon } from "../util.js";
 import { state, canViewTeamLocations, seesAllActivity } from "../state.js";
 import { seesHomeKpis, homeShowsCompanyData, homeShowsCompanyDashboard } from "../shared/roles.js";
 import { t, getLang } from "../i18n.js";
@@ -12,37 +12,6 @@ import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeli
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds, orderHomeTiles } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
 import { renderHomeKpis, wantsKpis } from "./homeKpis.js";
-
-// A dependency-free CSS bar chart -- this app has no charting library, and
-// 30 bars is simple enough not to need one. Each bar's height is relative
-// to the busiest day in the window, not an absolute scale, so a quiet
-// period still reads as a legible shape instead of 30 near-flat slivers.
-function trendChartHtml(daily) {
-  const max = Math.max(1, ...daily.map((d) => d.visits));
-  const bars = daily
-    .map((d) => {
-      const heightPct = Math.round((d.visits / max) * 100);
-      const label = formatDayMonth(new Date(`${d.day}T00:00:00`));
-      return `<div class="trend-bar" style="height:${Math.max(heightPct, d.visits > 0 ? 4 : 0)}%" title="${label}: ${d.visits}"></div>`;
-    })
-    .join("");
-  return `<div class="trend-chart" role="img" aria-label="${t("visit_trends")}">${bars}</div>`;
-}
-
-function comparisonCardHtml(label, current, previous, sublabel) {
-  current = Number(current);
-  previous = Number(previous);
-  const delta = previous > 0 ? Math.round(((current - previous) / previous) * 100) : current > 0 ? 100 : 0;
-  const trendCls = delta > 0 ? "trend-up" : delta < 0 ? "trend-down" : "trend-flat";
-  const arrow = delta > 0 ? "&#8593;" : delta < 0 ? "&#8595;" : "&#8226;";
-  return `
-    <div class="stat-card">
-      <span class="stat-value">${current}</span>
-      <span class="stat-label">${label}</span>
-      <span class="stat-sublabel ${trendCls}">${arrow} ${Math.abs(delta)}% ${sublabel}</span>
-    </div>
-  `;
-}
 
 // The icon (and, for two tiles, a count badge) is the only thing that
 // differs between tiles -- label and DOM id both fall straight out of the
@@ -189,7 +158,7 @@ export async function renderDashboard(root, navigate) {
           // down to what "next visit" actually means for that role -- their
           // own assigned book, not the whole company's.
           showsSnapshotInstead ? Promise.resolve([]) : api.listCustomers(state.user.role === "sales_manager" ? { assigned_manager_id: state.user.id } : {}),
-          api.dashboardTrends(),
+          Promise.resolve(null), // the visit trends left Home (owner, 2026-11-07); the slot keeps the order of the answers
           api.getSettings(),
           // Company Dashboard preview card (ceo/admin only, see paint()
           // below) -- same MTD leaderboard Company Dashboard's own Overview
@@ -441,19 +410,7 @@ export async function renderDashboard(root, navigate) {
           </div>`
     }
 
-    <details class="dashboard-insights">
-      <summary><span>${t("performance_insights")}</span><span class="dashboard-insights-chevron" aria-hidden="true">${icons.chevronDown}</span></summary>
-
-    <h2 class="section-title">${t("visit_trends")}</h2>
-    <div class="card trend-chart-card">
-      ${trendChartHtml(trends.daily)}
-    </div>
-    <div class="stat-grid">
-      ${comparisonCardHtml(t("this_week"), trends.comparison.this_week, trends.comparison.last_week, t("vs_last_week"))}
-      ${comparisonCardHtml(t("this_month"), trends.comparison.this_month, trends.comparison.last_month, t("vs_last_month"))}
-    </div>
-    </details>
-    ${state.user.role === "admin" ? `<div id="erp-sync-slot"></div>` : ""}
+        ${state.user.role === "admin" ? `<div id="erp-sync-slot"></div>` : ""}
     </div>
   `;
 

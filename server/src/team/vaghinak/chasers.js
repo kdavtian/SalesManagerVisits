@@ -9,6 +9,7 @@ import { durationHy } from "./phrases.js";
 import { createOpsTask, usersWithRole } from "../opsTasks.js";
 import { orderFlow } from "../../reports/opsReports.js";
 import { bullets, bulletNames } from "../../utils/bullets.js";
+import { listPurchases } from "../../products/purchases.js";
 
 const MAX_NEW_PER_REP_PER_DAY = 3;
 const MAX_OPEN_PER_REP = 8;
@@ -168,4 +169,33 @@ export async function downpaymentChase({ db, day, settings, pick, now = new Date
     for (const u of mgmt) if (await createMessage(db, u, { kind: "downpayment_overdue", level: 1, day, ctx, audience: "management", settings, pick })) created++;
   }
   return created;
+}
+
+// Purchases beside the Excel Purchase_IN (owner, 2026-11-07, optimization idea 1): once a day the accountant hears which supplier invoices of the
+// last 60 days are only in the Excel or differ from it, so they are fixed in minutes instead of being searched for. Silent while the bot has
+// sent no Purchase_IN yet (nothing to compare) and when everything matches.
+export async function purchaseChase({ db, day, settings, pick }) {
+  const { rows: [{ n }] } = await db.query("SELECT count(*)::int AS n FROM erp_purchase_lines");
+  if (!n) return 0;
+  const from = new Date(Date.parse(`${day}T00:00:00Z`) - 60 * 86400000).toISOString().slice(0, 10);
+  const open = (await listPurchases({ from, to: day }, db)).filter((r) => r.status === "excel_only" || r.status === "diff");
+  if (!open.length) return 0;
+  const label = { excel_only: "միայն Excel-ում", diff: "տարբերվում է" };
+  const list = bullets(open.slice(0, 6).map((r) => `№ ${r.invoice_no} · ${r.supplier || "—"} · ${label[r.status]}`));
+  const { rows: people } = await db.query(
+    "SELECT id, name, name_hy, role, vaghinak_address FROM users WHERE role = 'accountant' AND status = 'active' AND vaghinak_muted_day IS DISTINCT FROM $1::date",
+    [day]
+  );
+  for (const u of people) {
+    await createMessage(db, u, {
+      kind: "purchase_check",
+      level: 1,
+      day,
+      ctx: { n: open.length, excel_only: open.filter((r) => r.status === "excel_only").length, diff: open.filter((r) => r.status === "diff").length, list },
+      audience: "management",
+      settings,
+      pick,
+    });
+  }
+  return 0;
 }

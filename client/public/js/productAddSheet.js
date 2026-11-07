@@ -5,7 +5,11 @@
 // the person confirms it is a different one.
 import { api } from "./api.js";
 import { t } from "./i18n.js";
-import { activateDialog, bindAmdInput, escapeHtml, parseAmd } from "./util.js";
+import { activateDialog, bindAmdInput, compressImage, escapeHtml, parseAmd, showToast } from "./util.js";
+import { CATEGORY_LABEL_KEY } from "./productBrowse.js";
+
+// the categories a new product can be put in (owner, 2026-11-07); stored as the product's family, as the Excel does
+const PA_CATEGORIES = ["Engine oil", "Transmission", "Brake fluid", "Hydraulic", "Antifreeze", "Grease", "EV fluids", "Merch", "Other"];
 
 const uniqueSorted = (values) => [...new Set(values.map((v) => String(v || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
@@ -29,18 +33,22 @@ export async function openAddProductSheet({ onSaved } = {}) {
         <datalist id="pa-brands">${brands.map((b) => `<option value="${escapeHtml(b)}"></option>`).join("")}</datalist>
         <label>${t("product_name")}<input name="name" required maxlength="120" placeholder="${t("pa_name_hint")}" /></label>
         <div class="pa-two">
-          <label>${t("pa_size_l")}<input name="size" inputmode="decimal" required placeholder="4" /></label>
-          <label>${t("pa_family")}<input name="family" list="pa-families" maxlength="40" /></label>
+          <label>${t("pa_category")}
+            <select name="category">${PA_CATEGORIES.map((c) => `<option value="${c}">${escapeHtml(t(CATEGORY_LABEL_KEY[c]))}</option>`).join("")}</select>
+          </label>
+          <label>${t("pa_size_l")}<input name="size" inputmode="decimal" placeholder="4" /></label>
         </div>
+        <label id="pa-line-wrap">${t("pa_family")}<input name="family" list="pa-families" maxlength="40" placeholder="Edge, Magnatec, GTX…" /></label>
         <datalist id="pa-families">${families.map((f) => `<option value="${escapeHtml(f)}"></option>`).join("")}</datalist>
         <div class="pa-two">
-          <label>${t("tier_bronze")}<input name="bronze" class="amd-input" inputmode="numeric" required /></label>
+          <label>${t("tier_bronze")}<input name="bronze" class="amd-input" inputmode="numeric" /></label>
           <label>${t("tier_silver")}<input name="silver" class="amd-input" inputmode="numeric" placeholder="${t("pa_silver_hint")}" /></label>
         </div>
         <div class="pa-two">
           <label>${t("price_retail")}<input name="retail" class="amd-input" inputmode="numeric" placeholder="${t("pa_retail_hint")}" /></label>
           <label>${t("pa_hc_code")}<input name="hc_code" inputmode="numeric" maxlength="20" /></label>
         </div>
+        <label class="pa-photo">${t("pa_photo")}<input type="file" name="photo" accept="image/*" /></label>
         <p class="muted pa-note">${t("pa_link_note")}</p>
         <p class="form-error" id="pa-error" hidden></p>
         <div class="sheet-actions">
@@ -66,19 +74,29 @@ export async function openAddProductSheet({ onSaved } = {}) {
     saveBtn.textContent = t("save");
     errorEl.hidden = true;
   });
+  // the product line only means something for engine oil (Edge, Magnatec...); every other category is the family itself
+  const categoryEl = form.querySelector('[name="category"]');
+  const paintCategory = () => {
+    overlay.querySelector("#pa-line-wrap").hidden = categoryEl.value !== "Engine oil";
+  };
+  categoryEl.addEventListener("change", paintCategory);
+  paintCategory();
   form.querySelector('[name="brand"]').focus();
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = new FormData(form);
-    const size = Number(String(data.get("size") || "").replace(",", "."));
+    const sizeText = String(data.get("size") || "").trim();
+    const size = sizeText ? Number(sizeText.replace(",", ".")) : null;
+    const category = String(data.get("category"));
     const bronze = parseAmd(data.get("bronze"));
     errorEl.hidden = true;
-    if (!Number.isFinite(size) || size <= 0) {
+    // a size is needed for what is sold by the liter; merch (a stand, a cap) has none
+    if ((size === null && category !== "Merch") || (size !== null && (!Number.isFinite(size) || size <= 0))) {
       errorEl.textContent = t("pa_size_invalid");
       errorEl.hidden = false;
       return;
     }
-    if (!(bronze > 0)) {
+    if (!(bronze > 0) && category !== "Merch") {
       errorEl.textContent = t("pa_price_invalid");
       errorEl.hidden = false;
       return;
@@ -88,16 +106,24 @@ export async function openAddProductSheet({ onSaved } = {}) {
       const product = await api.createProduct({
         brand: String(data.get("brand")).trim(),
         name: String(data.get("name")).trim(),
-        unit: `${size}L`,
+        unit: size ? `${size}L` : null,
         size_l: size,
-        family: String(data.get("family") || "").trim() || null,
-        unit_price_amd: bronze,
-        bronze_price_amd: bronze,
-        silver_price_amd: parseAmd(data.get("silver")) ?? bronze,
+        family: category === "Engine oil" ? String(data.get("family") || "").trim() || "Engine Oil" : category,
+        unit_price_amd: bronze ?? 0,
+        bronze_price_amd: bronze ?? 0,
+        silver_price_amd: parseAmd(data.get("silver")) ?? bronze ?? 0,
         retail_price_amd: parseAmd(data.get("retail")) ?? null,
         hc_code: String(data.get("hc_code") || "").trim() || null,
         allow_duplicate: confirmDuplicate,
       });
+      // the photo goes up right after the product exists (the server keeps it as the main photo)
+      const photo = form.querySelector('[name="photo"]').files[0];
+      if (photo) {
+        const body = new FormData();
+        body.append("kind", "front");
+        body.append("image", await compressImage(photo, { maxDimension: 1600, quality: 0.82 }).catch(() => photo), "photo.jpg");
+        await api.uploadProductPhoto(product.id, body).catch(() => showToast(t("pa_photo_failed")));
+      }
       close();
       onSaved?.(product);
     } catch (err) {

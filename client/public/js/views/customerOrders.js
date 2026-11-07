@@ -112,7 +112,10 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     }
     if (!listEl.isConnected) return;
     if (!orders.length) {
-      listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p>`;
+      // say why: no Excel ID linked, or none of that ID's orders in the Excel (owner, 2026-11-07, customer 10255)
+      listEl.innerHTML = `<p class="empty-state">${t("no_orders_found")}</p><p class="muted empty-state-why">${escapeHtml(
+        customer.erp_customer_id ? t("no_orders_for_erp_id").replace("{id}", customer.erp_customer_id) : t("no_orders_no_erp_id")
+      )}</p>`;
       return;
     }
     const subtotal = orders.reduce((sum, o) => sum + Number(o.total_amd || 0), 0);

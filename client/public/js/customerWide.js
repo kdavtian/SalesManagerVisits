@@ -8,7 +8,7 @@ import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { escapeHtml, formatAmd, formatDateDMY, formatDayMonth, parseDateOnly } from "./util.js";
 import { loadWithCache } from "./listCache.js";
-import { paymentsSource, photosSource } from "./customerCardData.js";
+import { allOrdersSource, paymentsSource, photosSource } from "./customerCardData.js";
 import { isWide } from "./deskTable.js";
 
 const ORDER_ROWS = 5;
@@ -115,7 +115,8 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
   const el = panelShell("cd-panel-orders", t("all_orders"), t("view_all"));
   el.querySelector("[data-panel-all]").addEventListener("click", () => navigate(`#/customers/${customer.id}/orders`));
   const body = el.querySelector(".cd-panel-body");
-  const excel = (Array.isArray(erpOrders) ? erpOrders : []).map((o) => ({ kind: "erp", date: o.order_date, code: o.order_id, amount: o.total_amd, row: o }));
+  const toRow = (o) => ({ kind: "erp", date: o.order_date, code: o.order_id, amount: o.total_amd, row: o });
+  let excel = (Array.isArray(erpOrders) ? erpOrders : []).map(toRow);
   const thisYear = new Date().getFullYear();
   let yearExcelTotal = null;
   let lastApp = [];
@@ -124,7 +125,9 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
     if (!body.isConnected && !el.isConnected) return;
     const rows = [...appRows, ...excel].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, ORDER_ROWS);
     if (!rows.length) {
-      body.innerHTML = `<p class="muted cd-panel-empty">${t("no_orders_found")}</p>`;
+      body.innerHTML = `<p class="muted cd-panel-empty">${t("no_orders_found")} ${escapeHtml(
+        customer.erp_customer_id ? t("no_orders_for_erp_id").replace("{id}", customer.erp_customer_id) : t("no_orders_no_erp_id")
+      )}</p>`;
       return;
     }
     // this calendar year's orders (owner, 2026-11-07; it was the last 3 months): the Excel orders of the year + the app orders the Excel
@@ -149,6 +152,15 @@ function ordersPanel({ customer, erpOrders, navigate, openErpOrder, openAppOrder
     );
   };
   paint([]);
+  // No Excel order in the last 3 months (owner, 2026-11-07, customer 10255: "no orders found" for a customer who has older orders): the
+  // newest orders of the whole history instead.
+  if (!excel.length && customer.erp_customer_id) {
+    const all = allOrdersSource(customer.id);
+    loadWithCache(all.key, all.fetch, (rows) => {
+      excel = (Array.isArray(rows) ? rows : []).slice(0, ORDER_ROWS).map(toRow);
+      paint(lastApp);
+    }).catch(() => {});
+  }
   // the year's Excel orders (the list above holds only the last 3 months)
   loadWithCache(`cust-orders-year:${customer.id}`, () => api.getErpOrders(customer.id, "year"), (rows) => {
     yearExcelTotal = (Array.isArray(rows) ? rows : []).reduce((sum, r) => sum + (Number(r.total_amd) || 0), 0);

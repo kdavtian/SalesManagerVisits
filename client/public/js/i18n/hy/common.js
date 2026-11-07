@@ -773,6 +773,8 @@ export const hyCommon = {
     show_all_orders: "Ցուցադրել բոլոր պատվերները",
     all_orders: "Բոլոր պատվերները",
     excel_orders_title: "Excel-ի պատվերներ",
+    no_orders_for_erp_id: "Excel-ում {id} ID-ով հաճախորդի պատվեր չկա։",
+    no_orders_no_erp_id: "Այս հաճախորդին Excel-ի ID կապված չէ։",
     no_orders_found: "Պատվերներ չեն գտնվել։",
     erp_brand_unspecified: "Այլ",
     amd: "դր",

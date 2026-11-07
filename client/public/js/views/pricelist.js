@@ -139,8 +139,10 @@ export async function renderPricelist(root, navigate) {
 
   let products;
   try {
-    // Merch (free items such as Castrol Stend) is not for sale, so it is not on the customer pricelist.
-    products = (await api.listProducts()).filter((p) => String(p.family || "").toLowerCase() !== "merch");
+    // Merch (free items such as Castrol Stend) is not for sale, so the sales team does not see it here; the people who manage the
+    // catalog do (owner, 2026-11-07: a merch product made with New product "did not appear in Products").
+    const all = await api.listProducts();
+    products = canManageProducts() ? all : all.filter((p) => String(p.family || "").toLowerCase() !== "merch");
   } catch (err) {
     container.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
@@ -173,12 +175,12 @@ export async function renderPricelist(root, navigate) {
       <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <div class="detail-header-title">
+      <div class="detail-header-title pricelist-title">
         <h1>${t("products_page_title")}</h1>
+        <button type="button" class="settings-hint-icon" id="method-btn" aria-label="${t("meth_stock_link")}" title="${t("meth_stock_link")}">!</button>
       </div>
       <div class="detail-header-actions">
         ${canManageProducts() ? `<button type="button" class="icon-btn" id="add-product-btn" aria-label="${t("pa_title")}" title="${t("pa_title")}">${icons.plus}</button>` : ""}
-        <button type="button" class="icon-btn" id="method-btn" aria-label="${t("meth_stock_link")}" title="${t("meth_stock_link")}">${icons.info}</button>
         ${seesProductCosts() ? `<button type="button" class="icon-btn" id="calc-btn" aria-label="${t("cc_title")}" title="${t("cc_title")}">${icons.calculator}</button>` : ""}
         <button type="button" class="icon-btn" id="select-mode-btn" aria-label="${t("select_products")}">${icons.checkCircle}</button>
         <button type="button" class="icon-btn" id="export-btn" aria-label="${t("export")}">${icons.send}</button>
@@ -530,7 +532,7 @@ export async function renderPricelist(root, navigate) {
 
   function thumbHtml(p) {
     return p.image_path
-      ? `<img class="pricelist-row-thumb" src="${api.productImageUrl(p.id)}" alt="" loading="lazy" />`
+      ? `<img class="pricelist-row-thumb" src="${api.productImageUrl(p.id, { w: 160, v: p.image_path })}" alt="" loading="lazy" decoding="async" />`
       : `<span class="pricelist-row-thumb pricelist-row-thumb-placeholder">${icons.box}</span>`;
   }
 

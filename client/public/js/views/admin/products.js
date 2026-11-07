@@ -301,7 +301,7 @@ export async function renderProductsSection(container) {
           product
             ? `<div class="product-image-editor">
                 <div class="product-image-preview" id="product-image-preview">
-                  ${product.image_path ? `<img src="${api.productImageUrl(product.id)}" alt="" />` : `<span class="product-image-placeholder">${t("no_image")}</span>`}
+                  ${product.image_path ? `<img src="${api.productImageUrl(product.id, { w: 320, v: product.image_path })}" alt="" />` : `<span class="product-image-placeholder">${t("no_image")}</span>`}
                 </div>
                 <div class="product-image-actions">
                   <input type="file" id="product-image-input" accept="image/*" class="visually-hidden" />

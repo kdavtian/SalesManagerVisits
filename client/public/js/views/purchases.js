@@ -160,12 +160,19 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved }) {
       <p class="form-error" id="pu-sheet-error" hidden></p>
       <div class="sheet-actions">
         ${canDelete ? `<button type="button" class="btn btn-danger" id="pu-del">${t("pu_delete")}</button>` : ""}
+        <button type="button" class="btn" id="pu-repeat">${t("pu_repeat")}</button>
         ${app ? `<button type="button" class="btn btn-primary" id="pu-edit">${t("pu_edit")}</button>` : `<button type="button" class="btn btn-primary" id="pu-copy">${t("pu_copy_from_excel")}</button>`}
       </div>`;
     sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
     sheet.querySelector("#pu-edit")?.addEventListener("click", () => {
       close();
       openPurchaseForm(app, { onSaved });
+    });
+    // Repeat (owner, 2026-11-07): a new invoice with the same supplier, products, packs and prices; today's date, a new number to type
+    sheet.querySelector("#pu-repeat").addEventListener("click", () => {
+      close();
+      const from = app ? app.lines : excel.filter((l) => l.product_id).map((l) => ({ product_id: l.product_id, product_name: l.app_product_name, qty: l.qty, cost_usd: l.cost_usd }));
+      openPurchaseForm({ supplier: head.supplier ?? "", usd_rate: app?.usd_rate, lines: from }, { onSaved });
     });
     sheet.querySelector("#pu-copy")?.addEventListener("click", () => {
       close();
