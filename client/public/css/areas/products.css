@@ -200,3 +200,49 @@
   .pl-lbl-full { display: none; }
   .pl-lbl-short { display: inline; }
 }
+
+/* Purchases (owner, 2026-11-07): supplier invoices beside the Excel Purchase_IN */
+.pu-title { display: flex; align-items: center; gap: 6px; }
+.pu-new-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; white-space: nowrap; }
+.pu-new-btn svg { width: 18px; height: 18px; }
+.pu-chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px 0; scrollbar-width: none; }
+.pu-chips::-webkit-scrollbar { display: none; }
+.pu-chips .map-filter-chip { flex: 0 0 auto; }
+.pu-count { font-variant-numeric: tabular-nums; opacity: 0.7; }
+.pu-totals { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 16px 0; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.pu-totals-right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; text-align: right; }
+.purchases-view .card-list { padding: 0 16px 16px; }
+.pu-month { display: flex; justify-content: space-between; padding: 14px 4px 6px; font-size: 0.9rem; font-variant-numeric: tabular-nums; text-transform: capitalize; }
+.pu-group { padding: 0; overflow: hidden; }
+.pu-row { display: flex; width: 100%; gap: 10px; justify-content: space-between; align-items: center; padding: 10px 12px; min-height: 56px; border: 0; border-top: 1px solid var(--border); background: none; text-align: left; color: inherit; cursor: pointer; }
+.pu-row:first-child { border-top: 0; }
+.pu-row-main { display: flex; flex-direction: column; min-width: 0; }
+.pu-row-main .muted { font-size: 0.8rem; overflow-wrap: anywhere; }
+.pu-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.pu-lines { padding: 4px 12px; }
+.pu-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 0.88rem; font-variant-numeric: tabular-nums; align-items: baseline; }
+.pu-line:first-child { border-top: 0; }
+.pu-line-name { overflow-wrap: anywhere; }
+.pu-line-qty { color: var(--text-dim); white-space: nowrap; }
+.pu-line-sum { text-align: right; white-space: nowrap; }
+.pu-line-total { font-weight: 700; }
+.pu-form-sheet form > label, .pu-form-sheet .pa-two label { display: block; margin-bottom: 8px; }
+.pu-date-btn { width: 100%; min-height: 44px; margin-top: 4px; justify-content: flex-start; }
+.pu-form-lines { padding: 4px 10px; }
+.pu-form-line { display: grid; grid-template-columns: minmax(0, 1fr) 88px 104px 44px; gap: 8px; align-items: end; padding: 8px 0; border-top: 1px solid var(--border); }
+.pu-form-line:first-child { border-top: 0; }
+.pu-form-name { align-self: center; font-size: 0.88rem; overflow-wrap: anywhere; }
+.pu-form-num { display: flex; flex-direction: column; font-size: 0.72rem; color: var(--text-dim); }
+.pu-form-num input { min-height: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+.pu-form-empty { margin: 8px 0; font-size: 0.85rem; }
+@media (max-width: 480px) {
+  .pu-form-line { grid-template-columns: 1fr 1fr 44px; }
+  .pu-form-name { grid-column: 1 / -1; }
+}
+.pu-add { margin: 8px 0; }
+.pu-add input { width: 100%; }
+.pu-results { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.pu-result { text-align: left; min-height: 44px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--border); background: none; color: inherit; cursor: pointer; }
+.pu-form-total { font-variant-numeric: tabular-nums; }
+.pu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 16px 0; }
+.pu-head h1 { margin: 0; font-size: var(--fs-title); }

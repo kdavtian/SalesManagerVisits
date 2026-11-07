@@ -9759,6 +9759,9 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .es-home-bad { border-color: var(--danger, #e33b43); }
 .es-home-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .es-problem { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger, #e33b43) 12%, transparent); font-size: 0.85rem; overflow-wrap: anywhere; }
+.es-pause-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 6px 0; border-top: 1px solid var(--border); }
+.es-pause-row .health-label { display: flex; flex-direction: column; }
+.es-pause-since { font-size: 0.78rem; font-weight: 400; }
 
 /* Customer card header: how likely a potential customer is to buy (owner, 2026-10-24) */
 .pl-badge.pl-1 { background: color-mix(in srgb, var(--pl-1) 16%, var(--bg-card)); color: var(--pl-1); }
@@ -9989,6 +9992,15 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .signed-acts { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; text-align: left; }
 .signed-act-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .order-signed-note { margin: 8px 0; padding: 8px 10px; border-radius: 10px; background: rgba(46, 160, 67, 0.12); font-size: 0.85rem; }
+/* Corrections of an order after review (owner, 2026-11-07): who, when, why, total before -> after */
+.order-corrections { margin: 10px 0; }
+.order-correction { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--warning, #f5a623) 10%, var(--bg-card)); margin-top: 6px; }
+.order-correction-head { display: flex; justify-content: space-between; gap: 8px; font-size: 0.85rem; }
+.order-correction-reason { margin: 4px 0 0; font-size: 0.9rem; overflow-wrap: anywhere; }
+.order-correction-total { margin: 2px 0 0; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.oc-correct-note { margin: 0 0 8px; font-size: 0.85rem; }
+.oc-correct-reason { display: block; margin: 6px 0; font-size: 0.85rem; }
+.oc-correct-reason textarea { width: 100%; margin-top: 4px; font: inherit; }
 .blank-actions:has(#blank-sign-btn[hidden]) { grid-template-columns: 1fr; }
 .team-locked-box .btn { flex: none; min-height: 40px; }
 .wish-report-name {
@@ -10418,3 +10430,9 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   flex: 1;
   min-width: 0;
 }
+
+/* Two fields side by side in a sheet form (New product, New purchase); one under the other on a narrow phone */
+.pa-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pa-two > label { min-width: 0; }
+@media (max-width: 340px) { .pa-two { grid-template-columns: 1fr; } }
+.pa-note { font-size: 0.82rem; margin: 6px 0; }

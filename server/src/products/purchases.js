@@ -1,0 +1,243 @@
+// Purchases (owner, 2026-11-07): supplier invoices typed in the app with the Excel Purchase_IN columns (invoice no., date, supplier,
+// product, packs, USD per pack, the invoice's USD rate), and the side-by-side check against the Purchase_IN rows the bot sends
+// (erp_purchase_lines). Excel stays the source of stock until the owner switches the module over (docs/KDS-excel-off-single-erp.md, P4).
+// An invoice is matched app <-> Excel by its number (case and spaces ignored) and date; it "matches" when the packs and the USD total agree.
+import { pool } from "../db/pool.js";
+
+const USD_TOLERANCE = 0.05; // rounding in the workbook's own SUM column
+const keyOf = (invoiceNo, date) => `${String(invoiceNo ?? "").trim().toLowerCase().replace(/\s+/g, " ")}|${String(date).slice(0, 10)}`;
+const round2 = (n) => Math.round(Number(n) * 100) / 100;
+
+export class PurchaseError extends Error {}
+
+function cleanLines(lines) {
+  if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");
+  if (lines.length > 500) throw new PurchaseError("At most 500 lines");
+  return lines.map((l) => {
+    const qty = Number(l?.qty);
+    const cost = Number(l?.cost_usd);
+    const productId = l?.product_id == null || l.product_id === "" ? null : Number(l.product_id);
+    if (!Number.isFinite(qty) || qty <= 0) throw new PurchaseError("Every line needs a positive number of packs");
+    if (!Number.isFinite(cost) || cost < 0) throw new PurchaseError("Every line needs a USD price per pack (0 or more)");
+    if (productId !== null && !Number.isInteger(productId)) throw new PurchaseError("product_id must be a whole number");
+    return { product_id: productId, qty, cost_usd: cost, product_name: l?.product_name ? String(l.product_name).trim().slice(0, 200) : null };
+  });
+}
+
+/** Creates or updates one invoice (id = null: new). Returns the invoice id. A repeated client_ref returns the invoice it already made. */
+export async function savePurchase(body, userId, id = null, db = pool) {
+  const invoiceNo = String(body?.invoice_no ?? "").trim();
+  const date = String(body?.invoice_date ?? "").slice(0, 10);
+  const rate = Number(body?.usd_rate);
+  if (!invoiceNo) throw new PurchaseError("The invoice number is required");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new PurchaseError("invoice_date must be YYYY-MM-DD");
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 10000) throw new PurchaseError("usd_rate must be a positive number");
+  const lines = cleanLines(body?.lines);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    if (!id && body?.client_ref) {
+      const { rows } = await client.query("SELECT id FROM purchase_invoices WHERE client_ref = $1", [String(body.client_ref)]);
+      if (rows[0]) {
+        await client.query("ROLLBACK");
+        return rows[0].id;
+      }
+    }
+    let supplierId = body?.supplier_id ? Number(body.supplier_id) : null;
+    if (!supplierId) {
+      const name = String(body?.supplier_name ?? "").trim();
+      if (!name) throw new PurchaseError("Choose the supplier");
+      const { rows } = await client.query(
+        "INSERT INTO suppliers (name) VALUES ($1) ON CONFLICT (lower(name)) DO UPDATE SET name = suppliers.name RETURNING id",
+        [name.slice(0, 120)]
+      );
+      supplierId = rows[0].id;
+    }
+    // each line keeps the product's name, brand and size as they were (the catalog can change later)
+    const ids = lines.map((l) => l.product_id).filter(Boolean);
+    const { rows: products } = ids.length ? await client.query("SELECT id, name, brand, unit, size_l FROM products WHERE id = ANY($1)", [ids]) : { rows: [] };
+    const byId = new Map(products.map((p) => [p.id, p]));
+    for (const l of lines) {
+      const p = l.product_id ? byId.get(l.product_id) : null;
+      if (l.product_id && !p) throw new PurchaseError("A line names a product that does not exist");
+      l.product_name = p?.name ?? l.product_name;
+      if (!l.product_name) throw new PurchaseError("Every line needs a product");
+      l.brand = p?.brand ?? null;
+      l.size_l = p ? (Number(p.size_l) || Number(String(p.unit ?? "").replace(",", ".").match(/[\d.]+/)?.[0]) || null) : null;
+    }
+    let invoiceId = id;
+    if (id) {
+      const { rowCount } = await client.query(
+        "UPDATE purchase_invoices SET invoice_no = $2, invoice_date = $3, supplier_id = $4, usd_rate = $5, note = $6, updated_by = $7, updated_at = now() WHERE id = $1",
+        [id, invoiceNo, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId]
+      );
+      if (!rowCount) throw new PurchaseError("Purchase not found");
+      await client.query("DELETE FROM purchase_lines WHERE invoice_id = $1", [id]);
+    } else {
+      const { rows } = await client.query(
+        `INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, note, client_ref, created_by, updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id`,
+        [invoiceNo, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, body?.client_ref ? String(body.client_ref) : null, userId]
+      );
+      invoiceId = rows[0].id;
+    }
+    for (const l of lines) {
+      await client.query(
+        "INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        [invoiceId, l.product_id, l.product_name, l.brand, l.size_l, l.qty, l.cost_usd]
+      );
+    }
+    await client.query("COMMIT");
+    return invoiceId;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** The Purchase_IN rows the bot sends replace the previous copy. Rows without a date or an invoice number are skipped. */
+export async function applyExcelPurchases(rows, db = pool) {
+  if (!Array.isArray(rows)) throw new PurchaseError("rows must be an array");
+  const clean = [];
+  let skipped = 0;
+  rows.forEach((r, i) => {
+    const date = String(r?.date ?? "").slice(0, 10);
+    const invoiceNo = String(r?.invoice_id ?? r?.invoice_no ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !invoiceNo) {
+      skipped += 1;
+      return;
+    }
+    const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+    clean.push([invoiceNo.slice(0, 80), date, r?.supplier ? String(r.supplier).trim().slice(0, 120) : null, r?.product_id ? String(r.product_id).trim() : null, r?.brand ? String(r.brand).trim() : null, r?.product_name ? String(r.product_name).trim() : null, num(r?.size_l), num(r?.qty), num(r?.cost_usd), num(r?.amount_amd), r?.info ? String(r.info).slice(0, 500) : null, Number(r?.excel_row) || i + 1]);
+  });
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM erp_purchase_lines");
+    const cols = (k) => clean.map((c) => c[k]);
+    if (clean.length) {
+      await client.query(
+        `INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, brand, product_name, size_l, qty, cost_usd, amount_amd, info, excel_row)
+         SELECT * FROM unnest($1::text[], $2::date[], $3::text[], $4::text[], $5::text[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::numeric[], $11::text[], $12::int[])`,
+        [cols(0), cols(1), cols(2), cols(3), cols(4), cols(5), cols(6), cols(7), cols(8), cols(9), cols(10), cols(11)]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  return { rows: clean.length, skipped };
+}
+
+/**
+ * Every invoice of the period, from the app and from Excel, each with its comparison:
+ * status "match" | "diff" | "app_only" | "excel_only". Newest first. `from` / `to` are YYYY-MM-DD (inclusive).
+ */
+export async function listPurchases({ from = null, to = null, supplierId = null } = {}, db = pool) {
+  const params = [from, to];
+  const [{ rows: app }, { rows: excel }] = await Promise.all([
+    db.query(
+      `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, s.id AS supplier_id, s.name AS supplier,
+              count(l.id)::int AS lines, COALESCE(sum(l.qty), 0)::float8 AS qty, COALESCE(sum(l.qty * l.cost_usd), 0)::float8 AS usd,
+              COALESCE(sum(l.qty * l.size_l), 0)::float8 AS liters, u.name AS created_by_name
+         FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN purchase_lines l ON l.invoice_id = i.id
+         LEFT JOIN users u ON u.id = i.created_by
+        WHERE ($1::date IS NULL OR i.invoice_date >= $1::date) AND ($2::date IS NULL OR i.invoice_date <= $2::date) ${supplierId ? "AND i.supplier_id = $3" : ""}
+        GROUP BY i.id, s.id, u.name`,
+      supplierId ? [...params, supplierId] : params
+    ),
+    db.query(
+      `SELECT invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date, min(supplier) AS supplier, count(*)::int AS lines,
+              COALESCE(sum(qty), 0)::float8 AS qty, COALESCE(sum(qty * cost_usd), 0)::float8 AS usd, COALESCE(sum(amount_amd), 0)::float8 AS amd,
+              COALESCE(sum(qty * size_l), 0)::float8 AS liters
+         FROM erp_purchase_lines
+        WHERE ($1::date IS NULL OR invoice_date >= $1::date) AND ($2::date IS NULL OR invoice_date <= $2::date)
+        GROUP BY invoice_no, invoice_date`,
+      params
+    ),
+  ]);
+  const byKey = new Map();
+  for (const a of app) byKey.set(keyOf(a.invoice_no, a.invoice_date), { app: a, excel: null });
+  let supplierName = null;
+  if (supplierId) supplierName = app.find((a) => a.supplier_id === supplierId)?.supplier ?? (await db.query("SELECT name FROM suppliers WHERE id = $1", [supplierId])).rows[0]?.name ?? null;
+  for (const e of excel) {
+    if (supplierId && String(e.supplier ?? "").toLowerCase() !== String(supplierName ?? "").toLowerCase() && !byKey.has(keyOf(e.invoice_no, e.invoice_date))) continue;
+    const k = keyOf(e.invoice_no, e.invoice_date);
+    const hit = byKey.get(k);
+    if (hit) hit.excel = e;
+    else byKey.set(k, { app: null, excel: e });
+  }
+  const out = [...byKey.values()].map(({ app: a, excel: e }) => {
+    const status = a && e ? (Math.abs(a.qty - e.qty) < 0.001 && Math.abs(a.usd - e.usd) <= USD_TOLERANCE ? "match" : "diff") : a ? "app_only" : "excel_only";
+    const base = a ?? e;
+    return {
+      id: a?.id ?? null,
+      invoice_no: base.invoice_no,
+      invoice_date: base.invoice_date,
+      supplier: a?.supplier ?? e?.supplier ?? null,
+      status,
+      lines: base.lines,
+      qty: base.qty,
+      liters: round2(base.liters),
+      usd: round2(base.usd),
+      amd: a ? Math.round(a.usd * a.usd_rate) : Math.round(e.amd || 0),
+      usd_rate: a?.usd_rate ?? null,
+      created_by_name: a?.created_by_name ?? null,
+      excel: e ? { qty: e.qty, usd: round2(e.usd), lines: e.lines } : null,
+    };
+  });
+  out.sort((x, y) => y.invoice_date.localeCompare(x.invoice_date) || String(y.invoice_no).localeCompare(String(x.invoice_no)));
+  return out;
+}
+
+/** One invoice with its lines, and the Excel lines of the same invoice number and date beside them. */
+export async function getPurchase(id, db = pool) {
+  const { rows: [inv] } = await db.query(
+    `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, i.supplier_id, s.name AS supplier,
+            i.created_at, i.updated_at, u.name AS created_by_name
+       FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN users u ON u.id = i.created_by WHERE i.id = $1`,
+    [id]
+  );
+  if (!inv) return null;
+  const [{ rows: lines }, { rows: excel }] = await Promise.all([
+    db.query("SELECT id, product_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]),
+    db.query(
+      `SELECT erp_product_id, brand, product_name, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd, amount_amd::float8 AS amount_amd, info
+         FROM erp_purchase_lines WHERE invoice_date = $1::date AND lower(regexp_replace(trim(invoice_no), '\\s+', ' ', 'g')) = lower(regexp_replace(trim($2), '\\s+', ' ', 'g'))
+        ORDER BY excel_row`,
+      [inv.invoice_date, inv.invoice_no]
+    ),
+  ]);
+  return { ...inv, lines, excel_lines: excel };
+}
+
+export async function listSuppliers(db = pool) {
+  const { rows } = await db.query(
+    `SELECT s.id, s.name, s.brands, s.active, max(i.invoice_date) AS last_invoice_date,
+            (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate
+       FROM suppliers s LEFT JOIN purchase_invoices i ON i.supplier_id = s.id
+      GROUP BY s.id ORDER BY s.active DESC, max(i.invoice_date) DESC NULLS LAST, s.name`
+  );
+  // the Excel's supplier names not yet in the list, so the first invoices can pick them
+  const { rows: excelNames } = await db.query("SELECT DISTINCT supplier FROM erp_purchase_lines WHERE supplier IS NOT NULL AND supplier <> ''");
+  const known = new Set(rows.map((r) => r.name.toLowerCase()));
+  return { suppliers: rows, excel_names: excelNames.map((r) => r.supplier).filter((n) => !known.has(n.toLowerCase())).sort() };
+}
+
+/** The Excel lines of one invoice (number + date), each with the app product it names (by the Excel ProductID), to copy it into the app. */
+export async function getExcelInvoice(invoiceNo, date, db = pool) {
+  const { rows } = await db.query(
+    `SELECT e.invoice_no, to_char(e.invoice_date, 'YYYY-MM-DD') AS invoice_date, e.supplier, e.erp_product_id, e.brand, e.product_name, e.size_l::float8 AS size_l,
+            e.qty::float8 AS qty, e.cost_usd::float8 AS cost_usd, e.amount_amd::float8 AS amount_amd, e.info, p.id AS product_id, p.name AS app_product_name
+       FROM erp_purchase_lines e LEFT JOIN products p ON p.erp_product_id = e.erp_product_id
+      WHERE e.invoice_date = $1::date AND lower(regexp_replace(trim(e.invoice_no), '\\s+', ' ', 'g')) = lower(regexp_replace(trim($2), '\\s+', ' ', 'g'))
+      ORDER BY e.excel_row`,
+    [date, invoiceNo]
+  );
+  return rows;
+}

@@ -305,7 +305,7 @@ productsRouter.get("/duplicates", async (req, res) => {
 });
 
 productsRouter.post("/", async (req, res) => {
-  const { name, sku, brand, unit, unit_price_amd, retail_price_amd, net_cost_amd } = req.body ?? {};
+  const { name, sku, brand, unit, unit_price_amd, retail_price_amd, net_cost_amd, silver_price_amd, family, hc_code, size_l, allow_duplicate } = req.body ?? {};
   const price = Number(unit_price_amd);
   if (!name || !Number.isFinite(price) || price < 0) {
     return res.status(400).json({ error: "name and a non-negative unit_price_amd are required" });
@@ -321,10 +321,27 @@ productsRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "net_cost_amd must be a non-negative number" });
     }
   }
+  const silver = silver_price_amd !== undefined && silver_price_amd !== null && silver_price_amd !== "" ? Number(silver_price_amd) : null;
+  if (silver !== null && (!Number.isFinite(silver) || silver < 0)) return res.status(400).json({ error: "silver_price_amd must be a non-negative number" });
+  const sizeL = size_l !== undefined && size_l !== null && size_l !== "" ? Number(size_l) : null;
+  if (sizeL !== null && (!Number.isFinite(sizeL) || sizeL <= 0)) return res.status(400).json({ error: "size_l must be a positive number" });
+  // The same brand + name + size already in the catalog (owner, 2026-11-07: one product, not two): said back with the existing one, saved
+  // only when the person confirms it is a different product (allow_duplicate). Same comparison as the Excel sync's claim step.
+  if (allow_duplicate !== true) {
+    const { rows: same } = await pool.query(
+      `SELECT id, name, brand, unit FROM products
+        WHERE lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = lower(regexp_replace(trim($1), '\\s+', ' ', 'g'))
+          AND lower(regexp_replace(trim(coalesce(brand, '')), '\\s+', ' ', 'g')) = lower(regexp_replace(trim(coalesce($2, '')), '\\s+', ' ', 'g'))
+          AND lower(regexp_replace(trim(coalesce(unit, '')), '\\s+', '', 'g')) = lower(regexp_replace(trim(coalesce($3, '')), '\\s+', '', 'g'))
+        LIMIT 1`,
+      [String(name), brand || null, unit || null]
+    );
+    if (same[0]) return res.status(409).json({ error: "This product is already in the catalog", code: "duplicate", existing: same[0] });
+  }
   const { rows } = await pool.query(
-    `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd, net_cost_amd)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7) RETURNING *`,
-    [name, sku || null, brand || null, unit || null, price, retail, netCost]
+    `INSERT INTO products (name, sku, brand, unit, unit_price_amd, bronze_price_amd, retail_price_amd, net_cost_amd, silver_price_amd, family, hc_code, size_l)
+     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+    [String(name).trim(), sku || null, brand ? String(brand).trim() : null, unit || null, price, retail, netCost, silver, family ? String(family).trim() : null, hc_code ? String(hc_code).trim() : null, sizeL]
   );
   res.status(201).json(rows[0]);
 });

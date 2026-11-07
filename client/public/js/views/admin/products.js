@@ -31,6 +31,8 @@ export async function renderProductsSection(container) {
   const listEl = container.querySelector("#product-list");
   container.querySelector("#bulk-price-edit-btn").addEventListener("click", () => openBulkPriceEditSheet(loadProducts));
   container.querySelector("#import-excel-btn").addEventListener("click", () => openImportSheet(loadProducts));
+  // a new product: the short form with the Excel fields (productAddSheet.js); the full sheet below stays for editing
+  container.querySelector("#add-product-btn").addEventListener("click", async () => (await import("../../productAddSheet.js")).openAddProductSheet({ onSaved: () => loadProducts() }));
 
   // Landing cost is entirely ERP-sync-fed (never editable in-app -- see
   // migration 064), so "it's not showing" has exactly two possible causes:
@@ -460,7 +462,6 @@ export async function renderProductsSection(container) {
       : `<p class="empty-state">${t("no_price_history")}</p>`;
   }
 
-  container.querySelector("#add-product-btn").addEventListener("click", () => openProductSheet(null));
 
   // Surfaces existing name+brand+unit duplicates (see GET
   // /products/duplicates) so an admin can find and resolve the ones
