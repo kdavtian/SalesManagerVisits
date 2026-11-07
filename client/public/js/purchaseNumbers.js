@@ -20,8 +20,8 @@ export function priceChangePct(previous, current) {
   return Math.round(((b - a) / a) * 100);
 }
 
-/** "How long ago" without a library: "0 min", "12 min", "3 h", "5 d" (units passed in by the caller, so the screen can speak Armenian). */
-export function sinceText(iso, now = Date.now(), units = { min: "min", h: "h", d: "d" }) {
+/** "How long ago" without a library: "12 min", "3 h", "5 d". The unit words come from the caller (translated), so the screen speaks Armenian. */
+export function sinceText(iso, now, units) {
   const ms = now - new Date(iso).getTime();
   if (!Number.isFinite(ms) || ms < 0) return "";
   const min = Math.floor(ms / 60000);

@@ -92,7 +92,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     </div>
     <form id="pu-form" class="pu-form" autocomplete="off" novalidate>
       <div class="pu-form-body">
-        <p class="pu-draft" id="pu-draft" hidden><span>${t("pu_draft_restored")}</span><button type="button" class="settings-reset-link" id="pu-draft-discard">${t("pu_draft_discard")}</button></p>
+        <p class="pu-draft" id="pu-draft" hidden><span>${t("pu_draft_restored")}</span><button type="button" class="pu-link-btn" id="pu-draft-discard">${t("pu_draft_discard")}</button></p>
         <fieldset class="pu-block">
           <legend>${t("pu_supplier")}</legend>
           <div class="pu-supplier-pick" id="pu-supplier-chips" role="radiogroup" aria-label="${t("pu_supplier")}"></div>

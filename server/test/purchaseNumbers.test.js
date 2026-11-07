@@ -21,11 +21,12 @@ test("price change in whole percent; nothing when a price is missing", () => {
 });
 
 test("since text", () => {
+  const EN = { min: "min", h: "h", d: "d" };
   const now = Date.parse("2026-11-08T12:00:00Z");
-  assert.equal(sinceText("2026-11-08T11:59:30Z", now), "0 min");
+  assert.equal(sinceText("2026-11-08T11:59:30Z", now, EN), "0 min");
   assert.equal(sinceText("2026-11-08T09:00:00Z", now, { min: "ր", h: "ժ", d: "օր" }), "3 ժ");
-  assert.equal(sinceText("2026-11-08T11:30:00Z", now), "30 min");
-  assert.equal(sinceText("2026-11-08T09:00:00Z", now), "3 h");
-  assert.equal(sinceText("2026-11-04T12:00:00Z", now), "4 d");
-  assert.equal(sinceText("bad", now), "");
+  assert.equal(sinceText("2026-11-08T11:30:00Z", now, EN), "30 min");
+  assert.equal(sinceText("2026-11-08T09:00:00Z", now, EN), "3 h");
+  assert.equal(sinceText("2026-11-04T12:00:00Z", now, EN), "4 d");
+  assert.equal(sinceText("bad", now, EN), "");
 });
