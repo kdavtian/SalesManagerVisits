@@ -45,6 +45,9 @@ export default defineConfig({
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`,
+    // The people who use the app are in Yerevan and the server counts days there: a test browser left in UTC disagreed about "today" from
+    // 20:00 to 24:00 UTC (CI and this machine), when it is already tomorrow in Yerevan -- Orders reopened on "this month" showed no orders.
+    timezoneId: "Asia/Yerevan",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

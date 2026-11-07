@@ -182,7 +182,17 @@ test("migration 173: the Stock count tile is added to customized lists of its ro
 // recheck what differs and tells the accountants the result.
 test("finishing the day needs the drawn signature; with it the day is signed, its PDF exists, the counter gets a recheck task and the accountant a notice", async () => {
   const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-  const day = (await apiRequest("/api/stock-count/day", { cookie: cookies.admin })).data;
+  let day = (await apiRequest("/api/stock-count/day", { cookie: cookies.admin })).data;
+  if (day.items.length < 2) {
+    // a Sunday or a company holiday in Yerevan: nothing is planned for today (correct); this test needs two products due today, so it plans them itself
+    const today = day.today;
+    await pool.query(
+      `INSERT INTO stock_counts (month, product_id, planned_date) SELECT $1::date, p.id, $2::date FROM products p WHERE p.id = ANY($3)
+       ON CONFLICT (month, product_id) DO UPDATE SET planned_date = EXCLUDED.planned_date`,
+      [`${today.slice(0, 7)}-01`, today, products.slice(0, 2).map((p) => p.id)]
+    );
+    day = (await apiRequest("/api/stock-count/day", { cookie: cookies.admin })).data;
+  }
   const first = day.items.slice(0, 2);
   assert.ok(first.length === 2, "today has products to count");
   for (const it of first) {
