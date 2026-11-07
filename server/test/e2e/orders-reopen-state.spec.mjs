@@ -9,7 +9,9 @@ test("@iphone @smoke Orders reopens with saved settings, ignores unknown ones an
   const product = await fixtures.createProduct({ unit_price_amd: 1000 });
   await fixtures.createOrder({ customer_id: customer.id, user_id: admin.id, status: "confirmed", total_amd: 5000, product, quantity: 5, payment_method: "cash" });
   const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  // a reload interrupts requests on their way: Safari reports each as "TypeError: Load failed" (Chrome "Failed to fetch"); those are not
+  // errors of the screen (and since 1.525.0 the app no longer takes them for a broken app file either)
+  page.on("pageerror", (e) => !/^(TypeError: )?(Load failed|Failed to fetch)$/.test(e.message) && errors.push(e.message));
   await page.setViewportSize({ width: 390, height: 844 });
   // the app saves where it is when the page goes away, so the record under test is written at the start of the next load
   await page.addInitScript(() => {

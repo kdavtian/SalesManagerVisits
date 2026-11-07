@@ -537,7 +537,11 @@ async function doLogout() {
 function appIsBlank() {
   return !app.querySelector("*");
 }
-const MODULE_LOAD_FAILURE = /dynamically imported module|Importing a module script failed|Failed to fetch|Load failed|does not provide an export|Importing binding name|is not found/i;
+// Only a file of the app that did not load (Chrome: "Failed to fetch dynamically imported module", Safari: "Importing a module script failed",
+// two versions meeting: "does not provide an export"). A plain request that failed is NOT one: Safari words every failed or interrupted
+// request "TypeError: Load failed" (Chrome "Failed to fetch"), and counting those as a broken app file made a dropped request on an iPhone
+// with an update waiting show "The screen did not open" and reload the app (owner, 2026-11-07: Orders after an update).
+const MODULE_LOAD_FAILURE = /dynamically imported module|Importing a module script failed|does not provide an export|Importing binding name|is not found/i;
 const isModuleLoadFailure = (err) => MODULE_LOAD_FAILURE.test(String(err?.message || err || ""));
 function showRenderFailure(err) {
   console.error("Screen failed to render:", err);
