@@ -17,6 +17,13 @@ export const productsApi = {
   savePurchase: (id, data) => json(id ? `/purchases/${id}` : "/purchases", id ? "PUT" : "POST", data),
   deletePurchase: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
   listSuppliers: () => request("/purchases/suppliers", { fresh: true }),
+  getPurchasesStatus: () => request("/purchases/status", { fresh: true }),
+  getPurchaseHistory: (ids, exclude = {}) => request(`/purchases/product-history?${new URLSearchParams({ ids: ids.join(","), ...(exclude.no && exclude.date ? { exclude_no: exclude.no, exclude_date: exclude.date } : {}) }).toString()}`, { fresh: true }),
+  importPurchasesExcel: (file) => {
+    const form = new FormData();
+    form.set("file", file);
+    return request("/purchases/import-excel", { method: "POST", body: form });
+  },
   updateProduct: (id, data) => json(`/products/${id}`, "PATCH", data),
   deleteProduct: (id) => request(`/products/${id}`, { method: "DELETE" }),
   resyncProduct: (id) => request(`/products/${id}/resync`, { method: "POST" }),

@@ -201,24 +201,79 @@
   .pl-lbl-short { display: inline; }
 }
 
-/* Purchases (owner, 2026-11-07): supplier invoices beside the Excel Purchase_IN */
+/* Purchases (owner, 2026-11-07): supplier invoices beside the Excel Purchase_IN. Ultra version: Excel status, KPI cards, supplier cards that filter,
+   desktop rows with columns, a form with a fixed bottom bar (totals + Save never leave the screen). */
 .pu-title { display: flex; align-items: center; gap: 6px; }
-.pu-new-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; white-space: nowrap; }
-.pu-new-btn svg { width: 18px; height: 18px; }
+.pu-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 16px 16px 0; }
+.pu-head h1 { margin: 0; font-size: var(--fs-title); }
+.pu-head-actions { display: flex; gap: 8px; }
+.pu-new-btn, .pu-import-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 0; text-align: center; }
+.pu-new-btn svg, .pu-import-btn svg { width: 18px; height: 18px; }
+.pu-icon-up { display: inline-flex; transform: rotate(180deg); }
+@media (max-width: 520px) {
+  .pu-head-actions { width: 100%; }
+  .pu-head-actions .btn { flex: 1 1 0; padding-left: 10px; padding-right: 10px; }
+}
+@media (max-width: 380px) {
+  .pu-head-actions { flex-direction: column; } /* two long Armenian labels do not fit side by side at 320 px */
+}
+.pu-excel-line { margin: 0; padding: 8px 16px 0; font-size: 0.8rem; }
+.pu-excel-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 12px 16px 0; padding: 14px 16px; border: 1px dashed var(--control-border); }
+.pu-excel-empty p { margin: 0; }
 .pu-chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px 0; scrollbar-width: none; }
 .pu-chips::-webkit-scrollbar { display: none; }
 .pu-chips .map-filter-chip { flex: 0 0 auto; }
+.pu-chips-inline { padding: 0; }
 .pu-count { font-variant-numeric: tabular-nums; opacity: 0.7; }
-.pu-totals { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 16px 0; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
-.pu-totals-right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 12px; text-align: right; }
+.pu-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 16px 0; }
+.pu-kpis:empty { display: none; }
+@media (min-width: 720px) { .pu-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pu-kpi { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.pu-kpi-label { font-size: 0.75rem; color: var(--text-dim); }
+.pu-kpi-value { font-size: 1.15rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pu-kpi-sub { font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.pu-suppliers { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px 0; scrollbar-width: none; }
+.pu-suppliers::-webkit-scrollbar { display: none; }
+.pu-suppliers:empty { display: none; }
+.pu-supplier { flex: 0 0 172px; display: flex; flex-direction: column; gap: 4px; min-height: 44px; padding: 10px 12px; text-align: left; color: inherit; cursor: pointer; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.pu-supplier-active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pu-supplier-name { font-weight: 700; overflow-wrap: anywhere; }
+.pu-supplier-usd { font-variant-numeric: tabular-nums; }
+.pu-supplier-bar { display: block; height: 6px; border-radius: 3px; background: var(--bg-card-pressed); overflow: hidden; }
+.pu-supplier-bar i { display: block; height: 100%; background: var(--accent); }
+.pu-supplier-meta { font-size: 0.75rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (min-width: 900px) {
+  .pu-suppliers { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); overflow: visible; }
+  .pu-supplier { flex: none; }
+}
+.pu-toolbar { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px 0; }
+.pu-search input { width: 100%; min-height: 44px; }
+.pu-toolbar .pu-chips { overflow-x: auto; }
+@media (min-width: 900px) {
+  .pu-toolbar { flex-direction: row; align-items: center; }
+  .pu-search { flex: 0 0 320px; }
+}
 .purchases-view .card-list { padding: 0 16px 16px; }
+.pu-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 0; }
+.pu-empty p { margin: 0; }
 .pu-month { display: flex; justify-content: space-between; padding: 14px 4px 6px; font-size: 0.9rem; font-variant-numeric: tabular-nums; text-transform: capitalize; }
 .pu-group { padding: 0; overflow: hidden; }
 .pu-row { display: flex; width: 100%; gap: 10px; justify-content: space-between; align-items: center; padding: 10px 12px; min-height: 56px; border: 0; border-top: 1px solid var(--border); background: none; text-align: left; color: inherit; cursor: pointer; }
 .pu-row:first-child { border-top: 0; }
 .pu-row-main { display: flex; flex-direction: column; min-width: 0; }
 .pu-row-main .muted { font-size: 0.8rem; overflow-wrap: anywhere; }
+.pu-row-cols { display: none; }
 .pu-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+@media (min-width: 900px) {
+  .pu-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2.6fr) 150px; gap: 16px; }
+  .pu-row-main .muted { display: none; }
+  .pu-row-cols { display: grid; grid-template-columns: 110px minmax(0, 1fr) 100px 90px 130px; gap: 12px; align-items: center; font-variant-numeric: tabular-nums; }
+  .pu-col-liters, .pu-col-perl, .pu-col-amd { text-align: right; }
+  .pu-col-no { overflow-wrap: anywhere; }
+  .pu-row:hover { background: var(--bg-card-pressed); }
+}
+.pu-sheet-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pu-excel-notes { font-size: 0.85rem; overflow-wrap: anywhere; }
 .pu-lines { padding: 4px 12px; }
 .pu-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 0.88rem; font-variant-numeric: tabular-nums; align-items: baseline; }
 .pu-line:first-child { border-top: 0; }
@@ -226,26 +281,93 @@
 .pu-line-qty { color: var(--text-dim); white-space: nowrap; }
 .pu-line-sum { text-align: right; white-space: nowrap; }
 .pu-line-total { font-weight: 700; }
-.pu-form-sheet form > label, .pu-form-sheet .pa-two label { display: block; margin-bottom: 8px; }
-.pu-date-btn { width: 100%; min-height: 44px; margin-top: 4px; justify-content: flex-start; }
-.pu-form-lines { padding: 4px 10px; }
-.pu-form-line { display: grid; grid-template-columns: minmax(0, 1fr) 88px 104px 44px; gap: 8px; align-items: end; padding: 8px 0; border-top: 1px solid var(--border); }
-.pu-form-line:first-child { border-top: 0; }
-.pu-form-name { align-self: center; font-size: 0.88rem; overflow-wrap: anywhere; }
-.pu-form-num { display: flex; flex-direction: column; font-size: 0.72rem; color: var(--text-dim); }
-.pu-form-num input { min-height: 40px; text-align: right; font-variant-numeric: tabular-nums; }
-.pu-form-empty { margin: 8px 0; font-size: 0.85rem; }
-@media (max-width: 480px) {
-  .pu-form-line { grid-template-columns: 1fr 1fr 44px; }
-  .pu-form-name { grid-column: 1 / -1; }
+.sheet.pu-sheet .sheet-actions-floating, .sheet.pu-import-sheet .sheet-actions { margin-top: 14px; }
+
+/* Import from Excel */
+.pu-file-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; margin: 12px 0; cursor: pointer; overflow-wrap: anywhere; }
+.pu-file-btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pu-file-btn svg { width: 18px; height: 18px; }
+.pu-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+
+/* The new / edit invoice form: header, a scrolling body, a bar that stays */
+.sheet.pu-form-sheet { display: flex; flex-direction: column; padding: 0; width: 100%; max-width: min(960px, 100%); max-height: 92vh; max-height: 92dvh; overflow: hidden; }
+/* the global desktop rule (styles.css: every sheet a 560 px centred dialog) is out-ranked on purpose: this form is a working screen, it gets the room */
+@media (min-width: 900px) {
+  .sheet-overlay:not(.guide-overlay):not(.pd-lightbox):not(.map-dimension-popover-overlay) > .sheet.pu-form-sheet:not(.order-detail-sheet) {
+    width: min(980px, 100%);
+    max-width: 980px;
+    max-height: min(92vh, 900px);
+    padding: 0;
+  }
 }
-.pu-add { margin: 8px 0; }
-.pu-add input { width: 100%; }
-.pu-results { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
-.pu-result { text-align: left; min-height: 44px; padding: 8px 10px; border: 0; border-bottom: 1px solid var(--border); background: none; color: inherit; cursor: pointer; }
-.pu-form-total { font-variant-numeric: tabular-nums; }
-.pu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 16px 0; }
-.pu-head h1 { margin: 0; font-size: var(--fs-title); }
+.pu-form-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 16px 6px; flex: 0 0 auto; }
+.pu-form-head h2 { margin: 0; }
+.pu-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.pu-form-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 16px 16px; }
+.pu-bar { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px calc(10px + var(--nav-safe-bottom)); background: var(--bg-card); border-top: 1px solid var(--border); box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.08); }
+.pu-bar-totals { display: flex; flex-direction: column; min-width: 0; font-variant-numeric: tabular-nums; }
+.pu-bar-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 1.1rem; }
+.pu-bar-sub { font-size: 0.8rem; overflow-wrap: anywhere; }
+.pu-bar-btns { display: flex; gap: 8px; flex: 0 0 auto; }
+.pu-bar-btns .btn { min-height: 44px; min-width: 96px; }
+@media (max-width: 520px) {
+  .pu-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .pu-bar-btns .btn { flex: 1; }
+}
+.pu-block { min-width: 0; margin: 0 0 12px; padding: 0; border: 0; }
+.pu-block legend { padding: 0; margin-bottom: 6px; font-size: 0.8rem; color: var(--text-dim); }
+.pu-supplier-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.pu-chip { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 6px 14px; text-align: left; color: inherit; cursor: pointer; background: var(--bg-card); border: 1px solid var(--control-border); border-radius: 12px; }
+.pu-chip .muted { font-size: 0.72rem; }
+.pu-chip-on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg-card)); box-shadow: inset 0 0 0 1px var(--accent); }
+.pu-chip-add { justify-content: center; border-style: dashed; }
+#pu-new-supplier { margin-top: 8px; }
+#pu-new-supplier input { width: 100%; min-height: 44px; }
+.pu-grid3 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@media (min-width: 640px) { .pu-grid3 { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); } }
+.pu-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin-bottom: 8px; }
+.pu-field label { margin: 0; font-size: 0.8rem; color: var(--text-dim); }
+.pu-field input { width: 100%; min-height: 44px; margin: 0; }
+.pu-date-btn { width: 100%; min-height: 44px; margin: 0; justify-content: flex-start; }
+.pu-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 0.78rem; }
+.pu-hints:empty { display: none; }
+.pu-hint-chip { position: relative; padding: 2px 10px; color: var(--accent); cursor: pointer; background: none; border: 1px solid var(--accent); border-radius: 999px; }
+.pu-hint-chip::after { content: ""; position: absolute; inset: -9px -4px; } /* a 44 px tap area around the small chip */
+.pu-field-err { margin: 2px 0 0; color: var(--danger); font-size: 0.8rem; }
+.pu-form input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.pu-dup { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 10px; padding: 10px 12px; background: color-mix(in srgb, var(--warning) 12%, var(--bg-card)); border: 1px solid var(--warning); border-radius: var(--radius); }
+.pu-dup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pu-dup-actions .btn { min-height: 44px; }
+.pu-draft { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 10px; padding: 8px 12px; font-size: 0.85rem; background: var(--bg-card-pressed); border-radius: var(--radius); }
+.pu-link-btn { min-height: 44px; padding: 0 4px; color: var(--accent); text-decoration: underline; background: none; border: 0; cursor: pointer; }
+.pu-add { position: relative; margin: 8px 0; }
+.pu-add input { width: 100%; min-height: 44px; }
+.pu-results { position: absolute; left: 0; right: 0; z-index: 3; max-height: 260px; overflow-y: auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); }
+.pu-results:empty { display: none; }
+.pu-result { display: block; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; color: inherit; cursor: pointer; background: none; border: 0; border-bottom: 1px solid var(--border); }
+.pu-result-active, .pu-result:hover { background: var(--bg-card-pressed); }
+.pu-flines { display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.pu-flines:empty { display: none; }
+.pu-fl { display: grid; grid-template-columns: minmax(0, 1fr) 110px 130px 120px 44px; align-items: start; gap: 8px 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.pu-fl:first-child { border-top: 0; }
+.pu-fl-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pu-fl-name { font-weight: 600; overflow-wrap: anywhere; }
+.pu-fl-hist { font-size: 0.78rem; overflow-wrap: anywhere; }
+.pu-fl-num { display: flex; flex-direction: column; gap: 2px; font-size: 0.72rem; color: var(--text-dim); }
+.pu-fl-num input { width: 100%; min-height: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.pu-delta { align-self: flex-end; font-size: 0.75rem; font-style: normal; font-weight: 700; }
+.pu-delta-up { color: var(--danger); }
+.pu-delta-down { color: var(--success); }
+.pu-fl-sum { display: flex; flex-direction: column; align-items: flex-end; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.pu-fl-sum-label { font-size: 0.72rem; color: var(--text-dim); }
+.pu-fl > .icon-btn { align-self: end; }
+.pu-fl-err { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 719px) {
+  .pu-fl { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+  .pu-fl-main { grid-column: 1 / -1; }
+  .pu-fl-sum { grid-column: 1 / -1; grid-row: 3; flex-direction: row; justify-content: space-between; align-items: baseline; }
+  .pu-fl > .icon-btn { grid-column: 3; grid-row: 2; }
+}
 
 /* Products header (owner, 2026-11-07): the "!" sits after the title; on a phone the action buttons stay on the title's row */
 .pricelist-title { display: flex; flex-direction: row; align-items: center; gap: 6px; }
