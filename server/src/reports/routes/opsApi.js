@@ -8,7 +8,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "../../db/pool.js";
-import { checkBearer } from "../../erp/integrationTokens.js";
+import { checkBearer, auditTokenCall } from "../../erp/integrationTokens.js";
 import { reconcile } from "../opsFeed/reconcile.js";
 import { kpi, KPI_PERIODS, KPI_MODES } from "../opsFeed/kpi.js";
 
@@ -31,19 +31,12 @@ opsApiRouter.use(
 
 // Named: test/architecture.test.js counts it as the login of every route below.
 opsApiRouter.use(async function requireOpsToken(req, res, next) {
-  if (req.method !== "GET") return fail(res, 405, "read_only", "The ops API is read-only (GET)");
+  if (req.method !== "GET" && req.method !== "HEAD") return fail(res, 405, "read_only", "The ops API is read-only (GET)");
   const auth = await checkBearer(req, "ops-read");
   if (!auth.token) return fail(res, auth.status, auth.code, auth.message);
   req.opsToken = auth.token;
   res.set("Cache-Control", "no-store");
-  res.on("finish", () => {
-    pool
-      .query(
-        `INSERT INTO integration_audit_log (token_id, token_name, method, path, status_code, ip) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [auth.token.id, auth.token.name, req.method, req.originalUrl.split("?")[0], res.statusCode, req.ip]
-      )
-      .catch((err) => console.error("Ops API audit log failed:", err));
-  });
+  auditTokenCall(req, res, auth.token);
   next();
 });
 
@@ -57,6 +50,13 @@ opsApiRouter.get("/kpi", async (req, res) => {
   if (!KPI_PERIODS.includes(period)) return fail(res, 400, "bad_period", `period must be one of: ${KPI_PERIODS.join(", ")}`);
   if (!KPI_MODES.includes(mode)) return fail(res, 400, "bad_mode", `mode must be one of: ${KPI_MODES.join(", ")}`);
   res.json(await kpi(pool, { period, mode }));
+});
+
+// A failure keeps the documented error shape (never the app's generic one), without its text: it could quote data.
+// (four arguments: that is how Express tells an error handler)
+opsApiRouter.use((err, _req, res, _next) => {
+  console.error("Ops API failed:", err);
+  fail(res, 500, "internal", "The ops API failed; try again later");
 });
 
 // Anything else under /v1 stops here (never falls through to the Operations control router behind it).

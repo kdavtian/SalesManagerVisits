@@ -55,3 +55,16 @@ export async function checkBearer(req, scope) {
   pool.query("UPDATE integration_tokens SET last_used_at = now() WHERE id = $1", [rows[0].id]).catch(() => {});
   return { token: rows[0] };
 }
+
+/** Writes one token call to integration_audit_log once the answer is sent (Lily's API and the ops feed). */
+export function auditTokenCall(req, res, token, { orderId = () => null, idempotencyKey = null } = {}) {
+  res.on("finish", () => {
+    pool
+      .query(
+        `INSERT INTO integration_audit_log (token_id, token_name, method, path, status_code, order_id, idempotency_key, ip)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [token.id, token.name, req.method, req.originalUrl.split("?")[0], res.statusCode, orderId() ?? null, idempotencyKey, req.ip]
+      )
+      .catch((err) => console.error("Integration audit log failed:", err));
+  });
+}

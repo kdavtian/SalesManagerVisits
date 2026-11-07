@@ -21,9 +21,9 @@ Agents never see personal data. Customer and staff names, phones, addresses, TIN
 - `Authorization: Bearer kad_ops_...`: an integration token of scope **`ops-read`** (migration 194). Only this router accepts it; Lily's
   `/api/integration/v1` answers **403 `wrong_scope`** to it, and this router answers 403 to Lily's `accounting` token. No / unknown / revoked
   token: **401**. A person's login cookie is not accepted.
-- **GET only** (anything else: 405). 30 requests a minute per address (429 after that). `Cache-Control: no-store`.
+- **GET only** (HEAD too; anything else: 405). 30 requests a minute per address (429 after that). `Cache-Control: no-store`.
 - Every call is written to `integration_audit_log` (token, path, status, IP). An ops token does not make Lily look "online".
-- Errors: `{ "error": { "code", "message" } }`.
+- Errors: `{ "error": { "code", "message" } }`, also for a server failure (500 `internal`, never with the underlying text).
 
 ### Creating and revoking the token (admin)
 
@@ -41,12 +41,14 @@ Or as admin over the app API: `POST /api/integration-tokens {"name":"Claude agen
 ## GET /reconcile
 
 What the app knows differs from the Excel. Every rule is the one the app's own screens use, so the agent can never disagree with the app.
-A row younger than `grace_days` (the anti-fraud "not in Excel after N days" setting, default 3) is not called missing yet; rows older than
-180 days are left out.
+A row younger than `grace_days` (the anti-fraud "not in Excel after N days" setting, default 3) is not called missing yet. Each module looks
+back as far as the screen whose rule it uses: cash payments and field expenses 120 days (Fraud alerts / Expense watch), bank payments,
+deliveries and returns 60 days (the live debt's window; an older unmatched delivery is a known data gap for Data quality, not news).
 
 ```json
 {
-  "ok": false,                       // true only when every module is empty, no sync failed in 24 h and the sync is not stale
+  "ok": false,                       // true only when every module is empty, no sync failed since the last success (24 h),
+                                     // and neither the sync nor the workbook file is older than 72 h
   "generated_at": "2026-11-07T05:00:00.000Z",
   "grace_days": 3,
   "modules": {
@@ -57,7 +59,7 @@ A row younger than `grace_days` (the anti-fraud "not in Excel after N days" sett
     "returns":        { ... "kind": "return_not_in_excel" },
     "field_expenses": { ... "kind": "field_expense_not_in_excel", "customer_erp_id": null }
   },
-  "erp_sync": { "last_success_at": "...", "hours_since_success": 5.2, "stale": false, "stale_after_hours": 72,
+  "erp_sync": { "last_success_at": "...", "hours_since_success": 5.2, "workbook_age_hours": 20.5, "stale": false, "workbook_stale": false, "stale_after_hours": 72,
                 "failed_attempts_24h": 0, "failed_endpoints_24h": [] }
 }
 ```
@@ -69,7 +71,7 @@ A row younger than `grace_days` (the anti-fraud "not in Excel after N days" sett
 | `orders` | app order delivered, not delivered by the sync, and not matched to an Excel order (`erp_matched_order_id`; `orders/appStock.js`) |
 | `returns` | goods returned to the warehouse (done) the Excel does not have yet (`recorded_at` empty; `orders/appStock.js`) |
 | `field_expenses` | rep's field cash expense with no Excel expense row of the same amount within 5 days, after 5 days (`money/expenseWatch.js`) |
-| `erp_sync` | last successful sync (`erp_sync_runs`), stale after 72 h (`erp/erpSyncFreshness.js`), failed attempts (`erp_sync_attempts`) |
+| `erp_sync` | the Settings > Excel sync status (`erp/erpSyncStatus.js`): last success, sync and workbook file age (stale after 72 h); failed attempts of the last 24 h that came after the last success (a failure fixed by a retry does not count) |
 
 `items` lists at most 50 rows per module, oldest first (`truncated: true` when there are more); `count` / `amount_amd` cover all of them.
 

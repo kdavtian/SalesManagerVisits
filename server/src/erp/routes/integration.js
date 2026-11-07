@@ -4,7 +4,7 @@
 // accounting status -- nothing else; see docs/lily-integration.md.
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
-import { checkBearer } from "../integrationTokens.js";
+import { checkBearer, auditTokenCall } from "../integrationTokens.js";
 import { nextStatusFromDocuments } from "../../orders/accountingStatus.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
@@ -27,18 +27,8 @@ integrationRouter.use(async function requireIntegrationToken(req, res, next) {
   // only accounting-scope tokens (an ops-read token of the Claude agents gets 403 here: erp/integrationTokens.js)
   const auth = await checkBearer(req, "accounting");
   if (!auth.token) return fail(res, auth.status, auth.code, auth.message);
-  const rows = [auth.token];
   req.integration = auth.token;
-
-  res.on("finish", () => {
-    pool
-      .query(
-        `INSERT INTO integration_audit_log (token_id, token_name, method, path, status_code, order_id, idempotency_key, ip)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [rows[0].id, rows[0].name, req.method, req.originalUrl.split("?")[0], res.statusCode, req.auditOrderId ?? null, req.get("idempotency-key") ?? null, req.ip]
-      )
-      .catch((err) => console.error("Integration audit log failed:", err));
-  });
+  auditTokenCall(req, res, auth.token, { orderId: () => req.auditOrderId, idempotencyKey: req.get("idempotency-key") ?? null });
   next();
 });
 

@@ -183,7 +183,23 @@ test("/reconcile and /kpi: the numbers, ERP ids only, and nothing personal in an
   for (const m of ["bank_payments", "returns", "field_expenses"]) assert.equal(rec.data.modules[m].count, 0, m);
   assert.equal(rec.data.erp_sync.last_success_at, null);
   assert.equal(rec.data.erp_sync.stale, true);
-  assert.equal(typeof rec.data.erp_sync.failed_attempts_24h, "number");
+  assert.equal(rec.data.erp_sync.workbook_stale, false);
+
+  // a failed sync that a later sync fixed is not a difference; one after the last success is (and so is an old workbook file)
+  await pool.query("INSERT INTO erp_sync_attempts (endpoint, ok, error, at) VALUES ('/api/erp-sync', false, 'Customer X broke it', now() - interval '2 hours')");
+  await pool.query("INSERT INTO erp_sync_runs (at, workbook_modified_at) VALUES (now() - interval '1 hour', now() - interval '2 hours')");
+  let sync = (await apiRequest("/api/ops/v1/reconcile", { headers: bearer(opsToken) })).data.erp_sync;
+  assert.equal(sync.failed_attempts_24h, 0, "retried fine afterwards");
+  assert.equal(sync.stale, false);
+  assert.equal(sync.hours_since_success, 1);
+  await pool.query("INSERT INTO erp_sync_attempts (endpoint, ok, error) VALUES ('/api/erp-sync/payments', false, 'Customer X broke it again')");
+  await pool.query("UPDATE erp_sync_runs SET workbook_modified_at = now() - interval '100 hours'");
+  sync = (await apiRequest("/api/ops/v1/reconcile", { headers: bearer(opsToken) })).data.erp_sync;
+  assert.equal(sync.failed_attempts_24h, 1);
+  assert.deepEqual(sync.failed_endpoints_24h, ["/api/erp-sync/payments"]);
+  assert.equal(sync.workbook_stale, true);
+  assert.ok(!JSON.stringify(sync).includes("Customer X"), "no sync error text");
+  assert.equal((await apiRequest("/api/ops/v1/reconcile", { method: "HEAD", headers: bearer(opsToken) })).status, 200, "HEAD is a read");
 
   const week = await apiRequest("/api/ops/v1/kpi?period=week", { headers: bearer(opsToken) });
   assert.equal(week.status, 200);

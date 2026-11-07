@@ -61,8 +61,8 @@ export async function kpi(db = pool, { period = "week", mode = "complete", today
   const names = Object.keys(windows);
   const params = names.flatMap((k) => [windows[k].from, windows[k].to]);
   const inWin = (col, i) => `${col} BETWEEN $${i * 2 + 1}::date AND $${i * 2 + 2}::date`;
-  const lo = `LEAST(${names.map((_, i) => `$${i * 2 + 1}::date`).join(", ")})`;
-  const hi = `GREATEST(${names.map((_, i) => `$${i * 2 + 2}::date`).join(", ")})`;
+  // only the three windows' days (not the 13 months from last year's window to today)
+  const anyWin = (col) => `(${names.map((_, i) => inWin(col, i)).join(" OR ")})`;
   const [sales, cash, through, debtors, stock] = await Promise.all([
     db.query(
       `WITH l AS (
@@ -70,7 +70,7 @@ export async function kpi(db = pool, { period = "week", mode = "complete", today
                 COALESCE(eol.qty, 0) * ${SIZE("eol.size_l")} AS liters,
                 CASE WHEN p.landing_cost_amd > 0 THEN COALESCE(eol.qty, 0) * p.landing_cost_amd END AS cost
            FROM erp_order_lines eol LEFT JOIN products p ON lower(p.erp_product_id) = lower(eol.product_id)
-          WHERE eol.order_date BETWEEN ${lo} AND ${hi} AND eol.erp_customer_id <> '10000')
+          WHERE ${anyWin("eol.order_date")} AND eol.erp_customer_id <> '10000')
        SELECT ${names
          .map(
            (k, i) => `COALESCE(sum(rev) FILTER (WHERE ${inWin("d", i)}), 0)::float8 AS ${k}_rev,
@@ -86,7 +86,7 @@ export async function kpi(db = pool, { period = "week", mode = "complete", today
     ),
     db.query(
       `SELECT ${names.map((k, i) => `COALESCE(sum(amount_amd) FILTER (WHERE ${inWin("cashflow_date", i)}), 0)::float8 AS ${k}`).join(", ")}
-         FROM erp_cashflow_lines WHERE amount_amd > 0 AND erp_customer_id <> '10000' AND cashflow_date BETWEEN ${lo} AND ${hi}`,
+         FROM erp_cashflow_lines WHERE amount_amd > 0 AND erp_customer_id <> '10000' AND ${anyWin("cashflow_date")}`,
       params
     ),
     db.query(
