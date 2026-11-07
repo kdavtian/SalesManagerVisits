@@ -27,9 +27,14 @@ test.describe("Order sheet: terms, edit, delete", () => {
     await page.locator("#edit-due-days").fill("0");
     await page.locator("#edit-add-product-btn").click();
     await expect(page.locator("#edit-add-product-results")).toContainText("Extra Oil 1L", { timeout: 10000 });
-    // the product list really has room (it used to collapse to nothing on iPhone Safari)
-    const room = await page.locator("#edit-add-product-results").evaluate((el) => el.getBoundingClientRect().height);
+    // the product list really has room (it used to collapse to nothing on iPhone Safari): the space from the top of the list to the
+    // sheet's footer, not the list's own height (that is only as tall as the rows found, and a long test product name changed it)
+    const room = await page.locator("#edit-add-product-results").evaluate((el) => {
+      const footer = el.closest(".sheet, .order-detail-sheet, [role=dialog]")?.querySelector(".edit-sheet-footer") ?? document.querySelector(".edit-sheet-footer");
+      return footer.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    });
     expect(room).toBeGreaterThan(150);
+    await expect(page.locator("#edit-add-product-results .order-add-row").first()).toBeVisible();
     await page.locator(`[data-add-product-id="${extra.id}"] [data-action="add-product"]`).click();
     await page.locator("#edit-add-product-btn").click(); // "Done"
     await page.locator("#edit-order-save").click();
