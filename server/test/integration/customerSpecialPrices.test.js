@@ -40,7 +40,7 @@ test("only reviewer roles save special prices, only for Gold customers; null rem
   assert.deepEqual((await apiRequest(`/api/customers/${gold.id}/product-prices`, { cookie: repCookie })).data.map((r) => r.price_amd), [50000], "everyone can read them");
 });
 
-test("a new order for the Gold customer uses the special price automatically, the other product its Gold list price", async () => {
+test("a new order for the Gold customer uses the special price automatically, the other product the Silver list price", async () => {
   const res = await apiRequest("/api/orders", {
     method: "POST",
     cookie: repCookie,
@@ -50,5 +50,29 @@ test("a new order for the Gold customer uses the special price automatically, th
   trackOrder(res.data.id);
   const byProduct = Object.fromEntries(res.data.items.map((i) => [i.product_id, Number(i.unit_price_amd)]));
   assert.equal(byProduct[p1.id], 50000, "special price");
-  assert.equal(byProduct[p2.id], 54000, "Gold list price");
+  assert.equal(byProduct[p2.id], 57000, "Gold pays the Silver list without a special price");
+});
+
+test("migration 189 records the Excel Gold prices as special prices of customer 10001, keeping one already set", async () => {
+  const fs = await import("node:fs");
+  const sql = fs.readFileSync(new URL("../../migrations/189_gold_prices_to_customer_10001.sql", import.meta.url), "utf8");
+  const gmm = await createCustomer({ created_by: admin.id });
+  const p3 = await createProduct({ unit: "20L" });
+  await pool.query("UPDATE products SET silver_price_amd = 30000, gold_price_amd = 0 WHERE id = $1", [p3.id]); // no Gold price: no special price
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN"); // rolled back: the shared test database keeps no 10001
+    await client.query("UPDATE customers SET erp_customer_id = '10001', customer_tier = 'gold' WHERE id = $1", [gmm.id]);
+    await client.query("INSERT INTO customer_product_prices (customer_id, product_id, price_amd) VALUES ($1, $2, 51000)", [gmm.id, p2.id]);
+    await client.query(sql);
+    await client.query(sql); // safe to run twice
+    const { rows } = await client.query("SELECT product_id, price_amd::int AS price FROM customer_product_prices WHERE customer_id = $1 AND product_id = ANY($2)", [gmm.id, [p1.id, p2.id, p3.id]]);
+    const byProduct = Object.fromEntries(rows.map((r) => [r.product_id, r.price]));
+    assert.equal(byProduct[p1.id], 54000, "the Gold price it pays today");
+    assert.equal(byProduct[p2.id], 51000, "a special price already set is kept");
+    assert.equal(byProduct[p3.id], undefined);
+  } finally {
+    await client.query("ROLLBACK").catch(() => {});
+    client.release();
+  }
 });

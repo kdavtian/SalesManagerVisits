@@ -4,6 +4,7 @@
 // natively on Platform's side. Best-effort: a Platform outage must never
 // fail or slow down the ERP sync itself.
 import { pool } from "../db/pool.js";
+import { tierListPrice } from "../products/tierPricing.js";
 
 export async function syncProductsAndWholesaleCustomersToPlatform() {
   const url = process.env.PLATFORM_SYNC_URL;
@@ -32,7 +33,8 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sync-Key": key },
     body: JSON.stringify({
-      products: productsResult.rows,
+      // The website's Gold price (wholesale_t3) is what a Gold customer pays here: the Silver list (owner, 2026-11-07).
+      products: productsResult.rows.map((p) => ({ ...p, gold_price_amd: tierListPrice({ ...p, unit_price_amd: p.base_price_amd }, "gold") || null })),
       wholesale_customers: customersResult.rows,
     }),
   });

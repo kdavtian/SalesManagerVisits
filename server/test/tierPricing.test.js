@@ -10,9 +10,10 @@ test("bronze/potential/competitor pay bronze, falling back to silver when bronze
   assert.equal(tierListPrice(p({ bronze_price_amd: 100 }), "potential"), 100);
 });
 
-test("silver pays silver then bronze; gold pays gold, silver, bronze", () => {
+test("silver and gold both pay silver then bronze (gold differs only by its special prices, owner 2026-11-07)", () => {
   assert.equal(tierListPrice(p({ bronze_price_amd: 100, silver_price_amd: 90 }), "silver"), 90);
   assert.equal(tierListPrice(p({ bronze_price_amd: 100 }), "silver"), 100);
-  assert.equal(tierListPrice(p({ bronze_price_amd: 100, silver_price_amd: 90, gold_price_amd: 80 }), "gold"), 80);
+  assert.equal(tierListPrice(p({ bronze_price_amd: 100, silver_price_amd: 90, gold_price_amd: 80 }), "gold"), 90, "the Excel gold column no longer sets the price");
+  assert.equal(tierListPrice(p({ bronze_price_amd: 100, gold_price_amd: 80 }), "gold"), 100);
   assert.equal(tierListPrice(p({ bronze_price_amd: 100, silver_price_amd: 90 }), "gold"), 90);
 });

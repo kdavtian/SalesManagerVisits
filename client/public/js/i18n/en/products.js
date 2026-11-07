@@ -184,7 +184,7 @@ export const enProducts = {
     landing_cost: "Landing cost",
     sp_title: "Special pricelist",
     sp_gold_only: "Special prices exist for Gold customers only.",
-    sp_info_1: "Type the price this customer pays for a product. A field left empty means the normal Gold list price (shown in grey).",
+    sp_info_1: "Type the price this customer pays for a product. A field left empty means the Silver list price (shown in grey): Gold pays Silver prices unless a special price is set.",
     sp_info_2: "The chip beside a price is the difference to the Silver price: minus = cheaper than Silver, plus = more expensive.",
     sp_info_3: "Reset sets every price to the Silver price. Nothing is saved until you press Submit; Cancel drops your changes. New orders for this customer pick these prices automatically.",
     sp_chip_special: "Special prices",
