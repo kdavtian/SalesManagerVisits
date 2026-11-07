@@ -224,6 +224,15 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L22 Open questions for the owner (ask when relevant, do not decide alone) - Which customer segment first (garages/oil-change points, fleets/OEM, retail shops); what market-share definiti
 - L25 Market size and KAD's share - first estimate (2026-10-12, UNVERIFIED model) - Web searches found NO official data on Armenia's lubricant market (no import tonnage for HS 2710 19, no fleet
 
+## usability-gate.md (14 KB, 130 lines)
+- L10 1. When it applies - Every code change, whatever the wording: "fix this", "add this feature", "rename", "make it faster", a screens
+- L18 2. Define success before changing code - Answer these in your notes (one line each; for class A one line in total):
+- L31 3. Classify the change (take the highest class that applies; unsure = higher) - Money screens, presentation only.
+- L45 4. Design for correct, effortless use (class B and C) - Clarity: the next action is obvious.
+- L66 5. Choose the test that answers the question
+- L83 6. KAD acceptance scenarios (use when the change touches them; use TEST data, cl - 6.1 Mobile sales flow stays deliberate.
+- L105 7. Completion rule, human tests, report - Fix and retest before "done" any reproducible defect that (a) prevents completing the task, (b) records incorr
+
 ## vaghinak-spec.md (9 KB, 45 lines)
 - L5 Owner's requirements (verbatim intent) - Lives on Home tab / Quick actions as a tile with a BADGE = count of important messages.
 - L21 Existing building blocks in the app (reuse, do not rebuild) - tasks table + routes/tasks.js (has autokind), taskReminders.js, taskAutoComplete.js, debtCollectionTasks.js; n
