@@ -107,7 +107,13 @@ is exactly the kind of drift this check exists to catch — see the `sw.js`
 for what "a required-by-convention step silently skipped for a long time"
 costs in practice.
 
-This check is about the *server* release version only. `APP_VERSION`/
-`CACHE_VERSION` consistency (the client PWA cache-bust pair) is a separate,
-unrelated concern, enforced by the PR template and `CLAUDE.md`, not by this
-script.
+The same script (same `npm run check:version`, in the CI `static` job and
+in `scripts/local-ci.sh`, `--quick` included) also enforces `CLAUDE.md`
+rule 1: when any file under `client/public/` changed against the base
+(`BASE_REF`, which CI sets to `origin/<PR base branch>` on a PR and to
+the pre-push commit on a push to main, else `origin/main`), `APP_VERSION` in `client/public/js/version.js` AND the
+number in `CACHE_VERSION` (`field-visits-vNNN`) in `client/public/sw.js`
+must both be greater than the base's. A change with nothing under
+`client/public/` needs no bump. Locally it also sees uncommitted and
+untracked files, so it fails before the commit. The comparison rules are
+unit-tested in `server/test/versionBumpCheck.test.js`.
