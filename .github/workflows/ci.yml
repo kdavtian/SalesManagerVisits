@@ -56,7 +56,10 @@ jobs:
     env:
       NODE_ENV: test
     steps:
+      # Full history: check:version compares client/public, APP_VERSION and CACHE_VERSION with the merge-base of the PR's base branch.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -66,7 +69,10 @@ jobs:
 
       - run: npm ci --no-audit --no-fund --prefer-offline
 
+      # CHANGELOG entry for the server version + CLAUDE.md rule 1: a change under client/public/ must bump APP_VERSION AND CACHE_VERSION.
       - run: npm run check:version
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
 
       - run: npm run verify:ui
 
