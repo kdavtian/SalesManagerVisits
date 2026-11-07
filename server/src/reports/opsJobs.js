@@ -7,12 +7,11 @@ import { createOpsTask, closeOpsTasks, usersWithRole } from "../team/opsTasks.js
 import { isWorkingDay, minuteOfDay } from "../team/vaghinak/engine.js";
 
 const CHECK_LABELS = {
-  customers_no_channel: "Հաճախորդներ՝ առանց ալիքի",
+  customers_no_channel: "Հաճախորդներ՝ առանց ուղղության",
   customers_no_owner: "Հաճախորդներ՝ առանց պատասխանատուի",
   customers_no_erp_id: "Հաճախորդներ՝ առանց ERP կոդի",
   customers_duplicate_erp_id: "Կրկնվող ERP կոդեր",
   price_below_landing: "Ապրանքներ՝ գինը ինքնարժեքից ցածր",
-  price_gold_above_silver: "Ապրանքներ՝ Gold գինը Silver-ից բարձր է",
   products_no_price: "Ակտիվ ապրանքներ՝ առանց գնի",
   products_test_active: "Թեստային ապրանք՝ ակտիվ",
 };

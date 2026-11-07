@@ -546,7 +546,7 @@ function showRenderFailure(err) {
   const moduleLoadFailure = isModuleLoadFailure(err);
   noteLoadFailure();
   // Said to the server too, with the file it was about: a failure that only the person saw could not be found afterwards.
-  api.reportClientError({ kind: "error", message: `Screen failed (${location.hash || "#/dashboard"}; app ${APP_VERSION}): ${String(err?.message || err)}`.slice(0, 1500), url: location.href }).catch(() => {});
+  api.reportClientError({ kind: "error", message: `Screen failed (${location.hash || "#/dashboard"}; app ${APP_VERSION}): ${String(err?.message || err)}`.slice(0, 1500), stack: String(err?.stack || "").slice(0, 4000), url: location.href }).catch(() => {});
   try {
     const last = Number(sessionStorage.getItem("fv_render_reload") || 0);
     if (moduleLoadFailure && Date.now() - last > 60000) {
@@ -577,6 +577,18 @@ function showRenderFailure(err) {
   });
 }
 const STALE_ROUTE = new Error("stale route");
+let lastRetry = { hash: "", at: 0 };
+function retryRenderOnce(err) {
+  const hash = location.hash || "#/dashboard";
+  if (lastRetry.hash === hash && Date.now() - lastRetry.at < 30000) return false;
+  lastRetry = { hash, at: Date.now() };
+  console.error("Screen failed to render, building it again:", err);
+  api.reportClientError({ kind: "error", message: `Screen failed, built again (${hash}; app ${APP_VERSION}): ${String(err?.message || err)}`.slice(0, 1500), stack: String(err?.stack || "").slice(0, 4000), url: location.href }).catch(() => {});
+  forgetView();
+  app.innerHTML = "";
+  setTimeout(render, 0);
+  return true;
+}
 async function render() {
   const seq = ++renderSeq;
   // A screen that has not appeared after a few seconds: a bar with Reload / Clean reload, and the step it hung on is reported.
@@ -597,6 +609,10 @@ async function render() {
   } catch (err) {
     if (err === STALE_ROUTE) return;
     hideSlowBar();
+    // A screen that throws while it is being built (not a file that failed to load) is built ONCE more by itself, without the list settings
+    // it may have reopened with (viewMemory.js): owner, 2026-11-07, iPhone: Orders "did not open" after an update and only a second tap on
+    // the tab drew it; a reload brought the error back because the same saved settings were reopened. The error is still reported below.
+    if (!isModuleLoadFailure(err) && retryRenderOnce(err)) return;
     showRenderFailure(err);
   } finally {
     clearTimeout(slowTimer);

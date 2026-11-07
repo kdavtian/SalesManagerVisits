@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatDateDMY, formatAmd } from "../util.js";
+import { escapeHtml, formatDateDMY, formatAmd, groupDigits } from "../util.js";
 import { t } from "../i18n.js";
 import { dueChipHtml, unpaidRowClass, partialChipHtml } from "../debtChip.js";
 import { loadWithCache } from "../listCache.js";
@@ -121,18 +121,49 @@ export async function renderCustomerOrders(root, navigate, customerId) {
     const openingDueDays = customer.debt_summary?.opening_due_days ?? null;
     const visible = orders.slice(0, shown);
     const hidden = orders.length - visible.length;
+    // Grouped by year, newest first, each year with its subtotal (owner, 2026-11-07); a row shows date, order, items, liters, brands, amount.
+    const byYear = new Map();
+    orders.forEach((o, i) => {
+      const year = String(o.order_date || "").slice(0, 4) || "—";
+      if (!byYear.has(year)) byYear.set(year, { year, rows: [], amount: 0, liters: 0, count: 0 });
+      const g = byYear.get(year);
+      g.amount += Number(o.total_amd) || 0;
+      g.liters += Number(o.liters) || 0;
+      g.count += 1;
+      if (i < shown) g.rows.push([o, i]);
+    });
+    const num = (n) => groupDigits(Math.round(Number(n) || 0));
+    const liters = (n) => `${groupDigits(Math.round((Number(n) || 0) * 10) / 10)} L`;
+    const brandsHtml = (list) =>
+      (Array.isArray(list) ? list : []).map((b) => `<span class="co-brand">${escapeHtml(b)}</span>`).join("");
+    const rowHtml = (o, i) => {
+      const chips = [partialChipHtml(o), Number(o.unpaid_amd) > 0 ? dueChipHtml(o.due_days) : ""].filter(Boolean).join(" ");
+      return `
+          <div class="erp-order-row co-row ${unpaidRowClass(o)}" data-order-index="${i}" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
+            <span class="co-date">${escapeHtml(formatDateDMY(o.order_date))}</span>
+            <span class="co-id erp-order-id">${escapeHtml(o.order_id)}</span>
+            <span class="co-items">${num(o.items_qty)} ${t("co_pcs")}</span>
+            <span class="co-liters">${liters(o.liters)}</span>
+            <span class="co-brands">${brandsHtml(o.brands)}</span>
+            <span class="co-amount">${formatAmd(o.total_amd)}</span>
+            ${chips ? `<span class="co-chips">${chips}</span>` : ""}
+          </div>`;
+    };
     listEl.innerHTML = `
-      <div class="card erp-card">
-        ${visible
+      <div class="card erp-card co-card">
+        <div class="co-row co-head" aria-hidden="true">
+          <span class="co-date">${t("co_col_date")}</span><span class="co-id">${t("co_col_order")}</span><span class="co-items">${t("co_col_items")}</span>
+          <span class="co-liters">${t("co_col_liters")}</span><span class="co-brands">${t("co_col_brands")}</span><span class="co-amount">${t("co_col_amount")}</span>
+        </div>
+        ${[...byYear.values()]
           .map(
-            (o, i) => `
-          <div class="erp-order-row ${unpaidRowClass(o)}" data-order-index="${i}" data-order-id="${escapeHtml(o.order_id)}" role="button" tabindex="0">
-            <span>${escapeHtml(formatDateDMY(o.order_date))}</span>
-            <span class="erp-order-id">${escapeHtml(o.order_id)}</span>
-            <span>${formatAmd(o.total_amd)}</span>
-            ${partialChipHtml(o) ? `<div class="erp-order-partial">${partialChipHtml(o)}</div>` : ""}
-            ${Number(o.unpaid_amd) > 0 ? `<div class="erp-order-due">${dueChipHtml(o.due_days)}</div>` : ""}
-          </div>`
+            (g) => `
+          <div class="co-year">
+            <strong class="co-year-label">${escapeHtml(g.year)}</strong>
+            <span class="co-year-facts muted">${g.count} ${t(g.count === 1 ? "co_orders_one" : "co_orders")} · ${liters(g.liters)}</span>
+            <strong class="co-year-amount">${formatAmd(g.amount)}</strong>
+          </div>
+          ${g.rows.map(([o, i]) => rowHtml(o, i)).join("")}`
           )
           .join("")}
         ${hidden > 0 ? `<button type="button" class="btn btn-block" id="more-orders-btn">${t("show_more_n").replace("{n}", hidden)}</button>` : ""}

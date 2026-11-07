@@ -185,7 +185,6 @@ export const enCommon = {
     ops_chk_customers_no_region: "Customers without a region",
     ops_chk_customers_no_tin: "Customers without a TIN",
     ops_chk_price_below_landing: "Active products priced below landing cost",
-    ops_chk_price_gold_above_silver: "Gold price above Silver",
     ops_chk_landing_no_pack_data: "Active products without pack data in Excel (landing cost not calculated)",
     ops_chk_landing_pack_outlier: "Pack data in Excel looks wrong (calculated landing differs from the workbook by more than 20%)",
     ops_chk_products_no_price: "Active products without a price",

@@ -3441,3 +3441,69 @@ a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px
 .product-admin-more { flex: 0 0 auto; width: 44px; height: 44px; }
 .product-action-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 .product-action-list .btn { min-height: 44px; }
+
+/* Customers heading (owner, 2026-11-07): the "!" sits right after the last letter of the title, not in front of it. */
+.list-view .list-header .cl-legend-btn { margin-left: -4px; }
+/* The three header buttons carry their words on a computer (Debts, All organizations / Our customers, Add new customer); a phone keeps the icons. */
+.cl-btn-label { display: none; }
+@media (min-width: 1024px) {
+  .list-view .list-header .list-header-add-btn:has(.cl-btn-label) {
+    width: auto !important;
+    min-width: 0;
+    height: 44px !important;
+    padding: 0 16px !important;
+    gap: 8px;
+    border-radius: 999px !important;
+    white-space: nowrap;
+  }
+  .list-view .list-header .list-header-add-btn:has(.cl-btn-label) svg { width: 20px !important; height: 20px !important; flex: 0 0 auto; }
+  .list-view .list-header .cl-btn-label { display: inline; font-size: 0.92rem; font-weight: 600; }
+}
+
+/* A customer's "All orders" (owner, 2026-11-07): grouped by year with a subtotal; each order shows date, order, items, liters, brands and
+   amount; the paid / due chips get a line of their own so nothing overlaps. Phone: date, order and amount on the first line, the rest under. */
+.co-card { padding-top: 4px; }
+.co-row.erp-order-row {
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  grid-template-areas: "date id amount" "items liters brands" "chips chips chips";
+  row-gap: 2px;
+  align-items: center;
+}
+.co-row .co-date { grid-area: date; }
+.co-row .co-id { grid-area: id; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co-row .co-amount { grid-area: amount; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.co-row .co-items, .co-row .co-liters { color: var(--text-dim); font-size: 0.8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.co-row .co-items { grid-area: items; }
+.co-row .co-liters { grid-area: liters; }
+.co-row .co-brands { grid-area: brands; justify-self: end; display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.co-row .co-chips { grid-area: chips; justify-self: end; display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.co-brand { font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--bg-muted, rgba(120, 120, 128, 0.12)); color: var(--text-dim); white-space: nowrap; }
+.co-head { display: none; }
+.co-year {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 14px 4px 6px;
+  border-top: 1px solid var(--border);
+}
+.co-year:first-of-type, .co-head + .co-year { border-top: 0; }
+.co-year-label { font-size: 1rem; }
+.co-year-facts { font-size: 0.8rem; }
+.co-year-amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (min-width: 760px) {
+  .co-row.erp-order-row, .co-head {
+    grid-template-columns: 92px minmax(110px, 1fr) 84px 90px minmax(0, 1.4fr) 140px;
+    grid-template-areas: "date id items liters brands amount" "chips chips chips chips chips chips";
+    column-gap: 12px;
+  }
+  .co-head { display: grid; padding: 6px 4px; font-size: 0.75rem; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.02em; }
+  .co-head .co-date { grid-area: date; } .co-head .co-id { grid-area: id; } .co-head .co-items { grid-area: items; text-align: right; }
+  .co-head .co-liters { grid-area: liters; text-align: right; } .co-head .co-brands { grid-area: brands; } .co-head .co-amount { grid-area: amount; text-align: right; }
+  .co-row .co-items { grid-area: items; text-align: right; font-size: 0.85rem; }
+  .co-row .co-liters { grid-area: liters; text-align: right; font-size: 0.85rem; }
+  .co-row .co-brands { grid-area: brands; justify-self: start; justify-content: flex-start; }
+}
+/* the year headers of a customer's payments / orders sheets: year and its subtotal */
+.pr-year-row { background: var(--bg-muted, rgba(120, 120, 128, 0.08)); border-radius: 8px; margin-top: 6px; }
+.pr-year-row:first-child { margin-top: 0; }

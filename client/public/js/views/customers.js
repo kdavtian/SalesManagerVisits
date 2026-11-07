@@ -132,11 +132,11 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   root.innerHTML = `
     <div class="list-view">
       <div class="list-header">
-        <button type="button" class="settings-hint-icon cl-legend-btn" id="cl-legend-btn" aria-label="${t("cl_legend_title")}">!</button>
         <h1>${t("nav_customers")}</h1>
-        <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}</button>
+        <button type="button" class="settings-hint-icon cl-legend-btn" id="cl-legend-btn" aria-label="${t("cl_legend_title")}">!</button>
+        <button class="list-header-add-btn" id="toggle-debt-btn" aria-label="${t("show_outstanding_debt")}" title="${t("show_outstanding_debt")}" aria-pressed="false">${icons.payment}<span class="cl-btn-label">${t("cl_btn_debts")}</span></button>
         <button class="list-header-add-btn" id="toggle-ours-btn" aria-label="${t("customers_only_ours")}" title="${t("customers_only_ours")}" aria-pressed="false">${icons.customersAll}</button>
-        <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}</button>
+        <button class="list-header-add-btn customer-map-add-action" id="add-customer-btn" aria-label="${t("add_customer")}" title="${t("add_customer")}">${icons.mapPinPlus}<span class="cl-btn-label">${t("cl_btn_add")}</span></button>
       </div>
 
       <div class="customer-stats-bar" id="customer-stats-bar"></div>
@@ -279,7 +279,8 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
   const paintOurs = () => {
     oursBtn.classList.toggle("list-header-add-btn-active", onlyOurs);
     oursBtn.setAttribute("aria-pressed", String(onlyOurs));
-    oursBtn.innerHTML = onlyOurs ? icons.customersOurs : icons.customersAll;
+    // the icon and (on a computer) the words say which list is on screen now
+    oursBtn.innerHTML = `${onlyOurs ? icons.customersOurs : icons.customersAll}<span class="cl-btn-label">${t(onlyOurs ? "cl_btn_ours" : "cl_btn_all")}</span>`;
     const label = onlyOurs ? t("customers_show_all") : t("customers_only_ours");
     oursBtn.setAttribute("aria-label", label);
     oursBtn.title = label;
@@ -455,6 +456,7 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
       // customers (server/src/customers/routes/customers.js) -- every row they can
       // see is already "assigned to me", so this filter has nothing left to
       // narrow for that role and just adds a confusing no-op control.
+      // Order (owner, 2026-11-07): direction & manager, region, potential, type & tier, products on the shelf.
       seesAllActivity()
         ? filterIconButton({
             key: "assignment",
@@ -473,15 +475,6 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
             count: regionCount,
           })
         : "",
-      brandSummary.size
-        ? filterIconButton({
-            key: "brands",
-            icon: icons.box,
-            label: t("filter_brands_title"),
-            active: brandChipIds.size > 0,
-            count: brandChipIds.size,
-          })
-        : "",
       allCustomers.some((c) => c.customer_tier === "potential")
         ? filterIconButton({
             key: "potential",
@@ -498,6 +491,15 @@ export function renderCustomers(root, navigate, initialFilter, initialPotential 
             label: t("filter_type_tier_title"),
             active: typeFilters.size + tierFilters.size > 0,
             count: typeFilters.size + tierFilters.size,
+          })
+        : "",
+      brandSummary.size
+        ? filterIconButton({
+            key: "brands",
+            icon: icons.box,
+            label: t("filter_brands_title"),
+            active: brandChipIds.size > 0,
+            count: brandChipIds.size,
           })
         : "",
     ]
