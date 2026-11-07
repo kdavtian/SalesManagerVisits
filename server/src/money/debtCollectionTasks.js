@@ -90,6 +90,12 @@ const PAID_SINCE_TASK_SQL = `(COALESCE(erp.last_payment_date >= (t.created_at AT
   OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
                AND cf.cashflow_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
 
+// Strictly AFTER the day the task was made (the workbook has dates, not times: a payment dated the task's own day may have come before it, and
+// the task's title even names it as "last payment"). The app's own events close a same-day payment (taskAutoComplete.js).
+const PAID_AFTER_TASK_SQL = `(COALESCE(erp.last_payment_date > (t.created_at AT TIME ZONE 'Asia/Yerevan')::date, false)
+  OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
+               AND cf.cashflow_date > (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
+
 // KF and CAS are never chased; OEM (like CVO, PCO and SM B2B) is chased by CALL tasks only (CALL_CHANNELS).
 const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS'])`;
 // Overdue = the oldest unpaid invoice is older than the credit term (see debtAge.js).
@@ -217,22 +223,35 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   //     it records itself ("any amount counts", taskAutoComplete.js), so the workbook's payments close it the same way: partial while
   //     something is left on the Excel debt, paid when nothing is. Both the automatic task and the one a person gave (type "Collect
   //     debt"). Owner, 2026-11-08: customer 10136, task of 10/10/2026, payments after it, the task stayed open.
+  // Not touched: a task with a promise still running (outcome 'promised', date ahead) keeps its promise so a broken one is still caught
+  // (the promise logic below reopens it); a customer with no Excel row (no proof the debt is gone).
   const { rows: paidAfter } = await pool.query(
     `UPDATE tasks t SET status = 'done', completed_at = now(), completion_note = 'Ավտոմատ՝ վճարում է ստացվել (Excel)',
        outcome = CASE WHEN COALESCE(erp.debt_amd, 0) > 1 THEN 'partial' ELSE 'paid' END, updated_at = now()
-     FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
+     FROM customers c JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.status = 'open'
-       AND c.erp_customer_id IS NOT NULL AND ${PAID_SINCE_TASK_SQL}
-     RETURNING t.id, t.assignee_id, c.name AS customer_name`
+       AND NOT (COALESCE(t.outcome, '') = 'promised' AND COALESCE(t.promise_date, DATE '1900-01-01') >= $1::date) -- (no NULL logic: a task without an outcome is not excluded)
+       AND ${PAID_AFTER_TASK_SQL}
+     RETURNING t.id, t.assignee_id, t.creator_id, t.auto_kind, t.title, c.name AS customer_name`,
+    [today]
   );
   for (const r of paidAfter) {
     await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [r.id]);
+    // told one by one only when this is not a sync run: a sync tells every person ONCE (syncNotifier), whatever it closed
+    if (!notify) continue;
     if (r.assignee_id) {
       await notifyUser(r.assignee_id, "task_completed", {
         title: "Առաջադրանքը ավտոմատ կատարվեց",
         body: `${r.customer_name} · վճարում է ստացվել (Excel)`,
         url: `/#/tasks?open=${r.id}`,
       }).catch((err) => console.error("Auto-complete notification failed:", err.message));
+    }
+    if (!r.auto_kind && r.creator_id && r.creator_id !== r.assignee_id) {
+      await notifyUser(r.creator_id, "task_completed", {
+        title: `Առաջադրանքը կատարված է՝ ${r.title}`,
+        body: `${r.customer_name} · վճարում է ստացվել (Excel)`,
+        url: `/#/tasks?open=${r.id}`,
+      }).catch((err) => console.error("Auto-complete creator notification failed:", err.message));
     }
   }
   closed.push(...paidAfter);
@@ -349,7 +368,9 @@ export async function createReorderFollowupTasks(now = new Date(), { notify = tr
      FROM customers c
      WHERE t.customer_id = c.id AND (t.auto_kind = 'reorder_followup' OR t.task_kind = 'make_order') AND t.status = 'open' AND c.erp_customer_id IS NOT NULL
        AND EXISTS (SELECT 1 FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id
-                     AND l.order_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date AND COALESCE(l.qty, 0) > 0 AND COALESCE(l.revenue_amd, 0) > 0)
+                     AND (l.order_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date AND t.auto_kind = 'reorder_followup'
+                          OR l.order_date > (t.created_at AT TIME ZONE 'Asia/Yerevan')::date) -- a person's task: an order dated its own day may be older than it
+                     AND COALESCE(l.qty, 0) > 0 AND COALESCE(l.revenue_amd, 0) > 0)
      RETURNING t.id`
   );
   if (ordered.length) await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = ANY($1)", [ordered.map((r) => r.id)]);
