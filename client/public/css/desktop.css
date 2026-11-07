@@ -525,6 +525,15 @@
   .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom {
     grid-column: 4;
     grid-row: 1 / span 2;
+    /* the chips stay inside their own column (owner, 2026-11-07: a long "Overdue" chip ran into the Due column) */
+    min-width: 0;
+    overflow: hidden;
+  }
+  .desk-view :is(#orders-list, #activity-list, #task-list, #customer-list) > .list-row .list-row-body > .list-row-bottom > .badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .desk-view #customer-list > .list-row .list-row-body > .list-row-bottom.product-match-row {
     grid-column: 3 / span 2;
@@ -1034,6 +1043,8 @@
   .dashboard-grid > .home-kpis { column-span: all; margin-bottom: 16px; }
   .home-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; margin-top: 12px; align-items: start; }
   .home-col { padding: 14px 16px; margin: 0; min-width: 0; }
+  .home-desk-left { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .home-desk-left > .progress-card { margin: 0; }
   .home-col-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .home-col-title { font-size: 1rem; font-weight: 700; margin: 0 0 8px; }
   .home-col-link { font-size: 0.85rem; white-space: nowrap; }

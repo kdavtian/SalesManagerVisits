@@ -6,7 +6,7 @@ import { escapeHtml, formatAmd, openInfoPopup } from "../../util.js";
 import { openAdminSection } from "./sheets.js";
 import { renderNotificationDefaultsSection, renderReportsManagementSection } from "./notifications.js";
 import { renderTeamSection } from "../admin/team.js";
-import { renderClientErrorLogSection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderPlacesSection, renderPointsCloseoutSection, renderQuickActionVisibilitySection, renderSalesChannelOwnersSection } from "../admin.js";
+import { renderClientErrorLogSection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderOfficesSection, renderPlacesSection, renderPointsCloseoutSection, renderQuickActionVisibilitySection, renderSalesChannelOwnersSection } from "../admin.js";
 import { renderDocumentTextsSection, renderVisitFrequencyTypesSection } from "../settingsDocTexts.js";
 import { renderSystemHealthSection } from "../systemHealth.js";
 
@@ -427,6 +427,9 @@ export function wireAdminRows(ctx) {
     });
     ctx.root.querySelector("#row-quick-actions").addEventListener("click", (e) => {
       openAdminSection(ctx.root, e.currentTarget, t("quick_action_visibility_title"), renderQuickActionVisibilitySection);
+    });
+    ctx.root.querySelector("#row-offices")?.addEventListener("click", (e) => {
+      openAdminSection(ctx.root, e.currentTarget, t("offices_title"), renderOfficesSection);
     });
     ctx.root.querySelector("#row-visit-types").addEventListener("click", (e) => {
       openAdminSection(ctx.root, e.currentTarget, t("visit_types_title"), renderVisitFrequencyTypesSection);

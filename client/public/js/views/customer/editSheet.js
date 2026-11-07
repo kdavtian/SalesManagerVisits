@@ -53,7 +53,6 @@ export async function openEditSheet(customer, navigate, onDone) {
           }
           return `<label>${t(f.labelKey)}<input type="${f.type}" name="${f.name}" value="${value}" /></label>`;
         }).join("")}
-        ${isAdmin() ? `<label class="checkbox-row office-switch"><input type="checkbox" name="checkin_for_all" ${customer.checkin_for_all ? "checked" : ""} /><span>${t("office_switch")}</span></label>` : ""}
         <p class="muted tin-lookup-status" id="tin-lookup-status" role="status" hidden></p>
         <div id="edit-social-section"></div>
         <p class="form-error" id="edit-customer-error" hidden></p>
@@ -159,7 +158,6 @@ export async function openEditSheet(customer, navigate, onDone) {
       return;
     }
     const changes = { customer_tier: data.get("customer_tier") };
-    if (isAdmin()) changes.checkin_for_all = data.get("checkin_for_all") === "on";
     for (const f of fields) {
       const raw = data.get(f.name);
       if (f.name === "phone") {

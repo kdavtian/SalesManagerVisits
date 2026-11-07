@@ -8,12 +8,14 @@ import { foldText, matchKind, prepareSearchText } from "../shared/searchKey.js";
 const preparedCustomers = new Map(); // id -> { text, prepared }
 export async function customerIdsMatching(search) {
   const { rows } = await pool.query(
-    `SELECT id, phone, concat_ws(' ', name, erp_customer_id, tin, legal_name, address, region, subregion, instagram_username, facebook_url, email, website) AS text
+    `SELECT id, phone, erp_customer_id, tin, concat_ws(' ', name, erp_customer_id, tin, legal_name, address, region, subregion, instagram_username, facebook_url, email, website) AS text
      FROM customers`
   );
   const words = foldText(search).split(/\s+/).filter(Boolean).slice(0, 8);
   const wholeDigits = /^[\d\s+()-]+$/.test(search.trim()) ? search.replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "") : "";
   const wholePhone = wholeDigits.length >= 3 ? wholeDigits : "";
+  // the Excel ID or TIN typed exactly ("10174") is the best match there is (owner, 2026-11-07)
+  const exact = search.trim().toLowerCase();
   const hits = [];
   const seen = new Set();
   for (const r of rows) {
@@ -22,6 +24,10 @@ export async function customerIdsMatching(search) {
     if (!entry || entry.text !== r.text) {
       entry = { text: r.text, prepared: prepareSearchText(r.text) };
       preparedCustomers.set(r.id, entry);
+    }
+    if (exact && (String(r.erp_customer_id ?? "").trim().toLowerCase() === exact || String(r.tin ?? "").trim() === exact)) {
+      hits.push({ id: r.id, kind: 4 });
+      continue;
     }
     const phone = String(r.phone ?? "").replace(/\D/g, "").replace(/^374/, "").replace(/^0+/, "");
     // a phone number typed with spaces ("091 007 019") is one number, not three words

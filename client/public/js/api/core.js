@@ -96,6 +96,39 @@ export function getCsrfToken() {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+// Offline copies of reads (listCache.js saveOfflineCopy / readOfflineCopy; owner, 2026-11-07): a read that fails for lack of a connection
+// (no network, or no answer within GET_TIMEOUT_MS) answers with its last saved copy, at most 3 days old, and the app says so
+// ("fv:offline-copy" -> a note with the time of the copy, app.js). Never for a change (POST/PATCH/...), never for an answer the server
+// refused (4xx/5xx), never for the live addresses below (who is where now, sign-in, counters, the sync's own state).
+const NO_OFFLINE_COPY = /^\/(auth|me\b|csrf|lockdown|push|locations|team-locations|notifications|badges|client-errors|health|system-health|erp-sync\/status|version)/;
+const OFFLINE_SAVE_EVERY_MS = 60000;
+const offlineSavedAt = new Map();
+function keepOfflineCopy(path, body) {
+  if (NO_OFFLINE_COPY.test(path) || body == null) return;
+  const last = offlineSavedAt.get(path) ?? 0;
+  if (Date.now() - last < OFFLINE_SAVE_EVERY_MS) return;
+  offlineSavedAt.set(path, Date.now());
+  if (offlineSavedAt.size > 500) offlineSavedAt.clear();
+  let copy;
+  try {
+    copy = structuredClone(body); // now: the screen may sort or edit its rows before the store writes them
+  } catch {
+    return;
+  }
+  import("../listCache.js").then((m) => m.saveOfflineCopy(path, copy)).catch(() => {});
+}
+async function offlineCopy(path) {
+  if (NO_OFFLINE_COPY.test(path)) return undefined;
+  try {
+    const stored = await (await import("../listCache.js")).readOfflineCopy(path);
+    if (!stored) return undefined;
+    window.dispatchEvent(new CustomEvent("fv:offline-copy", { detail: { at: stored.at } }));
+    return stored.body;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function doRequest(path, options) {
   const method = (options.method || "GET").toUpperCase();
   const csrfToken = method !== "GET" ? getCsrfToken() : null;
@@ -121,6 +154,12 @@ export async function doRequest(path, options) {
       },
     });
   } catch (err) {
+    clearTimeout(timer);
+    // no connection / no answer: a read answers with its last saved copy when there is one
+    if (method === "GET" && !options.signal) {
+      const copy = await offlineCopy(path);
+      if (copy !== undefined) return copy;
+    }
     if (controller?.signal.aborted) {
       const timeout = new Error(t("request_timeout"));
       timeout.status = 408;
@@ -135,6 +174,7 @@ export async function doRequest(path, options) {
 
   const isJson = res.headers.get("content-type")?.includes("application/json");
   const body = isJson ? await res.json() : null;
+  if (method === "GET" && res.ok && isJson) keepOfflineCopy(path, body);
 
   if (!res.ok) {
     if (res.status === 423 && body?.locked) {

@@ -70,7 +70,7 @@ function html(k) {
       })}
     </div>
     <div class="home-desk-cols">
-      ${attentionHtml(k)}
+      <div class="home-desk-left">${attentionHtml(k)}</div>
       <div class="home-today-slot"></div>
     </div>`;
 }
@@ -316,9 +316,36 @@ async function loadToday() {
 // and whatever slot is current gets the numbers.
 const recent = { at: 0, run: null, slot: null, last: null };
 
+// "This week's progress" sits under "Needs attention" on a computer, so the left column is not a short card beside the tall "Today"
+// with an empty hole under it (owner, 2026-11-07). It goes back to its place in Home's flow (before the quick actions) on a phone width
+// and before every repaint (a repaint would otherwise throw it away).
+function progressHome(slot, onDesk) {
+  const grid = slot.closest(".dashboard-grid");
+  const card = grid?.querySelector("#progress-card");
+  if (!card) return;
+  const left = slot.querySelector(".home-desk-left");
+  if (onDesk && left) {
+    if (card.parentElement !== left) left.appendChild(card);
+  } else if (card.parentElement !== grid) {
+    const before = grid.querySelector(":scope > .home-quick-actions");
+    before ? grid.insertBefore(card, before) : grid.appendChild(card);
+  }
+}
+let deskWatch = false;
+function watchDesk() {
+  if (deskWatch || !window.matchMedia) return;
+  deskWatch = true;
+  window.matchMedia("(min-width: 1024px)").addEventListener?.("change", (e) => {
+    if (recent.slot?.isConnected) progressHome(recent.slot, e.matches);
+  });
+}
+
 function paintInto(slot, k) {
   if (!slot?.isConnected) return;
+  progressHome(slot, false);
   slot.innerHTML = html(k);
+  progressHome(slot, true);
+  watchDesk();
   slot.hidden = false;
   wireAttention(slot);
   const el = todayEl();

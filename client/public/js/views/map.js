@@ -89,12 +89,18 @@ export function renderMap(root, navigate, relocateCustomerId, startInAddMode = f
       document.getElementById("app")?.classList.remove("app-main-locked");
       document.body.classList.remove("map-active");
       if (cancelled) return;
+      // a plain message and a normal button (owner, 2026-11-07: the raw "Failed to load /js/..." and a tall thin Retry button); the
+      // technical reason stays in small print for a support question
       root.innerHTML = `
-        <div class="map-view map-view-loading">
-          <p class="form-error">${escapeHtml(err.message)}</p>
-          <button type="button" class="btn" id="map-load-retry">${t("try_again")}</button>
+        <div class="map-view map-view-loading map-load-error">
+          <p class="map-load-error-title">${t("map_load_failed")}</p>
+          <p class="muted">${t(navigator.onLine === false ? "map_load_offline" : "map_load_weak")}</p>
+          <button type="button" class="btn btn-primary" id="map-load-retry">${t("try_again")}</button>
+          <small class="muted map-load-error-detail">${escapeHtml(err.message)}</small>
         </div>
       `;
+      // back online: try again by itself
+      window.addEventListener("online", () => root.querySelector("#map-load-retry")?.click(), { once: true });
       root.querySelector("#map-load-retry").addEventListener("click", () => {
         cleanup = renderMap(root, navigate, relocateCustomerId, startInAddMode, startInPlanMode, focusCustomerId);
       });

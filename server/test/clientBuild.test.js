@@ -47,6 +47,7 @@ test("every file loaded by its address keeps it: the boot files, every screen, e
     "js/perf-mode-init.js",
     "js/zoom-lock.js",
     "js/browser-check.js",
+    "js/mapSafeRuntime.js",
     ...fs.readdirSync(path.join(PUBLIC, "js", "views")).filter((f) => f.endsWith(".js")).map((f) => `js/views/${f}`),
     ...["en", "hy"].flatMap((lang) => fs.readdirSync(path.join(PUBLIC, "js", "i18n", lang)).map((f) => `js/i18n/${lang}/${f}`)),
   ];
@@ -93,6 +94,18 @@ test("sw.js lists exactly the built scripts for offline use, plus the non-script
   const scripts = shell.filter((p) => p.startsWith("/js/")).sort();
   assert.deepEqual(scripts, builtScripts().map((f) => `/${f}`).sort());
   assert.ok(shell.includes("/css/app.css") && shell.includes("/index.html"), "the non-script entries are kept");
+  // a script the app loads by its address ("/js/x.js" written in the code: leafletLoader.js adds mapSafeRuntime.js as a <script>) must be
+  // in the built offline list: one that was not broke the Map on a weak connection ("Failed to load /js/mapSafeRuntime.js", 1.528.0)
+  const byAddress = new Set();
+  (function walk(dir) {
+    for (const name of fs.readdirSync(path.join(PUBLIC, dir))) {
+      const rel = `${dir}/${name}`;
+      if (fs.statSync(path.join(PUBLIC, rel)).isDirectory()) walk(rel);
+      else if (rel.endsWith(".js")) for (const m of fs.readFileSync(path.join(PUBLIC, rel), "utf8").matchAll(/["'](\/js\/[A-Za-z0-9_/-]+\.js)["']/g)) byAddress.add(m[1]);
+    }
+  })("js");
+  assert.ok(byAddress.has("/js/mapSafeRuntime.js"), "the scan finds the scripts loaded by their address");
+  for (const p of byAddress) assert.ok(shell.includes(p), `${p} is loaded by its address but missing from the built offline list`);
   assert.equal(sw.match(/const CACHE_VERSION = "([^"]+)"/)?.[1], fs.readFileSync(path.join(PUBLIC, "sw.js"), "utf8").match(/const CACHE_VERSION = "([^"]+)"/)?.[1]);
 });
 

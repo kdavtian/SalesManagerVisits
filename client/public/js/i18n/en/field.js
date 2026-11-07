@@ -249,6 +249,8 @@ export const enField = {
     task_add_item: "Add item",
     task_item_placeholder: "Checklist item",
     task_due_today: "Due today",
+    task_days_n: "{n} d",
+    task_in_days: "In {n} d",
     task_overdue: "Overdue",
     task_status_done: "Done",
     task_status_cancelled: "Cancelled",

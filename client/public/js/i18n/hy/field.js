@@ -249,6 +249,8 @@ export const hyField = {
     task_add_item: "Ավելացնել կետ",
     task_item_placeholder: "Կետ",
     task_due_today: "Այսօր է",
+    task_days_n: "{n} օր",
+    task_in_days: "{n} օրից",
     task_overdue: "Ուշացած",
     task_status_done: "Կատարված",
     task_status_cancelled: "Չեղարկված",

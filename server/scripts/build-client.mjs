@@ -24,7 +24,10 @@ const out = outArg > 0 ? path.resolve(process.argv[outArg + 1]) : path.join(root
 // Safari 15 / Chrome 92 and newer (browser-check.js turns older browsers away): top-level await and ES2022 syntax stay as written.
 const TARGET = ["es2022", "safari15", "chrome92"];
 // Plain (non-module) scripts index.html loads before the app: minified one by one, never bundled.
-const CLASSIC_SCRIPTS = ["theme-init.js", "perf-mode-init.js", "zoom-lock.js", "browser-check.js"];
+// mapSafeRuntime.js is one too: leafletLoader.js adds it as a <script> by its address. Before 1.528.0 it was left out of the build, so
+// it was missing from the phones' offline list and the Map showed "Failed to load /js/mapSafeRuntime.js" on a weak connection (owner,
+// 2026-11-07).
+const CLASSIC_SCRIPTS = ["theme-init.js", "perf-mode-init.js", "zoom-lock.js", "browser-check.js", "mapSafeRuntime.js"];
 // Modules the browser tests import by their address (page.evaluate(() => import("/js/..."))): they must exist at that address in the
 // build and share their state with the app's copy (they become entries, so their code sits in the shared chunk the app uses too).
 const TEST_IMPORTED = ["api.js", "i18n.js", "util.js", "orderDetailSheet.js", "statusBarTap.js", "activityDatePicker.js"];

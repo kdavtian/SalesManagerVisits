@@ -5,9 +5,38 @@ import { openSyncQueueSheet } from "../syncQueueSheet.js";
 
 export const syncBanner = document.getElementById("sync-banner");
 
+// A screen is showing a saved copy because the internet dropped (api/core.js, "fv:offline-copy"; owner, 2026-11-07): the banner says so
+// and how old the copy is, until the connection is back (or for a few minutes after the last such copy).
+let offlineCopy = null; // { at: oldest copy shown, until }
+const OFFLINE_NOTE_MS = 3 * 60 * 1000;
+window.addEventListener("fv:offline-copy", (e) => {
+  const at = Number(e.detail?.at) || Date.now();
+  offlineCopy = { at: offlineCopy && offlineCopy.until > Date.now() ? Math.min(offlineCopy.at, at) : at, until: Date.now() + OFFLINE_NOTE_MS };
+  renderSyncBanner();
+  setTimeout(renderSyncBanner, OFFLINE_NOTE_MS + 100);
+});
+window.addEventListener("online", () => {
+  offlineCopy = null;
+});
+const hhmm = (ms) => {
+  const d = new Date(ms);
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return new Date().toDateString() === d.toDateString() ? time : `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")} ${time}`;
+};
+
 export function renderSyncBanner() {
   const queue = getQueue();
   const pending = queue.length;
+  if (!pending && offlineCopy && offlineCopy.until > Date.now()) {
+    syncBanner.hidden = false;
+    syncBanner.onclick = null;
+    syncBanner.onkeydown = null;
+    syncBanner.removeAttribute("tabindex");
+    syncBanner.setAttribute("role", "status");
+    syncBanner.classList.remove("sync-banner-link");
+    syncBanner.textContent = t("offline_copy_banner").replace("{time}", hhmm(offlineCopy.at));
+    return;
+  }
   if (!pending) {
     syncBanner.hidden = true;
     syncBanner.onclick = null;
