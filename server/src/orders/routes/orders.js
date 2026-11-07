@@ -614,7 +614,7 @@ ordersRouter.get("/accounting-count", async (req, res) => {
 ordersRouter.get("/accounting-agent", async (req, res) => {
   if (!canRequestAccountingDocs(req.user.role)) return res.json({ online: false, last_seen_at: null });
   const { rows } = await pool.query(
-    "SELECT MAX(last_used_at) AS last_seen_at FROM integration_tokens WHERE revoked_at IS NULL AND test_mode = false"
+    "SELECT MAX(last_used_at) AS last_seen_at FROM integration_tokens WHERE revoked_at IS NULL AND test_mode = false AND scope = 'accounting'"
   );
   const last = rows[0].last_seen_at;
   res.json({ online: !!last && Date.now() - new Date(last).getTime() < 60 * 1000, last_seen_at: last });

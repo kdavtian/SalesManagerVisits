@@ -4,7 +4,7 @@
 // accounting status -- nothing else; see docs/lily-integration.md.
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
-import { hashToken } from "../integrationTokens.js";
+import { checkBearer } from "../integrationTokens.js";
 import { nextStatusFromDocuments } from "../../orders/accountingStatus.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
@@ -24,16 +24,11 @@ function fail(res, status, code, message) {
 
 // Named: test/architecture.test.js counts it as the login of every route below.
 integrationRouter.use(async function requireIntegrationToken(req, res, next) {
-  const header = req.get("authorization") || "";
-  const match = /^Bearer\s+(\S+)$/i.exec(header);
-  if (!match) return fail(res, 401, "unauthorized", "Missing bearer token");
-  const { rows } = await pool.query(
-    "SELECT id, name, test_mode FROM integration_tokens WHERE token_hash = $1 AND revoked_at IS NULL",
-    [hashToken(match[1])]
-  );
-  if (!rows[0]) return fail(res, 401, "unauthorized", "Invalid or revoked token");
-  req.integration = rows[0];
-  pool.query("UPDATE integration_tokens SET last_used_at = now() WHERE id = $1", [rows[0].id]).catch(() => {});
+  // only accounting-scope tokens (an ops-read token of the Claude agents gets 403 here: erp/integrationTokens.js)
+  const auth = await checkBearer(req, "accounting");
+  if (!auth.token) return fail(res, auth.status, auth.code, auth.message);
+  const rows = [auth.token];
+  req.integration = auth.token;
 
   res.on("finish", () => {
     pool
