@@ -43,6 +43,8 @@ test("accountant uploads a statement: matched lines, add one to Cashflow, ignore
     // the ledger row the bank confirmed carries the mark
     await page.locator("#bk-close").click();
     await page.locator(`.cf-account[data-account="${acc.id}"]`).click();
+    // the rows are dated October 2026 and Cashflow opens on "This month": look at all dates (it failed every night from November on)
+    await page.locator('#cf-periods [data-base="all"]').click();
     await expect(page.locator(".cf-row", { hasText: "Fuel" }).first()).toContainText("bank", { timeout: 10000 });
   } finally {
     await pool.query("DELETE FROM cash_entries WHERE account_id = $1", [acc.id]);

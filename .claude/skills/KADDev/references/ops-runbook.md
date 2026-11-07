@@ -46,8 +46,19 @@ cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo syste
 - **Reading a red job**: `get_job_logs` with `return_content` and a big `tail_lines` is saved to a file when it is too long; slice it with python (`json.loads(...)['logs_content']`, replace `\n`, find the first check mark failure `✖` or `failing tests`). The postgres service log at the top is noise.
 - **Reproduce locally exactly as CI does it: `bash scripts/local-ci.sh`** (fresh database per shard, parallel, one summary line). A failure that only appears in ONE shard (foreign-key error, a count nobody else sees) is a hidden cross-file race on global state: found so far = erpSync TRUNCATEs erp_customer_data, the single `app_settings.bonuses_enabled` switch (10 bonus files), the one active route plan (activateSet rewrites every rep's rules), Vaghinak's engine tick (scans the whole database). Put the culprit file in `server/test/isolated-tests.txt` (read `server/test/ISOLATED.md`), never skip the test.
 - After a squash-merge: `git fetch origin main && git checkout -B <branch> origin/main`, then `git push --force-with-lease -u origin <branch>` so the stop hook stops reporting "unpushed commits" (the remote branch still holds the pre-squash commits).
+- **Nightly browser run (Field Visits `e2e-nightly.yml`, since 1.530.0)**: every day at 00:15 Yerevan (20:15 UTC), the hour when the UTC and
+  Yerevan dates differ, so Saturday's run is Yerevan-Sunday and Sunday's is the Monday week start. A red night opens (or comments on) the issue
+  "Nightly browser tests are red" (label `nightly-red`); the next green night closes it. When that issue is open, fixing it comes before new work.
+  The run was red unseen from 2026-10-15 to 2026-11-07: 2 hard-coded counts, 2 tests dated "this month" in October, map tiles from the internet
+  (now stubbed for every test in `fixtures.mjs`), and a real bug (a previous user's saved list filter beat a dashboard link).
+- **Date traps in tests**: never write a fixed date (`'2026-10-02'`) or "N days ago" into a test that checks a "this month / this week" screen
+  without choosing the period or computing the date in Yerevan time; it passes for weeks and then fails every night.
+- **Private repos and Actions minutes**: KAD OS, the bot and KD-Mozg are private; when the account's Actions minutes or payment run out, every job
+  fails in about 2 s with no runner and no log (`runner_id: 0`), `main` included. That is billing (owner: GitHub Settings -> Billing), not code.
 
 ## Local environment (for verification)
+- A brand-new container's Postgres has no password: `su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres'\""` once, then the
+  repo's `.claude/hooks/session-start.sh` (run it by hand when the session started outside the repo folder).
 - `pg_ctlcluster 16 main start`; `DATABASE_URL=postgres://postgres:postgres@localhost:5432/fieldvisits_test`; `JWT_SECRET` >= 16 chars (e.g. 24 x's) or every login 500s ("JWT_SECRET is missing or too short").
 - Browser driving: Playwright with `/opt/pw-browsers/chromium`; start the server on port 3001 with `E2E_RATE_LIMIT_BYPASS_TOKEN=qa`; do not `pkill -f` on command text (kills the harness).
 - Slow commands (`npm test`) run in background; read output file after the completion notification.

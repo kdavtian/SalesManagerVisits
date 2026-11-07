@@ -1,4 +1,5 @@
 import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
+import { notificationGroupsFor } from "../../../client/public/js/shared/notificationTypes.js";
 
 // Settings > Notifications offers every kind of notification the person's role can receive, in groups (owner, 2026-10-28: "1A";
 // client/public/js/shared/notificationTypes.js): a rep sees no warehouse kinds, the admin sees all four groups, a switch is saved.
@@ -32,6 +33,8 @@ test("the admin sees every kind in four groups", async ({ page, fixtures }) => {
   await loginViaUi(page, admin.email);
   await openSwitches(page);
   await expect(page.locator("#notification-prefs-list .settings-list-group-title")).toHaveCount(4);
-  await expect(page.locator("#notification-prefs-list [id^='notif-pref-']:not([id^='notif-pref-reset-'])")).toHaveCount(32);
+  // every kind the admin can receive, counted from the shared list (a hard-coded number went stale when kinds were added)
+  const kinds = notificationGroupsFor("admin").reduce((n, g) => n + g.types.length, 0);
+  await expect(page.locator("#notification-prefs-list [id^='notif-pref-']:not([id^='notif-pref-reset-'])")).toHaveCount(kinds);
   await page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/notif-switches-admin.png`, fullPage: true });
 });

@@ -138,19 +138,19 @@ rebuild with `python3 .claude/skills/KADDev/build-index.py` after changing a ref
 - L62 Shared kit and navigation (0.95.0) - client/public/js/kit/ is the SAME kit as Field Visits (KADDev rule 60, kad-app-standard.md section 4).
 - L65 Rounds of 2026-11-05 / 06 (KAD OS 0.106.0 - 0.107.0) - Oil by the litre from its own pack (0.106.0, migration 063): a drum (>= 50 L) asks for litres on any tap; a bo
 
-## ops-runbook.md (20 KB, 111 lines)
+## ops-runbook.md (21 KB, 122 lines)
 - L3 Environment facts - One DigitalOcean droplet (Ubuntu 24.04), hostname castrol-ceo-bot, IP 164.92.171.41.
 - L9 App deploy (preferred, fast) - cd /opt/field-visits && ./deploy/deploy.sh
 - L21 Bot deploy - cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo systemctl restart castrol-ceo-bot &
 - L27 Handy prod SQL (always read-only first) - Version/flag: select bonusesenabled from appsettings where id=1;
 - L33 CI and PR flow - GitHub Actions: test (npm ci, check:version, migrate, npm test, verify:ui, audit) and e2e-smoke (Playwright).
-- L50 Local environment (for verification) - pgctlcluster 16 main start; DATABASEURL=postgres://postgres:postgres@localhost:5432/fieldvisitstest; JWTSECRET
-- L55 Lessons added 2026-10-05 - "dubious ownership" on the bot: git pull as castrolbot fails after any root-run git touched the repo.
-- L63 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
-- L77 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
-- L87 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
-- L97 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
-- L104 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
+- L59 Local environment (for verification) - A brand-new container's Postgres has no password: su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'post
+- L66 Lessons added 2026-10-05 - "dubious ownership" on the bot: git pull as castrolbot fails after any root-run git touched the repo.
+- L74 Lessons added 2026-10-08 - Deploy command to give the owner: no migration in the release -> cd /opt/field-visits && ./deploy/deploy.sh --
+- L88 Lessons added 2026-10-09 - Deploy commands: no migration -> cd /opt/field-visits && ./deploy/deploy.sh --fast; migration present (e.g.
+- L98 Lessons added 2026-10-10 - deploy.sh --fast still runs migrations (npm run migrate on every deploy) and verify:deployment; "fast" only sk
+- L108 Lessons added 2026-10-24 (the optimization round) - Tests that passed for months only because everything ran in one slow pass share global state; splitting CI exp
+- L115 Lessons added 2026-10-24 (features round) - Bot deploy is separate from the app deploy: cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main
 
 ## optimization-ideas.md (9 KB, 62 lines)
 - L6 How an idea is written - N. <short name> - saves <minutes / taps / seconds / KB>; stays identical: <functionality, results, experience>
