@@ -122,6 +122,40 @@ async function setCachedFull(full, value) {
   }
 }
 
+// The last answer of each server read, kept for when the internet drops (owner, 2026-11-07: "app not loading pages ... cause was internet
+// connection; is there any room to improve cache?"). api/core.js saves a read's answer here (at most once a minute per address) and, when
+// the same read later fails for lack of a connection, shows this copy with a note saying how old it is. IndexedDB only (no memory slot,
+// so the lists' instant-open copies are never pushed out); scoped to the person like everything here and wiped on logout / role change.
+export const OFFLINE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+export async function saveOfflineCopy(key, body) {
+  if (!state.user?.id) return;
+  try {
+    const db = await openDb();
+    await new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, "readwrite").objectStore(STORE).put({ at: Date.now(), body }, scopedKey(`offline:${key}`));
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    // best effort: only the offline fallback of this one address is lost
+  }
+}
+export async function readOfflineCopy(key) {
+  if (!state.user?.id) return undefined;
+  try {
+    const db = await openDb();
+    const stored = await new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(scopedKey(`offline:${key}`));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    if (!stored || !(Date.now() - stored.at < OFFLINE_MAX_AGE_MS)) return undefined;
+    return stored;
+  } catch {
+    return undefined;
+  }
+}
+
 // Called on logout, alongside scopedKey() above -- belt and suspenders
 // against a shared device ever showing one rep's cached list data to the
 // next rep who signs in, in case some key is ever cached without going

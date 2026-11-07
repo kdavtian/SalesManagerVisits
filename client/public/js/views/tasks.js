@@ -27,10 +27,20 @@ function notifyTasksChanged() {
 }
 
 // "due" = deadline is today or already passed (red); otherwise yellow.
-export function taskDueInfo(task, today) {
+// `short`: the computer table, where the Due column already shows the date -- the chip says how late / how soon instead of repeating
+// it (owner, 2026-11-07: the "Overdue · 10-10-2026" chip ran into the Due column)
+export function taskDueInfo(task, today, { short = false } = {}) {
   if (task.status !== "open") return { cls: "badge-neutral", due: false, label: formatDateDMY(task.due_date) };
   const due = task.due_date <= today;
-  const label = task.due_date === today ? t("task_due_today") : task.due_date < today ? `${t("task_overdue")} · ${formatDateDMY(task.due_date)}` : formatDateDMY(task.due_date);
+  const days = Math.round((Date.parse(`${task.due_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+  const label =
+    task.due_date === today
+      ? t("task_due_today")
+      : task.due_date < today
+        ? `${t("task_overdue")} · ${short ? t("task_days_n").replace("{n}", String(-days)) : formatDateDMY(task.due_date)}`
+        : short
+          ? t("task_in_days").replace("{n}", String(days))
+          : formatDateDMY(task.due_date);
   return { cls: due ? "badge-danger" : "badge-warning", due, label };
 }
 
@@ -56,7 +66,7 @@ function progressText(task) {
 }
 
 export function taskCardHtml(task, today, { showCustomer = true, table = null } = {}) {
-  const info = taskDueInfo(task, today);
+  const info = taskDueInfo(task, today, { short: Boolean(table) && isDesktop() });
   const mine = task.assignee_id === state.user.id;
   return `
     <button type="button" class="card list-row task-card ${task.status !== "open" ? "task-card-closed" : ""}" data-task-id="${task.id}">
@@ -204,7 +214,7 @@ export function renderTasks(root, navigate, openId) {
     columns: TASK_DESK_COLUMNS,
     defaults: TASK_DESK_DEFAULTS,
     lead: [{ label: t("desk_col_task") }, { label: t("desk_col_status") }],
-    leadCols: "minmax(0, 1.8fr) minmax(0, 1.3fr)",
+    leadCols: "minmax(0, 2.4fr) minmax(0, 1fr)", // the title gets the room; the status chip is short (taskDueInfo short)
     rowSelector: ".list-row[data-task-id]",
     rows: () => sorted(visible()),
     sort: () => ({ key: f.sort, reversed: f.reversed }),

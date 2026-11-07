@@ -37,3 +37,23 @@ test("a long word with one letter wrong still finds it; exact matches come first
   const both = await names(tag);
   assert.ok(both.includes(armenian.id) && both.includes(latin.id));
 });
+
+// Owner, 2026-11-07: "user search for 10174, it should bring first exact matches, but the list dont include the 10174 customer". The
+// top-bar search asks for 5 rows: they came in name order (not best match first), and 10173 / 10175 counted as "one digit off".
+test("an Excel ID typed exactly comes first, also when only 5 rows are asked for; a number is never one digit off", async () => {
+  const admin = await createUser("admin");
+  const base = 70000 + (Date.now() % 20000);
+  const id = String(base);
+  const neighbours = [];
+  for (const n of [base - 1, base + 1, base + 10, base + 100]) {
+    neighbours.push(await createCustomer({ name: `AAA Neighbour ${n}`, created_by: admin.id, erp_customer_id: String(n) }));
+  }
+  // longer IDs that contain the typed number are matches too, and their names come first alphabetically
+  for (const extra of ["1", "2", "3", "4", "5", "6"]) await createCustomer({ name: `AAA Longer ${id}${extra}`, created_by: admin.id, erp_customer_id: `${id}${extra}` });
+  const target = await createCustomer({ name: `ZZZ Exact ${tag}`, created_by: admin.id, erp_customer_id: id });
+  const res = await apiRequest(`/api/customers?search=${id}&limit=5`, { cookie });
+  assert.equal(res.status, 200);
+  assert.equal(res.data[0]?.id, target.id, "the exact Excel ID is the first row");
+  const ids = res.data.map((c) => c.id);
+  for (const n of neighbours.slice(0, 2)) assert.ok(!ids.includes(n.id), "a number one digit off is another customer");
+});

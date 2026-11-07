@@ -98,7 +98,8 @@ export function matchKind(prepared, query) {
       kind = Math.min(kind, 2);
       continue;
     }
-    if (k.length >= TYPO_MIN_LETTERS && typoIn(k, prepared.words)) {
+    // a number (an Excel ID, a TIN, a phone) is never "one digit off": 10173 is another customer than 10174
+    if (k.length >= TYPO_MIN_LETTERS && !/^\d+$/.test(k) && typoIn(k, prepared.words)) {
       kind = 1;
       continue;
     }

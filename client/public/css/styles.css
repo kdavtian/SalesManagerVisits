@@ -10328,11 +10328,54 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   width: 60%;
   height: 60%;
 }
-.office-switch {
+/* the version at the end of Settings (owner, 2026-11-07) */
+.settings-version-foot {
+  text-align: center;
+  font-size: 0.85rem;
+  margin: 18px 0 8px;
+}
+.settings-version-aside {
+  display: none;
+}
+@media (min-width: 1024px) {
+  .settings-version-aside {
+    display: block;
+  }
+  .settings-version-end {
+    display: none;
+  }
+}
+
+/* Settings -> Offices (owner, 2026-11-07) */
+.office-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   min-height: 44px;
+  padding: 8px 12px;
+}
+.office-row + .office-row {
+  border-top: 1px solid var(--border);
+}
+.office-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.office-row .btn {
+  flex: none;
+  min-height: 44px;
+}
+.office-empty {
+  padding: 12px;
+  margin: 0;
+}
+.offices-search input {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
 }
 
 /* Vaghinak's route-plan suggestions (owner, 2026-11-03) */
@@ -10436,3 +10479,33 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .pa-two > label { min-width: 0; }
 @media (max-width: 340px) { .pa-two { grid-template-columns: 1fr; } }
 .pa-note { font-size: 0.82rem; margin: 6px 0; }
+
+/* The Map could not load its files (owner, 2026-11-07): a centred message and a normal-sized button, not a tall thin one */
+.map-view.map-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.map-load-error > .btn {
+  flex: none;
+  align-self: center;
+  height: auto;
+  min-height: 44px;
+  min-width: 160px;
+}
+.map-load-error-title {
+  font-weight: 700;
+  margin: 0;
+}
+.map-load-error > p {
+  margin: 0;
+  max-width: 34em;
+}
+.map-load-error-detail {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}

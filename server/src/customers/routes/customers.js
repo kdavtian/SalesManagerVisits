@@ -179,6 +179,8 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`(c.assigned_manager_id = $${params.length} OR c.checkin_for_all)`);
   }
   // "Only our customers" (owner, 2026-11-03): the ones that exist in the Excel -- bronze / silver / gold, which all have an ERP customer ID
+  // the offices (Settings -> Offices, owner 2026-11-07)
+  if (req.query.offices) conditions.push(`c.checkin_for_all`);
   if (only_erp) conditions.push(`NULLIF(btrim(c.erp_customer_id), '') IS NOT NULL`);
   if (visited === "visited") {
     conditions.push(`v.visited_this_week`);
@@ -209,7 +211,7 @@ customersRouter.get("/", async (req, res) => {
      ${REORDER_JOIN}
      ${debtJoin}
      ${where}
-     ORDER BY ${searchOrder && !page ? `array_position($${params.indexOf(searchOrder) + 1}::int[], c.id), ` : ""}c.name, c.id${page ? ` LIMIT ${page.limit} OFFSET ${page.offset}` : ""}`,
+     ORDER BY ${searchOrder && !page?.after ? `array_position($${params.indexOf(searchOrder) + 1}::int[], c.id), ` : ""}c.name, c.id${page ? ` LIMIT ${page.limit} OFFSET ${page.offset}` : ""}`,
     params
   );
   // debt_amd is ERP commercial data -- a sales_manager only sees it for

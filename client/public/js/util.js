@@ -1536,6 +1536,9 @@ export function customerSearchKind(c, query, extraText = "") {
   if (!words.length) return 3;
   // extraText: already-folded searchable text from outside the customer row
   // (e.g. the brands check-ins recorded -- see brandChips.js).
+  // the Excel ID or TIN typed exactly ("10174") comes first (owner, 2026-11-07)
+  const exact = query.trim().toLowerCase();
+  if (exact && (String(c.erp_customer_id ?? "").trim().toLowerCase() === exact || String(c.tin ?? "").trim() === exact)) return 4;
   const prepared = preparedFor(c, extraText);
   const phone = phoneTail(c.phone);
   // a phone number typed with spaces ("091 007 019", "+374 91 007019") is one number, not three words

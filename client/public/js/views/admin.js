@@ -640,3 +640,80 @@ export async function renderClientErrorLogSection(container) {
     </div>
   `;
 }
+
+// Offices (owner, 2026-11-07: "better to have Offices in admin settings, not in the customer"): the places every rep can check in at
+// (customers.checkin_for_all: Head office, the second office...). Offices have no visit plan, no reorder, no debt chase; an office is
+// still a place on the map with a pin. Add one by searching a place, remove it with one tap. Server: PATCH /customers/:id (admin only).
+export async function renderOfficesSection(container) {
+  container.innerHTML = `
+    <h3 class="health-title">${t("offices_current")}<button type="button" class="settings-hint-icon" id="offices-hint" aria-label="${t("more_info")}">!</button></h3>
+    <p class="muted settings-hint-text" id="offices-hint-text" hidden>${t("offices_hint")}</p>
+    <div class="card settings-list" id="offices-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+    <h3 class="health-title" style="margin-top:18px">${t("offices_add")}</h3>
+    <div class="offices-search"><input type="search" id="offices-search" autocomplete="off" placeholder="${escapeHtml(t("offices_search_ph"))}" aria-label="${escapeHtml(t("offices_search_ph"))}" /></div>
+    <div class="card settings-list" id="offices-found" hidden></div>
+    <p class="form-error" id="offices-error" hidden></p>`;
+  const hintBtn = container.querySelector("#offices-hint");
+  hintBtn.addEventListener("click", () => {
+    const h = container.querySelector("#offices-hint-text");
+    h.hidden = !h.hidden;
+  });
+  const listEl = container.querySelector("#offices-list");
+  const foundEl = container.querySelector("#offices-found");
+  const errEl = container.querySelector("#offices-error");
+  const input = container.querySelector("#offices-search");
+  const fail = (m) => ((errEl.textContent = m), (errEl.hidden = !m));
+  const row = (c, act) => `
+    <div class="office-row">
+      <span class="office-name"><strong>${escapeHtml(c.name)}</strong>${c.address ? `<small class="muted">${escapeHtml(c.address)}</small>` : ""}</span>
+      <button type="button" class="btn ${act === "add" ? "btn-primary" : ""}" data-${act}="${c.id}">${t(act === "add" ? "offices_make" : "offices_remove")}</button>
+    </div>`;
+
+  async function setOffice(id, on, btn) {
+    btn.disabled = true;
+    fail("");
+    try {
+      await api.updateCustomer(id, { checkin_for_all: on });
+      input.value = "";
+      foundEl.hidden = true;
+      await load();
+    } catch (err) {
+      btn.disabled = false;
+      fail(err.message);
+    }
+  }
+
+  async function load() {
+    const rows = await api.listCustomers({ offices: 1 });
+    const offices = (rows || []).filter((c) => c.checkin_for_all);
+    listEl.innerHTML = offices.length ? offices.map((c) => row(c, "remove")).join("") : `<p class="muted office-empty">${t("offices_empty")}</p>`;
+    listEl.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", () => setOffice(Number(b.dataset.remove), false, b)));
+  }
+
+  let timer = null;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) {
+      foundEl.hidden = true;
+      return;
+    }
+    timer = setTimeout(async () => {
+      try {
+        const rows = (await api.listCustomers({ search: q, limit: 8 })).filter((c) => !c.checkin_for_all);
+        if (input.value.trim() !== q) return;
+        foundEl.innerHTML = rows.length ? rows.map((c) => row(c, "add")).join("") : `<p class="muted office-empty">${t("desk_search_none")}</p>`;
+        foundEl.hidden = false;
+        foundEl.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => setOffice(Number(b.dataset.add), true, b)));
+      } catch (err) {
+        fail(err.message);
+      }
+    }, 220);
+  });
+
+  try {
+    await load();
+  } catch (err) {
+    listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
+}

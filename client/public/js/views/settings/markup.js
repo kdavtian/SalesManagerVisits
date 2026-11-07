@@ -34,6 +34,8 @@ export function paintSettingsMarkup(ctx) {
         <p class="muted admin-search-empty" id="settings-search-empty" hidden>${t("admin_search_empty")}</p>
         <nav class="card settings-list settings-nav" id="settings-nav-personal" aria-label="${t("personal_settings")}" hidden>${ctx.navItems("personal")}</nav>
         ${ctx.hasAdminWorkspace ? `<nav class="card settings-list settings-nav" id="settings-nav-admin" aria-label="${t("admin_workspace")}" hidden>${ctx.navItems("admin")}</nav>` : ""}
+        <!-- the version at the very end of Settings (owner, 2026-11-07): under the menu on a computer, after the last section on a phone -->
+        <p class="muted settings-version-foot settings-version-aside">${t("version")} ${APP_VERSION}</p>
       </div>
 
       <div class="settings-main">
@@ -225,6 +227,7 @@ export function paintSettingsMarkup(ctx) {
         </div>
         <div class="card settings-list">
           ${settingsRow({ icon: ICON.calendar, label: t("visit_types_title"), id: "row-visit-types", color: "green" })}
+          ${ctx.admin ? settingsRow({ icon: ICON.gps, label: t("offices_title"), id: "row-offices", color: "blue" }) : ""}
           ${settingsRow({ icon: ICON.book, label: t("doc_texts_title"), id: "row-doc-texts", color: "orange" })}
           ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
@@ -442,6 +445,7 @@ export function paintSettingsMarkup(ctx) {
           : ""
       }
       </div>
+      <p class="muted settings-version-foot settings-version-end">${t("version")} ${APP_VERSION}</p>
     </div>
   `;
 }
