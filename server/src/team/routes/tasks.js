@@ -208,6 +208,8 @@ tasksRouter.get("/:id", async (req, res, next) => {
   res.json({ ...task, calls, today: yerevanToday() });
 });
 
+const ORDER_NEEDS_ERP = "A make-order task needs a customer that is in the ERP (not a draft-only customer)";
+
 tasksRouter.post("/", async (req, res) => {
   if (!canCreateTasks(req.user.role)) return res.status(403).json({ error: "Only management can create tasks" });
   const { title, assignee_id, customer_id, due_date, due_is_next_visit } = req.body ?? {};
@@ -233,6 +235,13 @@ tasksRouter.post("/", async (req, res) => {
     if (!rows[0]) return res.status(400).json({ error: "Customer not found" });
     customerId = rows[0].id;
     customerName = rows[0].name;
+  }
+  // Owner, 2026-11-08: nobody gives a "Make order" task for a customer that is not ours (no ERP id): the app only makes draft orders for
+  // them, and an order task closes only by a real order. Vaghinak's own "stopped ordering" tasks come from the workbook's orders, so they
+  // never exist for such a customer either.
+  if (taskKind === "make_order") {
+    const { rows } = await pool.query("SELECT 1 FROM customers WHERE id = $1 AND NULLIF(btrim(erp_customer_id), '') IS NOT NULL", [customerId]);
+    if (!rows.length) return res.status(400).json({ error: ORDER_NEEDS_ERP });
   }
 
   const client = await pool.connect();

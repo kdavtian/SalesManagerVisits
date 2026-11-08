@@ -21,7 +21,7 @@ test.before(async () => {
   other = await createUser("sales_manager");
   dirCookie = await loginAs(director.email);
   repCookie = await loginAs(rep.email);
-  customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id });
+  customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, erp_customer_id: `ITEST-TSC-${Date.now()}` });
 });
 test.after(async () => {
   await pool.query("DELETE FROM tasks WHERE creator_id = $1", [director.id]);
@@ -130,7 +130,7 @@ test("a call to a debt customer records what was said and does not close the tas
 
 test("a check-in far from the customer does not close a visit task (a visit needs the visit)", async () => {
   // management may check in from anywhere; such a check-in is saved as 'not within range' and never counts as the customer's visit
-  const far = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, lat: 40.2, lng: 44.5 });
+  const far = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, lat: 40.2, lng: 44.5, erp_customer_id: `ITEST-TSF-${Date.now()}` });
   const task = await apiRequest("/api/tasks", { method: "POST", cookie: dirCookie, body: { title: "E2E far visit", assignee_id: rep.id, customer_id: far.id, due_date: yerevanToday(), task_kind: "visit_customer" } });
   assert.equal(task.status, 201);
   await pool.query("UPDATE tasks SET assignee_id = $2 WHERE id = $1", [task.data.id, director.id]);
