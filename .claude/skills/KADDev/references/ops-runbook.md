@@ -53,8 +53,9 @@ cd /opt/castrol-ceo-bot && sudo -u castrolbot git pull origin main && sudo syste
   (now stubbed for every test in `fixtures.mjs`), and a real bug (a previous user's saved list filter beat a dashboard link).
 - **Date traps in tests**: never write a fixed date (`'2026-10-02'`) or "N days ago" into a test that checks a "this month / this week" screen
   without choosing the period or computing the date in Yerevan time; it passes for weeks and then fails every night.
-- **Private repos and Actions minutes**: KAD OS, the bot and KD-Mozg are private; when the account's Actions minutes or payment run out, every job
-  fails in about 2 s with no runner and no log (`runner_id: 0`), `main` included. That is billing (owner: GitHub Settings -> Billing), not code.
+- **Private repos and Actions minutes**: KAD OS, the bot and KD-Mozg are private and get no Actions minutes (owner 2026-11-08: no paid GitHub, "always merge"):
+  every job fails in about 2 s with no runner and no log (`runner_id: 0`), `main` included. Not a code problem and nothing to ask the owner:
+  run the repo's local CI (`bash scripts/local-ci.sh --e2e`) and merge when it passes (KADDev rule 3).
 
 ## Local environment (for verification)
 - A brand-new container's Postgres has no password: `su postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres'\""` once, then the
