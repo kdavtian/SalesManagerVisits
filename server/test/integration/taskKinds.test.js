@@ -4,6 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, apiFormRequest, loginAs, trackCheckin, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
+import { getCheckinRadiusMeters } from "../../src/shared/settings.js";
 
 const stamp = Date.now();
 let director, rep, dirCookie, repCookie;
@@ -197,7 +198,9 @@ test("a check-in the server let in because GPS accuracy was forgiven still close
   const orderTask = (await give(customer, "make_order")).data;
   const form = new FormData();
   form.set("customer_id", String(customer.id));
-  form.set("lat", String(Number(customer.lat) + 0.00225)); // about 250 m: more than the 200 m allowance, less than 200 m with 100 m of GPS error forgiven
+  // 50 m beyond the allowance (whatever it is set to right now): outside it by the raw distance, inside it once 100 m of GPS error is forgiven
+  const radius = await getCheckinRadiusMeters();
+  form.set("lat", String(Number(customer.lat) + (radius + 50) / 111320));
   form.set("lng", String(customer.lng));
   form.set("accuracy_m", "100");
   form.set("outcomes", JSON.stringify(["other"]));
