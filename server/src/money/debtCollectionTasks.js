@@ -91,14 +91,16 @@ const MIN_ERP_ROWS_TO_TRUST_ABSENCE = 20;
 // was owed before them = the Excel debt + them) -- a tiny payment closes nothing (taskPaymentRule.js, owner 2026-11-08). A customer with no
 // cashflow line since the task falls back to a newer last-payment date (the workbook may carry that and no lines).
 // op: ">=" counts the task's own day (the workbook has dates, not times), ">" only the days after it.
-const paidSinceSql = (op) => {
+const paidSinceSql = (op, anyAmount = false) => {
   const day = "(t.created_at AT TIME ZONE 'Asia/Yerevan')::date";
   const lines = `FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0 AND cf.cashflow_date ${op} ${day}`;
   const sum = `COALESCE((SELECT sum(cf.amount_amd) ${lines}), 0)`;
+  // anyAmount: step 1 below (the OVERDUE money is gone altogether, so the task's goal is met by whatever was paid)
+  if (anyAmount) return `(${sum} > 0 OR (NOT EXISTS (SELECT 1 ${lines}) AND COALESCE(erp.last_payment_date ${op} ${day}, false)))`;
   return `((${sum} > 0 AND ${sum} >= LEAST(${MIN_TASK_PAYMENT_AMD}, GREATEST(COALESCE(erp.debt_amd, 0) + ${sum}, 1)))
     OR (NOT EXISTS (SELECT 1 ${lines}) AND COALESCE(erp.last_payment_date ${op} ${day}, false)))`;
 };
-const PAID_SINCE_TASK_SQL = paidSinceSql(">=");
+const PAID_SINCE_TASK_SQL = paidSinceSql(">=", true);
 
 // Strictly AFTER the day the task was made (the workbook has dates, not times: a payment dated the task's own day may have come before it, and
 // the task's title even names it as "last payment"). The app's own events close a same-day payment (taskAutoComplete.js).
@@ -227,8 +229,8 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   );
 
   // 1b) The customer PAID after the task was made (a payment line in the workbook's cashflow, or a newer last-payment date) but still
-  //     owes overdue money: step 1 leaves the task open, because the debt is still overdue. The app closes the same task for ANY amount
-  //     it records itself ("any amount counts", taskAutoComplete.js), so the workbook's payments close it the same way: partial while
+  //     owes overdue money: step 1 leaves the task open, because the debt is still overdue. The app closes the same task for a payment of at least MIN(20,000, the debt before it)
+  //     it records itself (a payment of at least MIN(20,000, the debt before it), taskAutoComplete.js), so the workbook's payments close it the same way: partial while
   //     something is left on the Excel debt, paid when nothing is. Both the automatic task and the one a person gave (type "Collect
   //     debt"). Owner, 2026-11-08: customer 10136, task of 10/10/2026, payments after it, the task stayed open.
   // Not touched: a task with a promise still running (outcome 'promised', date ahead) keeps its promise so a broken one is still caught
