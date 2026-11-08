@@ -573,11 +573,12 @@ export function sendsRequests(role) {
 }
 
 // Tasks that close ONLY by the work itself (owner, 2026-11-05): a visit task when the rep checks in at the customer, a "check products" task
-// when a check-in records which brands the shop has, a "collect debt" task when a payment is recorded. Nobody marks them done by hand (a rep
-// not at all; the server refuses it); management can CANCEL one with a reason. Plain tasks, "make order" and call tasks are not in this list.
-export const SELF_CLOSING_TASK_KINDS = ["visit_customer", "check_products", "collect_debt"];
+// when a check-in records which brands the shop has, a "collect debt" task when a payment is recorded, and (owner, 2026-11-08) a "make order" /
+// "he stopped ordering" task when an order is made (or the rep checks in and says why there is no order). Nobody marks them done by hand (a rep
+// not at all; the server refuses it); management can CANCEL one with a reason. Plain tasks and call tasks are not in this list.
+export const SELF_CLOSING_TASK_KINDS = ["visit_customer", "check_products", "collect_debt", "make_order"];
 export function taskClosesItself(task) {
-  return SELF_CLOSING_TASK_KINDS.includes(task?.task_kind) || task?.auto_kind === "debt_collection";
+  return SELF_CLOSING_TASK_KINDS.includes(task?.task_kind) || task?.auto_kind === "debt_collection" || task?.auto_kind === "reorder_followup";
 }
 // Who may cancel a self-closing task (with a written reason): the task givers above the sales manager.
 export function canCancelSelfClosingTask(role) {

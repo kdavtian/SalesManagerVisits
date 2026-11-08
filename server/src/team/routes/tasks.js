@@ -427,7 +427,8 @@ tasksRouter.post("/:id/call-result", async (req, res) => {
   ]);
   if (result === "spoke" && isDebtTask) {
     await saveDebtResult(task, outcome, promiseDate, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ");
-  } else if (result === "spoke") {
+  } else if (result === "spoke" && !taskClosesItself(task)) {
+    // (a self-closing task, e.g. a "stopped ordering" call, keeps its call in the history but only the work itself closes it)
     await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [task.id]);
     await finishTask(task, req.user, note ? `Խոսել է հաճախորդի հետ · ${note}` : "Խոսել է հաճախորդի հետ");
   } else if (result === "call_back") {

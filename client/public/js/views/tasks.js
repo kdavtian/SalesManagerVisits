@@ -650,7 +650,7 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
       ${isCallTask(task) ? callHistoryHtml(task.calls) : ""}
       ${task.outcome ? `<p><span class="badge badge-neutral">${t(`collect_outcome_${task.outcome}`)}${task.promise_date ? ` · ${escapeHtml(task.promise_date)}` : ""}</span></p>` : ""}
       ${task.completion_note ? `<p class="muted">${escapeHtml(task.completion_note)}</p>` : ""}
-      ${open && selfClosing ? `<p class="muted task-hint" id="task-selfclose-hint">${escapeHtml(t(isDebt ? "task_selfclose_debt" : task.task_kind === "check_products" ? "task_selfclose_products" : "task_selfclose_visit"))}</p>` : ""}
+      ${open && selfClosing ? `<p class="muted task-hint" id="task-selfclose-hint">${escapeHtml(t(isDebt ? "task_selfclose_debt" : task.task_kind === "check_products" ? "task_selfclose_products" : task.task_kind === "make_order" || task.auto_kind === "reorder_followup" ? "task_selfclose_order" : "task_selfclose_visit"))}</p>` : ""}
       ${open && selfClosing && mayCancel ? `<textarea id="task-cancel-reason" class="task-complete-note" rows="2" maxlength="300" placeholder="${escapeHtml(t("task_cancel_reason_placeholder"))}" aria-label="${escapeHtml(t("task_cancel_reason_placeholder"))}"></textarea>` : ""}
       ${open && !selfClosing && !task.items.length && !isCallTask(task) ? `<textarea id="task-complete-note" class="task-complete-note" rows="2" maxlength="500" placeholder="${escapeHtml(t("task_note_placeholder"))}" aria-label="${escapeHtml(t("task_note_placeholder"))}"></textarea>` : ""}
       <p class="form-error" id="task-sheet-error" hidden></p>
