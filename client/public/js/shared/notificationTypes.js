@@ -7,6 +7,15 @@ const MANAGEMENT = ["admin", "ceo", "operations_director", "sales_director", "ac
 
 export const NOTIFICATION_GROUPS = [
   {
+    // the request card (owner, 2026-11-08): a request waits for my decision / my request was decided (system/requests/notify.js).
+    // Payments, visit plans and performance plans keep their own kinds below (payment_submitted, plan_submitted, ...).
+    key: "requests",
+    types: [
+      { type: "approval_request", roles: MANAGEMENT },
+      { type: "approval_result", roles: ALL },
+    ],
+  },
+  {
     key: "orders",
     types: [
       { type: "order_placed", roles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager", "accountant"] },

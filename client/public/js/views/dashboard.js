@@ -8,7 +8,7 @@ import { seesHomeKpis, homeShowsCompanyData, homeShowsCompanyDashboard } from ".
 import { t, getLang } from "../i18n.js";
 import { icons } from "../icons.js";
 import { applyVaghinakBadge } from "../vaghinak.js";
-import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge } from "../badges.js";
+import { applyPaymentBadge, applyUnrecordedBadge, applyWarehouseBadge, applyDeliveryBadge, applyAccountingBadge, applyRequestBadge } from "../badges.js";
 import { QUICK_ACTIONS, QUICK_ACTION_ROUTE, visibleQuickActionIds, orderHomeTiles } from "../quickActions.js";
 import { loadWithCache } from "../listCache.js";
 import { renderHomeKpis, wantsKpis } from "./homeKpis.js";
@@ -52,6 +52,8 @@ const QUICK_ACTION_ICON = {
   qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.dashboard}</span>`,
   qa_sales: () => `<span class="quick-action-icon quick-action-icon-sales">${icons.trendUp}</span>`,
   qa_tasks: () => `<span class="quick-action-icon quick-action-icon-tasks">${icons.tasks}<span class="nav-badge count-badge" id="qa-tasks-badge" hidden></span></span>`,
+  qa_requests: () =>
+    `<span class="quick-action-icon quick-action-icon-requests">${icons.checkCircle}<span class="nav-badge count-badge" id="qa-requests-badge" data-badge="requests" hidden></span></span>`,
   qa_vaghinak: () => `<span class="quick-action-icon quick-action-icon-vaghinak">${icons.vaghinak}<span class="nav-badge count-badge" id="qa-vaghinak-badge" hidden></span></span>`,
   qa_ask_kad: () => `<span class="quick-action-icon quick-action-icon-askkad">${icons.sparkles}</span>`,
   qa_bonuses: () => `<span class="quick-action-icon quick-action-icon-bonuses">${icons.gift}</span>`,
@@ -429,6 +431,7 @@ export async function renderDashboard(root, navigate) {
   applyWarehouseBadge();
   applyDeliveryBadge();
   applyAccountingBadge();
+  applyRequestBadge();
   applyVaghinakBadge();
 
   const progressCard = container.querySelector("#progress-card");

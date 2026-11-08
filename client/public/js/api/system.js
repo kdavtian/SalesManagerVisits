@@ -38,6 +38,9 @@ export const systemApi = {
   // refreshes right after a specific action still use each badge's own
   // single-purpose endpoint below (getOrdersPendingCount etc.), unchanged.
   getBadgeCounts: () => request("/badges"),
+  // the request card (system/routes/requests.js): everything waiting that I may decide, and one request in full
+  listRequests: () => request("/requests", { fresh: true }),
+  getRequest: (kind, id) => request(`/requests/${kind}/${id}`, { fresh: true }),
   retailDifferences: () => request("/settings/retail-differences", { fresh: true }),
   getSettings: () => request("/settings"),
   updateSettings: async (data) => {

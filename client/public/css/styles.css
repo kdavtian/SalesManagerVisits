@@ -10559,3 +10559,74 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   .task-reward .reward-ring, .task-reward .reward-tick { animation: none; stroke-dashoffset: 0; }
   .task-reward .reward-confetti { display: none; }
 }
+
+/* ---- Requests: the list and the full-screen request card (views/requests.js, owner 2026-11-08) ---- */
+.quick-action-icon-requests {
+  background: color-mix(in srgb, var(--success) 80%, var(--accent) 20%);
+  color: #ffffff;
+}
+.req-list { margin-top: 12px; display: flex; flex-direction: column; gap: 16px; }
+.req-group { display: flex; flex-direction: column; gap: 8px; }
+.req-group-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-dim); }
+.req-group-count { position: static; }
+.req-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.req-item-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.req-item-who { overflow-wrap: anywhere; }
+.req-item-sub { font-size: 0.85rem; overflow-wrap: anywhere; }
+.req-item-amount { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+#req-card { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.req-section { display: flex; flex-direction: column; gap: 8px; }
+.req-section-title { margin: 6px 0 0; font-size: 0.9rem; font-weight: 600; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+.req-section-title .count-badge { position: static; }
+.req-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.req-row-label { color: var(--text-dim); flex: none; max-width: 45%; }
+.req-row-value { text-align: right; display: flex; flex-direction: column; align-items: flex-end; min-width: 0; overflow-wrap: anywhere; }
+.req-row-note .req-row-value { text-align: left; align-items: flex-start; }
+.req-when { font-size: 0.85rem; }
+.req-amount { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.req-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-top: 0.5px solid var(--border); }
+.req-line-name { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.req-line-price { font-size: 0.85rem; }
+.req-line-amount { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.req-line-warn .req-line-price { color: var(--danger); }
+.req-totals { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 0.5px solid var(--border); }
+.req-discount, .req-negative { color: var(--danger); }
+.req-warn { margin: 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-weight: 600; }
+.req-change { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-top: 0.5px solid var(--border); }
+.req-change:first-of-type { border-top: 0; }
+.req-change-label { color: var(--text-dim); font-size: 0.85rem; }
+.req-change-values { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; overflow-wrap: anywhere; }
+.req-old { color: var(--text-dim); text-decoration: line-through; }
+.req-arrow { color: var(--text-dim); }
+.req-stops { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.req-source { margin-top: 4px; text-align: center; text-decoration: none; }
+.req-status { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; font-size: 0.95rem; }
+.req-status-approved { background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
+.req-status-denied { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+.req-status-pending, .req-status-closed { background: var(--bg-card); border: 0.5px solid var(--border); color: var(--text-dim); }
+.req-status-when { font-size: 0.85rem; opacity: 0.85; }
+.req-status-reason { color: var(--text); overflow-wrap: anywhere; }
+/* the fixed bottom bar with the two big buttons, above the tab bar */
+.req-view-has-bar { padding-bottom: 150px; }
+.req-bar {
+  position: fixed; left: 0; right: 0; bottom: var(--nav-reserve); z-index: 900;
+  display: flex; flex-direction: column; gap: 8px; max-width: var(--app-max-width); margin: 0 auto; padding: 10px 16px 12px;
+  background: var(--bg-elevated); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 0.5px solid var(--border);
+}
+.req-bar-buttons { display: flex; gap: 10px; }
+.req-btn { flex: 1; min-height: 52px; font-size: 1.05rem; font-weight: 600; border-radius: 14px; }
+.req-btn-deny, .req-btn-deny-send { background: transparent; border-color: var(--danger); color: var(--danger); }
+.req-btn-deny-send:not(:disabled) { background: var(--danger); color: var(--on-accent); }
+.req-btn-approve { background: var(--success); border-color: var(--success); color: var(--on-accent); }
+.req-btn-approve[data-armed="1"] { background: color-mix(in srgb, var(--success) 75%, #000 25%); }
+.req-reason-label { font-weight: 600; font-size: 0.9rem; }
+.req-reason { width: 100%; box-sizing: border-box; min-height: 64px; font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--control-border); background: var(--bg-card); color: var(--text); resize: vertical; }
+.req-bar-error { margin: 0; }
+.req-reason:focus, .req-reason:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+@media (min-width: 1024px) {
+  /* a card that reads as one column: a full-width row put the label and its value a window apart */
+  .req-view > .detail-header, .req-list, #req-card { max-width: 760px; }
+  /* a computer has no tab bar: the bar sits at the window's bottom, right of the side menu, its buttons under the card */
+  .req-bar { left: var(--sidebar-width); bottom: 0; max-width: none; padding: 12px 16px 16px; }
+  .req-bar > * { width: 100%; max-width: 760px; margin-left: 0; }
+}

@@ -312,6 +312,8 @@ export async function renderRoute(ctx) {
   const paymentDetailMatch = path.match(/^#\/payments\/(\d+)$/);
   const handoffDetailMatch = path.match(/^#\/cash-handoffs\/(\d+)$/);
   const routePlanSetMatch = path.match(/^#\/route-plan-sets\/(\d+)$/);
+  // the full-screen request card a push opens (owner, 2026-11-08): #/requests/<kind>/<id>
+  const requestCardMatch = path.match(/^#\/requests\/([a-z_]+)\/(\d+)$/);
 
   if (path === "#/dashboard" && state.user.role === "warehouse_manager") {
     ctx.currentCleanup = await (await fresh(import("../views/warehouseHome.js"))).renderWarehouseHome(ctx.app, ctx.navigate);
@@ -326,6 +328,10 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/purchases.js"))).renderPurchases(ctx.app, ctx.navigate);
   } else if (path === "#/cashflow") {
     (await fresh(import("../views/cashflow.js"))).renderCashflow(ctx.app, ctx.navigate);
+  } else if (path === "#/requests") {
+    ctx.currentCleanup = (await fresh(import("../views/requests.js"))).renderRequests(ctx.app, ctx.navigate);
+  } else if (requestCardMatch) {
+    (await fresh(import("../views/requests.js"))).renderRequestCard(ctx.app, ctx.navigate, requestCardMatch[1], Number(requestCardMatch[2]));
   } else if (path === "#/returns") {
     (await fresh(import("../views/returns.js"))).renderReturns(ctx.app, ctx.navigate);
   } else if (path === "#/staff" || /^#\/staff\/\d+$/.test(path)) {

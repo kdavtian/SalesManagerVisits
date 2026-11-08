@@ -53,7 +53,7 @@ test("a rep proposes a tier change; the sales director sees the queue and approv
 
 test("the sales director can reject too", async () => {
   const proposed = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.rep, body: { customer_id: customer.id, changes: { notes: "new note" } } });
-  const rejected = await apiRequest(`/api/edit-requests/${proposed.data.id}`, { method: "PATCH", cookie: cookies.director, body: { action: "reject" } });
+  const rejected = await apiRequest(`/api/edit-requests/${proposed.data.id}`, { method: "PATCH", cookie: cookies.director, body: { action: "reject", reason: "wrong phone" } });
   assert.equal(rejected.status, 200);
   assert.equal(rejected.data.status, "rejected");
 });

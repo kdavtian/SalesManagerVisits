@@ -44,6 +44,7 @@ function persistBadgeCounts() {
         notifications: unreadNotificationCount,
         planApprovals: planApprovalBadgeCount,
         editRequests: editRequestBadgeCount,
+        requests: requestBadgeCount,
       })
     );
   } catch {
@@ -371,6 +372,19 @@ export async function refreshEditRequestBadge() {
   persistBadgeCounts();
 }
 
+// Requests waiting for MY decision (the Requests tile and screen; owner, 2026-11-08), from the combined /api/badges poll.
+let requestBadgeCount = 0;
+export function applyRequestBadge() {
+  for (const el of document.querySelectorAll('[data-badge="requests"]')) {
+    if (requestBadgeCount > 0) {
+      el.textContent = requestBadgeCount > 99 ? "99+" : String(requestBadgeCount);
+      el.hidden = false;
+    } else {
+      el.hidden = true;
+    }
+  }
+}
+
 window.addEventListener("plans-changed", refreshPlanApprovalBadge);
 window.addEventListener("edit-requests-changed", refreshEditRequestBadge);
 
@@ -387,6 +401,7 @@ export function restoreCachedBadgeCounts() {
   unreadNotificationCount = cachedBadgeCounts.notifications ?? 0;
   planApprovalBadgeCount = cachedBadgeCounts.planApprovals ?? 0;
   editRequestBadgeCount = cachedBadgeCounts.editRequests ?? 0;
+  requestBadgeCount = cachedBadgeCounts.requests ?? 0;
 }
 
 // Not more often than every few seconds, however many triggers (focus, visibility, pageshow, online, a screen refresh)
@@ -412,6 +427,7 @@ export async function refreshAllBadgesFromServer({ force = false } = {}) {
   unreadNotificationCount = counts.notifications;
   planApprovalBadgeCount = counts.planApprovals;
   editRequestBadgeCount = counts.editRequests;
+  requestBadgeCount = counts.requests ?? 0;
   applyOrderBadge();
   applyPaymentBadge();
   applyUnrecordedBadge();
@@ -421,5 +437,6 @@ export async function refreshAllBadgesFromServer({ force = false } = {}) {
   applyDeliveryBadge();
   applyNotificationBadge();
   applyPlanApprovalBadge();
+  applyRequestBadge();
   persistBadgeCounts();
 }

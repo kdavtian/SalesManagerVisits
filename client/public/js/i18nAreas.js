@@ -16,6 +16,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/purchases": ["products"],
   "#/bank-desk": ["money", "settings"],
   "#/returns": ["orders"],
+  "#/requests": ["customers"],
   "#/staff": ["team"],
   "#/wh-pack": ["customers", "money", "orders"],
   "#/stock-count": ["orders"],

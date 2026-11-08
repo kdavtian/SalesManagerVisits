@@ -6,6 +6,8 @@ import { haversineMeters } from "../../utils/geo.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { normalizeIncomingPlaces, recordPlaceReviews } from "../placeReviews.js";
 import { movesAnyPinAtOnce, canReviewCustomerEdits } from "../../shared/roles.js";
+import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
+import { cleanReason } from "../../system/requests/rules.js";
 
 export const editRequestsRouter = Router();
 
@@ -112,6 +114,8 @@ editRequestsRouter.post("/", async (req, res) => {
     [customerId, req.user.id, JSON.stringify(filtered), note ?? null]
   );
   res.status(201).json(rows[0]);
+  // every person who may review it gets a push that opens the request card (owner, 2026-11-08)
+  notifyApproversOf("customer_edit", rows[0].id);
 });
 
 editRequestsRouter.get("/", async (req, res) => {
@@ -172,6 +176,10 @@ editRequestsRouter.patch("/:id", async (req, res) => {
   if (!["approve", "reject"].includes(action)) {
     return res.status(400).json({ error: "action must be 'approve' or 'reject'" });
   }
+  // A denial always says why (owner, 2026-11-08): the person who asked reads it in their push. `note` is accepted for it too (the
+  // field this endpoint always took); an app from before 1.536.0 sent neither and gets "Write why it is rejected" until it updates.
+  const reason = action === "reject" ? cleanReason(req.body?.reason ?? note) : "";
+  if (action === "reject" && !reason) return res.status(400).json({ error: "Write why it is rejected" });
 
   const client = await pool.connect();
   let releaseErr;
@@ -229,14 +237,15 @@ editRequestsRouter.patch("/:id", async (req, res) => {
 
     const { rows: updated } = await client.query(
       `UPDATE customer_edit_requests
-       SET status = $1, reviewed_by = $2, reviewed_at = now(), note = COALESCE($3, note)
+       SET status = $1, reviewed_by = $2, reviewed_at = now(), note = COALESCE($3, note), review_reason = $5
        WHERE id = $4
        RETURNING *`,
-      [action === "approve" ? "approved" : "rejected", req.user.id, note ?? null, req.params.id]
+      [action === "approve" ? "approved" : "rejected", req.user.id, action === "approve" ? note ?? null : null, req.params.id, reason || null]
     );
 
     await client.query("COMMIT");
     res.json(updated[0]);
+    notifyDecisionOf("customer_edit", updated[0].id, { deciderId: req.user.id, approved: action === "approve", reason });
   } catch (err) {
     releaseErr = err;
     await client.query("ROLLBACK");

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
 import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, canReopenPlanAsDraft, seesAllPerformance, canCloseMonth } from "../../shared/roles.js";
@@ -569,24 +570,8 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
   await writeAudit(pool, plan.id, req.user.id, "submit", { status: plan.status }, { status: "pending_approval" });
   res.json(updated[0]);
 
-  (async () => {
-    try {
-      const roles =
-        req.user.role === "sales_director"
-          ? ["admin", "ceo", "operations_director", "accountant"]
-          : ["admin", "ceo", "operations_director"];
-      const { rows: reviewers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [roles]);
-      for (const reviewer of reviewers) {
-        notifyUser(reviewer.id, "perf_plan_submitted", {
-          title: "Աշխատանքային պլանը սպասում է վերանայման",
-          body: `${plan.month.toISOString?.() ?? plan.month}-ի պլանն ուղարկվել է հաստատման։`,
-          url: "/#/team-performance?tab=approvals",
-        });
-      }
-    } catch (err) {
-      console.error("Post-perf-plan-submit notification failed:", err);
-    }
-  })();
+  // every person who may review it (canReviewPlan) gets a push that opens the request card (owner, 2026-11-08)
+  notifyApproversOf("perf_plan", plan.id, { type: "perf_plan_submitted" });
 });
 
 teamPerformanceRouter.post("/plans/:id/approve", async (req, res) => {
@@ -613,31 +598,18 @@ async function reviewPlan(req, res, nextStatus, reason) {
     return res.status(403).json({ error: "Not allowed to review this plan" });
   }
 
+  // status guard: two reviewers deciding at the same moment -- the second one gets 409, not a second decision
   const { rows: updated } = await pool.query(
     `UPDATE perf_plans SET status = $1, approved_by = $2, approved_at = now(),
        rejected_reason = $3, lock_version = lock_version + 1, updated_at = now()
-     WHERE id = $4 RETURNING *`,
+     WHERE id = $4 AND status = 'pending_approval' RETURNING *`,
     [nextStatus, req.user.id, nextStatus === "rejected" ? reason : null, plan.id]
   );
+  if (!updated[0]) return res.status(409).json({ error: "Only a plan pending approval can be reviewed" });
   await writeAudit(pool, plan.id, req.user.id, nextStatus, { status: "pending_approval" }, { status: nextStatus }, reason);
   res.json(updated[0]);
 
-  (async () => {
-    try {
-      if (plan.submitted_by) {
-        notifyUser(plan.submitted_by, "perf_plan_reviewed", {
-          title: nextStatus === "approved" ? "Աշխատանքային պլանը հաստատվեց" : "Աշխատանքային պլանը մերժվեց",
-          body:
-            nextStatus === "approved"
-              ? `Ձեր պլանը հաստատվել է։`
-              : `Ձեր պլանը մերժվել է՝ ${reason}`,
-          url: "/#/team-performance?tab=planning",
-        });
-      }
-    } catch (err) {
-      console.error("Post-perf-plan-review notification failed:", err);
-    }
-  })();
+  notifyDecisionOf("perf_plan", plan.id, { deciderId: req.user.id, approved: nextStatus === "approved", reason, type: "perf_plan_reviewed" });
 }
 
 // CEO-only: revises an already-approved plan. Never edits the approved row

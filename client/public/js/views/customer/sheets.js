@@ -316,10 +316,9 @@ export function renderPendingRequest(slot, request, onDone) {
       window.dispatchEvent(new Event("edit-requests-changed"));
       onDone();
     });
-    slot.querySelector("#reject-request-btn").addEventListener("click", async () => {
-      await api.reviewEditRequest(request.id, "reject");
-      window.dispatchEvent(new Event("edit-requests-changed"));
-      onDone();
+    // Reject opens the request card: a denial needs a written reason, which the requester receives (owner, 2026-11-08)
+    slot.querySelector("#reject-request-btn").addEventListener("click", () => {
+      location.hash = `#/requests/customer_edit/${request.id}`;
     });
   } else {
     slot.innerHTML = `

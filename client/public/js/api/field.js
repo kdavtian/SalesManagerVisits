@@ -34,7 +34,7 @@ export const fieldApi = {
     json("/visit-plans", "POST", { date, customer_ids: stripCompetitorIds(customerIds), user_id: userId }),
   getPendingVisitPlans: () => request("/visit-plans/pending"),
   getTeamTodayVisitPlans: () => request("/visit-plans/team-today"),
-  reviewVisitPlan: (id, action) => json(`/visit-plans/${id}`, "PATCH", { action }),
+  reviewVisitPlan: (id, action, reason) => json(`/visit-plans/${id}`, "PATCH", { action, reason }),
   getVisitPlanRules: (userId) => request(`/visit-plans/rules${userId ? `?user_id=${userId}` : ""}`),
   // planChannel: "" = save the main plan, "SM B2B" = that channel's own plan (the person's other plans stay as they are);
   // undefined = replace the whole day (the Map's quick planner)

@@ -565,6 +565,12 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         }
         if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;
         if (btn.dataset.action === "mark-delivered" && !confirm(t("confirm_mark_delivered_no_route"))) return;
+        // Rejecting a discount / price opens the request card: a denial needs a written reason, which the rep receives (owner, 2026-11-08)
+        if (btn.dataset.action === "reject-discount") {
+          overlay.remove();
+          location.hash = `#/requests/discount/${orderId}`;
+          return;
+        }
         if (btn.dataset.action === "reject-order") {
           if (!confirm(t("confirm_reject_order"))) return;
           const note = prompt(t("reject_order_note_prompt")) || "";
@@ -602,7 +608,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           if (btn.dataset.action === "approve-credit") await api.approveOrderCredit(orderId);
           else if (btn.dataset.action === "reject-credit") await api.rejectOrderCredit(orderId);
           else if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
-          else if (btn.dataset.action === "reject-discount") await api.rejectOrderDiscount(orderId);
           else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
           else if (btn.dataset.action === "unconfirm-order") await api.unconfirmOrder(orderId);
           else if (btn.dataset.action === "mark-delivered") {

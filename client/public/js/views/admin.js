@@ -46,6 +46,8 @@ export async function renderPlanApprovalsSection(container) {
 
     section.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        // Reject opens the request card: a denial needs a written reason, which the rep receives (owner, 2026-11-08)
+        if (btn.dataset.action === "reject") return void (location.hash = `#/requests/visit_plan/${btn.dataset.id}`);
         btn.closest(".plan-approval-row").querySelectorAll("button").forEach((b) => (b.disabled = true));
         await api.reviewVisitPlan(btn.dataset.id, btn.dataset.action);
         window.dispatchEvent(new Event("plans-changed"));
@@ -100,6 +102,8 @@ export async function renderEditRequestsSection(container) {
 
     section.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        // Reject opens the request card: a denial needs a written reason, which the requester receives (owner, 2026-11-08)
+        if (btn.dataset.action === "reject") return void (location.hash = `#/requests/customer_edit/${btn.dataset.id}`);
         btn.closest(".plan-approval-row").querySelectorAll("button").forEach((b) => (b.disabled = true));
         await api.reviewEditRequest(btn.dataset.id, btn.dataset.action);
         window.dispatchEvent(new Event("edit-requests-changed"));

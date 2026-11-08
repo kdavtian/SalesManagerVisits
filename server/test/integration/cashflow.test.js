@@ -290,7 +290,7 @@ test("edit window, change requests, history with date and time; In / Out counts;
   assert.equal((await send("accountant", `/requests/${asked.data.id}/approve`, "POST", {})).status, 403, "the accountant does not approve");
   assert.equal((await send("ops", `/requests/${asked.data.id}/approve`, "POST", {})).status, 403);
   assert.equal((await send("admin", `/requests/${asked.data.id}/approve`, "POST", {})).status, 200);
-  assert.equal((await send("admin", `/requests/${asked.data.id}/approve`, "POST", {})).status, 404, "decided once");
+  assert.equal((await send("admin", `/requests/${asked.data.id}/approve`, "POST", {})).status, 409, "decided once");
   const { rows: [after] } = await pool.query("SELECT amount::float8 AS amount, info FROM cash_entries WHERE id = $1", [old]);
   assert.deepEqual([after.amount, after.info], [-7777, "ITest old fixed"]);
   d = (await send("accountant", `/entries/${old}`, "GET")).data;
@@ -302,11 +302,11 @@ test("edit window, change requests, history with date and time; In / Out counts;
   const refused = await send("admin", `/requests/${late}/approve`, "POST", {});
   assert.equal(refused.status, 409);
   assert.equal((await pool.query("SELECT status FROM cash_entry_requests WHERE id = $1", [late])).rows[0].status, "pending", "nothing half-done");
-  assert.equal((await send("admin", `/requests/${late}/reject`, "POST", {})).status, 200);
+  assert.equal((await send("admin", `/requests/${late}/reject`, "POST", { reason: "not needed" })).status, 200);
 
   // a delete request rejected leaves the row; approved removes it, the history stays readable
   const del = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete", reason: "duplicate" })).data.id;
-  assert.equal((await send("admin", `/requests/${del}/reject`, "POST", {})).status, 200);
+  assert.equal((await send("admin", `/requests/${del}/reject`, "POST", { reason: "keep it" })).status, 200);
   assert.ok((await pool.query("SELECT 1 FROM cash_entries WHERE id = $1", [old])).rowCount);
   const del2 = (await send("accountant", `/entries/${old}/requests`, "POST", { action: "delete" })).data.id;
   assert.equal((await send("admin", `/requests/${del2}/approve`, "POST", {})).status, 200);

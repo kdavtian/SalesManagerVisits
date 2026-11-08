@@ -26,6 +26,8 @@ import { autoCompleteReorderTasks } from "../../team/taskAutoComplete.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_APPROVE_PCT } from "../discountPolicy.js";
 import { bullets } from "../../utils/bullets.js";
+import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
+import { cleanReason } from "../../system/requests/rules.js";
 import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
 export const ordersRouter = Router();
@@ -425,8 +427,18 @@ export async function createOrderHandler(req, res) {
         `${partner ? "📱" : "🛒"} <b>${partner ? (replaces ? "APP order CHANGED" : "New APP order") : "New order"}</b>\n${escapeHtml(repName)} — ${escapeHtml(customer.name)}\n${lines.length} item${lines.length === 1 ? "" : "s"}, ${Number(totalAmd).toLocaleString()} AMD${escapeHtml(discountSuffix + creditSuffix + holdSuffix)}${replaces ? escapeHtml(` (replaces ${replaces.order_code})`) : ""}`
       );
 
+      // A discount / price that waits for approval goes to EVERY person who may approve it, as a request opening its card
+      // (owner, 2026-11-08); they do not get the plain "new order" on top of it.
+      // what the plain "new order" push said that the request card's lines do not: credit limit, overdue debt, the order it replaces
+      const extra = [
+        replaces ? `Փոխարինում է ${replaces.order_code} պատվերին (այն չեղարկված է)` : null,
+        credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով` : null,
+        hold?.on_hold ? `Ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ${hold.oldest_due_days} օր ուշացումով` : null,
+      ];
+      const approverIds = approvalStatus === "pending" ? await notifyApproversOf("discount", order.id, { extra }) : [];
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
+        if (approverIds.includes(recipient.id)) continue;
         notifyUser(recipient.id, "order_placed", {
           title: partner ? (replaces ? "Պատվերը փոխվեց (KAD OS)" : "Նոր պատվեր (KAD OS)") : "Նոր պատվեր",
           body: `${repName}-ը պատվեր է ձևակերպել ${customer.name}-ի համար\n${bullets([
@@ -866,8 +878,10 @@ ordersRouter.post("/:id/submit", async (req, res) => {
       notifyTelegram(
         `🛒 <b>New order</b>\n${escapeHtml(repName)} — ${escapeHtml(order.customer_name)}\n${Number(order.total_amd).toLocaleString()} AMD`
       );
+      const approverIds = updated.approval_status === "pending" ? await notifyApproversOf("discount", order.id) : [];
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
+        if (approverIds.includes(recipient.id)) continue;
         notifyUser(recipient.id, "order_placed", {
           title: "Նոր պատվեր",
           body: `${repName}-ը պատվեր է ուղարկել ${order.customer_name}-ի համար — ${Number(order.total_amd).toLocaleString()} ԱՄԴ։`,
@@ -1187,6 +1201,10 @@ ordersRouter.patch("/:id", async (req, res) => {
   // items/note edit) -- and not when they made the change themselves.
   (async () => {
     try {
+      // the order now waits for a discount / price approval it did not wait for before: every approver hears it
+      if (updated.approval_status === "pending" && updated.status !== "draft" && order.approval_status !== "pending") {
+        await notifyApproversOf("discount", order.id);
+      }
       if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
@@ -1327,7 +1345,7 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   }
 
   const { rows: updatedRows } = await pool.query(
-    `UPDATE orders SET approval_status = 'approved', approved_by = $1, approved_at = now(), updated_at = now()
+    `UPDATE orders SET approval_status = 'approved', approved_by = $1, approved_at = now(), approval_reason = NULL, updated_at = now()
      WHERE id = $2 AND approval_status = 'pending' RETURNING *`,
     [req.user.id, order.id]
   );
@@ -1349,13 +1367,8 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
           url: `/#/orders?open=${order.id}`,
         });
       }
-      if (req.user.id !== order.user_id) {
-        notifyUser(order.user_id, "order_status_changed", {
-          title: "Զեղչը հաստատվեց",
-          body: `${customerName}-ի պատվերի զեղչը հաստատվել է։`,
-          url: `/#/orders?open=${order.id}`,
-        });
-      }
+      // the person who asked hears it on the request card; the other approvers' notifications of it are closed
+      await notifyDecisionOf("discount", order.id, { deciderId: req.user.id, approved: true, type: "order_status_changed" });
     } catch (err) {
       console.error("Post-discount-approval notification failed:", err);
     }
@@ -1411,6 +1424,9 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
   if (!canConfirmOrders(req.user.role)) {
     return res.status(403).json({ error: "Only a sales director can reject a discount" });
   }
+  // a denial always says why: the person who asked reads it in their push (owner, 2026-11-08)
+  const reason = cleanReason(req.body?.reason);
+  if (!reason) return res.status(400).json({ error: "Write why it is rejected" });
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
@@ -1419,23 +1435,16 @@ ordersRouter.post("/:id/reject-discount", async (req, res) => {
   }
 
   const { rows: updatedRows } = await pool.query(
-    `UPDATE orders SET approval_status = 'rejected', approved_by = $1, approved_at = now(), updated_at = now()
+    `UPDATE orders SET approval_status = 'rejected', approved_by = $1, approved_at = now(), approval_reason = $3, updated_at = now()
      WHERE id = $2 AND approval_status = 'pending' RETURNING *`,
-    [req.user.id, order.id]
+    [req.user.id, order.id, reason]
   );
   if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending discount to reject" });
   res.json(updatedRows[0]);
 
   (async () => {
     try {
-      if (req.user.id !== order.user_id) {
-        const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-        notifyUser(order.user_id, "order_status_changed", {
-          title: "Զեղչը մերժվեց",
-          body: `${customerRows[0]?.name || "Պատվերի"} զեղչը մերժվել է -- խմբագրեք պատվերը կամ հեռացրեք զեղչը շարունակելու համար։`,
-          url: `/#/orders?open=${order.id}`,
-        });
-      }
+      await notifyDecisionOf("discount", order.id, { deciderId: req.user.id, approved: false, reason, type: "order_status_changed" });
     } catch (err) {
       console.error("Post-discount-rejection notification failed:", err);
     }

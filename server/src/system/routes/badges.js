@@ -12,6 +12,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { accountingBadgeCount } from "../../orders/accountingBadge.js";
+import { decidableRequests } from "../requests/rules.js";
 import {
   canConfirmSubmittedOrders,
   seesAllPayments,
@@ -30,7 +31,7 @@ badgesRouter.get("/", async (req, res) => {
   const role = req.user.role;
   const userId = req.user.id;
 
-  const [orders, payments, unrecorded, warehouse, delivery, notifications, planApprovals, editRequests, accounting] = await Promise.all([
+  const [orders, payments, unrecorded, warehouse, delivery, notifications, planApprovals, editRequests, accounting, requests] = await Promise.all([
     canConfirmSubmittedOrders(role)
       ? pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'submitted'")
       : Promise.resolve({ rows: [{ count: 0 }] }),
@@ -70,6 +71,9 @@ badgesRouter.get("/", async (req, res) => {
       : Promise.resolve({ rows: [{ count: 0 }] }),
 
     accountingBadgeCount(req.user),
+
+    // every approval waiting that this person may decide (the Requests screen, owner 2026-11-08)
+    decidableRequests(pool, req.user),
   ]);
 
   res.json({
@@ -82,5 +86,6 @@ badgesRouter.get("/", async (req, res) => {
     planApprovals: planApprovals.rows[0].count,
     editRequests: editRequests.rows[0].count,
     accounting,
+    requests: requests.length,
   });
 });

@@ -1,10 +1,10 @@
 import { Router } from "express";
+import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
+import { cleanReason } from "../../system/requests/rules.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canPlanForOthers, canViewAllRoutePlans, canViewTeamLocations } from "../../shared/roles.js";
 import { notifyTelegram, escapeHtml } from "../../shared/telegram.js";
-import { notifyUser } from "../../shared/notifications.js";
-import { APPROVER_ROLES } from "../../shared/notificationPreferences.js";
 import { repVisitSql } from "../visitCount.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "../../customers/routes/customers.js";
 import { dropRecentlyVisited } from "../../utils/planSkipRecent.js";
@@ -13,19 +13,6 @@ import { getStaffSettings, visitsOf } from "../../money/payroll.js";
 import { MAIN_SCOPE, parseScope, loadChannelMap, inScope, mergeScopeIds, scopesFor } from "../planScopes.js";
 
 export const visitPlansRouter = Router();
-
-// plan_date comes back from Postgres as a plain "YYYY-MM-DD" string (a
-// `date` column, no time component). `new Date(dateStr)` parses that as
-// UTC midnight, which .toLocaleDateString() then renders as the PREVIOUS
-// day whenever this process's own timezone (TZ env / host default) is
-// behind UTC -- reading the y/m/d digits straight out of the string and
-// building a local Date from them avoids the UTC round-trip entirely.
-function formatPlanDate(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
-  if (!match) return String(value);
-  const [, yyyy, mm, dd] = match;
-  return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).toLocaleDateString();
-}
 
 visitPlansRouter.use(requireAuth);
 
@@ -331,14 +318,8 @@ visitPlansRouter.post("/", async (req, res) => {
           `📋 <b>Route plan needs review</b>\n${escapeHtml(repName)} — ${date}, ${customerIds.length} stop${customerIds.length === 1 ? "" : "s"}`
         );
 
-        const { rows: approvers } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [APPROVER_ROLES]);
-        for (const approver of approvers) {
-          notifyUser(approver.id, "plan_submitted", {
-            title: "Պլանը սպասում է վերանայման",
-            body: `${repName}-ը ուղարկել է պլան ${date}-ի համար (${customerIds.length} կանգառ)։`,
-            url: "/#/settings?section=plan-approvals",
-          });
-        }
+        // every person who may review it (canPlanForOthers) gets a push that opens the request card (owner, 2026-11-08)
+        await notifyApproversOf("visit_plan", rows[0].id, { type: "plan_submitted" });
       }
     } catch (err) {
       console.error("Post-plan-submit notification failed:", err);
@@ -586,6 +567,9 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
   if (action === undefined && customer_ids === undefined) {
     return res.status(400).json({ error: "action or customer_ids is required" });
   }
+  // a denial always says why: the rep reads it in their push (owner, 2026-11-08)
+  const reason = action === "reject" ? cleanReason(req.body?.reason) : "";
+  if (action === "reject" && !reason) return res.status(400).json({ error: "Write why it is rejected" });
 
   const client = await pool.connect();
   let releaseErr;
@@ -619,10 +603,10 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
 
     const { rows: updated } = await client.query(
       `UPDATE visit_plans
-       SET customer_ids = $1, status = $2, reviewed_by = $3, reviewed_at = now(), updated_at = now()
+       SET customer_ids = $1, status = $2, reviewed_by = $3, reviewed_at = now(), updated_at = now(), review_reason = $5
        WHERE id = $4
        RETURNING *`,
-      [nextCustomerIds, nextStatus, req.user.id, req.params.id]
+      [nextCustomerIds, nextStatus, req.user.id, req.params.id, reason || null]
     );
 
     await client.query("COMMIT");
@@ -634,15 +618,7 @@ visitPlansRouter.patch("/:id", requireCanPlanForOthers, async (req, res) => {
     (async () => {
       try {
         if (action !== undefined) {
-          const dateLabel = formatPlanDate(updated[0].plan_date);
-          notifyUser(updated[0].user_id, "plan_reviewed", {
-            title: action === "approve" ? "Այցելության պլանը հաստատվեց" : "Այցելության պլանը մերժվեց",
-            body:
-              action === "approve"
-                ? `Ձեր ${dateLabel} պլանը հաստատվել է։`
-                : `Ձեր ${dateLabel} պլանը մերժվել է -- խնդրում ենք վերանայել այն։`,
-            url: "/#/map",
-          });
+          await notifyDecisionOf("visit_plan", updated[0].id, { deciderId: req.user.id, approved: action === "approve", reason, type: "plan_reviewed" });
         }
       } catch (err) {
         console.error("Post-plan-review notification failed:", err);

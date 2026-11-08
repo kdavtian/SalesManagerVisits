@@ -5,6 +5,7 @@
 // Money: Excel stays the truth. The return carries a provisional credit (what the customer paid per unit x quantity) that the customer card shows
 // until the negative line arrives from Excel (matchReturnsToErp) or the accountant marks it recorded.
 import { pool } from "../db/pool.js";
+import { notifyApproversOf, notifyDecisionOf } from "../system/requests/notify.js";
 import { notifyUser } from "../shared/notifications.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 
@@ -100,11 +101,8 @@ export async function requestReturn(user, body) {
       );
     }
     await client.query("COMMIT");
-    notifyRoles(["admin", "ceo", "operations_director", "sales_director", "accountant"], user.id, {
-      title: kind === "return" ? "Վերադարձի հայց" : "Չեղարկման հայց",
-      body: `${order.customer_name}${order.order_code ? ` · #${order.order_code}` : ""}`,
-      url: "/#/returns",
-    });
+    // every person who may decide it gets a push that opens the request card (owner, 2026-11-08)
+    notifyApproversOf("return", ret.id);
     return { id: ret.id, kind };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -166,8 +164,7 @@ export async function decideReturn(user, id, { approve, note }) {
       outcome = "approved_waiting_warehouse";
     }
     await client.query("COMMIT");
-    const msg = { rejected: "Հայցը մերժվեց", done: "Պատվերը չեղարկվեց", approved_waiting_warehouse: "Հայցը հաստատվեց" }[outcome];
-    if (ret.requested_by) notifyUser(ret.requested_by, "order_status_changed", { title: msg, body: text ?? "", url: "/#/returns" }).catch(() => {});
+    notifyDecisionOf("return", id, { deciderId: user.id, approved: outcome !== "rejected", reason: text, type: "order_status_changed" });
     if (outcome === "approved_waiting_warehouse") notifyRoles(["warehouse_manager", "admin"], user.id, { title: "Վերադարձ՝ ապրանքը ստանալու համար", body: "", url: "/#/returns" });
     return { status: outcome === "rejected" ? "rejected" : outcome === "done" ? "done" : "approved" };
   } catch (err) {

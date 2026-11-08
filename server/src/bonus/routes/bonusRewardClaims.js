@@ -38,7 +38,7 @@ async function handleMutation(req, res, mutate) {
     res.json(result);
   } catch (err) {
     if (err instanceof ClaimConflictError) return res.status(409).json({ error: err.message });
-    res.status(400).json({ error: err.message });
+    res.status(err.status ?? 400).json({ error: err.message });
   }
 }
 

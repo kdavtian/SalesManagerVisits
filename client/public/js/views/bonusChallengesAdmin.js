@@ -618,14 +618,9 @@ export async function renderBonusRewardClaimsSection(container) {
       });
     });
     listEl.querySelectorAll('[data-action="reject"]').forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const reason = prompt("Reason:") ?? "";
-        try {
-          await api.rejectBonusRewardClaim(btn.dataset.id, reason, Number(btn.dataset.version));
-          loadClaims();
-        } catch (err) {
-          alert(err.message);
-        }
+      // Reject opens the request card: an inline reason field instead of a prompt(), and the person receives it (owner, 2026-11-08)
+      btn.addEventListener("click", () => {
+        location.hash = `#/requests/bonus_claim/${btn.dataset.id}`;
       });
     });
     listEl.querySelectorAll('[data-action="hold"]').forEach((btn) => {

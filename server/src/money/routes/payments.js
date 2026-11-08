@@ -10,7 +10,7 @@ import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
-import { notifyUser } from "../../shared/notifications.js";
+import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
 import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
@@ -152,20 +152,21 @@ export async function insertPayment({ customer, amount, paymentDate, salesManage
     [paymentId, createdBy]
   );
 
-  (async () => {
-    try {
-      const { rows: recipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [PAYMENT_NOTIFY_ROLES]);
-      for (const recipient of recipients) {
-        notifyUser(recipient.id, "payment_submitted", {
-          title: "Նոր վճարում",
-          body: `${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}\n${Number(amount).toLocaleString()} AMD\n${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
-          url: `/#/payments/${paymentId}`,
-        });
-      }
-    } catch (err) {
-      console.error("Payment notification failed:", err);
-    }
-  })();
+  // The payment's approvers get a push that opens its request card (owner, 2026-11-08) -- still only the accountant among them
+  // (PAYMENT_NOTIFY_ROLES: "CEO should NOT receive automatic payment push notifications"); everyone who may approve it sees it in Requests.
+  // The facts are passed in, not read back: this may run inside the caller's transaction (a check-in or a delivery), before it commits.
+  notifyApprovers({
+    kind: "payment",
+    id: paymentId,
+    type: "payment_submitted",
+    requesterId: createdBy,
+    onlyThese: (u) => PAYMENT_NOTIFY_ROLES.includes(u.role),
+    lines: [
+      `Հաճախորդ՝ ${customer.name}${customer.erp_customer_id ? ` · ID ${customer.erp_customer_id}` : ""}`,
+      `Գումար՝ ${amdText(amount)}`,
+      `Մենեջեր՝ ${manager.name}${salesChannel ? ` · ${salesChannel}` : ""}`,
+    ],
+  });
 
   return paymentId;
 }
@@ -563,6 +564,7 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
     client.release();
   }
   res.json(await loadPaymentRow(req.params.id));
+  notifyDecisionOf("payment", Number(req.params.id), { deciderId: req.user.id, approved: true });
 });
 
 paymentsRouter.post("/:id/reject", async (req, res) => {
@@ -611,6 +613,7 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
     client.release();
   }
   res.json(await loadPaymentRow(req.params.id));
+  notifyDecisionOf("payment", Number(req.params.id), { deciderId: req.user.id, approved: false, reason: reason.trim() });
 });
 
 // Reversal is deliberately not reachable from the list row -- see task
