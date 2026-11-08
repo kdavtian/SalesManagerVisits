@@ -7,7 +7,7 @@ test.describe("Typed tasks", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const director = await fixtures.createUser("sales_director");
     const rep = await fixtures.createUser("sales_manager");
-    const customer = await fixtures.createCustomer({ created_by: rep.id, name: "Typed Task Garage", assigned_manager_id: rep.id, sales_channel: "SM YVN" });
+    const customer = await fixtures.createCustomer({ created_by: rep.id, name: "Typed Task Garage", assigned_manager_id: rep.id, sales_channel: "SM YVN", erp_customer_id: `E2E-TT-${Date.now()}` });
 
     await loginViaUi(page, director.email);
     await page.goto("/#/tasks");
