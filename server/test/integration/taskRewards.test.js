@@ -1,7 +1,7 @@
 // The "well done" moment (migration 195): a finished task is shown to its assignee ONCE. The server keeps what was not seen yet.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
 const stamp = Date.now();
