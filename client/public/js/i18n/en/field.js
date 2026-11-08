@@ -204,6 +204,7 @@ export const enField = {
     task_type_check_products: "Check products",
     task_type_check_products_sub: "Closes itself when a check-in records the shop's brands",
     task_type_needs_customer: "Choose the customer for this task",
+    task_order_needs_erp: "An order task is only for customers that are in the ERP. This customer has no ERP id.",
     call_btn: "Call",
     call_no_phone: "The customer has no phone number. Add it on the customer card.",
     call_record_result: "Record the call result",
