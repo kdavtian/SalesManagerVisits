@@ -946,7 +946,8 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
         }
         const mine = ++seq;
         try {
-          const found = (await api.listCustomers({ search: q, limit: 8 })).slice(0, 8);
+          // a "Make order" task is only for customers that are in the ERP (server rule): the others are not even offered
+          const found = (await api.listCustomers({ search: q, limit: 8, ...(kind === "make_order" ? { only_erp: "1" } : {}) })).slice(0, 8);
           if (mine !== seq) return;
           results.hidden = false;
           results.innerHTML = found.length
@@ -1057,7 +1058,7 @@ export async function openTaskEditor({ customer = null, task = null, taskKind = 
       notifyTasksChanged();
       onSaved?.();
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = err.message.startsWith("A make-order task needs") ? t("task_order_needs_erp") : err.message;
       errorEl.hidden = false;
       saveBtn.disabled = false;
     }

@@ -1,0 +1,55 @@
+name: Ship skills to the app repos
+
+# Owner 2026-11-07 ("one skill change = one PR") and 2026-11-08 ("always merge", no paid GitHub): the skill master is the PRIVATE repo
+# kdavtian/KD-Mozg, which gets no GitHub Actions minutes, so this workflow runs here (public repo, free minutes). Every 3 hours (and on
+# demand: Actions -> "Ship skills to the app repos" -> Run workflow) it copies KD-Mozg's skills into the four app repos with
+# KD-Mozg/ship-skills.sh: one docs-only PR per repo whose copy changed, merged at once. Nothing changes when every copy is current.
+# Off until the owner adds the repository secret SKILLS_SYNC_TOKEN here (a classic token with the "repo" scope: it must read the
+# private KD-Mozg and write to kdavtian/* and KAD-Motors/KAD-Motors-Platform); without it the run only says so and stays green.
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ship-skills
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ secrets.SKILLS_SYNC_TOKEN }}
+    steps:
+      - name: Token present?
+        id: token
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::SKILLS_SYNC_TOKEN is not set: skill copies are not shipped (see the comment at the top of this workflow)."
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == '1'
+        with: { repository: kdavtian/KD-Mozg, path: KD-Mozg, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == '1'
+        with: { repository: kdavtian/SalesManagerVisits, path: SalesManagerVisits, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == '1'
+        with: { repository: kdavtian/castrol_ceo_report, path: castrol_ceo_report, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == '1'
+        with: { repository: kdavtian/KAD-GMM, path: KAD-GMM, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == '1'
+        with: { repository: KAD-Motors/KAD-Motors-Platform, path: KAD-Motors-Platform, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
+      - name: Copy, open the PRs, merge
+        if: steps.token.outputs.ok == '1'
+        run: bash KD-Mozg/ship-skills.sh

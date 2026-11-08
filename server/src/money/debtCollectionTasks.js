@@ -26,6 +26,7 @@ import { queueSyncNotice } from "../erp/syncNotifier.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 import { DEBT_AGE_LATERAL, overdueDebtSql, debtAgeDaysSql } from "./debtAge.js";
 import { liveDebtMap } from "./liveDebt.js";
+import { MIN_TASK_PAYMENT_AMD } from "../team/taskPaymentRule.js";
 
 // Release 5 (owner 2026-11-03: Vaghinak's debt tasks on the LIVE debt): the Excel picks the overdue debtors, then the live debt
 // (money/liveDebt.js: + app orders the Excel does not have yet - app payments it does not have yet, oldest orders paid first) has
@@ -86,15 +87,24 @@ const MIN_ERP_ROWS_TO_TRUST_ABSENCE = 20;
 
 // The customer paid since the task was created: the workbook's last payment date, or a payment row in its cashflow
 // (bank transfers reach the app ONLY this way). Uses the task (t), customer (c) and erp aliases of the UPDATE below.
-const PAID_SINCE_TASK_SQL = `(COALESCE(erp.last_payment_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date, false)
-  OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
-               AND cf.cashflow_date >= (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
+// "Paid since the task was made" needs a payment big enough: the workbook's cashflow payments since the task together reach MIN(20,000, what
+// was owed before them = the Excel debt + them) -- a tiny payment closes nothing (taskPaymentRule.js, owner 2026-11-08). A customer with no
+// cashflow line since the task falls back to a newer last-payment date (the workbook may carry that and no lines).
+// op: ">=" counts the task's own day (the workbook has dates, not times), ">" only the days after it.
+const paidSinceSql = (op, anyAmount = false) => {
+  const day = "(t.created_at AT TIME ZONE 'Asia/Yerevan')::date";
+  const lines = `FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0 AND cf.cashflow_date ${op} ${day}`;
+  const sum = `COALESCE((SELECT sum(cf.amount_amd) ${lines}), 0)`;
+  // anyAmount: step 1 below (the OVERDUE money is gone altogether, so the task's goal is met by whatever was paid)
+  if (anyAmount) return `(${sum} > 0 OR (NOT EXISTS (SELECT 1 ${lines}) AND COALESCE(erp.last_payment_date ${op} ${day}, false)))`;
+  return `((${sum} > 0 AND ${sum} >= LEAST(${MIN_TASK_PAYMENT_AMD}, GREATEST(COALESCE(erp.debt_amd, 0) + ${sum}, 1)))
+    OR (NOT EXISTS (SELECT 1 ${lines}) AND COALESCE(erp.last_payment_date ${op} ${day}, false)))`;
+};
+const PAID_SINCE_TASK_SQL = paidSinceSql(">=", true);
 
 // Strictly AFTER the day the task was made (the workbook has dates, not times: a payment dated the task's own day may have come before it, and
 // the task's title even names it as "last payment"). The app's own events close a same-day payment (taskAutoComplete.js).
-const PAID_AFTER_TASK_SQL = `(COALESCE(erp.last_payment_date > (t.created_at AT TIME ZONE 'Asia/Yerevan')::date, false)
-  OR EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = c.erp_customer_id AND cf.amount_amd > 0
-               AND cf.cashflow_date > (t.created_at AT TIME ZONE 'Asia/Yerevan')::date))`;
+const PAID_AFTER_TASK_SQL = paidSinceSql(">");
 
 // KF and CAS are never chased; OEM (like CVO, PCO and SM B2B) is chased by CALL tasks only (CALL_CHANNELS).
 const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS'])`;
@@ -219,8 +229,8 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
   );
 
   // 1b) The customer PAID after the task was made (a payment line in the workbook's cashflow, or a newer last-payment date) but still
-  //     owes overdue money: step 1 leaves the task open, because the debt is still overdue. The app closes the same task for ANY amount
-  //     it records itself ("any amount counts", taskAutoComplete.js), so the workbook's payments close it the same way: partial while
+  //     owes overdue money: step 1 leaves the task open, because the debt is still overdue. The app closes the same task for a payment of at least MIN(20,000, the debt before it)
+  //     it records itself (a payment of at least MIN(20,000, the debt before it), taskAutoComplete.js), so the workbook's payments close it the same way: partial while
   //     something is left on the Excel debt, paid when nothing is. Both the automatic task and the one a person gave (type "Collect
   //     debt"). Owner, 2026-11-08: customer 10136, task of 10/10/2026, payments after it, the task stayed open.
   // Not touched: a task with a promise still running (outcome 'promised', date ahead) keeps its promise so a broken one is still caught

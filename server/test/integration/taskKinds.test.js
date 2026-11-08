@@ -71,7 +71,7 @@ test("Collect debt closes on a payment (and the creator is told); Make order clo
 });
 
 test("Check products closes when a check-in records the shop's brands, not on a bare visit", async () => {
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l74-${stamp}` });
   const check = (await give(customer, "check_products")).data;
   const visit = async (extra) => {
     const form = new FormData();
@@ -92,7 +92,7 @@ test("Check products closes when a check-in records the shop's brands, not on a 
 });
 
 test("a typed Collect debt task cannot be completed by hand: the rep records what the customer said and it stays open (owner, 2026-11-05)", async () => {
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l95-${stamp}` });
   const debt = (await give(customer, "collect_debt")).data;
   const bad = await apiRequest(`/api/tasks/${debt.id}/complete`, { method: "POST", cookie: repCookie, body: { note: "done", outcome: "refused" } });
   assert.equal(bad.status, 409, JSON.stringify(bad.data));
@@ -103,7 +103,7 @@ test("a typed Collect debt task cannot be completed by hand: the rep records wha
 
 // Owner, 2026-11-08: "make order" and "he stopped ordering" tasks close only by an order (or by a visit that says why there was none).
 test("a Make order task and the automatic 'stopped ordering' task cannot be completed by hand; a plain task still can", async () => {
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l106-${stamp}` });
   const order = (await give(customer, "make_order", { items: ["Call and ask"] })).data;
   const auto = (await pool.query(
     "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind) VALUES ('he stopped ordering', $1, $2, $3, current_date, true, 'reorder_followup') RETURNING id",
@@ -135,7 +135,7 @@ test("a Make order task and the automatic 'stopped ordering' task cannot be comp
 });
 
 test("a check-in AT the customer that says why there was no order closes the order tasks; a far check-in or a made-up reason does not", async () => {
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l138-${stamp}` });
   const order = (await give(customer, "make_order")).data;
   const auto = (await pool.query(
     "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind) VALUES ('he stopped ordering', $1, $2, $3, current_date, true, 'reorder_followup') RETURNING id",
@@ -173,7 +173,7 @@ test("a check-in AT the customer that says why there was no order closes the ord
 
 test("a reason given by one rep closes only THAT rep's order tasks, not another rep's task at the same customer", async () => {
   const rep2 = await createUser("sales_manager");
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l176-${stamp}` });
   const mine = (await give(customer, "make_order")).data; // a person's task, no automatic task at all
   const theirs = (await apiRequest("/api/tasks", { method: "POST", cookie: dirCookie, body: { title: "other rep", assignee_id: rep2.id, customer_id: customer.id, due_date: due, task_kind: "make_order" } })).data;
   const form = new FormData();
@@ -193,7 +193,7 @@ test("a reason given by one rep closes only THAT rep's order tasks, not another 
 });
 
 test("a check-in the server let in because GPS accuracy was forgiven still closes the rep's visit and no-order tasks", async () => {
-  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-l196-${stamp}` });
   const visitTask = (await give(customer, "visit_customer")).data;
   const orderTask = (await give(customer, "make_order")).data;
   const form = new FormData();
@@ -213,4 +213,16 @@ test("a check-in the server let in because GPS accuracy was forgiven still close
   await wait(400);
   assert.equal((await status(visitTask.id)).status, "done");
   assert.equal((await status(orderTask.id)).status, "done");
+});
+
+// Owner, 2026-11-08: no "Make order" task for a customer that is not ours (no ERP id).
+test("a Make order task needs a customer with an ERP id; the other task types do not", async () => {
+  const draftOnly = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const refused = await give(draftOnly, "make_order");
+  assert.equal(refused.status, 400);
+  assert.match(refused.data.error, /make-order task needs/);
+  assert.equal((await give(draftOnly, "check_products")).status, 201);
+  assert.equal((await give(draftOnly, "collect_debt")).status, 201);
+  const ours = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail", erp_customer_id: `ITEST-TK-mo-${stamp}` });
+  assert.equal((await give(ours, "make_order")).status, 201);
 });
