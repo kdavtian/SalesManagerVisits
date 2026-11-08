@@ -6,6 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   checkClientBump,
+  highestAppVersion,
+  highestNumber,
   compareVersions,
   parseAppVersion,
   parseCacheVersion,
@@ -79,4 +81,22 @@ test("editing sw.js alone (e.g. APP_SHELL) still needs both bumps", () => {
 test("an unreadable version format fails even without a client change", () => {
   assert.equal(checkClientBump({ changedFiles: [], appNow: null, cacheNow: 545, ...base }).length, 1);
   assert.equal(checkClientBump({ changedFiles: [], appNow: [1, 0, 0], cacheNow: null, ...base }).length, 1);
+});
+
+test("the base is the higher of the branch start and main now (two branches bumping to the same version)", () => {
+  assert.deepEqual(highestAppVersion([[1, 529, 0], [1, 530, 0]]), [1, 530, 0]);
+  assert.deepEqual(highestAppVersion([[1, 530, 0], null]), [1, 530, 0]);
+  assert.equal(highestAppVersion([null, null]), null);
+  assert.equal(highestNumber([545, 546]), 546);
+  assert.equal(highestNumber([null, 545]), 545);
+  assert.equal(highestNumber([null]), null);
+  // main already shipped 1.530.0 / v546 while this branch (started at 1.529.0) also bumped to 1.530.0 / v546: refused
+  const errors = checkClientBump({
+    changedFiles: ["client/public/js/app.js"],
+    appNow: [1, 530, 0],
+    appBase: highestAppVersion([[1, 529, 0], [1, 530, 0]]),
+    cacheNow: 546,
+    cacheBase: highestNumber([545, 546]),
+  });
+  assert.equal(errors.length, 2);
 });

@@ -56,6 +56,17 @@ export function checkClientBump({ changedFiles, appNow, appBase, cacheNow, cache
   return errors;
 }
 
+/** The highest of several [major, minor, patch] (nulls ignored), or null. */
+export function highestAppVersion(list) {
+  return list.filter(Boolean).sort(compareVersions).at(-1) ?? null;
+}
+
+/** The highest of several numbers (null/undefined ignored), or null. */
+export function highestNumber(list) {
+  const nums = list.filter((n) => typeof n === "number");
+  return nums.length ? Math.max(...nums) : null;
+}
+
 function checkChangelog(repoRoot) {
   const pkg = JSON.parse(readFileSync(path.join(repoRoot, "server", "package.json"), "utf8"));
   const changelog = readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8");
@@ -105,12 +116,27 @@ function checkBumpAgainstBase(repoRoot) {
       return null;
     }
   };
+  // Compared with the HIGHER of where this branch started and the base branch as it is now: a local run (scripts/local-ci.sh) on a
+  // branch started before another PR merged the same new version used to pass (CI itself tests the PR merged into main).
+  let tip = null;
+  try {
+    tip = git("rev-parse", baseName);
+  } catch {
+    /* no tip: the merge-base alone */
+  }
+  const showAt = (rev, file) => {
+    try {
+      return git("show", `${rev}:${file}`);
+    } catch {
+      return null;
+    }
+  };
   const errors = checkClientBump({
     changedFiles,
     appNow,
-    appBase: parseAppVersion(show(VERSION_FILE)),
+    appBase: highestAppVersion([parseAppVersion(show(VERSION_FILE)), tip && parseAppVersion(showAt(tip, VERSION_FILE))]),
     cacheNow,
-    cacheBase: parseCacheVersion(show(SW_FILE)),
+    cacheBase: highestNumber([parseCacheVersion(show(SW_FILE)), tip && parseCacheVersion(showAt(tip, SW_FILE))]),
   });
   if (!errors.length) {
     const client = changedFiles.filter((f) => f.startsWith(CLIENT_DIR)).length;

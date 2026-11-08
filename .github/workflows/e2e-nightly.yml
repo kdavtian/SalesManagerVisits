@@ -8,6 +8,22 @@ on:
     # are tested every week, and the last day of each month tests the month edge. Outside business hours; no PR traffic.
     - cron: "15 20 * * *"
   workflow_dispatch: {}
+  # The full run also checks a PR that touches the map or date/period code: those broke only in the nightly before (a late address
+  # lookup, the UTC 'today' after midnight, 2026-11-08), a day after they merged. About 20 minutes; not a required check.
+  pull_request:
+    paths:
+      - "client/public/js/views/map.js"
+      - "client/public/js/views/map/**"
+      - "client/public/js/leafletLoader.js"
+      - "client/public/js/mapSafeRuntime.js"
+      - "client/public/js/periodButtons.js"
+      - "client/public/js/util.js"
+      - "server/src/utils/yerevanDate.js"
+      - "server/src/utils/periodWindows.js"
+
+concurrency:
+  group: e2e-nightly-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -34,13 +34,16 @@ test("desktop Map: side table, row opens the popup, visible area, key panel, fil
     await expect(table.locator(".mst-row")).toHaveCount(2, { timeout: 15000 });
     await page.locator("#map-customer-search").press("Escape");
     await expect(page.locator("#map-address-results")).toBeHidden();
+    // Escape also empties the search box (a browser search field does that), so the table lists every customer in the database again:
+    // from here on only this test's two rows count (parallel tests add their own customers; the nightly failed on them)
+    const ours = table.locator(".mst-row").filter({ hasText: stamp });
 
     // debt column, and a debt sort puts the debtor first (tap again: reversed)
     await table.locator('.mst-th[data-sort="debt"]').click();
-    await expect(table.locator(".mst-row").first()).toContainText(`MapNear${stamp}`);
-    await expect(table.locator(".mst-row").first().locator(".mst-debt")).toHaveText("1,234,567");
+    await expect(ours.first()).toContainText(`MapNear${stamp}`);
+    await expect(ours.first().locator(".mst-debt")).toHaveText("1,234,567");
     await table.locator('.mst-th[data-sort="debt"]').click();
-    await expect(table.locator(".mst-row").first()).toContainText(`MapFar${stamp}`);
+    await expect(ours.first()).toContainText(`MapFar${stamp}`);
 
     // a row pans to the pin and opens its popup, with Debt and Last order
     await table.locator(".mst-row", { hasText: `MapNear${stamp}` }).click();
@@ -52,12 +55,19 @@ test("desktop Map: side table, row opens the popup, visible area, key panel, fil
     await expect(table.locator(".mst-row.is-active")).toContainText(`MapNear${stamp}`);
 
     // zoomed in on the near shop: "Only the visible area" drops the far one
-    for (let i = 0; i < 4; i += 1) await page.locator("#zoom-in-btn").click();
+    // each zoom finishes before the next, then the row is tapped again so the near pin is centred at the new zoom (the popup's auto-pan
+    // moves it off centre)
+    for (let i = 0; i < 4; i += 1) {
+      await page.locator("#zoom-in-btn").click();
+      await expect(page.locator("#leaflet-map.leaflet-zoom-anim")).toHaveCount(0);
+    }
+    await table.locator(".mst-row", { hasText: `MapNear${stamp}` }).click();
+    await expect(page.locator(".leaflet-popup .map-popup")).toContainText(`MapNear${stamp}`);
     await table.locator(".mst-visible-input").check();
-    await expect(table.locator(".mst-row")).toHaveCount(1);
-    await expect(table.locator(".mst-row")).toContainText(`MapNear${stamp}`);
+    await expect(ours).toHaveCount(1);
+    await expect(ours).toContainText(`MapNear${stamp}`);
     await table.locator(".mst-visible-input").uncheck();
-    await expect(table.locator(".mst-row")).toHaveCount(2);
+    await expect(ours).toHaveCount(2);
 
     // the filter bar: status choices as visible chips above the map
     const overdueChip = page.locator('.map-search-filter-menu [data-filter="overdue"]');
