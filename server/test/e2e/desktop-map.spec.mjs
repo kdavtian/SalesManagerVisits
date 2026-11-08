@@ -59,7 +59,9 @@ test("desktop Map: side table, row opens the popup, visible area, key panel, fil
     // moves it off centre)
     for (let i = 0; i < 4; i += 1) {
       await page.locator("#zoom-in-btn").click();
-      await expect(page.locator("#leaflet-map.leaflet-zoom-anim")).toHaveCount(0);
+      // Leaflet marks its inner map pane (not #leaflet-map) with leaflet-zoom-anim while a zoom animates; it starts on the next frame
+      await page.waitForTimeout(60);
+      await expect(page.locator("#leaflet-map .leaflet-map-pane.leaflet-zoom-anim")).toHaveCount(0);
     }
     await table.locator(".mst-row", { hasText: `MapNear${stamp}` }).click();
     await expect(page.locator(".leaflet-popup .map-popup")).toContainText(`MapNear${stamp}`);
