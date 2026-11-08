@@ -169,3 +169,45 @@ test("a check-in AT the customer that says why there was no order closes the ord
   const { rows: [t] } = await pool.query("SELECT completion_note FROM tasks WHERE id = $1", [order.id]);
   assert.match(t.completion_note, /Փող չկա/);
 });
+
+test("a reason given by one rep closes only THAT rep's order tasks, not another rep's task at the same customer", async () => {
+  const rep2 = await createUser("sales_manager");
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const mine = (await give(customer, "make_order")).data; // a person's task, no automatic task at all
+  const theirs = (await apiRequest("/api/tasks", { method: "POST", cookie: dirCookie, body: { title: "other rep", assignee_id: rep2.id, customer_id: customer.id, due_date: due, task_kind: "make_order" } })).data;
+  const form = new FormData();
+  form.set("customer_id", String(customer.id));
+  form.set("lat", String(customer.lat));
+  form.set("lng", String(customer.lng));
+  form.set("outcomes", JSON.stringify(["other"]));
+  form.set("note", "visit");
+  form.set("no_order_reason", "stock_full");
+  const res = await apiFormRequest("/api/checkins", { cookie: repCookie, form });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  trackCheckin(res.data.id);
+  await wait(400);
+  assert.equal((await status(mine.id)).status, "done", "a Make order task closes by the no-order visit too");
+  assert.equal((await status(theirs.id)).status, "open", "the other rep did not visit");
+  await pool.query("DELETE FROM tasks WHERE assignee_id = $1", [rep2.id]);
+});
+
+test("a check-in the server let in because GPS accuracy was forgiven still closes the rep's visit and no-order tasks", async () => {
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const visitTask = (await give(customer, "visit_customer")).data;
+  const orderTask = (await give(customer, "make_order")).data;
+  const form = new FormData();
+  form.set("customer_id", String(customer.id));
+  form.set("lat", String(Number(customer.lat) + 0.00225)); // about 250 m: more than the 200 m allowance, less than 200 m with 100 m of GPS error forgiven
+  form.set("lng", String(customer.lng));
+  form.set("accuracy_m", "100");
+  form.set("outcomes", JSON.stringify(["other"]));
+  form.set("note", "visit");
+  form.set("no_order_reason", "closed");
+  const res = await apiFormRequest("/api/checkins", { cookie: repCookie, form });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  trackCheckin(res.data.id);
+  assert.equal(res.data.within_range, false, "the raw distance is still saved as it was");
+  await wait(400);
+  assert.equal((await status(visitTask.id)).status, "done");
+  assert.equal((await status(orderTask.id)).status, "done");
+});

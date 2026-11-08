@@ -85,6 +85,7 @@ export async function autoCompleteOrderTasksNoOrder({ customerId, actorId, reaso
   return closeTasks("reorder_followup", "make_order", {
     customerId,
     actorId,
+    onlyAssignee: actorId, // a reason given by one rep says nothing about another rep's task at the same customer
     note: `Ավտոմատ՝ այցի ժամանակ պատվեր չի եղել՝ ${label}`,
     body: `այցի ժամանակ պատվեր չի եղել՝ ${label}`,
   });

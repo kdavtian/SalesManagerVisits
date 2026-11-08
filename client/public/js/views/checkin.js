@@ -231,7 +231,7 @@ export async function renderCheckin(root, navigate, customerId) {
       const load = async () => {
         const { rows, today } = await tasksModule.loadCustomerTasks(customerId);
         const mine = rows.filter((r) => r.assignee_id === state.user.id || r.creator_id === state.user.id);
-        openOrderTasks = mine.filter((r) => r.auto_kind === "reorder_followup" && r.assignee_id === state.user.id);
+        openOrderTasks = mine.filter((r) => (r.auto_kind === "reorder_followup" || r.task_kind === "make_order") && r.assignee_id === state.user.id);
         slot.innerHTML = mine.length
           ? `<h2 class="section-title section-title-tight">${t("tasks_customer_title")}</h2><div class="card-list">${mine.map((r) => tasksModule.taskCardHtml(r, today, { showCustomer: false })).join("")}</div>`
           : "";

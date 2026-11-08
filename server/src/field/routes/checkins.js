@@ -293,6 +293,10 @@ checkinsRouter.post("/", (req, res, next) => {
   const withinRange = distance <= radiusMeters;
   // The refusal forgives GPS accuracy up to 100 m (owner, 2026-10-13); the real distance and within_range are what get saved.
   const tooFar = creditedDistanceMeters(distance, parseAccuracy(accuracy_m)) > radiusMeters;
+  // "At the customer's place" for the tasks a visit closes: what the refusal above accepts (accuracy forgiven), not the raw distance --
+  // a rep 150 m away with 80 m of GPS error was let in, and his visit / product-check / no-order tasks (locked, nobody closes them by hand)
+  // must close with that check-in. Management checking in from far away is not at the customer, whatever the allowance says.
+  const atCustomer = !tooFar;
   if (tooFar && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(422).json({
@@ -479,15 +483,15 @@ checkinsRouter.post("/", (req, res, next) => {
 
   // The visit itself closes the "Visit" task given to this rep for this customer -- only a check-in AT the customer's place counts
   // (owner, 2026-11-05: a visit task cannot be closed without the visit; a far check-in never counts as the customer's visit).
-  if (withinRange) autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
+  if (atCustomer) autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
 
   // Saying why there was no order, at the customer's place, closes the customer's order tasks (order tasks close only by an order or by this).
-  if (withinRange && no_order_reason) {
+  if (atCustomer && no_order_reason) {
     autoCompleteOrderTasksNoOrder({ customerId, actorId: req.user.id, reason: String(no_order_reason) }).catch((err) => console.error("Task auto-complete failed:", err.message));
   }
 
   // Recording what the shop has (brand chips / available products) closes the customer's "check products" task.
-  if (withinRange && (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length))) {
+  if (atCustomer && (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length))) {
     autoCompleteProductCheckTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
   }
 
