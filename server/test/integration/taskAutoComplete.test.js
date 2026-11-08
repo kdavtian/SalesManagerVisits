@@ -20,6 +20,7 @@ test.before(async () => {
 test.after(async () => {
   await pool.query("DELETE FROM tasks WHERE assignee_id = $1", [rep.id]);
   await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = ANY($1)", [erpIds]);
+  await pool.query("DELETE FROM erp_cashflow_lines WHERE erp_customer_id = ANY($1)", [erpIds]);
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id = ANY($1)", [erpIds]);
   await pool.query("DELETE FROM payments WHERE sales_manager_id = $1", [rep.id]);
   await cleanupAll();
@@ -113,4 +114,139 @@ test("one sync run = one notification per person, with a line per effect and the
   assert.match(mine[0].body, /3 ապրանքի/);
   assert.match(mine[0].body, /2 նոր առաջադրանք/);
   assert.doesNotMatch(mine[0].body, /Օրական հաշվետվություն/);
+});
+
+// Owner, 2026-11-08: "there was a task of debt collection for 10136 on 10/10/2026 and there were payments after that, but the task wasn't
+// closed by itself". The app closes a task for ANY amount it records itself; the nightly Excel check closed it only when the whole overdue
+// debt was gone. A payment that reached the Excel (cashflow line / last payment date) while money is still owed must close it too.
+const today = () => new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
+const manualTask = async (customerId, taskKind) =>
+  (await pool.query(
+    "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, task_kind) VALUES ($1, $2, $3, $4, current_date + 3, $5) RETURNING id",
+    [`manual ${taskKind}`, director.id, rep.id, customerId, taskKind]
+  )).rows[0].id;
+const madeDaysAgo = (id, days) => pool.query("UPDATE tasks SET created_at = now() - ($2 || ' days')::interval WHERE id = $1", [id, String(days)]);
+const taskById = async (id) => (await pool.query("SELECT * FROM tasks WHERE id = $1", [id])).rows[0];
+
+test("a payment in the Excel after the task was made closes it (partial) even though overdue money is left", async () => {
+  const customer = await debtor("xp", 200000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  assert.equal(open.status, "open");
+  await madeDaysAgo(open.id, 3);
+  // 50,000 is paid and recorded in the workbook's cashflow; 150,000 is still owed and overdue (days_since_payment 90, term 45)
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 50000)", [customer.erp_customer_id, today()]);
+  await pool.query("UPDATE erp_customer_data SET debt_amd = 150000 WHERE erp_customer_id = $1", [customer.erp_customer_id]);
+  const marker = (await pool.query("SELECT COALESCE(max(id), 0) AS m FROM notifications")).rows[0].m;
+  await createDebtCollectionTasks();
+  const t = await taskById(open.id);
+  assert.equal(t.status, "done");
+  assert.equal(t.outcome, "partial");
+  assert.match(t.completion_note, /Excel/);
+  assert.ok((await notified(rep.id, "task_completed")).some((n) => n.id > marker), "the rep is told it closed itself");
+});
+
+test("a payment that clears the debt through the Excel's last payment date closes it as paid", async () => {
+  const customer = await debtor("xq", 90000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  assert.equal(open.status, "open");
+  await madeDaysAgo(open.id, 3);
+  await pool.query("UPDATE erp_customer_data SET debt_amd = 0, last_payment_date = $2 WHERE erp_customer_id = $1", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  const t = await taskById(open.id);
+  assert.equal(t.status, "done");
+  assert.equal(t.outcome, "paid");
+});
+
+test("a payment from BEFORE the task does not close it", async () => {
+  const customer = await debtor("xr", 120000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  await pool.query("UPDATE tasks SET created_at = now() - interval '3 days' WHERE id = $1", [open.id]);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2::date - 10, 40000)", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(open.id)).status, "open");
+});
+
+test("a debt task given by a person (type 'Collect debt') closes the same way when the Excel shows a payment after it", async () => {
+  const customer = await debtor("xm", 100000);
+  const id = await manualTask(customer.id, "collect_debt");
+  await madeDaysAgo(id, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 30000)", [customer.erp_customer_id, today()]);
+  await pool.query("UPDATE erp_customer_data SET debt_amd = 70000 WHERE erp_customer_id = $1", [customer.erp_customer_id]);
+  await createDebtCollectionTasks();
+  const t = await taskById(id);
+  assert.equal(t.status, "done");
+  assert.equal(t.outcome, "partial");
+});
+
+test("an order that reaches the Excel closes the 'Make an order' task a person gave, like the automatic one", async () => {
+  const erpId = `ITEST-TAC-mo-${stamp}`;
+  erpIds.push(erpId);
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, erp_customer_id: erpId, sales_channel: "retail" });
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at) VALUES ($1, 'x', 0, now())", [erpId]);
+  const id = await manualTask(customer.id, "make_order");
+  await madeDaysAgo(id, 3);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, qty, revenue_amd) VALUES ($1, $2, $3, 2, 5000)", [erpId, `MO-${stamp}`, today()]);
+  await createReorderFollowupTasks();
+  assert.equal((await taskById(id)).status, "done");
+});
+
+test("a payment dated the task's own day (it may have come BEFORE the task) does not close it; neither does an order of that day for a person's task", async () => {
+  const customer = await debtor("sd", 100000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 10000)", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(open.id)).status, "open", "same day: only the app's own event closes it");
+  const erpId = `ITEST-TAC-sdo-${stamp}`;
+  erpIds.push(erpId);
+  const shop = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, erp_customer_id: erpId, sales_channel: "retail" });
+  await pool.query("INSERT INTO erp_customer_data (erp_customer_id, customer_name, debt_amd, synced_at) VALUES ($1, 'x', 0, now())", [erpId]);
+  const orderTask = await manualTask(shop.id, "make_order");
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, qty, revenue_amd) VALUES ($1, $2, $3, 2, 5000)", [erpId, `SD-${stamp}`, today()]);
+  await createReorderFollowupTasks();
+  assert.equal((await taskById(orderTask)).status, "open");
+});
+
+test("a task with a promise still running keeps it when a payment shows; a customer with no Excel row is never closed as paid", async () => {
+  const customer = await debtor("pr", 100000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  await madeDaysAgo(open.id, 3);
+  await pool.query("UPDATE tasks SET outcome = 'promised', promise_date = $2::date + 5 WHERE id = $1", [open.id, today()]);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 10000)", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  const t = await taskById(open.id);
+  assert.equal(t.status, "open", "the promise is kept");
+  assert.equal(t.outcome, "promised");
+  // no Excel row for the customer at all, only a cashflow line: no proof that the debt is gone
+  const erpId = `ITEST-TAC-nr-${stamp}`;
+  erpIds.push(erpId);
+  const shop = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, erp_customer_id: erpId, sales_channel: "retail" });
+  const id = await manualTask(shop.id, "collect_debt");
+  await madeDaysAgo(id, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 5000)", [erpId, today()]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(id)).status, "open");
+});
+
+test("the notifications of a sync run are not sent task by task: a run with notify off closes quietly, a run with notify on tells the rep and the person who gave the task", async () => {
+  const customer = await debtor("nq", 100000);
+  const id = await manualTask(customer.id, "collect_debt");
+  await madeDaysAgo(id, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 20000)", [customer.erp_customer_id, today()]);
+  const marker = (await pool.query("SELECT COALESCE(max(id), 0) AS m FROM notifications")).rows[0].m;
+  await createDebtCollectionTasks(new Date(), { notify: false });
+  assert.equal((await taskById(id)).status, "done");
+  assert.equal((await notified(rep.id, "task_completed")).filter((n) => n.id > marker).length, 0, "a sync run says nothing task by task");
+  const customer2 = await debtor("nr2", 100000);
+  const id2 = await manualTask(customer2.id, "collect_debt");
+  await madeDaysAgo(id2, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 20000)", [customer2.erp_customer_id, today()]);
+  await createDebtCollectionTasks(new Date(), { notify: true });
+  assert.equal((await taskById(id2)).status, "done");
+  assert.ok((await notified(rep.id, "task_completed")).some((n) => n.id > marker), "the rep is told");
+  assert.ok((await notified(director.id, "task_completed")).some((n) => n.id > marker), "the person who gave the task is told");
 });
