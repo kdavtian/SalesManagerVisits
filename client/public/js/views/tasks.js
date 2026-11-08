@@ -671,7 +671,10 @@ export async function openTaskSheet(taskId, { onChanged, navigate } = {}) {
     };
     const refresh = async (promise) => {
       try {
+        const wasOpen = task.status === "open";
         task = await promise;
+        // finished by its assignee, here, by hand: the "well done" moment (the server counted it as seen already)
+        if (wasOpen && task.status === "done" && task.assignee_id === state.user?.id) import("../shell/taskReward.js").then((m) => m.celebrateTask(task)).catch(() => {});
         notifyTasksChanged();
         onChanged?.();
         render();

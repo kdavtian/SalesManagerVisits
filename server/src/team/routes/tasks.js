@@ -125,6 +125,40 @@ tasksRouter.get("/customer-flags", async (req, res) => {
   res.json(rows);
 });
 
+// The "well done" moment (owner, 2026-11-08): MY tasks that finished and whose confirmation I have not seen yet -- closed by the system
+// (a payment, an order, a visit, a check) or by hand on another device. Newest first; the client shows them once and tells us (rewards/seen).
+// Only the last 3 days: an old one is not news. "stats" is what makes the moment worth something: how many I closed this week and what is left.
+tasksRouter.get("/rewards", async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT t.id, t.title, t.task_kind, t.auto_kind, t.outcome, t.completed_at, t.due_date, c.name AS customer_name
+     FROM tasks t LEFT JOIN customers c ON c.id = t.customer_id
+     WHERE t.assignee_id = $1 AND t.status = 'done' AND t.reward_seen_at IS NULL AND t.completed_at > now() - interval '3 days'
+     ORDER BY t.completed_at DESC LIMIT 20`,
+    [req.user.id]
+  );
+  if (!rows.length && !req.query.stats) return res.json({ rewards: [], stats: null });
+  const { rows: stat } = await pool.query(
+    `SELECT count(*) FILTER (WHERE status = 'done' AND completed_at >= date_trunc('week', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')::int AS done_week,
+            count(*) FILTER (WHERE status = 'done' AND (completed_at AT TIME ZONE 'Asia/Yerevan')::date = (now() AT TIME ZONE 'Asia/Yerevan')::date)::int AS done_today,
+            count(*) FILTER (WHERE status = 'open')::int AS open_left,
+            count(*) FILTER (WHERE status = 'open' AND due_date < $2::date)::int AS overdue_left
+     FROM tasks WHERE assignee_id = $1`,
+    [req.user.id, yerevanToday()]
+  );
+  res.json({ rewards: rows, stats: stat[0] });
+});
+
+// The client has shown these: never show them again. Only my own tasks, only finished ones.
+tasksRouter.post("/rewards/seen", async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter((n) => Number.isInteger(n) && n > 0).slice(0, 50) : [];
+  if (!ids.length) return res.json({ ok: true, marked: 0 });
+  const r = await pool.query(
+    "UPDATE tasks SET reward_seen_at = now() WHERE id = ANY($1) AND assignee_id = $2 AND status = 'done' AND reward_seen_at IS NULL",
+    [ids, req.user.id]
+  );
+  res.json({ ok: true, marked: r.rowCount });
+});
+
 // scope: mine (assigned to me, default) | created (by me) | all (everything I may see)
 // status: open (default) | done | cancelled | all;   due=today -> due today or earlier
 tasksRouter.get("/", async (req, res) => {
@@ -331,7 +365,9 @@ tasksRouter.patch("/:id", async (req, res) => {
 // anyone who sees all tasks. The creator is told.
 async function finishTask(task, user, note, outcome = null, promiseDate = null) {
   await pool.query(
-    `UPDATE tasks SET status = 'done', completed_at = now(), completed_by = $2, completion_note = $3, outcome = $4, promise_date = $5, updated_at = now() WHERE id = $1`,
+    // the assignee who finishes it by hand sees the confirmation right there: that counts as seen (a task finished by someone else, or by the system, is shown to the assignee later)
+    `UPDATE tasks SET status = 'done', completed_at = now(), completed_by = $2, completion_note = $3, outcome = $4, promise_date = $5, updated_at = now(),
+       reward_seen_at = CASE WHEN assignee_id = $2 THEN now() ELSE NULL END WHERE id = $1`,
     [task.id, user.id, note || null, outcome, promiseDate]
   );
   if (task.creator_id !== user.id && !task.auto_kind) {
@@ -443,7 +479,7 @@ tasksRouter.post("/:id/reopen", async (req, res) => {
   if (!task) return res.status(404).json({ error: "Task not found" });
   if (!mayWork(task, req.user)) return res.status(403).json({ error: "Not allowed" });
   if (task.status !== "done") return res.status(409).json({ error: "Only a finished task can be reopened" });
-  await pool.query(`UPDATE tasks SET status = 'open', completed_at = NULL, completed_by = NULL, updated_at = now() WHERE id = $1`, [task.id]);
+  await pool.query(`UPDATE tasks SET status = 'open', completed_at = NULL, completed_by = NULL, reward_seen_at = NULL, updated_at = now() WHERE id = $1`, [task.id]);
   res.json(await loadTask(task.id, req.user));
 });
 
@@ -465,7 +501,7 @@ tasksRouter.post("/:id/items/:itemId", async (req, res) => {
   // a self-closing task is never finished by its checklist: only the work itself closes it
   if (task.status === "open" && rows[0].n > 0 && rows[0].all_done && !taskClosesItself(task)) await finishTask(task, req.user, "");
   else if (task.status === "done" && !done) {
-    await pool.query(`UPDATE tasks SET status = 'open', completed_at = NULL, completed_by = NULL, updated_at = now() WHERE id = $1`, [task.id]);
+    await pool.query(`UPDATE tasks SET status = 'open', completed_at = NULL, completed_by = NULL, reward_seen_at = NULL, updated_at = now() WHERE id = $1`, [task.id]);
   }
   res.json(await loadTask(task.id, req.user));
 });
