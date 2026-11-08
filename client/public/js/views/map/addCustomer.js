@@ -605,12 +605,19 @@ export function openNewCustomerForm(ctx, latlng) {
     }
   });
 
+  // A region / subregion the person picks is never overwritten by the address lookup when it answers late (slow network,
+  // 2026-11-08: the rep chose Tavush, the pin's late lookup put it back to Kentron and renamed the customer). Programmatic
+  // value changes fire no "change" event, so only the person's own choice sets this.
+  let placeChosenByHand = false;
+  overlay.addEventListener("change", (e) => {
+    if (e.target.id === "new-customer-region" || e.target.id === "new-customer-subregion") placeChosenByHand = true;
+  });
   api
     .reverseGeocode(latlng.lat, latlng.lng)
     .then((result) => {
       if (result?.address && !addressInput.value) addressInput.value = result.address;
       const guessedRegion = matchRegion(result?.region);
-      if (guessedRegion) {
+      if (guessedRegion && !placeChosenByHand) {
         regionSelect.value = guessedRegion;
         renderSubregionField(guessedRegion, matchSubregion(result?.subregion, guessedRegion));
         refreshRouteSuggestion();
