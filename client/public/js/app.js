@@ -828,6 +828,7 @@ async function init() {
     setOfficeNavigator(navigate);
     startUsageTracking();
     startErrorMonitoring();
+    import("./shell/taskReward.js").then((m) => m.startTaskRewards()).catch(() => {});
   } catch (err) {
     // Only the server's answer "not signed in / not allowed" (401, 403) signs out. No network, a timeout or a server error is not a
     // sign-out: a rep opening the app without signal used to land on the login screen with the saved user deleted, locked out of the
@@ -842,6 +843,7 @@ async function init() {
     setOfficeNavigator(navigate);
     startUsageTracking();
       startErrorMonitoring();
+      import("./shell/taskReward.js").then((m) => m.startTaskRewards()).catch(() => {});
     }
   }
   renderSyncBanner();

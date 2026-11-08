@@ -45,6 +45,9 @@ export const teamApi = {
   taskRecordResult: (id, body) => json(`/tasks/${id}/record-result`, "POST", body),
   reopenTask: (id) => json(`/tasks/${id}/reopen`, "POST", {}),
   setTaskItemDone: (id, itemId, done) => json(`/tasks/${id}/items/${itemId}`, "POST", { done }),
+  getTaskRewards: () => request("/tasks/rewards"),
+  getTaskRewardStats: async () => (await request("/tasks/rewards?stats=1")).stats,
+  markTaskRewardsSeen: (ids) => json("/tasks/rewards/seen", "POST", { ids }),
   getTaskCustomerFlags: () => request("/tasks/customer-flags"),
   // Staff (see server/src/team/routes/staff.js)
   getStaffAccess: () => request("/staff/access", { fresh: true }),

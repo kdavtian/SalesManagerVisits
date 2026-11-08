@@ -138,7 +138,8 @@ export function openCallResultSheet(task, { onSaved } = {}) {
     try {
       const updated = await api.taskCallResult(task.id, body);
       close();
-      showToast(t(result === "spoke" ? "call_saved_done" : "call_saved"));
+      if (updated?.status === "done" && task.status === "open") import("./shell/taskReward.js").then((m) => m.celebrateTask(updated)).catch(() => {});
+      else showToast(t(result === "spoke" ? "call_saved_done" : "call_saved"));
       window.dispatchEvent(new Event("tasks-changed"));
       onSaved?.(updated);
     } catch (err) {
