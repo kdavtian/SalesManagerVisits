@@ -94,6 +94,7 @@ export async function renderRoute(ctx) {
       startDriverArrival(ctx.navigate);
       setOfficeNavigator(ctx.navigate);
       startUsageTracking();
+      import("./taskReward.js").then((m) => m.startTaskRewards()).catch(() => {});
       // A session that expired while this device had queued offline work
       // stops flushQueue() at the first 401 rather than deleting that work
       // (see offlineQueue.js) -- nothing else re-triggers a flush once the

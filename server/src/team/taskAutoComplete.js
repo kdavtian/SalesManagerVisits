@@ -75,6 +75,22 @@ export async function autoCompleteReorderTasks({ customerId, actorId, orderCode 
   });
 }
 
+// The rep checked in AT the customer and said why there was no order (stock full / no money / shop closed / other): the visit closes the
+// customer's order tasks (the one a person gave and the automatic "stopped ordering"). Order tasks are self-closing: this and a real order
+// are the only ways (owner, 2026-11-08).
+const NO_ORDER_REASONS = { stock_full: "Պահեստը լիքն է", no_money: "Փող չկա", closed: "Խանութը փակ է", other: "Այլ" };
+export async function autoCompleteOrderTasksNoOrder({ customerId, actorId, reason }) {
+  const label = NO_ORDER_REASONS[reason];
+  if (!label) return 0;
+  return closeTasks("reorder_followup", "make_order", {
+    customerId,
+    actorId,
+    onlyAssignee: actorId, // a reason given by one rep says nothing about another rep's task at the same customer
+    note: `Ավտոմատ՝ այցի ժամանակ պատվեր չի եղել՝ ${label}`,
+    body: `այցի ժամանակ պատվեր չի եղել՝ ${label}`,
+  });
+}
+
 // A check-in recorded which brands the shop has (the "products at this shop" chips or the available products): closes the
 // customer's open "check products" task. (No automatic kind behind it: the type exists only as a person's task.)
 export async function autoCompleteProductCheckTasks({ customerId, actorId }) {

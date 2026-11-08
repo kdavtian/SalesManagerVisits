@@ -100,7 +100,7 @@ export function getCsrfToken() {
 // (no network, or no answer within GET_TIMEOUT_MS) answers with its last saved copy, at most 3 days old, and the app says so
 // ("fv:offline-copy" -> a note with the time of the copy, app.js). Never for a change (POST/PATCH/...), never for an answer the server
 // refused (4xx/5xx), never for the live addresses below (who is where now, sign-in, counters, the sync's own state).
-const NO_OFFLINE_COPY = /^\/(auth|me\b|csrf|lockdown|push|locations|team-locations|notifications|badges|client-errors|health|system-health|erp-sync\/status|version)/;
+const NO_OFFLINE_COPY = /^\/(auth|me\b|csrf|lockdown|push|locations|team-locations|notifications|badges|client-errors|health|system-health|erp-sync\/status|version|tasks\/rewards)/;
 const OFFLINE_SAVE_EVERY_MS = 60000;
 const offlineSavedAt = new Map();
 function keepOfflineCopy(path, body) {
@@ -128,6 +128,8 @@ async function offlineCopy(path) {
     return undefined;
   }
 }
+
+const TASK_CLOSING_WRITES = /^\/(checkins|payments|orders|customers|products|cashflow)/;
 
 export async function doRequest(path, options) {
   const method = (options.method || "GET").toUpperCase();
@@ -169,6 +171,9 @@ export async function doRequest(path, options) {
   } finally {
     clearTimeout(timer);
   }
+
+  // A write that can finish a task by itself (a payment, an order, a check-in, a shop's products): the "well done" card looks right after.
+  if (method !== "GET" && res.ok && TASK_CLOSING_WRITES.test(path)) window.dispatchEvent(new Event("fv:tasks-maybe-changed"));
 
   if (res.status === 204) return null;
 
