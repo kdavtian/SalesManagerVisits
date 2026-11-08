@@ -10,6 +10,15 @@ test.describe("New customer name suggestion", () => {
       const c = await fixtures.createCustomer({ created_by: manager.id, name });
       expect(c.id).toBeTruthy();
     }
+    // The pin's address lookup answers LATE (a slow phone network; the real one goes to OpenStreetMap and made this test
+    // pass or fail by luck): it is held until the person has picked Tavush, then says "Yerevan / Kentron". A region the
+    // person chose must not be overwritten by it (2026-11-08).
+    let releaseLookup;
+    const lookupHeld = new Promise((r) => (releaseLookup = r));
+    await page.route("**/api/geocode/reverse**", async (route) => {
+      await lookupHeld;
+      await route.fulfill({ json: { address: "Kentron, Yerevan", region: "Երևան", subregion: "Կենտրոն" } });
+    });
     await loginViaUi(page, manager.email);
     await page.goto("/#/map");
     const mapEl = page.locator("#leaflet-map");
@@ -22,6 +31,13 @@ test.describe("New customer name suggestion", () => {
     await expect(form).toBeVisible();
     const nameInput = form.locator('input[name="name"]');
     await form.locator("#new-customer-region").selectOption("Tavush");
+    await expect(nameInput).toHaveValue("Tavush / Yuxman ket3");
+    // now the late lookup answers: the person's Tavush stays
+    const answered = page.waitForResponse("**/api/geocode/reverse**");
+    releaseLookup();
+    await answered;
+    await page.waitForTimeout(300);
+    await expect(form.locator("#new-customer-region")).toHaveValue("Tavush");
     await expect(nameInput).toHaveValue("Tavush / Yuxman ket3");
 
     await form.locator('[data-category="Խանութ"]').click();
