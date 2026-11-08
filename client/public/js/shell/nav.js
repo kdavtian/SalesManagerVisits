@@ -40,6 +40,7 @@ export const SIDEBAR_ITEM_ICON = {
   qa_company_dashboard: { icon: icons.dashboard, colorClass: "quick-action-icon-company" },
   qa_sales: { icon: icons.trendUp, colorClass: "quick-action-icon-sales" },
   qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
+  qa_requests: { icon: icons.checkCircle, colorClass: "quick-action-icon-requests" },
   qa_vaghinak: { icon: icons.vaghinak, colorClass: "quick-action-icon-vaghinak" },
   qa_ask_kad: { icon: icons.sparkles, colorClass: "quick-action-icon-askkad" },
   qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },

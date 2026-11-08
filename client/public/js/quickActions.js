@@ -28,6 +28,9 @@ export const QUICK_ACTIONS = [
   { id: "qa_check_in", defaultRoles: ALL_ROLES },
   // Task management: everyone receives tasks; management creates them.
   { id: "qa_tasks", defaultRoles: ALL_ROLES },
+  // Requests (owner, 2026-11-08): every approval waiting for my decision (discounts, returns, card edits, payments, cash changes, plans,
+  // bonus claims) with a badge; a push opens the same request card. The roles that approve something (server: system/requests/rules.js).
+  { id: "qa_requests", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   // Vaghinak, the AI operations deputy director: his messages, questions and (for management) the team pulse.
   { id: "qa_vaghinak", defaultRoles: ALL_ROLES },
   // Ask KAD: the admin asks questions about the company's own data and an AI answers (server/src/askKad).
@@ -121,6 +124,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_company_dashboard: "#/company-dashboard",
   qa_sales: "#/sales",
   qa_tasks: "#/tasks",
+  qa_requests: "#/requests",
   qa_vaghinak: "#/vaghinak",
   qa_ask_kad: "#/ask-kad",
   qa_bonuses: "#/bonuses",
@@ -147,7 +151,7 @@ export function withMergedTiles(ids) {
 // A tile added AFTER an admin customized a role's tiles must not stay hidden for that role (owner, 2026-11-07: "I don't see the Purchases
 // module" -- the admin's saved list predates it). The saved settings carry `_known`, the tile ids that existed when they were saved (admin.js
 // sends it); older saves without it knew every tile except the ones listed here. A tile the admin did not know about follows the defaults.
-export const TILES_ADDED_AFTER_VISIBILITY = ["qa_purchases"];
+export const TILES_ADDED_AFTER_VISIBILITY = ["qa_purchases", "qa_requests"];
 export function visibleQuickActionIds(role, visibility) {
   const override = visibility && Object.prototype.hasOwnProperty.call(visibility, role) ? visibility[role] : null;
   const known = Array.isArray(visibility?._known) ? visibility._known : QUICK_ACTION_IDS.filter((id) => !TILES_ADDED_AFTER_VISIBILITY.includes(id));

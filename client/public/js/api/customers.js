@@ -82,7 +82,7 @@ export const customersApi = {
     const qs = new URLSearchParams(params).toString();
     return request(`/edit-requests${qs ? `?${qs}` : ""}`);
   },
-  reviewEditRequest: (id, action, note) => json(`/edit-requests/${id}`, "PATCH", { action, note }),
+  reviewEditRequest: (id, action, reason) => json(`/edit-requests/${id}`, "PATCH", { action, reason }),
   getCustomerPaymentsReceived: (customerId) => request(`/customers/${customerId}/payments-received`),
   getErpOrders: (customerId, scope = "recent") => request(`/customers/${customerId}/erp-orders?scope=${scope}`),
   getErpOrderDetail: (customerId, orderId) =>

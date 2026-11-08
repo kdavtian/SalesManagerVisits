@@ -1,6 +1,8 @@
 // Cashflow module (owner, 2026-10-23): read the ledger (accounts, categories, entries, summary) and refresh it from an Excel workbook.
 // The bot's own push is POST /api/erp-sync/cashflow-ledger (routes/erpSync.js); both land in ../cashflow.js applyCashLedger.
 import { Router } from "express";
+import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
+import { cleanReason } from "../../system/requests/rules.js";
 import multer from "multer";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -308,6 +310,8 @@ cashflowRouter.post("/entries/:id/requests", async (req, res) => {
     );
     await logEntry(pool, id, "request", req.user.id, { before: row, after: payload, note: [action, reason].filter(Boolean).join(": ") });
     res.status(201).json({ id: rows[0].id });
+    // every person who may decide it gets a push that opens the request card (owner, 2026-11-08)
+    notifyApproversOf("cashflow", rows[0].id);
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ error: "A request for this row is already waiting" });
     throw err;
@@ -331,13 +335,19 @@ cashflowRouter.post("/requests/:id/:decision", async (req, res) => {
   if (!isCashflowManagement(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const decision = req.params.decision;
   if (!["approve", "reject"].includes(decision)) return res.status(404).json({ error: "Not found" });
+  // a denial always says why: the person who asked reads it in their push (owner, 2026-11-08)
+  const reason = decision === "reject" ? cleanReason(req.body?.reason) : "";
+  if (decision === "reject" && !reason) return res.status(400).json({ error: "Write why it is rejected" });
   // The decision, the change and both log lines commit together: a change that fails leaves the request waiting, not "approved" with nothing done.
   const outcome = await inTransaction(async (client) => {
     const { rows: [r] } = await client.query(
-      "UPDATE cash_entry_requests SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1 AND status = 'pending' RETURNING *",
-      [Number(req.params.id), decision === "approve" ? "approved" : "rejected", req.user.id]
+      "UPDATE cash_entry_requests SET status = $2, decided_by = $3, decided_at = now(), decision_reason = $4 WHERE id = $1 AND status = 'pending' RETURNING *",
+      [Number(req.params.id), decision === "approve" ? "approved" : "rejected", req.user.id, reason || null]
     );
-    if (!r) return { status: 404, error: "Request not found or already decided" };
+    if (!r) {
+      const { rowCount } = await client.query("SELECT 1 FROM cash_entry_requests WHERE id = $1", [Number(req.params.id)]);
+      return rowCount ? { status: 409, error: "This request was already decided" } : { status: 404, error: "Request not found" };
+    }
     if (decision === "reject") {
       await logEntry(client, r.entry_id, "reject", req.user.id, { note: `#${r.id}` });
       return { ok: true };
@@ -352,6 +362,7 @@ cashflowRouter.post("/requests/:id/:decision", async (req, res) => {
   });
   if (outcome.error) return res.status(outcome.status).json({ error: outcome.error });
   res.json({ ok: true });
+  notifyDecisionOf("cashflow", Number(req.params.id), { deciderId: req.user.id, approved: decision === "approve", reason });
 });
 
 // Customers for the "Customer ID" field of the Add sheet: ERP id, name and the channel of the rep the customer is assigned to.

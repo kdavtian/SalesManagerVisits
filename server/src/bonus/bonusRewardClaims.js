@@ -12,6 +12,10 @@
 import { pool } from "../db/pool.js";
 import { canApproveBonusRewards, canRecordBonusPayouts } from "../shared/roles.js";
 import { awardFirstApprovedRewardBadge } from "./bonusBadges.js";
+import { notifyApproversOf, notifyDecisionOf } from "../system/requests/notify.js";
+
+// An error with the HTTP status the route answers (403 not allowed, 409 already decided); others stay 400.
+const httpError = (message, status) => Object.assign(new Error(message), { status });
 
 const AWAITING = "awaiting_validation";
 
@@ -40,12 +44,16 @@ export async function createClaimsForFinalizedRound(round) {
   );
   let created = 0;
   for (const { user_id: userId } of reachedRows) {
-    const { rowCount } = await pool.query(
+    const { rows: inserted } = await pool.query(
       `INSERT INTO bonus_reward_claims (round_id, user_id, amount_amd) VALUES ($1, $2, $3)
-       ON CONFLICT (round_id, user_id) DO NOTHING`,
+       ON CONFLICT (round_id, user_id) DO NOTHING RETURNING id`,
       [round.id, userId, rewardAmd]
     );
-    if (rowCount) created += 1;
+    if (inserted[0]) {
+      created += 1;
+      // every person who may approve it gets a push that opens the request card (owner, 2026-11-08)
+      notifyApproversOf("bonus_claim", inserted[0].id);
+    }
   }
   return { created };
 }
@@ -112,7 +120,7 @@ async function withClaimLock(claimId, expectedVersion, action, actorId, mutate) 
 
 function requireStatus(claim, allowed, verb) {
   if (!allowed.includes(claim.status)) {
-    throw new Error(`Cannot ${verb} a claim in status '${claim.status}' (must be ${allowed.join(" or ")})`);
+    throw httpError(`Cannot ${verb} a claim in status '${claim.status}' (must be ${allowed.join(" or ")})`, 409);
   }
 }
 
@@ -121,9 +129,9 @@ function requireStatus(claim, allowed, verb) {
 // they otherwise hold an approving role (e.g. an admin who is also the
 // challenge's participant).
 export async function approveClaim(claimId, actorRole, actorId, expectedVersion) {
-  if (!canApproveBonusRewards(actorRole)) throw new Error("Not allowed to approve reward claims");
+  if (!canApproveBonusRewards(actorRole)) throw httpError("Not allowed to approve reward claims", 403);
   const updated = await withClaimLock(claimId, expectedVersion, "approve", actorId, (claim) => {
-    if (claim.user_id === actorId) throw new Error("Cannot approve your own reward claim");
+    if (claim.user_id === actorId) throw httpError("Cannot approve your own reward claim", 403);
     requireStatus(claim, [AWAITING, "on_hold"], "approve");
     return {
       setSql: "status = 'approved', approved_by = $2, approved_at = now(), rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL, hold_reason = NULL",
@@ -133,13 +141,17 @@ export async function approveClaim(claimId, actorRole, actorId, expectedVersion)
     };
   });
   await awardFirstApprovedRewardBadge(updated.user_id, claimId);
+  notifyDecisionOf("bonus_claim", claimId, { deciderId: actorId, approved: true });
   return updated;
 }
 
 export async function rejectClaim(claimId, actorRole, actorId, reason, expectedVersion) {
-  if (!canApproveBonusRewards(actorRole)) throw new Error("Not allowed to reject reward claims");
-  return withClaimLock(claimId, expectedVersion, "reject", actorId, (claim) => {
-    if (claim.user_id === actorId) throw new Error("Cannot reject your own reward claim");
+  if (!canApproveBonusRewards(actorRole)) throw httpError("Not allowed to reject reward claims", 403);
+  // a denial always says why: the person reads it in their push (owner, 2026-11-08)
+  reason = typeof reason === "string" ? reason.trim().slice(0, 500) : "";
+  if (!reason) throw httpError("Write why it is rejected", 400);
+  const updated = await withClaimLock(claimId, expectedVersion, "reject", actorId, (claim) => {
+    if (claim.user_id === actorId) throw httpError("Cannot reject your own reward claim", 403);
     requireStatus(claim, [AWAITING, "on_hold"], "reject");
     return {
       setSql: "status = 'rejected', rejected_by = $2, rejected_at = now(), rejection_reason = $3, hold_reason = NULL",
@@ -148,6 +160,8 @@ export async function rejectClaim(claimId, actorRole, actorId, reason, expectedV
       after: { status: "rejected", reason: reason ?? null },
     };
   });
+  notifyDecisionOf("bonus_claim", claimId, { deciderId: actorId, approved: false, reason });
+  return updated;
 }
 
 export async function holdClaim(claimId, actorRole, actorId, reason, expectedVersion) {

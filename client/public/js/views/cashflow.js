@@ -383,6 +383,11 @@ export async function renderCashflow(root, navigate) {
     listEl.addEventListener("click", async (ev) => {
       const open = ev.target.closest("[data-open]");
       const decide = ev.target.closest("[data-approve], [data-reject]");
+      // Reject opens the request card: a denial needs a written reason, which the accountant receives (owner, 2026-11-08)
+      if (decide?.dataset.reject) {
+        location.hash = `#/requests/cashflow/${decide.dataset.reject}`;
+        return;
+      }
       if (decide) {
         decide.disabled = true;
         try {

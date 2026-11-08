@@ -25,7 +25,8 @@ test.describe("Discount approval", () => {
     await repPage.locator("#order-discount-input").fill("10");
 
     const [orderResponse] = await Promise.all([
-      repPage.waitForResponse((res) => res.url().includes("/api/orders") && res.request().method() === "POST"),
+      // the exact path: the "Your order" sheet also POSTs /api/orders/price-check, which used to be picked up first at random
+      repPage.waitForResponse((res) => new URL(res.url()).pathname === "/api/orders" && res.request().method() === "POST"),
       repPage.locator("#save-order-btn").click(),
     ]);
     const order = await orderResponse.json();
