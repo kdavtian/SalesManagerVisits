@@ -250,3 +250,54 @@ test("the notifications of a sync run are not sent task by task: a run with noti
   assert.ok((await notified(rep.id, "task_completed")).some((n) => n.id > marker), "the rep is told");
   assert.ok((await notified(director.id, "task_completed")).some((n) => n.id > marker), "the person who gave the task is told");
 });
+
+// Owner, 2026-11-08: after a payment closes the task, Vaghinak can make a new task with a new deadline if overdue money is still left.
+test("a partial payment closes the debt task and the next run makes a NEW task for what is still overdue (no 14-day pause after a payment)", async () => {
+  const customer = await debtor("fu", 200000);
+  await createDebtCollectionTasks();
+  const first = await task(customer.id, "debt_collection");
+  assert.equal(first.status, "open");
+  const res = await apiRequest("/api/payments", { method: "POST", cookie: repCookie, body: { customer_id: customer.id, amount_amd: 50000 } });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  await wait(400);
+  assert.equal((await taskById(first.id)).status, "done");
+  assert.equal((await taskById(first.id)).outcome, "partial");
+  await createDebtCollectionTasks(); // the next night: 150,000 of overdue money is left
+  const next = await task(customer.id, "debt_collection");
+  assert.notEqual(next.id, first.id, "a new task");
+  assert.equal(next.status, "open");
+  assert.equal(next.assignee_id, rep.id);
+});
+
+test("a task nobody acted on still holds the next one back for the pause, and so does one management cancelled", async () => {
+  const customer = await debtor("fq", 120000);
+  await createDebtCollectionTasks();
+  const first = await task(customer.id, "debt_collection");
+  await pool.query("UPDATE tasks SET status = 'cancelled' WHERE id = $1", [first.id]);
+  await createDebtCollectionTasks();
+  const latest = await task(customer.id, "debt_collection");
+  assert.equal(latest.id, first.id, "no new task inside the pause");
+});
+
+test("the Excel path: a payment shown in the Excel closes the task and the same run makes a new one for what is still overdue", async () => {
+  const customer = await debtor("fx", 200000);
+  await createDebtCollectionTasks();
+  const first = await task(customer.id, "debt_collection");
+  await madeDaysAgo(first.id, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 40000)", [customer.erp_customer_id, today()]);
+  await pool.query("UPDATE erp_customer_data SET debt_amd = 160000 WHERE erp_customer_id = $1", [customer.erp_customer_id]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(first.id)).outcome, "partial");
+  const next = await task(customer.id, "debt_collection");
+  assert.notEqual(next.id, first.id);
+  assert.equal(next.status, "open");
+});
+
+test("a task closed by hand (no outcome) still holds the next one back for the pause", async () => {
+  const customer = await debtor("fh", 150000);
+  await createDebtCollectionTasks();
+  const first = await task(customer.id, "debt_collection");
+  await pool.query("UPDATE tasks SET status = 'done', completed_at = now(), outcome = NULL WHERE id = $1", [first.id]);
+  await createDebtCollectionTasks();
+  assert.equal((await task(customer.id, "debt_collection")).id, first.id, "no new task inside the pause");
+});

@@ -316,7 +316,9 @@ export async function createDebtCollectionTasks(now = new Date(), { notify = tru
          SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt')
            AND (t.status = 'open'
                 OR t.promise_date >= $2::date
-                OR (t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval)))
+                -- the 14-day pause after a task is for a task nobody acted on; a task CLOSED BY A PAYMENT (paid / partial) does not hold the
+                -- next one back: if overdue money is still left, Vaghinak makes a new task with a new deadline (owner, 2026-11-08)
+                OR (t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval AND NOT (t.status = 'done' AND COALESCE(t.outcome, '') IN ('paid', 'partial')))))
      ORDER BY erp.debt_amd DESC`,
     [COOLDOWN_DAYS, today]
   );
@@ -480,7 +482,7 @@ export async function autoTaskDiagnostics(now = new Date()) {
             EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.status = 'open') AS has_open,
             EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt') AND t.promise_date >= $2::date) AS promise_running,
             EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND (t.auto_kind = 'debt_collection' OR t.task_kind = 'collect_debt')
-                      AND t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval) AS cooling
+                      AND t.promise_date IS NULL AND t.created_at > now() - ($1 || ' days')::interval AND NOT (t.status = 'done' AND COALESCE(t.outcome, '') IN ('paid', 'partial'))) AS cooling
      FROM customers c
      JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      ${DEBT_AGE_LATERAL}
