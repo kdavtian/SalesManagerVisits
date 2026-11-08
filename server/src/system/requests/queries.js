@@ -25,7 +25,7 @@ const PENDING_SQL = {
             FROM payments p LEFT JOIN users u ON u.id = p.created_by
             WHERE p.status = 'pending'`,
   cashflow: `SELECT r.id, r.requested_by AS requested_by_id, u.name AS requested_by_name, r.requested_at, NULL AS customer_name, NULL AS erp_id,
-                    e.amount AS amount_amd, r.action AS extra
+                    CASE WHEN e.currency = 'USD' THEN NULL ELSE e.amount END AS amount_amd, r.action AS extra
              FROM cash_entry_requests r LEFT JOIN users u ON u.id = r.requested_by LEFT JOIN cash_entries e ON e.id = r.entry_id
              WHERE r.status = 'pending'`,
   visit_plan: `SELECT vp.id, vp.user_id AS requested_by_id, u.name AS requested_by_name, vp.created_at AS requested_at, NULL AS customer_name, NULL AS erp_id,
@@ -59,9 +59,19 @@ async function factsOf(db, kind, row) {
 // Every request waiting for a decision, of the given kinds, with its facts. `needsFacts(kind)` lets a caller skip the per-order cost check
 // when the person's role decides every discount anyway (the badge count).
 export async function pendingRequests(db, kinds, { needsFacts = () => true } = {}) {
+  const perKind = await Promise.all(
+    kinds.map(async (kind) => {
+      try {
+        const { rows } = await db.query(PENDING_SQL[kind]);
+        return { kind, rows };
+      } catch (err) {
+        console.error(`Pending requests (${kind}) failed:`, err.message);
+        return { kind, rows: [] };
+      }
+    })
+  );
   const out = [];
-  for (const kind of kinds) {
-    const { rows } = await db.query(PENDING_SQL[kind]);
+  for (const { kind, rows } of perKind) {
     for (const row of rows) {
       const facts = needsFacts(kind) ? await factsOf(db, kind, row) : {};
       out.push({
@@ -113,7 +123,8 @@ const LOADERS = {
     return {
       kind: "discount",
       id: o.id,
-      status: o.cancelled_at && status === "pending" ? "closed" : status,
+      // cancelled, or sent back to draft (POST /orders/:id/reject): nothing to decide until it is submitted again
+      status: (o.cancelled_at || o.status === "draft") && status === "pending" ? "closed" : status,
       requested_by_id: o.user_id,
       requested_by_name: o.requested_by_name,
       requested_at: o.updated_at ?? o.created_at,

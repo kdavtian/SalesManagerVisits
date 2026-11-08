@@ -184,3 +184,21 @@ test("an unknown kind or id answers 404", async () => {
   assert.equal((await apiRequest("/api/requests/nonsense/1", { cookie: cookies.admin })).status, 404);
   assert.equal((await apiRequest("/api/requests/payment/999999999", { cookie: cookies.admin })).status, 404);
 });
+
+test("a director who switched request pushes off still hears about the new order; an order sent back to draft no longer waits on its card", async () => {
+  const director = await createUser("sales_director", { name: "Req quiet director" });
+  await pool.query("INSERT INTO notification_settings (scope_type, scope_value, notification_type, enabled) VALUES ('user', $1, 'approval_request', false)", [String(director.id)]);
+  const product = await createProduct({ unit_price_amd: 8000 });
+  const created = await apiRequest("/api/orders", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: customer.id, items: [{ product_id: product.id, quantity: 1 }], payment_method: "cash", discount_pct: 5 } });
+  assert.equal(created.status, 201);
+  const orderId = trackOrder(created.data.id);
+  const placed = await waitFor(async () => (await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'order_placed' AND url = $2", [director.id, `/#/orders?open=${orderId}`])).rowCount);
+  assert.equal(placed, 1, "the plain new-order push still reaches someone who switched the request push off");
+  assert.equal((await notesOf(director.id, `/#/requests/discount/${orderId}`)).length, 0);
+
+  assert.equal((await apiRequest(`/api/orders/${orderId}/reject`, { method: "POST", cookie: cookies.sales_director, body: { note: "fix lines" } })).status, 200);
+  const card = await apiRequest(`/api/requests/discount/${orderId}`, { cookie: cookies.ceo });
+  assert.equal(card.data.status, "closed");
+  assert.equal(card.data.can_decide, false);
+  await pool.query("DELETE FROM notification_settings WHERE scope_type = 'user' AND scope_value = $1", [String(director.id)]);
+});

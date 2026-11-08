@@ -5,6 +5,8 @@
 // Both never throw: a failed push must not undo or fail the decision that caused it (same rule as shared/notifications.js).
 import { pool } from "../../db/pool.js";
 import { notifyUser } from "../../shared/notifications.js";
+import { isNotificationEnabled } from "../../shared/notificationPreferences.js";
+import { seesProductCosts } from "../../shared/roles.js";
 import { bullets } from "../../utils/bullets.js";
 import { mayDecide, requestUrl } from "./rules.js";
 import { activeUsers, closeRequestNotifications, loadRequest, userName } from "./queries.js";
@@ -29,7 +31,10 @@ export const amdText = (v) => `${Math.round(Number(v) || 0).toLocaleString("en-U
 export async function notifyApprovers({ kind, id, type = "approval_request", titleKind = kind, lines = [], requesterId = null, facts = {}, onlyThese = () => true }) {
   try {
     const users = await activeUsers(pool);
-    const approvers = users.filter((u) => u.id !== requesterId && mayDecide(kind, u, facts) && onlyThese(u));
+    const allowed = users.filter((u) => u.id !== requesterId && mayDecide(kind, u, facts) && onlyThese(u));
+    // only the people who really get it (a person can switch the kind off): a caller skips its own push for them
+    const approvers = [];
+    for (const u of allowed) if (await isNotificationEnabled(u.id, type)) approvers.push(u);
     const requester = await userName(pool, requesterId);
     const body = bullets([...lines, requester ? `Ով է խնդրում՝ ${requester}` : null]);
     await Promise.all(
@@ -66,13 +71,14 @@ const FIELD_HY = {
 };
 
 // The request's own facts as push lines: the customer (name + ERP id), the amount, and what the kind needs said.
-export function requestLines(request) {
+// costs: the "below net / landing cost" line, only for people who see product costs (seesProductCosts).
+export function requestLines(request, { costs = true } = {}) {
   const d = request.details ?? {};
   const kindLines = {
     discount: [
       d.order_code ? `Պատվեր՝ ${d.order_code}` : null,
       d.discount_amd > 0 ? `Զեղչ՝ ${d.discount_pct}% (${amdText(d.discount_amd)})` : null,
-      d.below_landing ? "Գինը ներմուծման ինքնարժեքից ցածր է" : d.below_cost ? "Գինը զուտ ինքնարժեքից ցածր է" : null,
+      !costs ? null : d.below_landing ? "Գինը ներմուծման ինքնարժեքից ցածր է" : d.below_cost ? "Գինը զուտ ինքնարժեքից ցածր է" : null,
     ],
     return: [d.order_code ? `Պատվեր՝ ${d.order_code}` : null],
     customer_edit: [`Փոփոխվում է՝ ${[...new Set((d.changes ?? []).map((c) => FIELD_HY[c.field] ?? c.field))].join(", ")}`],
@@ -107,7 +113,9 @@ export async function notifyDecisionOf(kind, id, { deciderId, approved, reason =
     const request = await loadRequest(pool, kind, Number(id));
     if (!request) return;
     const titleKind = kind === "return" && request.details?.return_kind === "cancel" ? "cancel" : kind;
-    await notifyDecision({ kind, id: request.id, deciderId, requesterId: request.requested_by_id, approved, reason, type, titleKind, lines: requestLines(request) });
+    const { rows: [requester] } = await pool.query("SELECT role FROM users WHERE id = $1", [request.requested_by_id ?? null]);
+    const lines = requestLines(request, { costs: seesProductCosts(requester?.role) });
+    await notifyDecision({ kind, id: request.id, deciderId, requesterId: request.requested_by_id, approved, reason, type, titleKind, lines });
   } catch (err) {
     console.error(`Request decision notification (${kind} #${id}) failed:`, err);
   }

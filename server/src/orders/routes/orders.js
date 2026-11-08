@@ -429,7 +429,13 @@ export async function createOrderHandler(req, res) {
 
       // A discount / price that waits for approval goes to EVERY person who may approve it, as a request opening its card
       // (owner, 2026-11-08); they do not get the plain "new order" on top of it.
-      const approverIds = approvalStatus === "pending" ? await notifyApproversOf("discount", order.id) : [];
+      // what the plain "new order" push said that the request card's lines do not: credit limit, overdue debt, the order it replaces
+      const extra = [
+        replaces ? `Փոխարինում է ${replaces.order_code} պատվերին (այն չեղարկված է)` : null,
+        credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով` : null,
+        hold?.on_hold ? `Ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ${hold.oldest_due_days} օր ուշացումով` : null,
+      ];
+      const approverIds = approvalStatus === "pending" ? await notifyApproversOf("discount", order.id, { extra }) : [];
       const { rows: notifyRecipients } = await pool.query("SELECT id FROM users WHERE role = ANY($1)", [ORDER_NOTIFY_ROLES]);
       for (const recipient of notifyRecipients) {
         if (approverIds.includes(recipient.id)) continue;

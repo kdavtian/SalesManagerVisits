@@ -176,7 +176,8 @@ editRequestsRouter.patch("/:id", async (req, res) => {
   if (!["approve", "reject"].includes(action)) {
     return res.status(400).json({ error: "action must be 'approve' or 'reject'" });
   }
-  // A denial always says why (owner, 2026-11-08): the person who asked reads it in their push. An older app sends it as `note`.
+  // A denial always says why (owner, 2026-11-08): the person who asked reads it in their push. `note` is accepted for it too (the
+  // field this endpoint always took); an app from before 1.536.0 sent neither and gets "Write why it is rejected" until it updates.
   const reason = action === "reject" ? cleanReason(req.body?.reason ?? note) : "";
   if (action === "reject" && !reason) return res.status(400).json({ error: "Write why it is rejected" });
 
