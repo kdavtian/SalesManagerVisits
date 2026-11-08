@@ -9,6 +9,7 @@ import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
 import { liveDebtMap } from "../money/liveDebt.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
+import { paymentCountsForTask } from "./taskPaymentRule.js";
 
 const amd = (n) => `${Math.round(Number(n)).toLocaleString("en-US")} դր`;
 
@@ -55,6 +56,10 @@ export async function autoCompleteCollectionTasks({ customerId, actorId, amountA
   const row = rows[0];
   const live = row?.erp_customer_id && row.debt_amd != null ? (await liveDebtMap(pool, [row], yerevanToday())).get(row.id) : null;
   const debt = Number(row?.debt_amd ?? 0);
+  // a tiny payment does not close the task (taskPaymentRule.js): at least MIN(20,000, what was owed before this payment). The live debt
+  // already contains the payment just recorded, so what was owed before is that plus the payment.
+  const owedBefore = live ? live.debt_amd + amount : debt;
+  if (!paymentCountsForTask(amount, owedBefore)) return 0;
   const outcome = live ? (live.debt_amd > 1 ? "partial" : "paid") : debt > 0 && amount < debt - 1 ? "partial" : "paid";
   return closeTasks("debt_collection", "collect_debt", {
     customerId,

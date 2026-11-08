@@ -301,3 +301,41 @@ test("a task closed by hand (no outcome) still holds the next one back for the p
   await createDebtCollectionTasks();
   assert.equal((await task(customer.id, "debt_collection")).id, first.id, "no new task inside the pause");
 });
+
+// Owner, 2026-11-08: a payment must be at least MIN(20,000 AMD, the debt balance before it) to close the task.
+test("a tiny payment recorded in the app closes nothing; 20,000 does; a customer who owes 5,000 closes it by paying 5,000", async () => {
+  const big = await debtor("tp1", 200000);
+  await createDebtCollectionTasks();
+  const first = await task(big.id, "debt_collection");
+  for (const amount of [1, 19999]) {
+    const res = await apiRequest("/api/payments", { method: "POST", cookie: repCookie, body: { customer_id: big.id, amount_amd: amount } });
+    assert.equal(res.status, 201, JSON.stringify(res.data));
+  }
+  await wait(500);
+  assert.equal((await taskById(first.id)).status, "open", "1 and 19,999 AMD are too small");
+  const ok = await apiRequest("/api/payments", { method: "POST", cookie: repCookie, body: { customer_id: big.id, amount_amd: 20000 } });
+  assert.equal(ok.status, 201, JSON.stringify(ok.data));
+  await wait(500);
+  assert.equal((await taskById(first.id)).status, "done");
+
+  const small = await debtor("tp2", 5000);
+  await pool.query("UPDATE erp_customer_data SET days_since_payment = 90 WHERE erp_customer_id = $1", [small.erp_customer_id]);
+  const id = await manualTask(small.id, "collect_debt");
+  const pay = await apiRequest("/api/payments", { method: "POST", cookie: repCookie, body: { customer_id: small.id, amount_amd: 5000 } });
+  assert.equal(pay.status, 201, JSON.stringify(pay.data));
+  await wait(500);
+  assert.equal((await taskById(id)).status, "done", "the whole balance counts even when it is under 20,000");
+});
+
+test("the workbook's payments close the task only when together they reach the limit", async () => {
+  const customer = await debtor("tp3", 200000);
+  await createDebtCollectionTasks();
+  const open = await task(customer.id, "debt_collection");
+  await madeDaysAgo(open.id, 3);
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 1), ($1, $2, 9000)", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(open.id)).status, "open", "9,001 AMD in total is below 20,000");
+  await pool.query("INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, $2, 11000)", [customer.erp_customer_id, today()]);
+  await createDebtCollectionTasks();
+  assert.equal((await taskById(open.id)).status, "done", "20,001 AMD in total reaches it");
+});
