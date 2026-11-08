@@ -99,3 +99,73 @@ test("a typed Collect debt task cannot be completed by hand: the rep records wha
   assert.equal(good.status, 200, JSON.stringify(good.data));
   assert.equal(good.data.status, "open");
 });
+
+// Owner, 2026-11-08: "make order" and "he stopped ordering" tasks close only by an order (or by a visit that says why there was none).
+test("a Make order task and the automatic 'stopped ordering' task cannot be completed by hand; a plain task still can", async () => {
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const order = (await give(customer, "make_order", { items: ["Call and ask"] })).data;
+  const auto = (await pool.query(
+    "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind) VALUES ('he stopped ordering', $1, $2, $3, current_date, true, 'reorder_followup') RETURNING id",
+    [director.id, rep.id, customer.id]
+  )).rows[0];
+  for (const id of [order.id, auto.id]) {
+    const done = await apiRequest(`/api/tasks/${id}/complete`, { method: "POST", cookie: repCookie, body: { note: "done" } });
+    assert.equal(done.status, 409, JSON.stringify(done.data));
+    assert.equal(done.data.code, "closes_itself");
+    assert.equal((await status(id)).status, "open");
+  }
+  // ticking the checklist is not a way round it
+  const full = (await apiRequest(`/api/tasks/${order.id}`, { cookie: repCookie })).data;
+  assert.ok(full.items.length);
+  const ticked = await apiRequest(`/api/tasks/${order.id}/items/${full.items[0].id}`, { method: "POST", cookie: repCookie, body: { done: true } });
+  assert.equal(ticked.status, 200);
+  assert.equal((await status(order.id)).status, "open", "the checklist never finishes a self-closing task");
+  // a call that "spoke" is logged but does not finish the automatic order task either
+  const called = await apiRequest(`/api/tasks/${auto.id}/call-result`, { method: "POST", cookie: repCookie, body: { result: "spoke", note: "will think" } });
+  assert.equal(called.status, 200, JSON.stringify(called.data));
+  assert.equal((await status(auto.id)).status, "open");
+  const plain = await apiRequest("/api/tasks", { method: "POST", cookie: dirCookie, body: { title: "plain", assignee_id: rep.id, due_date: due } });
+  const ok = await apiRequest(`/api/tasks/${plain.data.id}/complete`, { method: "POST", cookie: repCookie, body: {} });
+  assert.equal(ok.status, 200);
+  assert.equal((await status(plain.data.id)).status, "done");
+  // management may cancel one, with a reason
+  const cancel = await apiRequest(`/api/tasks/${order.id}`, { method: "PATCH", cookie: dirCookie, body: { status: "cancelled", reason: "customer closed the shop" } });
+  assert.equal(cancel.status, 200, JSON.stringify(cancel.data));
+});
+
+test("a check-in AT the customer that says why there was no order closes the order tasks; a far check-in or a made-up reason does not", async () => {
+  const customer = await createCustomer({ created_by: director.id, assigned_manager_id: rep.id, sales_channel: "retail" });
+  const order = (await give(customer, "make_order")).data;
+  const auto = (await pool.query(
+    "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, due_is_next_visit, auto_kind) VALUES ('he stopped ordering', $1, $2, $3, current_date, true, 'reorder_followup') RETURNING id",
+    [director.id, rep.id, customer.id]
+  )).rows[0];
+  const visit = async (extra, { far = false } = {}) => {
+    const form = new FormData();
+    form.set("customer_id", String(customer.id));
+    form.set("lat", String(far ? Number(customer.lat) + 0.5 : customer.lat));
+    form.set("lng", String(customer.lng));
+    form.set("outcomes", JSON.stringify(["other"]));
+    form.set("note", "visit");
+    for (const [k, v] of Object.entries(extra)) form.set(k, v);
+    const res = await apiFormRequest("/api/checkins", { cookie: repCookie, form });
+    if (far) {
+      assert.equal(res.status, 422, "a check-in far from the customer is refused: no visit, no reason");
+      return;
+    }
+    assert.equal(res.status, 201, JSON.stringify(res.data));
+    trackCheckin(res.data.id);
+    await wait(400);
+  };
+  await visit({ no_order_reason: "closed" }, { far: true });
+  assert.equal((await status(order.id)).status, "open");
+  await visit({ no_order_reason: "because I said so" });
+  assert.equal((await status(order.id)).status, "open", "only the known reasons count");
+  await visit({});
+  assert.equal((await status(order.id)).status, "open", "a visit without a reason does not close it");
+  await visit({ no_order_reason: "no_money" });
+  assert.equal((await status(order.id)).status, "done");
+  assert.equal((await status(auto.id)).status, "done");
+  const { rows: [t] } = await pool.query("SELECT completion_note FROM tasks WHERE id = $1", [order.id]);
+  assert.match(t.completion_note, /Փող չկա/);
+});

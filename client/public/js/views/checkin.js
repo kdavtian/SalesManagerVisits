@@ -987,6 +987,8 @@ export async function renderCheckin(root, navigate, customerId) {
     if (Number.isFinite(position.coords.accuracy)) formData.set("accuracy_m", Math.round(position.coords.accuracy));
     if (note) formData.set("note", note);
     formData.set("outcomes", JSON.stringify(outcomes));
+    // why there was no order: the SERVER closes the order tasks with the visit (order tasks cannot be closed by hand)
+    if (skippedOrderTasks) formData.set("no_order_reason", skippedOrderTasks.reason);
     if (amountCollected != null) formData.set("amount_collected_amd", amountCollected);
     const slipBlobs = amountCollected != null ? slipPhotos.map((photo) => photo.blob) : [];
     slipBlobs.forEach((blob, i) => formData.append("payment_slip_photos", blob, `payment-slip-${i}.jpg`));
@@ -1007,11 +1009,6 @@ export async function renderCheckin(root, navigate, customerId) {
 
     try {
       const checkin = await api.createCheckin(formData);
-      if (skippedOrderTasks) {
-        // Best effort: the visit is saved either way, the task simply stays open if this fails.
-        const note = `${t("order_task_closed_note")}: ${t(`order_task_reason_${skippedOrderTasks.reason}`)}`;
-        await Promise.all(skippedOrderTasks.tasks.map((task) => api.completeTask(task.id, note).catch(() => {})));
-      }
       showResult(checkin);
     } catch (err) {
       if (err instanceof TypeError) {
@@ -1028,6 +1025,7 @@ export async function renderCheckin(root, navigate, customerId) {
           note,
           brandStatus: brandStatusPayload,
           outcomes,
+          noOrderReason: skippedOrderTasks?.reason,
           amountCollected,
           deliveredOrderIds,
           availableProducts: availableProductsPayload,

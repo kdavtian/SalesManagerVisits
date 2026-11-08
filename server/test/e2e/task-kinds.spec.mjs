@@ -56,3 +56,31 @@ test.describe("Typed tasks", () => {
     expect(rows[0].customer_id).toBe(customer.id);
   });
 });
+
+// Owner, 2026-11-08: order tasks close only by an order (or a visit saying why there was none): the rep sees why there is no Done button.
+test("a Make order task and the automatic 'stopped ordering' task show the 'closes by itself' hint and no Mark complete button", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const director = await fixtures.createUser("sales_director");
+  const rep = await fixtures.createUser("sales_manager");
+  const customer = await fixtures.createCustomer({ created_by: rep.id, name: "Order Lock Garage", assigned_manager_id: rep.id, sales_channel: "SM YVN" });
+  const ids = [];
+  for (const [title, kind, auto] of [["Make order lock", "make_order", null], ["Stopped ordering lock", null, "reorder_followup"]]) {
+    ids.push((await pool.query(
+      "INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, task_kind, auto_kind) VALUES ($1, $2, $3, $4, current_date + 2, $5, $6) RETURNING id",
+      [title, director.id, rep.id, customer.id, kind, auto]
+    )).rows[0].id);
+  }
+  try {
+    await loginViaUi(page, rep.email);
+    for (const [i, title] of ["Make order lock", "Stopped ordering lock"].entries()) {
+      await page.goto(`/#/tasks?open=${ids[i]}`);
+      await expect(page.locator(".task-sheet-title")).toContainText(title, { timeout: 15000 });
+      await expect(page.locator("#task-selfclose-hint")).toContainText("order");
+      await expect(page.locator('[data-action="complete"]')).toHaveCount(0);
+      await expect(page.locator('[data-action="order-usual"]')).toBeVisible(); // the way to do the work is still one tap away
+      await page.keyboard.press("Escape");
+    }
+  } finally {
+    await pool.query("DELETE FROM tasks WHERE id = ANY($1)", [ids]);
+  }
+});

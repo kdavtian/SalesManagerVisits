@@ -13,7 +13,7 @@ import { FIELD_REP_ROLE } from "../visitCount.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
 import { notifyTelegram, escapeHtml } from "../../shared/telegram.js";
 import { insertPayment } from "../../money/routes/payments.js";
-import { autoCompleteCollectionTasks, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../../team/taskAutoComplete.js";
+import { autoCompleteCollectionTasks, autoCompleteOrderTasksNoOrder, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../../team/taskAutoComplete.js";
 import { lockSignedOrders, createSignedActs, createPaymentSlip, saveOwnSignature } from "../../orders/signedActs.js";
 import { scheduleAiCheck } from "../../customers/aiBlankCheck.js";
 import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered, CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
@@ -180,7 +180,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -480,6 +480,11 @@ checkinsRouter.post("/", (req, res, next) => {
   // The visit itself closes the "Visit" task given to this rep for this customer -- only a check-in AT the customer's place counts
   // (owner, 2026-11-05: a visit task cannot be closed without the visit; a far check-in never counts as the customer's visit).
   if (withinRange) autoCompleteVisitTasks({ customerId, actorId: req.user.id }).catch((err) => console.error("Task auto-complete failed:", err.message));
+
+  // Saying why there was no order, at the customer's place, closes the customer's order tasks (order tasks close only by an order or by this).
+  if (withinRange && no_order_reason) {
+    autoCompleteOrderTasksNoOrder({ customerId, actorId: req.user.id, reason: String(no_order_reason) }).catch((err) => console.error("Task auto-complete failed:", err.message));
+  }
 
   // Recording what the shop has (brand chips / available products) closes the customer's "check products" task.
   if (withinRange && (brandStatusValue || (Array.isArray(availableProductsValue) && availableProductsValue.length))) {

@@ -264,6 +264,7 @@ export const enField = {
     task_selfclose_visit: "Closes by itself when you check in at this customer.",
     task_selfclose_products: "Closes by itself when a check-in at this customer records which products the shop has.",
     task_selfclose_debt: "Closes by itself when a payment from this customer is recorded.",
+    task_selfclose_order: "Closes by itself when an order for this customer is made, or when you check in at the customer and say why there is no order.",
     task_record_result: "Record result",
     task_cancel_reason_placeholder: "Reason to cancel (required)",
     task_cancel_reason_required: "Write the reason for cancelling",
