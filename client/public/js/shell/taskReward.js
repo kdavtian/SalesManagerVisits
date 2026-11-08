@@ -92,12 +92,19 @@ function busyTyping() {
   return !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable);
 }
 
+// One pending look at a time (a queue of offline writes flushing fires many events; they all collapse into one request)
+let pending = 0;
+function scheduleCheck(ms) {
+  clearTimeout(pending);
+  pending = setTimeout(() => checkRewards({ force: true }), ms);
+}
+
 // Ask the server whether tasks finished that this app has not celebrated yet.
 export async function checkRewards({ force = false } = {}) {
   if (checking || !state.user || document.visibilityState === "hidden" || navigator.onLine === false) return;
   if (!force && Date.now() - lastCheck < 15000) return;
   if (busyTyping()) {
-    setTimeout(() => checkRewards({ force: true }), 4000); // not while someone types
+    scheduleCheck(4000); // not while someone types
     return;
   }
   checking = true;
@@ -105,8 +112,10 @@ export async function checkRewards({ force = false } = {}) {
   try {
     const { rewards, stats } = await api.getTaskRewards();
     if (!rewards?.length) return;
-    showReward(rewards, stats);
-    await api.markTaskRewardsSeen(rewards.map((r) => r.id));
+    // claim first, show second: a failed mark means no card now (asked again later), never the same card over and over; and when another tab or
+    // device claimed them in the same moment (marked 0), only that one shows it
+    const claim = await api.markTaskRewardsSeen(rewards.map((r) => r.id));
+    if (claim?.marked > 0) showReward(rewards, stats);
   } catch {
     // no signal or a server hiccup: the next check asks again, the tasks stay unseen on the server
   } finally {
@@ -123,6 +132,6 @@ export function startTaskRewards() {
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && soon());
   window.addEventListener("online", soon);
   // something that can finish a task just happened on this device (payment, order, check-in, product check): look right after
-  window.addEventListener("fv:tasks-maybe-changed", () => setTimeout(() => checkRewards({ force: true }), 1800));
+  window.addEventListener("fv:tasks-maybe-changed", () => scheduleCheck(1800));
   setInterval(() => checkRewards(), 90000);
 }

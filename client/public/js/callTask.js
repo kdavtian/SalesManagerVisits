@@ -2,6 +2,7 @@
 // and when back in the app records how the call went. A "pending call" is remembered across the app being sent to the
 // background (or even killed by the phone while the call runs): the result sheet opens when the app is shown again.
 import { api } from "./api.js";
+import { state } from "./state.js";
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { COLLECTION_OUTCOMES } from "./collectionOutcomeSheet.js";
@@ -138,7 +139,7 @@ export function openCallResultSheet(task, { onSaved } = {}) {
     try {
       const updated = await api.taskCallResult(task.id, body);
       close();
-      if (updated?.status === "done" && task.status === "open") import("./shell/taskReward.js").then((m) => m.celebrateTask(updated)).catch(() => {});
+      if (updated?.status === "done" && task.status === "open" && task.assignee_id === state.user?.id) import("./shell/taskReward.js").then((m) => m.celebrateTask(updated)).catch(() => {});
       else showToast(t(result === "spoke" ? "call_saved_done" : "call_saved"));
       window.dispatchEvent(new Event("tasks-changed"));
       onSaved?.(updated);
