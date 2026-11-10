@@ -55,6 +55,15 @@ test("visit frequency by customer type: the most frequent type wins, a hand-set 
   await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { visit_frequency_by_type: { potential_4: 6 } } });
   assert.equal((await freq(gold.id)).visit_frequency_days, 6);
 
+  // owner 2026-11-10: a potential customer of the SM channel (4 days) with "No potential" (60 days): the LEVEL wins, not the more frequent channel
+  await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { visit_frequency_by_type: { potential_1: 60 } } });
+  await pool.query("UPDATE customers SET sales_channel = 'SM YVN', potential_level = 1 WHERE id = $1", [gold.id]);
+  assert.equal((await freq(gold.id)).visit_frequency_days, 60, "No potential (60) beats the SM channel (4)");
+  await pool.query("UPDATE customers SET potential_level = NULL WHERE id = $1", [gold.id]);
+  assert.equal((await freq(gold.id)).visit_frequency_days, 4, "not assessed: the channel's default");
+  await pool.query("UPDATE customers SET potential_level = 4 WHERE id = $1", [gold.id]);
+  assert.equal((await freq(gold.id)).visit_frequency_days, 6, "back to High potential's 6 for the edit-sheet checks below");
+
   // the edit sheet: a typed number makes it the customer's own; an emptied field brings it back to the type default
   assert.equal((await apiRequest(`/api/customers/${gold.id}`, { method: "PATCH", cookie: adminCookie, body: { visit_frequency_days: 20 } })).status, 200);
   assert.deepEqual(await freq(gold.id), { visit_frequency_days: 20, visit_frequency_manual: true });

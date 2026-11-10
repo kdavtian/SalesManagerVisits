@@ -198,7 +198,7 @@ export const enSettings = {
     doc_texts_hint: "The customer reads the first three before signing. The app fills in [order no], [payment amount] and [updated debt balance]. The warning is printed at the bottom of every blank and payment slip.",
     doc_text_reset: "Restore the original text",
     visit_types_title: "Visit frequency by customer type",
-    visit_types_hint: "Days between visits for each type. A customer follows the most frequent of its types; an empty field uses the general default ({n} days). A frequency set on a customer's card always wins.",
+    visit_types_hint: "Days between visits for each type. A customer follows the most frequent of its types, except a potential customer, which follows its potential level when that has a number; an empty field uses the general default ({n} days). A frequency set on a customer's card always wins.",
     visit_types_unit: "days",
     usage_toggle_label: "Usage statistics",
     usage_toggle_help: "Counts which screens are opened, how long people stay on them and which menu buttons are tapped, so the app can be made faster and simpler. No names, customers, amounts or search words are stored; old rows are deleted after 90 days. Off by default.",
