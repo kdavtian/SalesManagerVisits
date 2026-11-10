@@ -809,6 +809,10 @@ notes(s, """
 Thank you. To sum up: KAD OS is one app for the whole distributor, from the first visit to the delivered and paid order; it checks every visit, order, price and payment; an AI agent keeps everyone on plan; and management sees everything live. We are happy to answer questions or show any part of the app live.
 """)
 
+# Teams edition (Castrol sales & marketing teams, 45 min): extra slides, timed chapters, backup section, new notes.
+if os.environ.get("DECK_EDITION") == "teams":
+    exec(open(os.path.join(HERE, "teams_edition.py"), encoding="utf-8").read(), globals())
+
 # Flat look in every renderer: drop the theme style reference (LibreOffice draws its shadow even with an empty effect list).
 for sl in prs.slides:
     for el in sl.shapes._spTree.iter():
