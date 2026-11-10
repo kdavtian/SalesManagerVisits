@@ -64,3 +64,66 @@ test("recommendations by job: delivery stops left, overdue tasks, the app not op
   const acc = personSummary({ ...base, user: { name: "Acc", role: "accountant", seen_today: false }, overdue: 4, approved: 2 });
   assert.deepEqual(acc.recos.map((r) => r.text), ["ժամկետանց առաջադրանքներ՝ 4", "այսօր հավելվածը չի բացել"]);
 });
+
+// Owner, 2026-11-10: "analyze the report, detect false info and fix".
+test("cash 'on hand' is the app's own definition: an approved or already received payment is not cash anyone holds", async () => {
+  const holder = await createUser("sales_manager", { name: "Digest Holder" });
+  const insert = (amount, status, daysAgo, extra = "") =>
+    pool.query(
+      `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by, current_holder_id, created_at ${extra ? ", approved_by" : ""})
+       VALUES ($1, 'x', $2, $3, $4, 'Digest Holder', $5, $4, $4, $3 ${extra ? ", $6" : ""})`,
+      extra ? [customer.id, amount, new Date(Date.now() - daysAgo * 86400000), holder.id, status, director.id] : [customer.id, amount, new Date(Date.now() - daysAgo * 86400000), holder.id, status]
+    );
+  await insert(40000, "pending", 3); // really in his pocket, 3 days
+  await insert(900000, "approved", 60, "by"); // approved by a person long ago: the company has it
+  await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by, current_holder_id, created_at, approved_from_erp)
+     VALUES ($1, 'x', 700000, $3, $2, 'Digest Holder', 'approved', $2, $2, $3, true)`,
+    [customer.id, holder.id, new Date(Date.now() - 63 * 86400000)]
+  ); // the Excel already showed it, before the cutover: the archive (the reported "63 days, 3.66M")
+  const { dayFacts } = await import("../../src/team/vaghinak/fullDigest.js");
+  const today = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
+  const mine = (await dayFacts(pool, today)).find((f) => f.user.id === holder.id);
+  assert.equal(Number(mine.cash.amd), 40000, "only the pending cash");
+  assert.equal(mine.cash.days, 3);
+  await pool.query("DELETE FROM payments WHERE sales_manager_id = $1", [holder.id]);
+});
+
+test("a plan is measured by the PLANNED customers visited: visits outside the plan do not fill it, they are shown apart", () => {
+  const base = { orders: null, payments: null, cash: null, tasksDone: 0, overdue: 0, packed: 0, confirmed: 0, stops: null, approved: 0, recorded: 0 };
+  const rep = personSummary({ ...base, user: { name: "Rep", role: "sales_manager", seen_today: true }, visits: { n: 6 }, plan: { planned_count: 10, visited_count: 2 } });
+  assert.match(rep.parts[0], /այցեր 2\/10 \(20%\) \+ 4 պլանից դուրս/);
+  assert.ok(rep.recos.some((r) => /պլանի միայն 20%/.test(r.text)), "6 check-ins no longer hide a plan that is 20% done");
+  const noPlan = personSummary({ ...base, user: { name: "Rep", role: "sales_manager", seen_today: true }, visits: { n: 4 }, plan: null });
+  assert.equal(noPlan.parts[0], "այցեր 4");
+});
+
+test("overdue tasks say how old the oldest is", () => {
+  const base = { visits: null, plan: null, orders: null, payments: null, cash: null, tasksDone: 0, packed: 0, confirmed: 0, stops: null, approved: 0, recorded: 0 };
+  const p = personSummary({ ...base, user: { name: "Acc", role: "accountant", seen_today: true }, overdue: 4, overdueOldest: 41 });
+  assert.equal(p.recos[0].text, "ժամկետանց առաջադրանքներ՝ 4 (ամենահինը՝ 41 օր)");
+});
+
+test("company totals: bank / card payments count, the old module's copies are not counted twice, and 'usual' skips a day nobody worked", async () => {
+  const { companyTotals } = await import("../../src/team/vaghinak/fullDigest.js");
+  const day = "2026-11-04"; // a Wednesday: the four before it are 28 Oct, 21 Oct, 14 Oct, 7 Oct
+  const insertPay = (source, amount, payDay) =>
+    pool.query(
+      `INSERT INTO customer_payments (customer_id, customer_name_snapshot, amount_amd, paid_at, pay_day, method, source, collected_by, created_by)
+       VALUES ($1, 'x', $2, $3, $4, 'bank', $5, $6, $6)`,
+      [customer.id, amount, `${payDay}T10:00:00+04:00`, payDay, source, director.id]
+    );
+  try {
+    const before = await companyTotals(pool, day);
+    await insertPay("bank", 70000, day);
+    await insertPay("bridge", 999999, day); // the copy of an old-module payment: counted there, not here
+    await insertPay("bank", 50000, "2026-10-28");
+    await insertPay("bank", 90000, "2026-10-21");
+    const after = await companyTotals(pool, day);
+    assert.equal(Number(after.today.paid_amd) - Number(before.today.paid_amd), 70000, "bank payment counted, bridge copy not");
+    assert.ok(after.usualDays <= 4);
+    assert.equal(after.paidComparable, false, "the new books' own payments start 21 Oct: fewer than 4 weeks of them, so no payments comparison yet");
+  } finally {
+    await pool.query("DELETE FROM customer_payments WHERE customer_id = $1", [customer.id]);
+  }
+});

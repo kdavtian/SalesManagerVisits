@@ -11,6 +11,7 @@ import { durationHy } from "./phrases.js";
 import { humanDelayPassed } from "./humanDelay.js";
 import { bullets } from "../../utils/bullets.js";
 import { stockCountToday } from "../../orders/stockCount.js";
+import { CASH_IN_HAND_SQL } from "../../money/cashCustody.js";
 
 export const DIGEST_ROLES = ["ceo", "admin"]; // who receives it (owner: "only to CEO and admin")
 // after the end of the work day and the wrap-up (+5 min) and management brief: the day's facts are in
@@ -40,12 +41,14 @@ export async function dayFacts(db, day) {
     q(`SELECT user_id, planned_count, visited_count, late_minutes, day_off FROM vaghinak_day_log WHERE day = $1::date`),
     q(`SELECT user_id, count(*)::int AS n, COALESCE(sum(total_amd), 0) AS amd FROM orders WHERE ${local("created_at")} = $1::date AND status <> 'draft' AND cancelled_at IS NULL GROUP BY user_id`),
     q(`SELECT sales_manager_id AS user_id, count(*)::int AS n, COALESCE(sum(amount_amd), 0) AS amd FROM payments WHERE ${local("created_at")} = $1::date AND status <> 'rejected' GROUP BY sales_manager_id`),
-    // cash still in the person's hands (not handed over, not on its way): how much and since when
-    q(`SELECT current_holder_id AS user_id, count(*)::int AS n, COALESCE(sum(amount_amd), 0) AS amd, ($1::date - min(${local("payment_date")}))::int AS days
-       FROM payments WHERE current_holder_id IS NOT NULL AND pending_handoff_id IS NULL AND status <> 'rejected' AND ${local("payment_date")} <= $1::date
-       GROUP BY current_holder_id`),
+    // cash still in the person's hands (not handed over, not on its way): how much and since when -- by the app's ONE definition of "cash in
+    // hand" (money/cashCustody.js, the same as the hand-over cards and the custody alerts). The digest used to count every payment whose holder
+    // was never cleared, so approved, received and pre-cutover payments made "63 days with 3,660,000" out of money nobody holds.
+    q(`SELECT p.current_holder_id AS user_id, count(*)::int AS n, COALESCE(sum(p.amount_amd), 0) AS amd, ($1::date - min(${local("p.payment_date")}))::int AS days
+       FROM payments p WHERE p.current_holder_id IS NOT NULL AND p.pending_handoff_id IS NULL AND ${CASH_IN_HAND_SQL} AND ${local("p.payment_date")} <= $1::date
+       GROUP BY p.current_holder_id`),
     q(`SELECT completed_by AS user_id, count(*)::int AS n FROM tasks WHERE ${local("completed_at")} = $1::date GROUP BY completed_by`),
-    q(`SELECT assignee_id AS user_id, count(*)::int AS n FROM tasks WHERE status = 'open' AND due_date < $1::date GROUP BY assignee_id`),
+    q(`SELECT assignee_id AS user_id, count(*)::int AS n, max($1::date - due_date)::int AS oldest FROM tasks WHERE status = 'open' AND due_date < $1::date GROUP BY assignee_id`),
     q(`SELECT changed_by AS user_id, count(*)::int AS n FROM order_status_history WHERE new_status = 'packed_stock_out' AND ${local("changed_at")} = $1::date GROUP BY changed_by`),
     q(`SELECT changed_by AS user_id, count(*)::int AS n FROM order_status_history WHERE new_status = 'confirmed' AND ${local("changed_at")} = $1::date GROUP BY changed_by`),
     q(`SELECT r.driver_id AS user_id, count(*)::int AS total, count(s.completed_at)::int AS done
@@ -62,6 +65,7 @@ export async function dayFacts(db, day) {
     cash: cash.get(u.id) ?? null,
     tasksDone: done.get(u.id)?.n ?? 0,
     overdue: overdue.get(u.id)?.n ?? 0,
+    overdueOldest: overdue.get(u.id)?.oldest ?? 0,
     packed: packed.get(u.id)?.n ?? 0,
     confirmed: confirmed.get(u.id)?.n ?? 0,
     stops: stops.get(u.id) ?? null,
@@ -70,26 +74,43 @@ export async function dayFacts(db, day) {
   }));
 }
 
-// The company's day next to its usual level: the average of the same figure over the previous 4 weeks' same weekday.
+// The company's day next to its usual level: the average of the same figure over the previous 4 weeks' same weekday -- over the weeks that
+// WORKED that day (a holiday with no visits at all is not "usual" and used to drag the average down, so today always read "more").
+// Payments = the old module's payments (not rejected) + the payments the new books hold on their own (bank / card lines and payments made in
+// the new screens; the old module's payments are copied there as source 'bridge' and must not be counted twice).
 export async function companyTotals(db, day) {
   const sql = (from) => `SELECT
       (SELECT count(*) FROM checkins WHERE ${local("timestamp")} ${from})::int AS visits,
       (SELECT count(*) FROM orders WHERE ${local("created_at")} ${from} AND status <> 'draft' AND cancelled_at IS NULL)::int AS orders,
       (SELECT COALESCE(sum(total_amd), 0) FROM orders WHERE ${local("created_at")} ${from} AND status <> 'draft' AND cancelled_at IS NULL) AS orders_amd,
-      (SELECT COALESCE(sum(amount_amd), 0) FROM payments WHERE ${local("created_at")} ${from} AND status <> 'rejected') AS paid_amd`;
-  const [today, usual, waiting] = await Promise.all([
+      (SELECT COALESCE(sum(amount_amd), 0) FROM payments WHERE ${local("created_at")} ${from} AND status <> 'rejected')
+        + (SELECT COALESCE(sum(amount_amd), 0) FROM customer_payments WHERE source <> 'bridge' AND voided_at IS NULL AND pay_day ${from}) AS paid_amd`;
+  const [today, ...before] = await Promise.all([
     db.query(sql("= $1::date"), [day]).then((r) => r.rows[0]),
-    // the same weekday of the 4 weeks before: divided by 4 below
-    db.query(sql("IN ($1::date - 7, $1::date - 14, $1::date - 21, $1::date - 28)"), [day]).then((r) => r.rows[0]),
-    db.query(
-      `SELECT count(*) FILTER (WHERE status = 'submitted')::int AS to_confirm,
-              count(*) FILTER (WHERE status = 'confirmed' AND updated_at < now() - interval '1 day')::int AS pack_late,
-              (SELECT count(*) FROM payments WHERE status = 'pending')::int AS pay_pending
-       FROM orders`
-    ).then((r) => r.rows[0]),
+    ...[7, 14, 21, 28].map((d) => db.query(sql("= ($1::date - $2::int)"), [day, d]).then((r) => r.rows[0])),
   ]);
-  const avg = (k) => Math.round(Number(usual[k]) / 4);
-  return { today, usual: { visits: avg("visits"), orders: avg("orders"), orders_amd: avg("orders_amd"), paid_amd: avg("paid_amd") }, waiting };
+  const worked = before.filter((r) => Number(r.visits) > 0 || Number(r.orders) > 0);
+  const avg = (k) => (worked.length ? Math.round(worked.reduce((sum, r) => sum + Number(r[k]), 0) / worked.length) : 0);
+  const { rows: [waiting] } = await db.query(
+    `SELECT count(*) FILTER (WHERE status = 'submitted')::int AS to_confirm,
+            max(CASE WHEN status = 'submitted' THEN ($1::date - ${local("created_at")}) END)::int AS to_confirm_oldest,
+            count(*) FILTER (WHERE status = 'confirmed' AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = orders.id AND h.new_status = 'confirmed'), updated_at) < now() - interval '1 day')::int AS pack_late,
+            (SELECT count(*) FROM payments WHERE status = 'pending')::int AS pay_pending,
+            (SELECT max($1::date - ${local("created_at")}) FROM payments WHERE status = 'pending')::int AS pay_pending_oldest
+     FROM orders`,
+    [day]
+  );
+  // The payments comparison is honest only when the usual weeks were counted the same way: the new books' own payments (bank / card lines)
+  // exist from their start date on. Before 4 full weeks of them, "usual" would miss them and today would read as a big "+%".
+  const { rows: [firstOwn] } = await db.query("SELECT min(pay_day)::text AS first_day FROM customer_payments WHERE source <> 'bridge' AND voided_at IS NULL");
+  const paidComparable = !firstOwn?.first_day || firstOwn.first_day <= new Date(Date.parse(`${day}T00:00:00Z`) - 28 * 86400000).toISOString().slice(0, 10);
+  const { rows: [tasks] } = await db.query(
+    `SELECT count(*) FILTER (WHERE status = 'done' AND ${local("completed_at")} = $1::date)::int AS done_today,
+            count(*) FILTER (WHERE status = 'open' AND due_date < $1::date)::int AS overdue
+     FROM tasks`,
+    [day]
+  );
+  return { today, usual: { visits: avg("visits"), orders: avg("orders"), orders_amd: avg("orders_amd"), paid_amd: avg("paid_amd") }, usualDays: worked.length, paidComparable, waiting, tasks };
 }
 
 // One person's line (what their job made them do today) and Vaghinak's recommendations for them, each with a weight (higher = first).
@@ -101,14 +122,18 @@ export function personSummary(f, { graceMin = 15 } = {}) {
   const field = role === "sales_manager";
   if (field) {
     const planned = f.plan?.planned_count ?? 0;
-    const visited = f.visits?.n ?? 0;
+    const all = f.visits?.n ?? 0; // every check-in of the day (also repeat visits and customers outside the plan)
+    // "visited" against a plan = the PLANNED customers visited (the plan log), never all check-ins: five visits to customers outside the plan
+    // used to read as a plan done 100%
+    const visited = planned > 0 && f.plan?.visited_count !== undefined && f.plan?.visited_count !== null ? Math.min(f.plan.visited_count, all) : all;
+    const extra = planned > 0 ? Math.max(0, all - visited) : 0;
     const pct = planned > 0 ? Math.round((Math.min(visited, planned) / planned) * 100) : null;
-    parts.push(planned ? `այցեր ${visited}/${planned} (${pct}%)` : `այցեր ${visited}`);
+    parts.push(planned ? `այցեր ${visited}/${planned} (${pct}%)${extra ? ` + ${extra} պլանից դուրս` : ""}` : `այցեր ${visited}`);
     if (f.plan?.day_off) parts.push("ազատ օր");
-    else if (planned > 0 && visited === 0) recos.push({ w: 90, text: "այսօր ոչ մի այց․ զանգահարել և պարզել պատճառը" });
+    else if (planned > 0 && all === 0) recos.push({ w: 90, text: "այսօր ոչ մի այց․ զանգահարել և պարզել պատճառը" });
     else if (pct !== null && pct < 50) recos.push({ w: 60, text: `պլանի միայն ${pct}%․ քննարկել երթուղին` });
     if (!f.plan?.day_off && (f.plan?.late_minutes ?? 0) > graceMin) recos.push({ w: 40, text: `ուշ է սկսել (${durationHy(f.plan.late_minutes)})` });
-    if (visited >= 3 && !f.orders) recos.push({ w: 35, text: `${visited} այց, բայց ոչ մի պատվեր․ արժե հարցնել՝ ինչու` });
+    if (all >= 3 && !f.orders) recos.push({ w: 35, text: `${all} այց, բայց ոչ մի պատվեր․ արժե հարցնել՝ ինչու` });
   }
   if (f.orders) parts.push(`պատվերներ ${f.orders.n} · ${amd(f.orders.amd)}`);
   if (f.payments) parts.push(`վճարումներ ${f.payments.n} · ${amd(f.payments.amd)}`);
@@ -122,8 +147,9 @@ export function personSummary(f, { graceMin = 15 } = {}) {
   if (f.recorded) parts.push(`գրանցել է ${f.recorded} պատվեր Excel-ում`);
   if (f.tasksDone) parts.push(`առաջադրանքներ ✓${f.tasksDone}`);
   if (f.cash && Number(f.cash.amd) > 0 && f.cash.days >= 2) recos.push({ w: 80, text: `կանխիկը մոտն է ${f.cash.days} օր (${amd(f.cash.amd)})․ պետք է հանձնել` });
-  if (f.overdue >= 3) recos.push({ w: 50, text: `ժամկետանց առաջադրանքներ՝ ${f.overdue}` });
-  else if (f.overdue > 0) parts.push(`ժամկետանց առաջադրանքներ ${f.overdue}`);
+  const oldest = f.overdueOldest >= 2 ? ` (ամենահինը՝ ${f.overdueOldest} օր)` : "";
+  if (f.overdue >= 3) recos.push({ w: 50, text: `ժամկետանց առաջադրանքներ՝ ${f.overdue}${oldest}` });
+  else if (f.overdue > 0) parts.push(`ժամկետանց առաջադրանքներ ${f.overdue}${oldest}`);
   if (!u.seen_today) recos.push({ w: field ? 85 : 30, text: "այսօր հավելվածը չի բացել" });
   return { name: firstName(u), fullName: u.name_hy || u.name, role: ROLE_HY[role] ?? role, parts, recos: recos.sort((a, b) => b.w - a.w) };
 }
@@ -138,8 +164,14 @@ function stockRecos(s) {
   return [{ w: 55, text: `Գույքագրում — այսօր չի հաշվվել ${s.due - s.counted} ապրանք (կտեղափոխվի վաղը)` }];
 }
 
-const compare = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${usual.toLocaleString("en-US")}${now >= usual ? "" : " · ավելի քիչ"})` : "");
-const compareAmd = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${amd(usual)}${Number(now) >= usual ? "" : " · ավելի քիչ"})` : "");
+// "(usual: 39 · -18%)": how far today is from its usual level, in percent (a bare "less" hid whether it was 3% or 60%).
+const percentOff = (now, usual) => {
+  const d = Math.round(((Number(now) - usual) / usual) * 100);
+  return d === 0 ? "նույնը" : `${d > 0 ? "+" : "−"}${Math.abs(d)}%`;
+};
+const compare = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${usual.toLocaleString("en-US")} · ${percentOff(now, usual)})` : "");
+const compareAmd = (now, usual) => (usual > 0 ? ` (սովորականը՝ ${amd(usual)} · ${percentOff(now, usual)})` : "");
+const oldestNote = (days) => (days >= 2 ? ` (ամենահինը՝ ${days} օր)` : "");
 
 // The whole message body (Armenian, plain text with bullets): company, then the top recommendations, then everyone.
 export function digestBody(facts, totals, opts) {
@@ -147,10 +179,11 @@ export function digestBody(facts, totals, opts) {
   const company = bullets([
     `Այցեր՝ ${t.visits}${compare(t.visits, totals.usual.visits)}`,
     `Պատվերներ՝ ${t.orders} · ${amd(t.orders_amd)}${compareAmd(t.orders_amd, totals.usual.orders_amd)}`,
-    `Վճարումներ՝ ${amd(t.paid_amd)}${compareAmd(t.paid_amd, totals.usual.paid_amd)}`,
-    ...(totals.waiting.to_confirm ? [`Հաստատման սպասող պատվերներ՝ ${totals.waiting.to_confirm}`] : []),
+    `Վճարումներ՝ ${amd(t.paid_amd)}${totals.paidComparable === false ? "" : compareAmd(t.paid_amd, totals.usual.paid_amd)}`,
+    ...(totals.waiting.to_confirm ? [`Հաստատման սպասող պատվերներ՝ ${totals.waiting.to_confirm}${oldestNote(totals.waiting.to_confirm_oldest)}`] : []),
     ...(totals.waiting.pack_late ? [`Մեկ օրից ավելի փաթեթավորման սպասող պատվերներ՝ ${totals.waiting.pack_late}`] : []),
-    ...(totals.waiting.pay_pending ? [`Հաստատման սպասող վճարումներ՝ ${totals.waiting.pay_pending}`] : []),
+    ...(totals.waiting.pay_pending ? [`Հաստատման սպասող վճարումներ՝ ${totals.waiting.pay_pending}${oldestNote(totals.waiting.pay_pending_oldest)}`] : []),
+    ...(totals.tasks && (totals.tasks.done_today || totals.tasks.overdue) ? [`Առաջադրանքներ՝ կատարվել է ${totals.tasks.done_today} · ժամկետանց ${totals.tasks.overdue}`] : []),
     ...stockLines(totals.stock),
   ]);
   const people = facts.map((f) => personSummary(f, opts));
