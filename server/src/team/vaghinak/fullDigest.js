@@ -100,13 +100,17 @@ export async function companyTotals(db, day) {
      FROM orders`,
     [day]
   );
+  // The payments comparison is honest only when the usual weeks were counted the same way: the new books' own payments (bank / card lines)
+  // exist from their start date on. Before 4 full weeks of them, "usual" would miss them and today would read as a big "+%".
+  const { rows: [firstOwn] } = await db.query("SELECT min(pay_day)::text AS first_day FROM customer_payments WHERE source <> 'bridge' AND voided_at IS NULL");
+  const paidComparable = !firstOwn?.first_day || firstOwn.first_day <= new Date(Date.parse(`${day}T00:00:00Z`) - 28 * 86400000).toISOString().slice(0, 10);
   const { rows: [tasks] } = await db.query(
     `SELECT count(*) FILTER (WHERE status = 'done' AND ${local("completed_at")} = $1::date)::int AS done_today,
             count(*) FILTER (WHERE status = 'open' AND due_date < $1::date)::int AS overdue
      FROM tasks`,
     [day]
   );
-  return { today, usual: { visits: avg("visits"), orders: avg("orders"), orders_amd: avg("orders_amd"), paid_amd: avg("paid_amd") }, usualDays: worked.length, waiting, tasks };
+  return { today, usual: { visits: avg("visits"), orders: avg("orders"), orders_amd: avg("orders_amd"), paid_amd: avg("paid_amd") }, usualDays: worked.length, paidComparable, waiting, tasks };
 }
 
 // One person's line (what their job made them do today) and Vaghinak's recommendations for them, each with a weight (higher = first).
@@ -175,7 +179,7 @@ export function digestBody(facts, totals, opts) {
   const company = bullets([
     `Այցեր՝ ${t.visits}${compare(t.visits, totals.usual.visits)}`,
     `Պատվերներ՝ ${t.orders} · ${amd(t.orders_amd)}${compareAmd(t.orders_amd, totals.usual.orders_amd)}`,
-    `Վճարումներ՝ ${amd(t.paid_amd)}${compareAmd(t.paid_amd, totals.usual.paid_amd)}`,
+    `Վճարումներ՝ ${amd(t.paid_amd)}${totals.paidComparable === false ? "" : compareAmd(t.paid_amd, totals.usual.paid_amd)}`,
     ...(totals.waiting.to_confirm ? [`Հաստատման սպասող պատվերներ՝ ${totals.waiting.to_confirm}${oldestNote(totals.waiting.to_confirm_oldest)}`] : []),
     ...(totals.waiting.pack_late ? [`Մեկ օրից ավելի փաթեթավորման սպասող պատվերներ՝ ${totals.waiting.pack_late}`] : []),
     ...(totals.waiting.pay_pending ? [`Հաստատման սպասող վճարումներ՝ ${totals.waiting.pay_pending}${oldestNote(totals.waiting.pay_pending_oldest)}`] : []),

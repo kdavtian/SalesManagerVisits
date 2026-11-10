@@ -76,6 +76,11 @@ test("cash 'on hand' is the app's own definition: an approved or already receive
     );
   await insert(40000, "pending", 3); // really in his pocket, 3 days
   await insert(900000, "approved", 60, "by"); // approved by a person long ago: the company has it
+  await pool.query(
+    `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by, current_holder_id, created_at, approved_from_erp)
+     VALUES ($1, 'x', 700000, $3, $2, 'Digest Holder', 'approved', $2, $2, $3, true)`,
+    [customer.id, holder.id, new Date(Date.now() - 63 * 86400000)]
+  ); // the Excel already showed it, before the cutover: the archive (the reported "63 days, 3.66M")
   const { dayFacts } = await import("../../src/team/vaghinak/fullDigest.js");
   const today = new Date(Date.now() + 4 * 3600000).toISOString().slice(0, 10);
   const mine = (await dayFacts(pool, today)).find((f) => f.user.id === holder.id);
@@ -102,19 +107,23 @@ test("overdue tasks say how old the oldest is", () => {
 test("company totals: bank / card payments count, the old module's copies are not counted twice, and 'usual' skips a day nobody worked", async () => {
   const { companyTotals } = await import("../../src/team/vaghinak/fullDigest.js");
   const day = "2026-11-04"; // a Wednesday: the four before it are 28 Oct, 21 Oct, 14 Oct, 7 Oct
-  const insertPay = (source, amount, payDay, extra = {}) =>
+  const insertPay = (source, amount, payDay) =>
     pool.query(
       `INSERT INTO customer_payments (customer_id, customer_name_snapshot, amount_amd, paid_at, pay_day, method, source, collected_by, created_by)
        VALUES ($1, 'x', $2, $3, $4, 'bank', $5, $6, $6)`,
       [customer.id, amount, `${payDay}T10:00:00+04:00`, payDay, source, director.id]
     );
-  const before = await companyTotals(pool, day);
-  await insertPay("bank", 70000, day);
-  await insertPay("bridge", 999999, day); // the copy of an old-module payment: counted there, not here
-  await insertPay("bank", 50000, "2026-10-28");
-  await insertPay("bank", 90000, "2026-10-21");
-  const after = await companyTotals(pool, day);
-  assert.equal(Number(after.today.paid_amd) - Number(before.today.paid_amd), 70000, "bank payment counted, bridge copy not");
-  assert.ok(after.usualDays <= 4);
-  await pool.query("DELETE FROM customer_payments WHERE customer_id = $1", [customer.id]);
+  try {
+    const before = await companyTotals(pool, day);
+    await insertPay("bank", 70000, day);
+    await insertPay("bridge", 999999, day); // the copy of an old-module payment: counted there, not here
+    await insertPay("bank", 50000, "2026-10-28");
+    await insertPay("bank", 90000, "2026-10-21");
+    const after = await companyTotals(pool, day);
+    assert.equal(Number(after.today.paid_amd) - Number(before.today.paid_amd), 70000, "bank payment counted, bridge copy not");
+    assert.ok(after.usualDays <= 4);
+    assert.equal(after.paidComparable, false, "the new books' own payments start 21 Oct: fewer than 4 weeks of them, so no payments comparison yet");
+  } finally {
+    await pool.query("DELETE FROM customer_payments WHERE customer_id = $1", [customer.id]);
+  }
 });
