@@ -9,53 +9,50 @@ stills = sys.argv[1]
 tmp = tempfile.mkdtemp()
 subprocess.run(["pdftoppm", "-r", "30", "-jpeg", stills, os.path.join(tmp, "t")], check=True)
 thumbs = sorted(glob.glob(os.path.join(tmp, "t-*.jpg")))
-assert len(thumbs) == len(MAIN_NOTES) + 1 + len(BACKUP_NOTES), len(thumbs)
+assert len(thumbs) == len(MAIN_NOTES) + len(BACKUP_NOTES), len(thumbs)
 b64 = lambda p: "data:image/jpeg;base64," + base64.b64encode(open(p, "rb").read()).decode()
 
-TITLES = ["Title", "Agenda", "The brand's blind spot", "What is KAD OS", "A day from A to Z",
-          "Chapter 1", "Check-in, step by step", "Demo video: check-in", "Visits that cannot be faked",
-          "Chapter 2", "Customers & map", "Advanced filters", "Customer card", "What the outlet data gives Castrol",
-          "Chapter 3", "Orders", "Demo video: order", "Credit, debt & cash", "Human approvals",
-          "Chapter 4", "AI agent", "How the AI agent decides", "Executive Assistant", "Management dashboards",
-          "Chapter 5", "Adoption", "Built and adopted", "Next: the customer app", "Three things to remember", "Thank you, questions"]
-B_TITLES = ["Home screen", "How it works", "The distributor's problems", "Customer card detail", "Demo video: customer card",
-            "Routes & fuel allowance", "Accounting & invoicing", "Warehouse", "Demo video: packing", "Delivery & driver",
+TITLES = ["Title", "11 problems, one app", "A day from A to Z", "Check-in", "Visits that cannot be faked",
+          "Customers & filters", "Customer card", "What the field data gives Castrol", "Orders", "Debt & cash",
+          "Tasks & AI agent", "How the AI agent decides", "Human approvals", "Reports", "Adoption",
+          "Built and adopted", "Next: the customer app", "Takeaways, thank you, questions"]
+B_TITLES = ["Home screen", "Accounting & invoicing", "Warehouse", "Delivery & driver", "Routes & fuel allowance",
             "AI analyst & calculations", "Built for field work"]
 assert len(TITLES) == len(MAIN_NOTES) and len(B_TITLES) == len(BACKUP_NOTES)
 
 QA = [
     ("Can a rep fake a visit?",
-     "No. A check-in is accepted only within 300 metres of the outlet; the real distance and the GPS accuracy are saved; the start and end of the visit are recorded; and repeated GPS evidence shows customers whose map pin is wrong. (Slide 9.)"),
+     "No. A check-in is accepted only within 300 metres of the customer; the real distance and the GPS accuracy are saved; the start and end of the visit are recorded; and repeated GPS evidence shows customers whose map pin is wrong. (Slide 5.)"),
     ("How reliable is the shelf data?",
-     "It is recorded by the rep at every visit, with a photo, and management sees it in the visit history per outlet and per rep. Because it is collected at every visit and not once a year, a wrong entry stands out quickly."),
+     "It is recorded by the rep at every visit, with a photo, and management sees it in the visit history per customer and per rep. Because it is collected at every visit and not once a year, a wrong entry stands out quickly."),
     ("What happens without internet?",
-     "The app keeps working. Visits, orders and stock counts wait on the phone and are sent when the signal comes back. (Backup B12.)"),
+     "The app keeps working. Visits, orders and stock counts wait on the phone and are sent when the signal comes back. (Backup B7.)"),
     ("How did you get the reps to use it?",
-     "A bonus system with points for the work done in the app, and a monthly contest: the rep with the most check-ins wins a fixed bonus. And the reps helped design it, so it saves them time. (Slide 26.)"),
+     "A bonus system with points for the work done in the app, and a monthly contest: the rep with the most check-ins wins a fixed bonus. And the reps helped design it, so it saves them time. (Slide 15.)"),
     ("What if the AI makes a mistake?",
-     "People approve every decision that matters: discounts, prices below cost, credit, invoices and cash. The AI agent started in test mode and was switched on only after management tuned it. (Slide 19.)"),
+     "People approve every decision that matters: discounts, prices below cost, credit, invoices and cash. The AI agent started in test mode and was switched on only after management tuned it. (Slide 13.)"),
     ("Does it connect to accounting or ERP systems?",
-     "Yes. It has an integration API, and it is connected to our local invoicing system, so invoices are created without typing them again. (Backup B2 and B7.)"),
+     "Yes. It has an integration API, and it is connected to our local invoicing system, so invoices are created without typing them again. (Backup B2.)"),
     ("Where is the data, and who can see it?",
-     "In our own cloud system, over an encrypted connection, with protected logins and an audit trail. Each person sees only what their role allows; the AI analyst sees customers and staff only as codes. (Backup B12, B11.)"),
+     "In our own cloud system, over an encrypted connection, with protected logins and an audit trail. Each person sees only what their role allows; the AI analyst sees customers and staff only as codes. (Backup B7, B6.)"),
     ("Which languages does it support?",
      "Armenian and English today."),
     ("How long did it take?",
-     "Three months to the first live version (May to August 2026), the whole field team in the app in the fourth month, and the complete system by the sixth month. (Slide 27.)"),
+     "Three months to the first live version (May to August 2026), the whole field team in the app in the fourth month, and the complete system by the sixth month. (Slide 16.)"),
     ("Can other distributors use KAD OS?  [owner to confirm the answer]",
      "Suggested: it was built for our own business, and we are open to discussing it with Castrol. Please do not promise dates or prices on stage."),
-    ("Can Castrol receive the outlet data (shelf, fake product, competitors)?  [owner to confirm the answer]",
-     "Suggested: today the data serves our own team; how to share outlet-level data with Castrol is something we would like to agree together."),
+    ("Can Castrol receive the field data (shelf, fake product, competitors)?  [owner to confirm the answer]",
+     "Suggested: today the data serves our own team; how to share field-level data with Castrol is something we would like to agree together."),
     ("What did it cost?  [owner to confirm the answer]",
      "Suggested: it was built by our own team; we prefer to discuss the details separately."),
 ]
 
 CHECK = [
-    "Open KAD_OS_Castrol_Teams.pptx (with videos) on the presenting laptop and play each of the 2 videos in the main part once (slides 8 and 17).",
+    "Open KAD_OS_Castrol_Teams.pptx on the presenting laptop and click through all 18 slides once; there are no videos to start.",
     "Use Presenter View, so the timed notes are on your screen and the audience sees only the slides.",
-    "Keep the PDF on a USB stick as a fallback (the video slides show a still).",
-    "Watch the time cue at the top of each note. If you are more than 2 minutes late at the start of a chapter, shorten the next video slide to its first two steps.",
-    "Backup slides start after slide 30. Jump to one by typing its number in slideshow mode (for example 33 Enter for B2) or with the slide sorter.",
+    "Keep the PDF on a USB stick as a fallback.",
+    "Watch the time cue at the top of each note. If you are more than 2 minutes late, shorten slide 12 (How the AI agent decides) to the first example and slide 13 (Approvals) to one sentence: that saves about 2 minutes.",
+    "Backup slides B1 to B7 follow slide 18. Jump to one by typing its number in slideshow mode (B1 = 19, B2 = 20, ... B7 = 25, then Enter).",
     "Optional: have the app open with the demo login for a live answer during the questions.",
 ]
 
@@ -86,7 +83,7 @@ for i, (title, body) in enumerate(zip(TITLES, MAIN_NOTES), 1):
 bpages = []
 for j, (title, body) in enumerate(zip(B_TITLES, BACKUP_NOTES), 1):
     txt = re.sub(r"^BACKUP \([^)]*\)\.\s*", "", body.strip())
-    bpages.append(f'<section class="b"><img src="{b64(thumbs[len(MAIN_NOTES) + j])}"><div><h3>B{j}. {html.escape(title)}</h3><p>{html.escape(txt)}</p></div></section>')
+    bpages.append(f'<section class="b"><img src="{b64(thumbs[len(MAIN_NOTES) + j - 1])}"><div><h3>B{j}. {html.escape(title)}</h3><p>{html.escape(txt)}</p></div></section>')
 qa = "".join(f"<div class='qa'><b>{html.escape(q)}</b><p>{html.escape(a)}</p></div>" for q, a in QA)
 check = "".join(f"<li>{html.escape(c)}</li>" for c in CHECK)
 
@@ -104,7 +101,7 @@ section p{{margin:0 0 5px}}.t{{display:inline-block;background:#009343;color:#ff
 </style></head><body>
 <div class="bar"></div><h1>KAD OS: speaker script</h1>
 <div class="sub">For Castrol sales &amp; marketing teams and their team leads · 45 minutes = 35 min talk + 10 min questions · Demo data only</div>
-<div class="note"><b>How to use this script.</b> Every slide has a time cue, one key message and the words to say (about 125 words a minute, with pauses). The same text is in the speaker notes of KAD_OS_Castrol_Teams.pptx. Words in brackets are actions, not speech. Slides 1 to 30 are the talk; B1 to B12 are backup slides for questions.</div>
+<div class="note"><b>How to use this script.</b> Every slide has a time cue, one key message and the words to say (about 125 words a minute, with pauses). The same text is in the speaker notes of KAD_OS_Castrol_Teams.pptx. Words in brackets are actions, not speech. Slides 1 to 18 are the talk; B1 to B7 are backup slides for questions.</div>
 <h2>Timing plan</h2>
 <table><tr><th>#</th><th>Slide</th><th>Time</th><th class="r">Words</th></tr>{''.join(rows)}</table>
 <h2>On the day</h2><ul>{check}</ul>

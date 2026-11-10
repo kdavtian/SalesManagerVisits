@@ -14,16 +14,17 @@ KAD OS explained feature by feature for Castrol Global, who asked for it so they
 | `kados/source/` | `shoot.mjs` (screens + automatic rejection), `record.mjs` (videos), `frames.py`, `build_kados.py`, `onepager.html` / `onepager.mjs`, `assistant.html` / `assets.mjs`. |
 | `assets/` | Official KAD logo; Castrol logo file used by the company's price lists (replace with Castrol's official high-resolution file). |
 
-### Teams edition: 45-minute session for Castrol sales & marketing teams (owner, 2026-11-10)
-Built from the owner's v6 deck (no content changes in v6): 35 minutes of talk in five timed chapters plus 10 minutes of questions.
+### Teams edition: 45-minute session for Castrol sales & marketing teams (owner, 2026-11-10, v2)
+35 minutes of talk (18 slides, five chapters shown by a progress bar top right) + 10 minutes of questions; 7 backup slides after slide 18.
+v2 owner edits: agenda slide removed; slide 2 lists 11 problems and their answers (incl. orders by phone or paper, reports, AI agent, tasks, debt view); "field" instead of "outlet"; no videos (the flows are shown as screens); duplicate slides merged (customers + filters, card + detail, tasks + AI agent, Executive Assistant + dashboard + reports, takeaways + thank you); a "Why it matters for Castrol" line on every feature slide.
 | File | What it is |
 |---|---|
-| `KAD_OS_Castrol_Teams.pptx` | 30 main slides + 12 backup slides, 2 videos in the main path (check-in, order) and 2 in backup. New slides: agenda, "the brand's blind spot", "what the outlet data gives Castrol sales & marketing", 5 chapter dividers, "three things to take away", backup divider. Every note starts with its time cue and key message. |
-| `KAD_OS_Castrol_Teams.pdf` | PDF export (video slides show a still). |
-| `KAD_OS_Castrol_Teams_Script.pdf` | Printable speaker script: timing plan, word-for-word text per slide with thumbnails, on-the-day checklist, likely questions with suggested answers (three marked "owner to confirm"), backup notes. |
-| `kados/source/teams_edition.py`, `teams_notes.py`, `teams_script.py` | Running order and new slides; the timed notes (the single source for deck notes and script); the script PDF builder. |
+| `KAD_OS_Castrol_Teams.pptx` | 18 talk slides + 7 backup (B1 home screen, B2 accounting & invoicing, B3 warehouse, B4 delivery, B5 routes & fuel, B6 AI analyst & calculations, B7 built for field work). Every note starts with its time cue and key message. |
+| `KAD_OS_Castrol_Teams.pdf` | PDF export. |
+| `KAD_OS_Castrol_Teams_Script.pdf` | Speaker script: timing plan, word-for-word text per slide with thumbnails, on-the-day checklist, likely questions with suggested answers (three marked "owner to confirm"), backup notes. |
+| `kados/source/teams_edition.py`, `teams_notes.py`, `teams_script.py` | Running order and new slides; the timed notes (single source for deck notes and script); the script PDF builder. |
 
-Rebuild: `DECK_EDITION=teams python3 build_kados.py`, then the stills copy (`NO_VIDEO=1 DECK_EDITION=teams DECK_OUT=/tmp/t.pptx`, export to PDF with LibreOffice, copy to `KAD_OS_Castrol_Teams.pdf`), then `python3 teams_script.py /tmp/t.pdf`.
+Rebuild: `DECK_EDITION=teams python3 build_kados.py`, export `KAD_OS_Castrol_Teams.pptx` to PDF with LibreOffice (`KAD_OS_Castrol_Teams.pdf`), then `python3 teams_script.py KAD_OS_Castrol_Teams.pdf`.
 
 ### Armenian version (owner, 2026-11-02)
 | File | What it is |
