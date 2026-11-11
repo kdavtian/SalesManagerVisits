@@ -266,7 +266,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         ${order.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(order.order_code)}</span>` : ""}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
-      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span>${order.not_in_excel_at ? ` ${notInExcelBadgeHtml(order)}` : ""}${
+      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span> ${notInExcelBadgeHtml(order)}${
       order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""

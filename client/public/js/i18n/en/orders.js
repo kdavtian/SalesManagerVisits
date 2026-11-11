@@ -246,7 +246,7 @@ export const enOrders = {
     submitted_shortage: "{n} pcs are already in submitted orders: only {left} may be left when they are confirmed.",
     submitted_shortage_see: "See orders",
     not_in_excel_badge: "Not in Excel",
-    not_in_excel_hint: "Delivered, but the Excel still does not show it 14 days later. It is on the accountant's list.",
+    not_in_excel_hint: "Delivered, but the Excel still does not show it 14 days later. The accountant enters it with its delivery date, or marks it Recorded.",
     holding_orders_title: "Orders holding this product",
     holding_orders_hint: "Confirmed and packed orders, orders delivered in the app that the Excel does not show yet, and (not holding, only waiting) submitted orders.",
     holding_orders_other_rep: "Another rep's order",

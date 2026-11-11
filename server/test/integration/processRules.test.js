@@ -256,3 +256,26 @@ test("a delivery the Excel still does not show after 14 days is flagged and list
   );
   assert.ok(!still.some((t) => (t.items ?? []).some((i) => i.includes(late.order_code))), "the recorded order left the accountant's list (the task closes when the list is empty)");
 });
+
+test("the accountant's list: ticking every line does not close it (it closes when the list is empty), and a run without changes keeps the ticks", async () => {
+  const { flagOrdersNotInExcel } = await import("../../src/orders/notInExcel.js");
+  const customer = await erpCustomer("nie2");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 50 WHERE id = $1", [product.id]);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, 1)", [customer.erp_customer_id, `ITEST-NIE2-TODAY-${stamp}`]);
+  const late = await order(customer, product, 2);
+  await pool.query("UPDATE orders SET status = 'delivered', updated_at = now() - interval '20 days' WHERE id = $1", [late.id]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'packed_stock_out', 'delivered', now() - interval '20 days')", [late.id]);
+  await flagOrdersNotInExcel(pool);
+  const { rows: [task] } = await pool.query("SELECT id FROM tasks WHERE auto_kind = 'order_not_in_excel' AND status = 'open' AND assignee_id = $1", [users.accountant.id]);
+  const { rows: items } = await pool.query("SELECT id FROM task_items WHERE task_id = $1", [task.id]);
+  for (const it of items) {
+    const r = await apiRequest(`/api/tasks/${task.id}/items/${it.id}`, { method: "POST", cookie: cookies.accountant, body: { done: true } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+  }
+  assert.equal((await pool.query("SELECT status FROM tasks WHERE id = $1", [task.id])).rows[0].status, "open", "ticking does not close the list");
+  await flagOrdersNotInExcel(pool); // nothing changed
+  const { rows: after } = await pool.query("SELECT bool_and(done) AS all_done FROM task_items WHERE task_id = $1", [task.id]);
+  assert.equal(after[0].all_done, true, "the ticks survive a run");
+  await pool.query("UPDATE orders SET recorded = true WHERE id = $1", [late.id]);
+});
