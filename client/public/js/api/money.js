@@ -29,6 +29,7 @@ export const moneyApi = {
   // Bank statements (see server/src/money/routes/bankStatements.js)
   previewBankStatement: (file, accountId, mapping) => request("/cashflow/bank/preview", { method: "POST", body: bankForm(file, accountId, mapping) }),
   importBankStatement: (file, accountId, mapping, options) => request("/cashflow/bank/import", { method: "POST", body: bankForm(file, accountId, mapping, options) }),
+  getBankCheck: (accountId) => request(`/cashflow/bank/check?account=${encodeURIComponent(accountId)}`, { fresh: true }),
   getBankLines: (params = {}) => request(`/cashflow/bank/lines?${new URLSearchParams(params)}`, { fresh: true }),
   addBankLine: (id, data) => json(`/cashflow/bank/lines/${id}/add`, "POST", data),
   ignoreBankLine: (id) => request(`/cashflow/bank/lines/${id}/ignore`, { method: "POST" }),
