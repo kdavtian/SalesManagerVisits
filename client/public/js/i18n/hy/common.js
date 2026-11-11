@@ -1441,6 +1441,8 @@ export const hyCommon = {
     bk_col_reference: "Փաստաթուղթ",
     bk_col_currency: "Արժույթ",
     bk_col_balance: "Մնացորդ",
+    bk_col_type_code: "Գործարքի տեսակ",
+    bk_col_counterparty_account: "Հակառակ կողմի հաշիվ",
     cf_kind_income: "Եկամուտ",
     cf_kind_expense: "Ծախսեր",
     cf_kind_owner: "Սեփականատեր",

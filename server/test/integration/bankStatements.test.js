@@ -16,6 +16,7 @@ const CSV = [
 
 test.before(async () => {
   await startTestServer();
+  await pool.query("UPDATE cash_accounts SET account_number = NULL WHERE account_number = '1660000000000100'"); // a crashed earlier run must not leave the number behind
   accountant = await createUser("accountant");
   director = await createUser("sales_director");
   cookies = { accountant: await loginAs(accountant.email), director: await loginAs(director.email) };
@@ -119,4 +120,84 @@ test("a statement with unknown columns needs a mapping; with one it imports", as
   const ok = await post("/import", "accountant", form({ mapping: { date: 0, description: 1, amount: 2 } }, csv));
   assert.equal(ok.status, 201, JSON.stringify(ok.data));
   assert.equal(ok.data.new_lines, 1);
+});
+
+// ---- Evoca layout (owner, 2026-11-11): the statement names its own account, proves its own totals ----
+import { evocaWorkbook, evocaRows, ACCOUNT } from "../evocaFixture.js";
+
+const evocaForm = async (rows, extra = {}) => {
+  const f = new FormData();
+  f.append("file", new Blob([await evocaWorkbook(rows)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "evoca.xlsx");
+  if (extra.account_id !== undefined) f.append("account_id", String(extra.account_id));
+  if (extra.accept_mismatch) f.append("accept_mismatch", "1");
+  return f;
+};
+
+test("Evoca: the preview shows the statement's own header and checks; no account chosen yet = the person is asked, nothing is saved", async () => {
+  const p = await post("/preview", "accountant", await evocaForm(evocaRows()));
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(p.data.account_needed, true);
+  assert.equal(p.data.account, null);
+  assert.equal(p.data.statement.account_number, ACCOUNT);
+  assert.equal(p.data.statement.opening_balance, 2200000);
+  assert.equal(p.data.total, 5);
+  assert.equal(p.data.money_in, 5350000);
+  assert.equal(p.data.money_out, 314500);
+  assert.equal(p.data.checks.ok, true);
+  assert.equal((await post("/import", "accountant", await evocaForm(evocaRows()))).status, 400, "an import needs its account");
+});
+
+test("Evoca: the first import teaches the account its number; the next statement finds its account by itself; another account is refused", async () => {
+  const first = await post("/import", "accountant", await evocaForm(evocaRows(), { account_id: accountId }));
+  assert.equal(first.status, 201, JSON.stringify(first.data));
+  assert.equal(first.data.new_lines, 5);
+  const { rows: [acc] } = await pool.query("SELECT account_number FROM cash_accounts WHERE id = $1", [accountId]);
+  assert.equal(acc.account_number, ACCOUNT);
+  const { rows: stored } = await pool.query("SELECT type_code, counterparty_account FROM bank_statement_lines WHERE account_id = $1 AND type_code = 'FEE'", [accountId]);
+  assert.equal(stored.length, 1, "the kind of operation is kept");
+  const { rows: [imp] } = await pool.query("SELECT statement_meta FROM bank_imports WHERE account_id = $1 ORDER BY id DESC LIMIT 1", [accountId]);
+  assert.equal(imp.statement_meta.account_number, ACCOUNT);
+  assert.equal(imp.statement_meta.checks.ok, true);
+
+  // found by its number, no account sent
+  const again = await post("/preview", "accountant", await evocaForm(evocaRows()));
+  assert.equal(again.data.account.id, accountId);
+  assert.equal(again.data.account_needed, false);
+  assert.equal(again.data.already_imported, 5, "the same statement read again adds nothing");
+  // a wrong choice is refused with a clear reason
+  const wrong = await post("/preview", "accountant", await evocaForm(evocaRows(), { account_id: otherAccountId }));
+  assert.equal(wrong.status, 400);
+  assert.equal(wrong.data.code, "wrong_account");
+  assert.match(wrong.data.error, new RegExp(ACCOUNT));
+});
+
+test("Evoca: lines that do not add up to the statement's own totals are refused unless the accountant accepts the difference", async () => {
+  const broken = evocaRows();
+  broken.splice(12, 1);
+  const refused = await post("/import", "accountant", await evocaForm(broken, { account_id: accountId }));
+  assert.equal(refused.status, 409);
+  assert.equal(refused.data.code, "totals_mismatch");
+  assert.ok(refused.data.checks.items.length > 0);
+  const accepted = await post("/import", "accountant", await evocaForm(broken, { account_id: accountId, accept_mismatch: true }));
+  assert.equal(accepted.status, 201, JSON.stringify(accepted.data));
+  const { rows: [imp] } = await pool.query("SELECT statement_meta FROM bank_imports WHERE account_id = $1 ORDER BY id DESC LIMIT 1", [accountId]);
+  assert.equal(imp.statement_meta.accepted_mismatch, true, "the audit trail says it was accepted");
+});
+
+test("Evoca: an AMD statement is refused in a USD account, and an account with another saved number refuses this statement", async () => {
+  const usd = (await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'bank') RETURNING id", [`ITEST Bank USD ${Date.now()}`])).rows[0].id;
+  const numbered = (await pool.query("INSERT INTO cash_accounts (name, kind, account_number) VALUES ($1, 'bank', 'OTHER-NUMBER-1') RETURNING id", [`ITEST Numbered ${Date.now()}`])).rows[0].id;
+  try {
+    const noNumber = evocaRows();
+    noNumber[2] = ["Հաշիվ N", "", "x"]; // a statement that does not name its account: only the currency can tell
+    const wrongCurrency = await post("/preview", "accountant", await evocaForm(noNumber, { account_id: usd }));
+    assert.equal(wrongCurrency.status, 400);
+    assert.equal(wrongCurrency.data.code, "wrong_account");
+    assert.match(wrongCurrency.data.error, /AMD/);
+    const otherNumber = await post("/import", "accountant", await evocaForm(evocaRows(), { account_id: numbered }));
+    assert.equal(otherNumber.status, 400);
+    assert.equal(otherNumber.data.code, "wrong_account");
+  } finally {
+    await pool.query("DELETE FROM cash_accounts WHERE id = ANY($1)", [[usd, numbered]]);
+  }
 });
