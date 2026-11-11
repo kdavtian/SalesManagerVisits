@@ -5,6 +5,7 @@
 // rep per sync) and a KAD OS customer sees it in their app (GET /api/partner/wishes).
 import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
+import { HOLDS_STOCK_SQL } from "./appStock.js";
 
 export const WISH_NOTIFY_ROLES = ["admin", "ceo", "operations_director", "sales_director"];
 const MAX_NAME = 120;
@@ -69,9 +70,7 @@ export async function markWishesBackInStock(db = pool) {
     `WITH avail AS (
        SELECT p.id, p.name, p.unit,
               p.stock_qty - COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                                      WHERE oi.product_id = p.id
-                                        AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out')
-                                             OR (o.status = 'delivered' AND p.synced_at IS NOT NULL AND o.updated_at > p.synced_at))), 0) AS available
+                                      WHERE oi.product_id = p.id AND ${HOLDS_STOCK_SQL}), 0) AS available
        FROM products p
        WHERE p.active AND p.stock_qty IS NOT NULL AND p.id IN (SELECT product_id FROM product_wishes WHERE back_in_stock_at IS NULL AND product_id IS NOT NULL)
      )

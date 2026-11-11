@@ -14,6 +14,8 @@ import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
 import { normalizeErpText, normalizeErpUnitKey } from "../../erp/erpTransform.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
+import { HOLDS_STOCK_SQL } from "../../orders/appStock.js";
+import { canConfirmOrders, canDeliverOrders, canRecordOrders } from "../../shared/roles.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
 // served back, so there's no reason to write it to disk first.
@@ -53,14 +55,13 @@ export async function fetchPricedProducts(where, params, role) {
   const { rows } = await pool.query(
     `WITH sel AS (SELECT p.id, p.synced_at FROM products p ${where}),
      -- Pieces already promised to other orders: in the pipeline (submitted/confirmed/packed)
-     -- or delivered since the last stock sync (the Excel stock does not know them yet).
+     -- or delivered in the app and not found in the Excel yet (orders/appStock.js HOLDS_STOCK_SQL).
      -- One grouped join for the whole list: the per-product subquery this replaced took 0.96 s for
-     -- 5,000 products with 300,000 order lines (0.14 s now, same numbers).
+     -- 5,000 products with 300,000 order lines (0.14 s then; the delivered-not-in-Excel rule checks updated_at first so its history lookup stays rare).
      rsv AS (
        SELECT sel.id AS product_id, SUM(oi.quantity) AS qty
        FROM sel JOIN order_items oi ON oi.product_id = sel.id JOIN orders o ON o.id = oi.order_id
-       WHERE o.status IN ('submitted', 'confirmed', 'packed_stock_out')
-          OR (o.status = 'delivered' AND sel.synced_at IS NOT NULL AND o.updated_at > sel.synced_at)
+       WHERE ${HOLDS_STOCK_SQL}
        GROUP BY sel.id
      )
      SELECT p.*,
@@ -199,6 +200,25 @@ productsRouter.get("/:id/image", async (req, res) => {
   const imagePath = rows[0]?.image_path;
   if (!imagePath) return res.status(404).json({ error: "No image set" });
   await sendProductImage(req, res, imagePath);
+});
+
+// Which orders hold a product's stock right now (owner, 2026-11-11: "I can't find the 17 pcs in other orders"): the very orders behind
+// reserved_qty, with their status, so the number can be explained. A rep sees the customer only on their own orders (made by them, or for a
+// customer assigned to them); the roles that handle every order (confirm / deliver / record them) see every customer.
+productsRouter.get("/:id/holding-orders", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(404).json({ error: "Not found" });
+  const { rows } = await pool.query(
+    `SELECT o.id, o.order_code, o.status, (o.user_id = $2 OR c.assigned_manager_id = $2) AS mine, c.name AS customer_name, SUM(oi.quantity)::int AS quantity,
+            to_char(COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = o.status), o.updated_at) AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS since
+     FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN customers c ON c.id = o.customer_id
+     WHERE oi.product_id = $1 AND ${HOLDS_STOCK_SQL}
+     GROUP BY o.id, c.name, c.assigned_manager_id
+     ORDER BY array_position(ARRAY['submitted', 'confirmed', 'packed_stock_out', 'delivered'], o.status), o.id DESC LIMIT 200`,
+    [id, req.user.id]
+  );
+  const all = canConfirmOrders(req.user.role) || canDeliverOrders(req.user.role) || canRecordOrders(req.user.role);
+  res.json(rows.map(({ mine, ...r }) => (all || mine ? r : { ...r, order_code: null, customer_name: null })));
 });
 
 productsRouter.use(requireProductManager);

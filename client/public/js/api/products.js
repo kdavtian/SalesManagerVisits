@@ -30,6 +30,7 @@ export const productsApi = {
   listProductPromos: (id) => request(`/products/${id}/promos`),
   createProductPromo: (id, data) => json(`/products/${id}/promos`, "POST", data),
   deleteProductPromo: (id, promoId) => request(`/products/${id}/promos/${promoId}`, { method: "DELETE" }),
+  getProductHoldingOrders: (id) => request(`/products/${id}/holding-orders`, { fresh: true }),
   getProductPriceHistory: (id) => request(`/products/${id}/price-history`),
   getProduct: (id) => request(`/products/${id}`),
   uploadProductPhoto: (id, formData) => request(`/products/${id}/images`, { method: "POST", body: formData }),

@@ -66,9 +66,44 @@ function stockWarning(product, requestedQty) {
   if (requestedQty > available) {
     const reserved = Number(product.reserved_qty) || 0;
     const base = `${t("only_n_available_prefix")}${Math.max(available, 0)}${t("only_n_available_suffix")}`;
-    return { level: "warning", text: reserved > 0 ? `${base} (${t("reserved_by_orders_prefix")}${reserved})` : base };
+    // the reserved pieces are a link to the very orders that hold them (owner, 2026-11-11: "I can't find the 17 pcs in other orders")
+    return { level: "warning", text: reserved > 0 ? `${base} (<button type="button" class="oc-holding-link" data-holding="${Number(product.id)}">${t("reserved_by_orders_prefix")}${reserved}</button>)` : base };
   }
   return null;
+}
+
+// Which orders hold a product's stock: one capture listener for the whole app (the product list and the "Your order" sheet both show the link).
+async function openHoldingOrders(productId) {
+  const overlay = openInfoPopup(`<h2>${escapeHtml(t("holding_orders_title"))}</h2><p class="loading-state" role="status">${escapeHtml(t("loading"))}</p>`);
+  const body = overlay.querySelector(".info-popup-body");
+  try {
+    const rows = await api.getProductHoldingOrders(productId);
+    body.innerHTML = `<h2>${escapeHtml(t("holding_orders_title"))}</h2><p class="muted">${escapeHtml(t("holding_orders_hint"))}</p>${
+      rows.length
+        ? `<div class="oc-holding-list">${rows
+            .map((r) => `<div class="oc-holding-row"><span><strong>${escapeHtml(r.order_code || t("holding_orders_other_rep"))}</strong>${r.customer_name ? `<span class="muted"> · ${escapeHtml(r.customer_name)}</span>` : ""}<span class="muted oc-holding-sub">${escapeHtml(t(`order_status_${r.status}`))} · ${escapeHtml(formatDateDMY(r.since))}</span></span><strong>${Number(r.quantity)}</strong></div>`)
+            .join("")}</div>`
+        : `<p class="muted">${escapeHtml(t("holding_orders_none"))}</p>`
+    }`;
+  } catch (err) {
+    body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+  }
+}
+let holdingListener = false;
+function installHoldingLink() {
+  if (holdingListener) return;
+  holdingListener = true;
+  document.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest?.("[data-holding]");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openHoldingOrders(Number(btn.dataset.holding));
+    },
+    true
+  );
 }
 
 // opts.from = "erp:<order id>" | "app:<order id>" pre-fills the cart with that past order (Reorder);
@@ -80,6 +115,7 @@ function stockWarning(product, requestedQty) {
 export async function renderOrderCreate(root, navigate, customerId, checkinId, opts = {}) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
+  installHoldingLink();
 
   let customer, products;
   try {

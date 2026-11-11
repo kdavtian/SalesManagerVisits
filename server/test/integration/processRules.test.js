@@ -144,3 +144,36 @@ test("products show stock still available after other orders' reservations", asy
   assert.equal(p.reserved_qty, 4);
   assert.equal(p.available_qty, 6);
 });
+
+// Owner, 2026-11-11: "Castrol Dexron VI 1L shows 0 on stock but we have it; I can't find the 17 pcs in other orders". A delivered order the Excel
+// ALREADY holds was subtracted a second time whenever it changed after the product's last stock sync (and synced_at only moves when the Excel
+// quantity changes). Delivered-but-not-in-Excel uses the stock count's rule now: no Excel match, delivered in the last 14 days.
+test("a delivered order the Excel already shows no longer holds stock; one the Excel does not show yet still does; the holding orders are listed", async () => {
+  const customer = await erpCustomer("hold");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 17, synced_at = now() - interval '5 days' WHERE id = $1", [product.id]);
+  // the Excel is up to date (its newest order is today): the 14-day window runs on the Excel's clock
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, 1)", [customer.erp_customer_id, `ITEST-HOLD-TODAY-${stamp}`]);
+  const inExcel = await order(customer, product, 17);
+  // the sync found it in the workbook and moved it to delivered; later something else touched it (updated_at after synced_at)
+  await pool.query("UPDATE orders SET status = 'delivered', delivered_from_erp = true, erp_matched_order_id = $2, updated_at = now() WHERE id = $1", [inExcel.id, `ITEST-HOLD-${stamp}`]);
+  const view = async () => (await apiRequest("/api/products", { cookie: cookies.sales_manager })).data.find((x) => x.id === product.id);
+  let p = await view();
+  assert.equal(p.reserved_qty, 0, "the Excel stock already left those 17 out: they are not subtracted again");
+  assert.equal(p.available_qty, 17);
+  // the out-of-stock guard agrees: a new order for it is accepted
+  const ok = await order(customer, product, 3);
+  p = await view();
+  assert.equal(p.reserved_qty, 3, "the new open order holds 3");
+  // delivered in the app, not in the Excel yet: still held
+  await pool.query("UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1", [ok.id]);
+  assert.equal((await view()).reserved_qty, 3);
+  const holding = await apiRequest(`/api/products/${product.id}/holding-orders`, { cookie: cookies.sales_manager });
+  assert.equal(holding.status, 200);
+  assert.deepEqual(holding.data.map((r) => [r.status, r.quantity]), [["delivered", 3]]);
+  assert.equal(holding.data[0].order_code, ok.order_code, "the rep sees their own order");
+  // more than 14 days after delivery an unmatched order is taken as already in the Excel stock (the stock count's rule)
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'confirmed', 'delivered', now() - interval '20 days')", [ok.id]);
+  await pool.query("UPDATE orders SET updated_at = now() - interval '20 days' WHERE id = $1", [ok.id]);
+  assert.equal((await view()).reserved_qty, 0);
+});

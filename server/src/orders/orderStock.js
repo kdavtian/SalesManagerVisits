@@ -2,11 +2,12 @@
 // which are out of stock"). The New order screen already hid the Add button, but nothing on the server checked: a KAD OS order, an
 // order edit, a reorder or a replayed offline order could still carry a product we do not have.
 //
-// A product is out of stock when its Excel stock minus what other open orders already promised (submitted / confirmed / packed, and
-// delivered since the last stock sync -- the same "reserved" as products.js) leaves nothing. Unknown stock (no Excel figure) passes for
+// A product is out of stock when its Excel stock minus what other orders hold (submitted / confirmed / packed, and delivered but not in the
+// Excel yet -- appStock.js HOLDS_STOCK_SQL, the same "reserved" as products.js) leaves nothing. Unknown stock (no Excel figure) passes for
 // our own staff, as on the order screen, but not for a customer ordering in KAD OS (its catalog never shows such a product).
 // Only what an order ADDS is checked: a product already in the order may keep its quantity (or go down) when the stock ran out later.
 import { pool } from "../db/pool.js";
+import { HOLDS_STOCK_SQL } from "./appStock.js";
 
 export async function outOfStockProducts(items, { excludeOrderId = null, previous = new Map(), strictUnknown = false, db = pool } = {}) {
   const wanted = new Map();
@@ -21,9 +22,7 @@ export async function outOfStockProducts(items, { excludeOrderId = null, previou
   const { rows } = await db.query(
     `SELECT p.id, p.name, p.unit, p.stock_qty,
             COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                      WHERE oi.product_id = p.id AND o.id IS DISTINCT FROM $2
-                        AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out')
-                             OR (o.status = 'delivered' AND p.synced_at IS NOT NULL AND o.updated_at > p.synced_at))), 0)::int AS reserved
+                      WHERE oi.product_id = p.id AND o.id IS DISTINCT FROM $2 AND ${HOLDS_STOCK_SQL}), 0)::int AS reserved
      FROM products p WHERE p.id = ANY($1)`,
     [added, excludeOrderId]
   );

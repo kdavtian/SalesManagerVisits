@@ -21,22 +21,35 @@ export const MATCH_WINDOW_DAYS = 14; // erpAutoMatch.js markAppRowsInExcel: erp.
 // is built from exactly the same SQL. `p` must be the products row alias of the surrounding query.
 export const PACKED_OUT_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
               WHERE oi.product_id = p.id AND o.cancelled_at IS NULL AND o.status = 'packed_stock_out'), 0)`;
+// The Excel's "now": the newest order date the workbook holds (+1 day). An unmatched delivery is released after MATCH_WINDOW_DAYS of THAT clock,
+// not of the wall clock: when the upload stops for two weeks (a holiday, a broken bot) the app must not hand those pieces back to sale while the
+// Excel stock still includes them (review of 2026-11-11). No Excel orders at all: the wall clock.
+export const EXCEL_NOW_SQL = `LEAST(now(), COALESCE((SELECT max(order_date) FROM erp_order_lines)::timestamp AT TIME ZONE 'Asia/Yerevan' + interval '1 day', now()))`;
+const DELIVERED_AT = `COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`;
+// Delivered in the app, not found in the Excel, inside the match window. `o` = the orders alias. updated_at is checked first (a delivery is never
+// later than the order's last change), so the history lookup runs only for the few recent ones -- the products list stays fast.
+export const DELIVERED_NOT_IN_EXCEL_COND = `(o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+     AND o.updated_at > ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days'
+     AND ${DELIVERED_AT} > ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days')`;
 export const DELIVERED_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-              WHERE oi.product_id = p.id AND o.cancelled_at IS NULL
-                AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
-                AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)
-                    > now() - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
+              WHERE oi.product_id = p.id AND o.cancelled_at IS NULL AND ${DELIVERED_NOT_IN_EXCEL_COND}), 0)`;
 // FOR INFORMATION, never subtracted: delivered in the app 15..180 days ago and still not found in Excel. After MATCH_WINDOW_DAYS the app stops
 // subtracting an unmatched delivery (it takes it as already in the Excel stock). If Excel in fact never got that sale (a customer without an
 // ERP id, a sale the accountant forgot), the app's number is TOO HIGH by exactly this much: the shelf holds less than the app says.
 export const DELIVERED_OLDER_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
               WHERE oi.product_id = p.id AND o.cancelled_at IS NULL
                 AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
-                AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)
-                    BETWEEN now() - interval '180 days' AND now() - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
+                AND ${DELIVERED_AT} BETWEEN ${EXCEL_NOW_SQL} - interval '180 days' AND ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
 export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
               WHERE ri.product_id = p.id AND r.kind = 'return' AND r.status = 'done' AND COALESCE(ri.condition, 'good') = 'good'
                 AND (r.recorded_at IS NULL OR (r.recorded_via = 'manual' AND p.synced_at IS NOT NULL AND r.recorded_at > p.synced_at))), 0)`;
+// An order HOLDS stock (it is subtracted from the Excel stock to get what can still be sold) while it is open, packed and out, or delivered in
+// the app and not yet found in the Excel (the same "not in Excel yet" rule as DELIVERED_NOT_IN_EXCEL_SQL above). `o` = the orders alias.
+// Owner, 2026-11-11 (Castrol Dexron VI 1L showed 0 although it is on the shelf, "17 pcs in other orders" nowhere to be found): the catalogue and
+// the out-of-stock guard used "delivered and changed after the product's last stock sync" instead. A delivered order the Excel ALREADY holds
+// (moved to delivered by the sync itself, or edited later: a signature, a payment link) was subtracted a second time, for as long as that
+// product's Excel quantity did not change (synced_at only moves when it does).
+export const HOLDS_STOCK_SQL = `(o.cancelled_at IS NULL AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out') OR ${DELIVERED_NOT_IN_EXCEL_COND}))`;
 export const APP_STOCK_SQL = `(p.stock_qty - ${PACKED_OUT_SQL} - ${DELIVERED_NOT_IN_EXCEL_SQL} + ${RETURNS_BACK_SQL})`;
 
 /** Where the app's number comes from, per product: Excel stock, packed out, delivered but not in Excel yet, returns back. As of now. */
