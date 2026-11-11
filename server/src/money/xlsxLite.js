@@ -7,10 +7,16 @@ import JSZip from "jszip";
 import { SaxesParser } from "saxes";
 
 const MAX_XML_BYTES = 60 * 1024 * 1024; // a statement is a few hundred KB: refuse a zip bomb
+const MAX_PARTS = 2000;
+const MAX_COLUMN = 16383; // XFD, Excel's last column
+const MAX_ROW = 1048576; // Excel's last row
 
 async function partText(zip, name) {
   const entry = zip.file(name) ?? zip.file(name.replace(/^\//, ""));
   if (!entry) return null;
+  // the size the zip DECLARES is checked before anything is inflated (a 15 MB upload can hide gigabytes)
+  const declared = entry._data?.uncompressedSize;
+  if (Number(declared) > MAX_XML_BYTES) throw new Error("The workbook part is too large");
   const text = await entry.async("string");
   if (text.length > MAX_XML_BYTES) throw new Error("The workbook part is too large");
   return text.replace(/^﻿/, "");
@@ -24,6 +30,7 @@ function walk(xml, handlers) {
   });
   parser.on("opentag", (node) => handlers.open?.(node.local, node));
   parser.on("text", (text) => handlers.text?.(text));
+  parser.on("cdata", (text) => handlers.text?.(text));
   parser.on("closetag", (node) => handlers.close?.(node.local, node));
   parser.write(xml).close();
 }
@@ -107,10 +114,10 @@ async function dateStyles(zip) {
 }
 
 const colIndex = (ref) => {
-  const letters = /^[A-Z]+/i.exec(ref ?? "")?.[0] ?? "";
+  const letters = /^[A-Z]{1,3}/i.exec(ref ?? "")?.[0] ?? "";
   let n = 0;
   for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
-  return n - 1;
+  return n - 1 > MAX_COLUMN ? -1 : n - 1; // a crafted reference ("ZZZZZZZZ1") would make an array of billions
 };
 
 // Excel serial day number -> a Date at UTC midnight (the 1900 system, with its leap-year bug for dates after 28 Feb 1900).
@@ -118,6 +125,7 @@ const serialToDate = (n) => new Date(Math.round((n - 25569) * 86400000));
 
 export async function readXlsxRows(buffer) {
   const zip = await JSZip.loadAsync(buffer);
+  if (Object.keys(zip.files).length > MAX_PARTS) throw new Error("The workbook has too many parts");
   const workbookXml = await partText(zip, "xl/workbook.xml");
   const relsXml = await partText(zip, "xl/_rels/workbook.xml.rels");
   const path = (workbookXml && sheetPath(workbookXml, relsXml)) || "xl/worksheets/sheet1.xml";
@@ -154,7 +162,7 @@ export async function readXlsxRows(buffer) {
           const n = Number(cell.v);
           value = Number.isFinite(n) ? (dateStyleSet.has(cell.s) ? serialToDate(n) : n) : cell.v;
         }
-        if (cell.row > 0 && cell.col >= 0 && value !== "") {
+        if (cell.row > 0 && cell.row <= MAX_ROW && cell.col >= 0 && value !== "") {
           const row = rows.get(cell.row) ?? [];
           row[cell.col] = value;
           rows.set(cell.row, row);

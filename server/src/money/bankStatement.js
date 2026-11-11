@@ -179,7 +179,9 @@ function readMeta(rows, headerRow) {
       if (key === "period_from" || key === "period_to") meta[key] = parseDate(value);
       else if (key === "opening_balance" || key === "closing_balance" || key === "total_in" || key === "total_out") meta[key] = parseAmount(value);
       else if (key === "account_number") {
-        meta.account_number = String(value ?? "").replace(/\s+/g, "").toUpperCase() || undefined;
+        // an account number / IBAN, not any text that happens to sit in that cell
+        const number = String(value ?? "").replace(/\s+/g, "").toUpperCase();
+        meta.account_number = /^(?=(?:.*\d){6})[A-Z0-9]{6,34}$/.test(number) ? number : undefined;
         const holder = String(row[2] ?? "").trim();
         if (holder) meta.holder = holder;
       } else if (key === "currency") {
@@ -267,6 +269,13 @@ export async function readStatement(buffer, fileName, { mapping = null, defaultC
       if (at >= 0) {
         const lead = norm(row[at]);
         const dayDate = dateInText(row[at]);
+        // a row that carries money but is not a recognised day row is NOT silently dropped (a counterparty called "Balance Motors" whose date
+        // could not be read must show up in the skipped list)
+        const carriesMoney = ["credit", "debit", "amount"].some((f) => parseAmount(cellAt(row, f)));
+        if (!(dayDate && (DAY_ROW_MOVEMENT.test(lead) || DAY_ROW_BALANCE.test(lead))) && carriesMoney) {
+          skipped.push({ row: r + 1, reason: "no date" });
+          continue;
+        }
         if (dayDate && DAY_ROW_MOVEMENT.test(lead)) {
           const d = days.get(dayDate) ?? {};
           d.in = parseAmount(cellAt(row, "credit")) ?? parseAmount(cellAt(row, "amount")) ?? d.in;

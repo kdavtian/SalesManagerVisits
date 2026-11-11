@@ -16,6 +16,7 @@ const CSV = [
 
 test.before(async () => {
   await startTestServer();
+  await pool.query("UPDATE cash_accounts SET account_number = NULL WHERE account_number = '1660000000000100'"); // a crashed earlier run must not leave the number behind
   accountant = await createUser("accountant");
   director = await createUser("sales_director");
   cookies = { accountant: await loginAs(accountant.email), director: await loginAs(director.email) };
@@ -181,4 +182,22 @@ test("Evoca: lines that do not add up to the statement's own totals are refused 
   assert.equal(accepted.status, 201, JSON.stringify(accepted.data));
   const { rows: [imp] } = await pool.query("SELECT statement_meta FROM bank_imports WHERE account_id = $1 ORDER BY id DESC LIMIT 1", [accountId]);
   assert.equal(imp.statement_meta.accepted_mismatch, true, "the audit trail says it was accepted");
+});
+
+test("Evoca: an AMD statement is refused in a USD account, and an account with another saved number refuses this statement", async () => {
+  const usd = (await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'bank') RETURNING id", [`ITEST Bank USD ${Date.now()}`])).rows[0].id;
+  const numbered = (await pool.query("INSERT INTO cash_accounts (name, kind, account_number) VALUES ($1, 'bank', 'OTHER-NUMBER-1') RETURNING id", [`ITEST Numbered ${Date.now()}`])).rows[0].id;
+  try {
+    const noNumber = evocaRows();
+    noNumber[2] = ["Հաշիվ N", "", "x"]; // a statement that does not name its account: only the currency can tell
+    const wrongCurrency = await post("/preview", "accountant", await evocaForm(noNumber, { account_id: usd }));
+    assert.equal(wrongCurrency.status, 400);
+    assert.equal(wrongCurrency.data.code, "wrong_account");
+    assert.match(wrongCurrency.data.error, /AMD/);
+    const otherNumber = await post("/import", "accountant", await evocaForm(evocaRows(), { account_id: numbered }));
+    assert.equal(otherNumber.status, 400);
+    assert.equal(otherNumber.data.code, "wrong_account");
+  } finally {
+    await pool.query("DELETE FROM cash_accounts WHERE id = ANY($1)", [[usd, numbered]]);
+  }
 });

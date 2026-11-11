@@ -63,6 +63,15 @@ async function readFor(req) {
     throw Object.assign(new Error(`${chosen.name} is saved with account number ${chosen.account_number}, this statement is for ${number}`), { status: 400, code: "wrong_account" });
   }
   const account = chosen ?? named;
+  // the statement's currency must be the account's: an AMD statement in a USD account (or the reverse) distorts balances for good
+  const currency = statement.meta?.currency;
+  if (account && currency) {
+    const usdAccount = /usd|dollar/i.test(account.name);
+    const amdAccount = /\bamd\b|dram/i.test(account.name);
+    if ((usdAccount && currency !== "USD") || (amdAccount && currency === "USD")) {
+      throw Object.assign(new Error(`This statement is in ${currency}, but ${account.name} is a ${usdAccount ? "USD" : "AMD"} account`), { status: 400, code: "wrong_account" });
+    }
+  }
   return { account, statement, number, rememberNumber: Boolean(account && !account.account_number && number) };
 }
 
@@ -124,7 +133,14 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
       [account.id, req.file.originalname?.slice(0, 200) ?? null, statement.lines.length, statement.skipped.length, req.user.id, JSON.stringify({ ...statement.meta, checks: { ok: statement.checks.ok, compared: statement.checks.compared, problems: statement.checks.problems }, accepted_mismatch: req.body?.accept_mismatch === "1" })]
     );
     // the first statement of an account teaches the app its number (the next files find their account by it)
-    if (rememberNumber) await client.query("UPDATE cash_accounts SET account_number = $2 WHERE id = $1 AND account_number IS NULL", [account.id, number]);
+    if (rememberNumber) {
+      const set = await client.query("UPDATE cash_accounts SET account_number = $2 WHERE id = $1 AND account_number IS NULL", [account.id, number]);
+      if (!set.rowCount) {
+        // somebody saved a number on this account since the preview: it must be this statement's, or the file belongs elsewhere
+        const { rows: [cur] } = await client.query("SELECT account_number FROM cash_accounts WHERE id = $1", [account.id]);
+        if (cur?.account_number && cur.account_number !== number) throw Object.assign(new Error(`${account.name} is saved with account number ${cur.account_number}, this statement is for ${number}`), { status: 409, code: "wrong_account" });
+      }
+    }
     let added = 0;
     for (let i = 0; i < statement.lines.length; i++) {
       const l = statement.lines[i];
@@ -143,6 +159,7 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
     res.status(201).json({ import_id: imp.id, new_lines: added, duplicate_lines: statement.lines.length - added, skipped: statement.skipped.length, ...recon.counts, payments });
   } catch (err) {
     await client.query("ROLLBACK");
+    if (err.status) return res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
     throw err;
   } finally {
     client.release();

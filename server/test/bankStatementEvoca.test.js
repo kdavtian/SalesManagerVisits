@@ -66,3 +66,32 @@ test("a plain statement without a header block or subtotals has nothing to compa
   const checks = checkStatement([{ line_date: "2026-10-01", amount: 5 }], {}, new Map());
   assert.equal(checks.ok, null);
 });
+
+// ---- review fixes (2026-11-11) ----
+test("a row with money whose date cannot be read is reported, never silently dropped (even when a counterparty starts with 'Balance')", async () => {
+  const rows = evocaRows();
+  rows.splice(12, 0, ["1 Oct 2026", "100099", "TRF", "1570000000000999", "Payment", "50,000.00", "0.00", "Balance Motors LLC"]);
+  const statement = await readStatement(await evocaWorkbook(rows), "evoca.xlsx");
+  assert.equal(statement.lines.length, 5, "the five real lines");
+  assert.equal(statement.skipped.length, 1, "the unreadable one is listed");
+  assert.equal(statement.skipped[0].reason, "no date");
+});
+
+test("a header cell that is not an account number is not taken for one", async () => {
+  const rows = evocaRows();
+  rows[2] = ["Հաշիվ N", "see attached", "x"];
+  const { meta } = await readStatement(await evocaWorkbook(rows), "evoca.xlsx");
+  assert.equal(meta.account_number, undefined);
+});
+
+test("a crafted cell reference cannot make an array of billions, and a part that declares a huge size is refused before it is inflated", async () => {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await evocaWorkbook(evocaRows()));
+  const sheet = await zip.file("xl/worksheets/sheet1.xml").async("string");
+  zip.file("xl/worksheets/sheet1.xml", sheet.replace('<x:row r="1">', '<x:row r="1"><x:c r="ZZZZZZZZ1" t="s"><x:v>0</x:v></x:c>'));
+  const started = Date.now();
+  const rows = await readXlsxRows(await zip.generateAsync({ type: "nodebuffer" }));
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(rows[0][0], "Ժամանակահատվածի սկիզբ", "the real cell is still read; the crafted one is dropped");
+  assert.ok(rows[0].length < 10);
+});
