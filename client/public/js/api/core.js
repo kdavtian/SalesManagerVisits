@@ -200,6 +200,8 @@ export async function doRequest(path, options) {
     const message =
       body?.code === "out_of_stock" && Array.isArray(body.products)
         ? t("order_out_of_stock_error").replace("{names}", body.products.map((p) => p.name).join(", "))
+        : body?.code === "short_stock" && Array.isArray(body.products)
+        ? t("order_short_stock_error").replace("{items}", body.products.map((p) => `${p.name} (${t("order_short_stock_item").replace("{wanted}", p.wanted).replace("{left}", p.available)})`).join(", "))
         : res.status === 403 && (body?.message || body?.error) === "Not allowed"
           ? t("not_available_for_role")
           : body?.message || body?.error;

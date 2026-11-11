@@ -69,6 +69,15 @@ function stockWarning(product, requestedQty) {
     // the reserved pieces are a link to the very orders that hold them (owner, 2026-11-11: "I can't find the 17 pcs in other orders")
     return { level: "warning", text: reserved > 0 ? `${base} (<button type="button" class="oc-holding-link" data-holding="${Number(product.id)}">${t("reserved_by_orders_prefix")}${reserved}</button>)` : base };
   }
+  // Submitted orders do not hold stock (owner, 2026-11-11), but when they already want what is left the rep is told: whoever is confirmed
+  // first gets the pieces.
+  const submitted = Number(product.submitted_qty) || 0;
+  if (submitted > 0 && requestedQty > available - submitted) {
+    return {
+      level: "warning",
+      text: `${t("submitted_shortage").replace("{n}", submitted).replace("{left}", Math.max(available - submitted, 0))} <button type="button" class="oc-holding-link" data-holding="${Number(product.id)}">${t("submitted_shortage_see")}</button>`,
+    };
+  }
   return null;
 }
 

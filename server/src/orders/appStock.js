@@ -49,7 +49,10 @@ export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_re
 // the out-of-stock guard used "delivered and changed after the product's last stock sync" instead. A delivered order the Excel ALREADY holds
 // (moved to delivered by the sync itself, or edited later: a signature, a payment link) was subtracted a second time, for as long as that
 // product's Excel quantity did not change (synced_at only moves when it does).
-export const HOLDS_STOCK_SQL = `(o.cancelled_at IS NULL AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out') OR ${DELIVERED_NOT_IN_EXCEL_COND}))`;
+// Owner, 2026-11-11: a SUBMITTED order (not yet confirmed) does not hold stock -- the availability is not reduced by it; the order screen warns
+// the rep instead when submitted orders already want the pieces (SUBMITTED_SQL), and confirming checks the real stock (orderStock.js).
+export const HOLDS_STOCK_SQL = `(o.cancelled_at IS NULL AND (o.status IN ('confirmed', 'packed_stock_out') OR ${DELIVERED_NOT_IN_EXCEL_COND}))`;
+export const SUBMITTED_SQL = `(o.cancelled_at IS NULL AND o.status = 'submitted')`;
 export const APP_STOCK_SQL = `(p.stock_qty - ${PACKED_OUT_SQL} - ${DELIVERED_NOT_IN_EXCEL_SQL} + ${RETURNS_BACK_SQL})`;
 
 /** Where the app's number comes from, per product: Excel stock, packed out, delivered but not in Excel yet, returns back. As of now. */

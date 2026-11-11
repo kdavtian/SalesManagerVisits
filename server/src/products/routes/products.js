@@ -14,7 +14,7 @@ import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
 import { normalizeErpText, normalizeErpUnitKey } from "../../erp/erpTransform.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { HOLDS_STOCK_SQL } from "../../orders/appStock.js";
+import { HOLDS_STOCK_SQL, SUBMITTED_SQL } from "../../orders/appStock.js";
 import { canConfirmOrders, canDeliverOrders, canRecordOrders } from "../../shared/roles.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
@@ -59,13 +59,16 @@ export async function fetchPricedProducts(where, params, role) {
      -- One grouped join for the whole list: the per-product subquery this replaced took 0.96 s for
      -- 5,000 products with 300,000 order lines (0.14 s then; the delivered-not-in-Excel rule checks updated_at first so its history lookup stays rare).
      rsv AS (
-       SELECT sel.id AS product_id, SUM(oi.quantity) AS qty
+       SELECT sel.id AS product_id, SUM(oi.quantity) FILTER (WHERE ${HOLDS_STOCK_SQL}) AS qty,
+              SUM(oi.quantity) FILTER (WHERE ${SUBMITTED_SQL}) AS submitted
        FROM sel JOIN order_items oi ON oi.product_id = sel.id JOIN orders o ON o.id = oi.order_id
-       WHERE ${HOLDS_STOCK_SQL}
+       WHERE ${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL}
        GROUP BY sel.id
      )
      SELECT p.*,
             COALESCE(rsv.qty, 0)::int AS reserved_qty,
+            -- submitted orders do not hold stock, but they already want these pieces: the order screen warns the rep (owner, 2026-11-11)
+            COALESCE(rsv.submitted, 0)::int AS submitted_qty,
             promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
      FROM products p
      LEFT JOIN rsv ON rsv.product_id = p.id
@@ -212,7 +215,7 @@ productsRouter.get("/:id/holding-orders", async (req, res) => {
     `SELECT o.id, o.order_code, o.status, (o.user_id = $2 OR c.assigned_manager_id = $2) AS mine, c.name AS customer_name, SUM(oi.quantity)::int AS quantity,
             to_char(COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = o.status), o.updated_at) AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS since
      FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN customers c ON c.id = o.customer_id
-     WHERE oi.product_id = $1 AND ${HOLDS_STOCK_SQL}
+     WHERE oi.product_id = $1 AND (${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL})
      GROUP BY o.id, c.name, c.assigned_manager_id
      ORDER BY array_position(ARRAY['submitted', 'confirmed', 'packed_stock_out', 'delivered'], o.status), o.id DESC LIMIT 200`,
     [id, req.user.id]

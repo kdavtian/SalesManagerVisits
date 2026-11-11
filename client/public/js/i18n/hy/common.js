@@ -608,6 +608,8 @@ export const hyCommon = {
     wish_period_d90: "90 օր",
     wish_period_d365: "Տարի",
     wish_period_all: "Բոլորը",
+    order_short_stock_error: "Պահեստում բավարար չէ՝ {items}",
+    order_short_stock_item: "պետք է {wanted}, մնացել է {left}",
     order_out_of_stock_error: "Պահեստում չկա, հանեք պատվերից՝ {names}",
     category_all: "Բոլոր կատեգորիաները",
     category_merch: "Մերչ",
