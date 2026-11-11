@@ -301,6 +301,7 @@ const APP_SHELL = [
   "/js/syncQueueSheet.js",
   "/js/routeNavigation.js",
   "/js/orderDetailSheet.js",
+  "/js/orderFlags.js",
   "/js/productAddSheet.js",
   "/js/productSearch.js",
   "/js/photoLightbox.js",

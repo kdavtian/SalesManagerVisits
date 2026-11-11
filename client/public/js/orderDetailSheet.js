@@ -23,6 +23,8 @@ import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openReturnSheet } from "./returnSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 import { installInlineClearButton } from "./searchBar.js";
+import { notInExcelBadgeHtml } from "./orderFlags.js";
+export { notInExcelBadgeHtml };
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -55,11 +57,6 @@ export function paymentMethodBadgeHtml(method) {
   if (!method) return "";
   const cash = method === "cash";
   return `<span class="badge ${cash ? "badge-warning" : "badge-info"}">${t(cash ? "payment_method_cash" : "payment_method_invoice")}</span>`;
-}
-
-// "Not in Excel" (owner, 2026-11-11): delivered, but the Excel still does not show it after 14 days -- the accountant has it on their list.
-export function notInExcelBadgeHtml(order) {
-  return order?.not_in_excel_at ? `<span class="badge badge-danger" title="${t("not_in_excel_hint")}">${t("not_in_excel_badge")}</span>` : "";
 }
 
 // "APP": the order came from a customer's KAD OS (it gets queue priority and a delivery promise).

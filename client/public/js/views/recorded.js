@@ -7,7 +7,7 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth, labelColon } from "../util.js";
 import { t } from "../i18n.js";
-import { notInExcelBadgeHtml } from "../orderDetailSheet.js";
+import { notInExcelBadgeHtml } from "../orderFlags.js";
 
 
 function formatDate(value) {
