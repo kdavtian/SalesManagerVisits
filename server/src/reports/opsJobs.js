@@ -5,6 +5,7 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 import { excelStatus, dataScorecard } from "./opsReports.js";
 import { createOpsTask, closeOpsTasks, usersWithRole } from "../team/opsTasks.js";
 import { isWorkingDay, minuteOfDay } from "../team/vaghinak/engine.js";
+import { flagOrdersNotInExcel } from "../orders/notInExcel.js";
 
 const CHECK_LABELS = {
   customers_no_channel: "Հաճախորդներ՝ առանց ուղղության",
@@ -32,6 +33,8 @@ export async function runOpsJobs(now = new Date(), db = pool) {
 
   const workday = dow >= 1 && dow <= 5 && (await isWorkingDay(db, day));
   if (!workday) return result;
+  // delivered orders the Excel still does not show after the match window: flag + the accountant's list (orders/notInExcel.js)
+  result.notInExcel = await flagOrdersNotInExcel(db).catch((err) => console.error("Not-in-Excel flagging failed:", err.message));
 
   if (!excel.today_synced && minute >= 10 * 60) {
     for (const id of await accountants(db)) {

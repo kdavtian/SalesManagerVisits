@@ -57,6 +57,11 @@ export function paymentMethodBadgeHtml(method) {
   return `<span class="badge ${cash ? "badge-warning" : "badge-info"}">${t(cash ? "payment_method_cash" : "payment_method_invoice")}</span>`;
 }
 
+// "Not in Excel" (owner, 2026-11-11): delivered, but the Excel still does not show it after 14 days -- the accountant has it on their list.
+export function notInExcelBadgeHtml(order) {
+  return order?.not_in_excel_at ? `<span class="badge badge-danger" title="${t("not_in_excel_hint")}">${t("not_in_excel_badge")}</span>` : "";
+}
+
 // "APP": the order came from a customer's KAD OS (it gets queue priority and a delivery promise).
 export function appBadgeHtml(order) {
   return order?.placed_via_app ? `<span class="badge badge-accent app-badge">${t("kos_badge_app")}</span>` : "";
@@ -261,7 +266,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         ${order.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(order.order_code)}</span>` : ""}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
-      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span>${
+      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span>${order.not_in_excel_at ? ` ${notInExcelBadgeHtml(order)}` : ""}${
       order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""

@@ -1857,7 +1857,7 @@ ordersRouter.patch("/:id/recorded", async (req, res) => {
 
   const { rows: updatedRows } = await pool.query(
     recorded
-      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now() WHERE id = $2 RETURNING *"
+      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now(), not_in_excel_at = NULL WHERE id = $2 RETURNING *"
       : "UPDATE orders SET recorded = false, recorded_by = NULL, recorded_at = NULL WHERE id = $1 RETURNING *",
     recorded ? [req.user.id, req.params.id] : [req.params.id]
   );
