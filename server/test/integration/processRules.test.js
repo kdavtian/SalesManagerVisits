@@ -152,6 +152,8 @@ test("a delivered order the Excel already shows no longer holds stock; one the E
   const customer = await erpCustomer("hold");
   const product = await createProduct({ unit_price_amd: 1000 });
   await pool.query("UPDATE products SET stock_qty = 17, synced_at = now() - interval '5 days' WHERE id = $1", [product.id]);
+  // the Excel is up to date (its newest order is today): the 14-day window runs on the Excel's clock
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, 1)", [customer.erp_customer_id, `ITEST-HOLD-TODAY-${stamp}`]);
   const inExcel = await order(customer, product, 17);
   // the sync found it in the workbook and moved it to delivered; later something else touched it (updated_at after synced_at)
   await pool.query("UPDATE orders SET status = 'delivered', delivered_from_erp = true, erp_matched_order_id = $2, updated_at = now() WHERE id = $1", [inExcel.id, `ITEST-HOLD-${stamp}`]);
