@@ -25,7 +25,7 @@ export const PACKED_OUT_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_item
 // not of the wall clock: when the upload stops for two weeks (a holiday, a broken bot) the app must not hand those pieces back to sale while the
 // Excel stock still includes them (review of 2026-11-11). No Excel orders at all: the wall clock.
 export const EXCEL_NOW_SQL = `LEAST(now(), COALESCE((SELECT max(order_date) FROM erp_order_lines)::timestamp AT TIME ZONE 'Asia/Yerevan' + interval '1 day', now()))`;
-const DELIVERED_AT = `COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`;
+export const DELIVERED_AT = `COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`;
 // Delivered in the app, not found in the Excel, inside the match window. `o` = the orders alias. updated_at is checked first (a delivery is never
 // later than the order's last change), so the history lookup runs only for the few recent ones -- the products list stays fast.
 export const DELIVERED_NOT_IN_EXCEL_COND = `(o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp

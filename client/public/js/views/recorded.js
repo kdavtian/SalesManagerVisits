@@ -7,6 +7,8 @@
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth, labelColon } from "../util.js";
 import { t } from "../i18n.js";
+import { notInExcelBadgeHtml } from "../orderFlags.js";
+
 
 function formatDate(value) {
   return formatDayMonth(new Date(value), { year: true });
@@ -70,7 +72,7 @@ export async function renderRecorded(root, navigate) {
   function compactRowHtml(r) {
     const badge = r.recorded
       ? `<span class="badge badge-success">${t("recorded_recorded_by")}</span>`
-      : `<span class="badge badge-warning">${t("recorded_tab_unrecorded")}</span>`;
+      : `<span class="badge badge-warning">${t("recorded_tab_unrecorded")}</span>${notInExcelBadgeHtml(r)}`;
     return `
       <button type="button" class="card list-row ${r.id === selectedId ? "recorded-row-active" : ""}" data-select-row="${r.id}">
         <div class="list-row-body">

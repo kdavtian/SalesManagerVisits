@@ -4,7 +4,7 @@ import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiter
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { loadWithCache } from "../listCache.js";
-import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml } from "../orderDetailSheet.js";
+import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml, notInExcelBadgeHtml } from "../orderDetailSheet.js";
 import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { dockedKey } from "../dockSheet.js";
@@ -592,7 +592,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
             </div>
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}${o.checkin_id ? ` · ${t("order_at_visit")}` : ""}</div>
             <div class="list-row-bottom">
-              ${appBadgeHtml(o)}
+              ${appBadgeHtml(o)}${notInExcelBadgeHtml(o)}
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
               ${o.delivered_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
               ${paymentMethodBadgeHtml(o.payment_method)}

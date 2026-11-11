@@ -742,7 +742,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
   // lands here), so unlike the "unrecorded" backlog it can't be assumed
   // small -- same fetch-one-extra-row-for-has_more pattern as GET / above.
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at,
+    `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at, o.not_in_excel_at,
             c.id AS customer_id, c.name AS customer_name, c.erp_customer_id,
             rb.name AS recorded_by_name,
             pod.id AS pod_record_id, pod.payment_id,
@@ -1857,7 +1857,7 @@ ordersRouter.patch("/:id/recorded", async (req, res) => {
 
   const { rows: updatedRows } = await pool.query(
     recorded
-      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now() WHERE id = $2 RETURNING *"
+      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now(), not_in_excel_at = NULL WHERE id = $2 RETURNING *"
       : "UPDATE orders SET recorded = false, recorded_by = NULL, recorded_at = NULL WHERE id = $1 RETURNING *",
     recorded ? [req.user.id, req.params.id] : [req.params.id]
   );

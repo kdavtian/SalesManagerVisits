@@ -23,6 +23,8 @@ import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openReturnSheet } from "./returnSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 import { installInlineClearButton } from "./searchBar.js";
+import { notInExcelBadgeHtml } from "./orderFlags.js";
+export { notInExcelBadgeHtml };
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
 // draft -> submitted -> confirmed -> packed_stock_out -> delivered, every
@@ -261,7 +263,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
         ${order.order_code ? `<span>${t("order_id_label")}${labelColon()}${escapeHtml(order.order_code)}</span>` : ""}
       </div>
       <h2 class="order-detail-customer">${customerNameLinkHtml(order.customer_name, order.customer_id)}</h2>
-      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span>${
+      <p>${appBadgeHtml(order)} <span class="badge ${meta.cls}">${t(meta.key)}</span> ${notInExcelBadgeHtml(order)}${
       order.delivered_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${
       order.payment_method ? ` ${paymentMethodBadgeHtml(order.payment_method)}` : ""
