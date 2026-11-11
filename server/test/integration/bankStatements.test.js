@@ -120,3 +120,65 @@ test("a statement with unknown columns needs a mapping; with one it imports", as
   assert.equal(ok.status, 201, JSON.stringify(ok.data));
   assert.equal(ok.data.new_lines, 1);
 });
+
+// ---- Evoca layout (owner, 2026-11-11): the statement names its own account, proves its own totals ----
+import { evocaWorkbook, evocaRows, ACCOUNT } from "../evocaFixture.js";
+
+const evocaForm = async (rows, extra = {}) => {
+  const f = new FormData();
+  f.append("file", new Blob([await evocaWorkbook(rows)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "evoca.xlsx");
+  if (extra.account_id !== undefined) f.append("account_id", String(extra.account_id));
+  if (extra.accept_mismatch) f.append("accept_mismatch", "1");
+  return f;
+};
+
+test("Evoca: the preview shows the statement's own header and checks; no account chosen yet = the person is asked, nothing is saved", async () => {
+  const p = await post("/preview", "accountant", await evocaForm(evocaRows()));
+  assert.equal(p.status, 200, JSON.stringify(p.data));
+  assert.equal(p.data.account_needed, true);
+  assert.equal(p.data.account, null);
+  assert.equal(p.data.statement.account_number, ACCOUNT);
+  assert.equal(p.data.statement.opening_balance, 2200000);
+  assert.equal(p.data.total, 5);
+  assert.equal(p.data.money_in, 5350000);
+  assert.equal(p.data.money_out, 314500);
+  assert.equal(p.data.checks.ok, true);
+  assert.equal((await post("/import", "accountant", await evocaForm(evocaRows()))).status, 400, "an import needs its account");
+});
+
+test("Evoca: the first import teaches the account its number; the next statement finds its account by itself; another account is refused", async () => {
+  const first = await post("/import", "accountant", await evocaForm(evocaRows(), { account_id: accountId }));
+  assert.equal(first.status, 201, JSON.stringify(first.data));
+  assert.equal(first.data.new_lines, 5);
+  const { rows: [acc] } = await pool.query("SELECT account_number FROM cash_accounts WHERE id = $1", [accountId]);
+  assert.equal(acc.account_number, ACCOUNT);
+  const { rows: stored } = await pool.query("SELECT type_code, counterparty_account FROM bank_statement_lines WHERE account_id = $1 AND type_code = 'FEE'", [accountId]);
+  assert.equal(stored.length, 1, "the kind of operation is kept");
+  const { rows: [imp] } = await pool.query("SELECT statement_meta FROM bank_imports WHERE account_id = $1 ORDER BY id DESC LIMIT 1", [accountId]);
+  assert.equal(imp.statement_meta.account_number, ACCOUNT);
+  assert.equal(imp.statement_meta.checks.ok, true);
+
+  // found by its number, no account sent
+  const again = await post("/preview", "accountant", await evocaForm(evocaRows()));
+  assert.equal(again.data.account.id, accountId);
+  assert.equal(again.data.account_needed, false);
+  assert.equal(again.data.already_imported, 5, "the same statement read again adds nothing");
+  // a wrong choice is refused with a clear reason
+  const wrong = await post("/preview", "accountant", await evocaForm(evocaRows(), { account_id: otherAccountId }));
+  assert.equal(wrong.status, 400);
+  assert.equal(wrong.data.code, "wrong_account");
+  assert.match(wrong.data.error, new RegExp(ACCOUNT));
+});
+
+test("Evoca: lines that do not add up to the statement's own totals are refused unless the accountant accepts the difference", async () => {
+  const broken = evocaRows();
+  broken.splice(12, 1);
+  const refused = await post("/import", "accountant", await evocaForm(broken, { account_id: accountId }));
+  assert.equal(refused.status, 409);
+  assert.equal(refused.data.code, "totals_mismatch");
+  assert.ok(refused.data.checks.items.length > 0);
+  const accepted = await post("/import", "accountant", await evocaForm(broken, { account_id: accountId, accept_mismatch: true }));
+  assert.equal(accepted.status, 201, JSON.stringify(accepted.data));
+  const { rows: [imp] } = await pool.query("SELECT statement_meta FROM bank_imports WHERE account_id = $1 ORDER BY id DESC LIMIT 1", [accountId]);
+  assert.equal(imp.statement_meta.accepted_mismatch, true, "the audit trail says it was accepted");
+});

@@ -6,7 +6,7 @@ import { activateDialog, escapeHtml, formatDateDMY, showToast } from "./util.js"
 
 const nf = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 const money = (n, currency = "AMD") => (currency === "USD" ? `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : nf(n));
-const FIELDS = ["date", "amount", "debit", "credit", "description", "counterparty", "reference", "currency", "balance"];
+const FIELDS = ["date", "amount", "debit", "credit", "description", "counterparty", "reference", "currency", "balance", "type_code", "counterparty_account"];
 const KINDS = ["income", "expense", "owner", "internal"];
 
 export async function openBankSheet(meta, onChanged) {
@@ -17,7 +17,7 @@ export async function openBankSheet(meta, onChanged) {
       <h2>${escapeHtml(t("bk_title"))}</h2>
       <details class="bk-import" id="bk-import" open>
         <summary>${escapeHtml(t("bk_import"))}</summary>
-        <label>${escapeHtml(t("cf_f_account"))}<select id="bk-account">${meta.accounts.filter((a) => a.active !== false).sort((a, b) => (a.kind === "bank" ? 0 : 1) - (b.kind === "bank" ? 0 : 1)).map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("")}</select></label>
+        <label>${escapeHtml(t("cf_f_account"))}<select id="bk-account"><option value="">${escapeHtml(t("bk_account_detect"))}</option>${meta.accounts.filter((a) => a.active !== false).sort((a, b) => (a.kind === "bank" ? 0 : 1) - (b.kind === "bank" ? 0 : 1)).map((a) => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join("")}</select></label>
         <label>${escapeHtml(t("bk_file"))}<span class="bk-file-btn btn btn-block"><span id="bk-file-name">${escapeHtml(t("bk_choose_file"))}</span><input type="file" id="bk-file" accept=".csv,.txt,.xlsx" /></span></label>
         <div id="bk-preview"></div>
         <p class="form-error" id="bk-error" hidden></p>
@@ -91,18 +91,41 @@ export async function openBankSheet(meta, onChanged) {
     $("#bk-preview").innerHTML = `<p class="loading-state" role="status">${escapeHtml(t("loading"))}</p>`;
     try {
       const p = await api.previewBankStatement(file, $("#bk-account").value, mapping);
+      // the statement named its account: the list follows it
+      if (p.account && $("#bk-account").value !== String(p.account.id)) $("#bk-account").value = String(p.account.id);
       paintPreview(p, file);
     } catch (err) {
       $("#bk-preview").innerHTML = "";
-      fail(err.message);
+      fail(err.body?.code === "wrong_account" ? t("bk_wrong_account") : err.message);
     }
   }
+  const checkLine = (i) => {
+    const date = i.date ? `${formatDateDMY(i.date)}: ` : "";
+    return `${date}${t(`bk_check_${i.kind}`)} ${nf(i.expected)} ≠ ${nf(i.got)}`;
+  };
   function paintPreview(p, file) {
     const cols = (sel) => `<option value="">—</option>${p.headers.map((h, i) => `<option value="${i}" ${p.mapping?.[sel] === i ? "selected" : ""}>${escapeHtml(h || `#${i + 1}`)}</option>`).join("")}`;
     const mappingHtml = p.needs_mapping
       ? `<p class="muted">${escapeHtml(t("bk_need_mapping"))}</p><div class="bk-map">${FIELDS.map((f) => `<label>${escapeHtml(t(`bk_col_${f}`))}<select data-map="${f}">${cols(f)}</select></label>`).join("")}</div><button type="button" class="btn" id="bk-remap">${escapeHtml(t("bk_read_again"))}</button>`
       : "";
+    const st = p.statement ?? {};
+    const header = st.number
+      ? `<div class="bk-stmt"><div><strong>${escapeHtml(p.account?.name ?? st.holder ?? "")}</strong>${st.number ? ` · <span class="muted">${escapeHtml(st.number)}</span>` : ""}</div>
+         ${st.period_from ? `<div class="muted">${escapeHtml(formatDateDMY(st.period_from))} – ${escapeHtml(formatDateDMY(st.period_to))}${st.opening_balance != null ? ` · ${escapeHtml(t("bk_balance_from_to").replace("{from}", nf(st.opening_balance)).replace("{to}", nf(st.closing_balance)))}` : ""}</div>` : ""}
+         <div class="muted">${escapeHtml(t("bk_in_out").replace("{in}", nf(p.money_in)).replace("{out}", nf(p.money_out)))}</div></div>`
+      : "";
+    const accountNote = p.account_needed
+      ? `<p class="form-error">${escapeHtml(t("bk_account_needed"))}</p>`
+      : p.remember_number ? `<p class="muted">${escapeHtml(t("bk_account_remember").replace("{number}", st.number))}</p>` : "";
+    const bad = p.checks?.ok === false;
+    const checksHtml = p.checks?.ok === true
+      ? `<p class="bk-check-ok">✓ ${escapeHtml(t("bk_checks_ok").replace("{n}", p.checks.compared))}</p>`
+      : bad
+        ? `<div class="bk-check-bad"><p><strong>${escapeHtml(t("bk_checks_bad"))}</strong></p><ul>${p.checks.items.slice(0, 6).map((i) => `<li>${escapeHtml(checkLine(i))}</li>`).join("")}</ul>
+           <label class="bk-accept"><input type="checkbox" id="bk-accept" /> ${escapeHtml(t("bk_checks_accept"))}</label></div>`
+        : "";
     $("#bk-preview").innerHTML = `
+      ${header}${accountNote}${checksHtml}
       ${p.total ? `<p><strong>${p.total}</strong> ${escapeHtml(t("bk_lines"))} · ${escapeHtml(formatDateDMY(p.first_date))} – ${escapeHtml(formatDateDMY(p.last_date))}${p.already_imported ? ` · <span class="muted">${escapeHtml(t("bk_already").replace("{n}", p.already_imported))}</span>` : ""}${p.skipped_count ? ` · <span class="muted">${escapeHtml(t("bk_skipped").replace("{n}", p.skipped_count))}</span>` : ""}</p>
       <div class="bk-sample">${p.sample.map((l) => `<div><span>${escapeHtml(formatDateDMY(l.line_date))}</span><span class="muted bk-sample-text">${escapeHtml(l.counterparty || l.description || "")}</span><span class="${l.amount < 0 ? "cf-out" : "cf-in"}">${l.amount < 0 ? "−" : "+"}${money(Math.abs(l.amount), l.currency)}</span></div>`).join("")}</div>
       <button type="button" class="btn btn-primary btn-block" id="bk-do-import">${escapeHtml(t("bk_import_now").replace("{n}", p.total - p.already_imported))}</button>` : ""}
@@ -112,10 +135,15 @@ export async function openBankSheet(meta, onChanged) {
       overlay.querySelectorAll("[data-map]").forEach((s) => s.value !== "" && (mapping[s.dataset.map] = Number(s.value)));
       preview();
     });
+    const importBtn = $("#bk-do-import");
+    const allowed = () => !p.account_needed || $("#bk-account").value !== "";
+    const syncImport = () => importBtn && (importBtn.disabled = !allowed() || (bad && !$("#bk-accept")?.checked));
+    $("#bk-accept")?.addEventListener("change", syncImport);
+    syncImport();
     $("#bk-do-import")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       try {
-        const r = await api.importBankStatement(file, $("#bk-account").value, mapping);
+        const r = await api.importBankStatement(file, $("#bk-account").value, mapping, { acceptMismatch: bad && $("#bk-accept")?.checked });
         changed = true;
         $("#bk-file").value = "";
         $("#bk-file-name").textContent = t("bk_choose_file");
@@ -127,7 +155,7 @@ export async function openBankSheet(meta, onChanged) {
         await load();
         onChanged?.();
       } catch (err) {
-        fail(err.message);
+        fail(err.body?.code === "totals_mismatch" ? t("bk_checks_bad") : err.body?.code === "wrong_account" ? t("bk_wrong_account") : err.message);
         e.currentTarget.disabled = false;
       }
     });

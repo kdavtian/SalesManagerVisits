@@ -1441,6 +1441,8 @@ export const enCommon = {
     bk_col_reference: "Reference",
     bk_col_currency: "Currency",
     bk_col_balance: "Balance",
+    bk_col_type_code: "Operation type",
+    bk_col_counterparty_account: "Counterparty account",
     cf_kind_income: "Income",
     cf_kind_expense: "Expenses",
     cf_kind_owner: "Owner",

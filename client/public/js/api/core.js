@@ -219,11 +219,12 @@ export function json(path, method, data) {
   });
 }
 
-export function bankForm(file, accountId, mapping) {
+export function bankForm(file, accountId, mapping, { acceptMismatch = false } = {}) {
   const form = new FormData();
   form.set("file", file);
-  form.set("account_id", String(accountId));
+  if (accountId) form.set("account_id", String(accountId)); // no account = the statement's own account number decides
   if (mapping) form.set("mapping", JSON.stringify(mapping));
+  if (acceptMismatch) form.set("accept_mismatch", "1");
   return form;
 }
 
