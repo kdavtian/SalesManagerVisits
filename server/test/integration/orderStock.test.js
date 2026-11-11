@@ -43,12 +43,17 @@ test("KAD Motors app: an out-of-stock product is refused with its name; in stock
   assert.equal((await newOrder(repCookie, [{ product_id: inStock.id, quantity: 2 }, { product_id: unknownStock.id, quantity: 1 }])).status, 201);
 });
 
-test("what other open orders already promised counts: the last pieces cannot be sold twice", async () => {
+test("what other orders already took counts: the last pieces cannot be sold twice", async () => {
   await pool.query("UPDATE products SET stock_qty = 3 WHERE id = $1", [inStock.id]);
   const first = await newOrder(repCookie, [{ product_id: inStock.id, quantity: 3 }]);
   assert.equal(first.status, 201);
+  // owner, 2026-11-11: a SUBMITTED order does not hold stock (the rep is only warned); once it is confirmed it does
+  const meanwhile = await newOrder(repCookie, [{ product_id: inStock.id, quantity: 1 }]);
+  assert.equal(meanwhile.status, 201, "the first order is only submitted: it does not take the pieces yet");
+  await pool.query("UPDATE orders SET status = 'confirmed' WHERE id = ANY($1)", [[first.data.id]]);
+  await pool.query("UPDATE orders SET status = 'confirmed' WHERE status = 'submitted' AND id IN (SELECT order_id FROM order_items WHERE product_id = $1) AND id <> $2", [inStock.id, meanwhile.data.id]);
   const second = await newOrder(repCookie, [{ product_id: inStock.id, quantity: 1 }]);
-  assert.equal(second.status, 409, "all 3 are promised to the first order (plus the 2 from the previous test)");
+  assert.equal(second.status, 409, "all 3 are held by the confirmed orders");
   await pool.query("UPDATE products SET stock_qty = 100 WHERE id = $1", [inStock.id]);
 });
 

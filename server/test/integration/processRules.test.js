@@ -138,10 +138,16 @@ test("products show stock still available after other orders' reservations", asy
   const customer = await erpCustomer("stock");
   const product = await createProduct({ unit_price_amd: 1000 });
   await pool.query("UPDATE products SET stock_qty = 10 WHERE id = $1", [product.id]);
-  await order(customer, product, 4);
-  const list = await apiRequest("/api/products", { cookie: cookies.sales_manager });
-  const p = list.data.find((x) => x.id === product.id);
-  assert.equal(p.reserved_qty, 4);
+  const o = await order(customer, product, 4);
+  const view = async () => (await apiRequest("/api/products", { cookie: cookies.sales_manager })).data.find((x) => x.id === product.id);
+  // owner, 2026-11-11: a submitted order does not hold stock; it is only counted as "wanted" for the rep's warning
+  let p = await view();
+  assert.equal(p.reserved_qty, 0);
+  assert.equal(p.submitted_qty, 4);
+  assert.equal(p.available_qty, 10);
+  await pool.query("UPDATE orders SET status = 'confirmed' WHERE id = $1", [o.id]);
+  p = await view();
+  assert.equal(p.reserved_qty, 4, "confirmed: it holds now");
   assert.equal(p.available_qty, 6);
 });
 
@@ -164,7 +170,8 @@ test("a delivered order the Excel already shows no longer holds stock; one the E
   // the out-of-stock guard agrees: a new order for it is accepted
   const ok = await order(customer, product, 3);
   p = await view();
-  assert.equal(p.reserved_qty, 3, "the new open order holds 3");
+  assert.equal(p.reserved_qty, 0, "a submitted order does not hold");
+  assert.equal(p.submitted_qty, 3);
   // delivered in the app, not in the Excel yet: still held
   await pool.query("UPDATE orders SET status = 'delivered', updated_at = now() WHERE id = $1", [ok.id]);
   assert.equal((await view()).reserved_qty, 3);
@@ -176,4 +183,26 @@ test("a delivered order the Excel already shows no longer holds stock; one the E
   await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'confirmed', 'delivered', now() - interval '20 days')", [ok.id]);
   await pool.query("UPDATE orders SET updated_at = now() - interval '20 days' WHERE id = $1", [ok.id]);
   assert.equal((await view()).reserved_qty, 0);
+});
+
+test("confirming takes the pieces: a submitted order that no longer fits the stock cannot be confirmed; the credit check counts a delivered order the Excel holds once", async () => {
+  const customer = await erpCustomer("short");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 5 WHERE id = $1", [product.id]);
+  const first = await order(customer, product, 4);
+  const second = await order(customer, product, 3); // both submitted: 7 wanted, 5 on the shelf -- allowed, the rep was warned
+  const confirm = (id) => apiRequest(`/api/orders/${id}`, { method: "PATCH", cookie: cookies.sales_director, body: { status: "confirmed" } });
+  const c1 = await confirm(first.id);
+  assert.equal(c1.status, 200, JSON.stringify(c1.data));
+  const c2 = await confirm(second.id);
+  assert.equal(c2.status, 409);
+  assert.equal(c2.data.code, "short_stock");
+  assert.deepEqual(c2.data.products.map((p) => [p.wanted, p.available]), [[3, 1]]);
+
+  // credit: a delivered order the Excel already holds is not counted again in the exposure
+  const { evaluateCredit } = await import("../../src/orders/creditLimit.js");
+  await pool.query("UPDATE orders SET status = 'delivered', delivered_from_erp = true, erp_matched_order_id = $2, updated_at = now() WHERE id = $1", [first.id, `ITEST-CR-${stamp}`]);
+  await pool.query("UPDATE erp_customer_data SET synced_at = now() - interval '1 day' WHERE erp_customer_id = $1", [customer.erp_customer_id]);
+  const snap = await evaluateCredit(pool, customer.id, 0);
+  assert.equal(snap.openOrders, Number(second.total_amd), "only the submitted order: the delivered one is already in the Excel debt");
 });

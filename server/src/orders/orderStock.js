@@ -38,3 +38,17 @@ export function outOfStockResponse(res, products) {
     products,
   });
 }
+
+// At CONFIRMING (owner, 2026-11-11: submitted orders do not hold stock, so two of them may want the same last pieces): the order's own
+// quantities must fit in what is left after the orders that already hold stock. Unknown stock passes. -> [{ id, name, unit, wanted, available }]
+export async function shortStockProducts(orderId, db = pool) {
+  const { rows } = await db.query(
+    `WITH mine AS (SELECT product_id, SUM(quantity)::int AS wanted FROM order_items WHERE order_id = $1 AND product_id IS NOT NULL GROUP BY product_id)
+     SELECT p.id, p.name, p.unit, mine.wanted,
+            (p.stock_qty - COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                                      WHERE oi.product_id = p.id AND o.id <> $1 AND ${HOLDS_STOCK_SQL}), 0))::int AS available
+     FROM mine JOIN products p ON p.id = mine.product_id WHERE p.stock_qty IS NOT NULL`,
+    [orderId]
+  );
+  return rows.filter((r) => r.wanted > r.available).map((r) => ({ id: r.id, name: r.name, unit: r.unit, wanted: r.wanted, available: Math.max(0, r.available) }));
+}

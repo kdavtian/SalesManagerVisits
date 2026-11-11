@@ -6,7 +6,7 @@ import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
 import { loadBlankOrders, previousDebts } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
-import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
+import { outOfStockProducts, outOfStockResponse, shortStockProducts } from "../orderStock.js";
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -1131,6 +1131,15 @@ ordersRouter.patch("/:id", async (req, res) => {
     const { rows: cRows } = await pool.query("SELECT erp_customer_id FROM customers WHERE id = $1", [order.customer_id]);
     if (!cRows[0]?.erp_customer_id) {
       return res.status(409).json({ error: "This order's customer has no ERP customer ID -- link one before confirming" });
+    }
+    // Submitted orders do not hold stock (owner, 2026-11-11): confirming is the moment the pieces are taken, so they must still be there.
+    const short = await shortStockProducts(order.id);
+    if (short.length) {
+      return res.status(409).json({
+        error: `Not enough stock to confirm: ${short.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`,
+        code: "short_stock",
+        products: short,
+      });
     }
     nextStatus = status;
   }
