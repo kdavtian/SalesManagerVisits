@@ -1256,6 +1256,8 @@ button.cf-row { width: 100%; text-align: left; color: inherit; font: inherit; cu
 .bk-file-btn { position: relative; display: flex; align-items: center; justify-content: center; min-height: 44px; overflow: hidden; }
 .bk-file-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bk-file-btn input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.bk-check-row { display: grid; grid-template-columns: 74px 1fr auto; gap: 8px; align-items: baseline; font-size: 0.85rem; padding: 3px 0; }
+.bk-suggest { display: block; margin-top: 2px; font-size: 0.8rem; }
 .bk-stmt { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; font-size: 0.9rem; overflow-wrap: anywhere; }
 .bk-check-ok { margin: 6px 0; color: #187a45; font-size: 0.88rem; }
 .bk-check-bad { margin: 8px 0; padding: 8px 10px; border-radius: 10px; border: 1px solid #d9534f; background: color-mix(in srgb, #d9534f 8%, transparent); font-size: 0.86rem; }

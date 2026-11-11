@@ -8,7 +8,8 @@ import multer from "multer";
 import { pool } from "../../db/pool.js";
 import { canEditCashflow } from "../../shared/roles.js";
 import { cleanEntry } from "../cashflow.js";
-import { readStatement, hashLines, matchLines, FIELDS } from "../bankStatement.js";
+import { readStatement, hashLines, FIELDS } from "../bankStatement.js";
+import { reconcile, learnFromMatches, checkAgainstLedger } from "../bankReconcile.js";
 import { recordBankLines } from "../payments2/bankPayments.js";
 
 export const bankRouter = Router();
@@ -154,6 +155,8 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
     await client.query("UPDATE bank_imports SET rows_new = $2, rows_duplicate = $3 WHERE id = $1", [imp.id, added, statement.lines.length - added]);
     await client.query("COMMIT");
     const recon = await reconcile({ accountId: account.id, from: statement.lines.reduce((m, l) => (l.line_date < m ? l.line_date : m), "9999-12-31"), to: statement.lines.reduce((m, l) => (l.line_date > m ? l.line_date : m), "0000-01-01") });
+    // every line that found its Cashflow row teaches the category rules
+    await learnFromMatches(recon.lines);
     // customer payments from the new money-in lines (payments redesign, release 2): recorded, or waiting in Unspecified
     const payments = await recordBankLines(pool, { actorId: req.user.id });
     res.status(201).json({ import_id: imp.id, new_lines: added, duplicate_lines: statement.lines.length - added, skipped: statement.skipped.length, ...recon.counts, payments });
@@ -166,41 +169,12 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
   }
 });
 
-// The lines of an account (or all accounts) in a period with their reconciliation state, computed from the current ledger.
-async function reconcile({ accountId = null, from = null, to = null, statuses = null }) {
-  const params = [];
-  const where = [];
-  if (accountId) where.push(`l.account_id = $${params.push(Number(accountId))}`);
-  if (from) where.push(`l.line_date >= $${params.push(from)}`);
-  if (to) where.push(`l.line_date <= $${params.push(to)}`);
-  if (statuses) where.push(`l.status = ANY($${params.push(statuses)})`);
-  const { rows: lines } = await pool.query(
-    `SELECT l.id, l.account_id, a.name AS account, l.line_date::text AS date, l.amount::float8 AS amount, l.currency, l.description, l.counterparty, l.reference, l.balance::float8 AS balance,
-            l.status, l.entry_id, l.decided_at, l.import_id
-     FROM bank_statement_lines l JOIN cash_accounts a ON a.id = l.account_id
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY l.line_date DESC, l.id DESC`,
-    params
-  );
-  const matchedBy = new Map();
-  const open = lines.filter((l) => l.status === "open");
-  const accounts = [...new Set(open.map((l) => l.account_id))];
-  for (const acc of accounts) {
-    const mine = open.filter((l) => l.account_id === acc);
-    const lo = mine.reduce((m, l) => (l.date < m ? l.date : m), "9999-12-31");
-    const hi = mine.reduce((m, l) => (l.date > m ? l.date : m), "0000-01-01");
-    // ±3 days either side of the statement lines; the rows already taken by 'added' lines are not offered again
-    const { rows: entries } = await pool.query(
-      `SELECT id, entry_date::text AS date, amount::float8 AS amount, currency FROM cash_entries
-       WHERE account_id = $1 AND entry_date BETWEEN ($2::date - 3) AND ($3::date + 3) AND id <> ALL($4::int[])`,
-      [acc, lo, hi, lines.filter((l) => l.entry_id).map((l) => l.entry_id)]
-    );
-    for (const [lineId, entryId] of matchLines(mine, entries)) matchedBy.set(lineId, entryId);
-  }
-  const out = lines.map((l) => ({ ...l, matched_entry_id: matchedBy.get(l.id) ?? null, state: l.status === "open" ? (matchedBy.has(l.id) ? "matched" : "unmatched") : l.status }));
-  const counts = { matched: 0, unmatched: 0, added: 0, ignored: 0 };
-  for (const l of out) counts[l.state]++;
-  return { lines: out, counts };
-}
+// The two-way check of one account (owner, 2026-11-11): statement lines with no Cashflow row, Cashflow rows with no bank line, and near misses.
+bankRouter.get("/check", async (req, res) => {
+  const accountId = Number(req.query.account);
+  if (!Number.isInteger(accountId)) return res.status(400).json({ error: "Choose the bank account" });
+  res.json(await checkAgainstLedger({ accountId, from: DATE.test(String(req.query.from ?? "")) ? req.query.from : null, to: DATE.test(String(req.query.to ?? "")) ? req.query.to : null }));
+});
 
 bankRouter.get("/lines", async (req, res) => {
   const state = ["matched", "unmatched", "added", "ignored"].includes(req.query.state) ? req.query.state : null;
@@ -209,6 +183,7 @@ bankRouter.get("/lines", async (req, res) => {
     from: DATE.test(String(req.query.from ?? "")) ? req.query.from : null,
     to: DATE.test(String(req.query.to ?? "")) ? req.query.to : null,
   });
+  await learnFromMatches(lines);
   const limit = Math.min(300, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
   const shown = state ? lines.filter((l) => l.state === state) : lines;
   const { rows: imports } = await pool.query(

@@ -201,3 +201,49 @@ test("Evoca: an AMD statement is refused in a USD account, and an account with a
     await pool.query("DELETE FROM cash_accounts WHERE id = ANY($1)", [[usd, numbered]]);
   }
 });
+
+// ---- the check against the accountant's Excel rows, and learning from them (owner, 2026-11-11) ----
+test("check: statement lines against the Cashflow rows the accountant already booked: matched, missing in Excel, Excel only, near misses; matches teach the categories", async () => {
+  const cat = async (name) => (await pool.query("SELECT id FROM cash_categories WHERE name = $1", [name])).rows[0].id;
+  const [oil, other, salary, transfer] = await Promise.all([cat("Oil order"), cat("Other"), cat("Salary"), cat("Transfer")]);
+  await pool.query("DELETE FROM bank_category_rules WHERE key LIKE 'cp:%տեստ%'");
+  await post("/import", "accountant", await evocaForm(evocaRows(), { account_id: accountId })); // (already imported by an earlier test: no new lines)
+  const book = (date, amount, category, info = null) =>
+    pool.query("INSERT INTO cash_entries (entry_date, amount, amount_amd, account_id, category_id, info, origin) VALUES ($1, $2, $2, $3, $4, $5, 'excel')", [date, amount, accountId, category, info]);
+  await book("2026-10-01", 1000000, oil, "Customer A"); // a payment, same day
+  await book("2026-10-02", 350000, oil); // the next day: still the same transaction
+  await book("2026-10-01", -5500, other); // the bank's fee
+  await book("2026-10-10", -309000, salary); // the salary booked 8 days late: a near miss
+  await book("2026-10-02", -10000, other); // booked by mistake: no bank line
+  const c = (await apiRequest(`/api/cashflow/bank/check?account=${accountId}`, { cookie: cookies.accountant })).data;
+  assert.equal(c.period.from, "2026-10-01");
+  assert.equal(c.counts.lines >= 5, true);
+  assert.equal(c.counts.near, 1, JSON.stringify(c.near.map((n) => [n.line.amount, n.days])));
+  assert.equal(c.near[0].line.amount, -309000);
+  assert.equal(c.near[0].days, 8);
+  assert.ok(c.excel_only.some((e) => e.amount === -10000), "the row with no bank line is listed");
+  assert.ok(c.missing_in_excel.some((l) => l.amount === 4000000), "the transfer nobody booked is missing in Excel");
+  // matched lines taught the rules: the same payer's next line is suggested the accountant's category
+  const { rows: rules } = await pool.query("SELECT key, category_id, hits FROM bank_category_rules WHERE key LIKE 'cp:%տեստ հաճախորդ%|in'");
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].category_id, oil);
+  await pool.query(
+    `INSERT INTO bank_statement_lines (account_id, line_date, amount, currency, description, counterparty, reference, line_hash, type_code, counterparty_account)
+     VALUES ($1, '2026-11-02', 70000, 'AMD', 'Payment', '«ՏԵՍՏ ՀԱՃԱԽՈՐԴ» ՍՊԸ', 'R1', $2, 'TRF', '1570000000000100')`,
+    [accountId, `learn-${Date.now()}`]
+  );
+  // built-in rules need no history: a transfer from one of OUR accounts, a salary
+  await pool.query(
+    `INSERT INTO bank_statement_lines (account_id, line_date, amount, currency, description, counterparty, reference, line_hash, type_code, counterparty_account)
+     VALUES ($1, '2026-11-03', 500000, 'AMD', 'Փոխանցում', 'OWN', 'R2', $3, 'TRF', $2), ($1, '2026-11-03', -120000, 'AMD', 'աշխատավարձ', 'ՏԵՍՏ ԱՇԽԱՏԱԿԻՑ 2', 'R3', $4, 'TRF', '999')`,
+    [otherAccountId, "1660000000000100", `own-${Date.now()}`, `sal-${Date.now()}`]
+  );
+  const mine = (await apiRequest(`/api/cashflow/bank/lines?account=${accountId}&state=unmatched`, { cookie: cookies.accountant })).data.lines.find((l) => l.amount === 70000);
+  assert.equal(mine.suggested_category_id, oil);
+  assert.equal(mine.suggested_reason, "learned:cp");
+  const other2 = (await apiRequest(`/api/cashflow/bank/lines?account=${otherAccountId}&state=unmatched`, { cookie: cookies.accountant })).data.lines;
+  assert.equal(other2.find((l) => l.amount === 500000).suggested_category_id, transfer);
+  assert.equal(other2.find((l) => l.amount === 500000).suggested_reason, "own_account");
+  assert.equal(other2.find((l) => l.amount === -120000).suggested_category_id, salary);
+  await pool.query("DELETE FROM bank_category_rules WHERE key LIKE 'cp:%տեստ%'");
+});

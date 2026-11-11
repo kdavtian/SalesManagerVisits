@@ -22,6 +22,12 @@ export async function openBankSheet(meta, onChanged) {
         <div id="bk-preview"></div>
         <p class="form-error" id="bk-error" hidden></p>
       </details>
+      <details class="bk-import" id="bk-check">
+        <summary>${escapeHtml(t("bk_check_title"))}</summary>
+        <p class="muted">${escapeHtml(t("bk_check_hint"))}</p>
+        <button type="button" class="btn btn-block" id="bk-check-run">${escapeHtml(t("bk_check_run"))}</button>
+        <div id="bk-check-out"></div>
+      </details>
       <div class="cf-periods cf-tabs-even" role="tablist" id="bk-tabs"></div>
       <div id="bk-list" class="bk-list"></div>
       <div class="sheet-actions sheet-actions-floating"><button type="button" class="btn btn-primary" id="bk-close">${escapeHtml(t("done"))}</button></div>
@@ -61,7 +67,7 @@ export async function openBankSheet(meta, onChanged) {
         : l.state === "ignored"
           ? `<div class="bk-actions"><button type="button" class="btn" data-act="reopen">${escapeHtml(t("bk_reopen"))}</button></div>`
           : "";
-    const badge = l.state === "matched" ? `<span class="badge badge-success">${escapeHtml(t("bk_matched"))}</span>` : l.state === "added" ? `<span class="badge badge-info">${escapeHtml(t("bk_added"))}</span>` : l.state === "ignored" ? `<span class="badge badge-neutral">${escapeHtml(t("bk_ignored"))}</span>` : "";
+    const badge = l.state === "matched" ? `<span class="badge badge-success">${escapeHtml(t("bk_matched"))}${l.matched_category ? ` · ${escapeHtml(l.matched_category)}` : ""}</span>` : l.state === "added" ? `<span class="badge badge-info">${escapeHtml(t("bk_added"))}</span>` : l.state === "ignored" ? `<span class="badge badge-neutral">${escapeHtml(t("bk_ignored"))}</span>` : "";
     return `<div class="bk-line" data-id="${l.id}">
       <div class="bk-line-main"><div><strong>${escapeHtml(formatDateDMY(l.date))}</strong> ${badge}<div class="muted bk-line-sub">${escapeHtml(l.account)}${sub ? ` · ${escapeHtml(sub)}` : ""}</div></div>
       <div class="bk-line-amt ${neg ? "cf-out" : "cf-in"}">${neg ? "−" : "+"}${money(Math.abs(l.amount), l.currency)}</div></div>
@@ -169,6 +175,32 @@ export async function openBankSheet(meta, onChanged) {
     if ($("#bk-file").files[0]) preview();
   });
 
+  // ---- the two-way check against the Cashflow rows the accountant already booked ----
+  const row = (date, amount, text) => `<div class="bk-check-row"><span>${escapeHtml(formatDateDMY(date))}</span><span class="muted bk-sample-text">${escapeHtml(text || "")}</span><span class="${amount < 0 ? "cf-out" : "cf-in"}">${amount < 0 ? "−" : "+"}${nf(Math.abs(amount))}</span></div>`;
+  $("#bk-check-run").addEventListener("click", async () => {
+    errEl.hidden = true;
+    const account = $("#bk-account").value;
+    if (!account) return fail(t("bk_check_choose"));
+    $("#bk-check-out").innerHTML = `<p class="loading-state" role="status">${escapeHtml(t("loading"))}</p>`;
+    try {
+      const c = await api.getBankCheck(account);
+      if (!c.period) {
+        $("#bk-check-out").innerHTML = `<p class="muted">${escapeHtml(t("bk_none"))}</p>`;
+        return;
+      }
+      const section = (key, items, render) => (items.length ? `<h4>${escapeHtml(t(key))} (${items.length})</h4>${items.slice(0, 40).map(render).join("")}${items.length > 40 ? `<p class="muted">…${items.length - 40}</p>` : ""}` : "");
+      $("#bk-check-out").innerHTML = `
+        <p><strong>${escapeHtml(formatDateDMY(c.period.from))} – ${escapeHtml(formatDateDMY(c.period.to))}</strong> · ${escapeHtml(t("bk_check_summary").replace("{lines}", c.counts.lines).replace("{matched}", c.counts.matched))}</p>
+        ${c.counts.missing_in_excel + c.counts.excel_only + c.counts.near === 0 ? `<p class="bk-check-ok">✓ ${escapeHtml(t("bk_check_all_ok"))}</p>` : ""}
+        ${section("bk_check_missing", c.missing_in_excel, (l) => row(l.date, l.amount, [l.counterparty, l.description].filter(Boolean).join(" · ")))}
+        ${section("bk_check_excel_only", c.excel_only, (e) => row(e.date, e.amount, [e.category, e.info].filter(Boolean).join(" · ")))}
+        ${section("bk_check_near", c.near, (n) => row(n.line.date, n.line.amount, `${n.line.counterparty || n.line.description || ""} ↔ ${formatDateDMY(n.entry.date)} (${n.days > 0 ? "+" : ""}${n.days} ${t("bk_days")})`))}`;
+    } catch (err) {
+      $("#bk-check-out").innerHTML = "";
+      fail(err.message);
+    }
+  });
+
   // ---- decisions on a line ----
   $("#bk-list").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-act]");
@@ -195,7 +227,7 @@ export async function openBankSheet(meta, onChanged) {
     const extra = el.querySelector(".bk-extra");
     extra.hidden = false;
     extra.innerHTML = `
-      <label>${escapeHtml(t("cf_f_category"))}<select name="category_id">${KINDS.map((k) => `<optgroup label="${escapeHtml(t(`cf_kind_${k}`))}">${meta.categories.filter((c) => c.kind === k).map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}</optgroup>`).join("")}</select></label>
+      <label>${escapeHtml(t("cf_f_category"))}<select name="category_id">${KINDS.map((k) => `<optgroup label="${escapeHtml(t(`cf_kind_${k}`))}">${meta.categories.filter((c) => c.kind === k).map((c) => `<option value="${c.id}" ${c.id === line.suggested_category_id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}</optgroup>`).join("")}</select>${line.suggested_category_id ? `<span class="muted bk-suggest">${escapeHtml(t(line.suggested_confidence === "high" ? "bk_suggested_sure" : "bk_suggested"))}</span>` : ""}</label>
       ${line.amount > 0 ? `<label>${escapeHtml(t("cf_f_customer"))}<input name="erp_customer_id" inputmode="numeric" maxlength="40" /></label>` : ""}
       <label>${escapeHtml(t("cf_f_info"))}<input name="info" maxlength="300" value="${escapeHtml([line.counterparty, line.description].filter(Boolean).join(" - ").slice(0, 300))}" /></label>
       <div class="bk-actions"><button type="button" class="btn" data-x="cancel">${escapeHtml(t("cancel"))}</button><button type="button" class="btn btn-primary" data-x="save">${escapeHtml(t("save"))}</button></div>`;

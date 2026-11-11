@@ -171,6 +171,8 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
     }
     await client.query("INSERT INTO cash_syncs (via, rows_in, rows_skipped, file_name, user_id, note) VALUES ($1, $2, $3, $4, $5, $6)", [via, clean.length, skipped, fileName, userId, note]);
     await client.query("COMMIT");
+    // the accountant's rows may now match bank lines imported earlier: they teach the category rules (best effort, never fails the refresh)
+    import("./bankReconcile.js").then(async (m) => m.learnFromMatches((await m.reconcile({ statuses: ["open"] })).lines)).catch((err) => console.error("Bank category learning failed:", err.message));
     return { rows: clean.length, skipped, accounts_added: accountsAdded, categories_added: categoriesAdded };
   } catch (err) {
     await client.query("ROLLBACK");
