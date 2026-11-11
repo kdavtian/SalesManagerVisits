@@ -37,6 +37,16 @@ export const DELIVERED_OLDER_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantit
 export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
               WHERE ri.product_id = p.id AND r.kind = 'return' AND r.status = 'done' AND COALESCE(ri.condition, 'good') = 'good'
                 AND (r.recorded_at IS NULL OR (r.recorded_via = 'manual' AND p.synced_at IS NOT NULL AND r.recorded_at > p.synced_at))), 0)`;
+// An order HOLDS stock (it is subtracted from the Excel stock to get what can still be sold) while it is open, packed and out, or delivered in
+// the app and not yet found in the Excel (the same "not in Excel yet" rule as DELIVERED_NOT_IN_EXCEL_SQL above). `o` = the orders alias.
+// Owner, 2026-11-11 (Castrol Dexron VI 1L showed 0 although it is on the shelf, "17 pcs in other orders" nowhere to be found): the catalogue and
+// the out-of-stock guard used "delivered and changed after the product's last stock sync" instead. A delivered order the Excel ALREADY holds
+// (moved to delivered by the sync itself, or edited later: a signature, a payment link) was subtracted a second time, for as long as that
+// product's Excel quantity did not change (synced_at only moves when it does).
+export const HOLDS_STOCK_SQL = `(o.cancelled_at IS NULL AND (o.status IN ('submitted', 'confirmed', 'packed_stock_out')
+     OR (o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+         AND COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)
+             > now() - interval '${MATCH_WINDOW_DAYS} days')))`;
 export const APP_STOCK_SQL = `(p.stock_qty - ${PACKED_OUT_SQL} - ${DELIVERED_NOT_IN_EXCEL_SQL} + ${RETURNS_BACK_SQL})`;
 
 /** Where the app's number comes from, per product: Excel stock, packed out, delivered but not in Excel yet, returns back. As of now. */
