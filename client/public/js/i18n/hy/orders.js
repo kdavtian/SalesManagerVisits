@@ -90,6 +90,7 @@ export const hyOrders = {
     recorded_view_signature: "Դիտել ստորագրությունը",
     recorded_recorded_by: "Հաշվառեց",
     recorded_undo: "Հետարկել",
+    recorded_by_excel: "Գտնվել է Excel-ում (ինքնաշխատ)",
     recorded_mark_recorded: "Նշել հաշվառված",
     recorded_empty_unrecorded: "Հաշվառման սպասող առաքված պատվերներ չկան։",
     recorded_empty_recorded: "Հաշվառված պատվերներ դեռ չկան։",

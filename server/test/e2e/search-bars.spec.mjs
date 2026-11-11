@@ -20,7 +20,7 @@ test.describe("Search bars", () => {
     // the channel filter sits inside the field and shows the channel icon (it filters by channel; a person icon used to win a race)
     await expect(bar.locator(".orders-search-actions #order-filter-btn")).toHaveAttribute("aria-label", "Filter by sales channel");
     await expect(bar.locator("#order-filter-btn")).not.toHaveAttribute("data-unified-icon", "true");
-    await expect(page.locator("#order-status-filters [data-status] .order-filter-status-icon")).toHaveCount(6);
+    await expect(page.locator("#order-status-filters [data-status] .order-filter-status-icon")).toHaveCount(7);
     await expect(page.locator('#order-status-filters [data-status="submitted"] .order-status-count-badge')).toHaveText(/^\d+$/);
 
     await expect(page.locator(".orders-list-row, .list-row[data-order-id]").filter({ hasText: north.name })).toBeVisible();

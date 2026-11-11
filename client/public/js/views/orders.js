@@ -23,7 +23,7 @@ const ACCOUNTING_FILTERS = ["pending", "in_progress", "waybill_created", "partia
 // (a waybill or invoice request), with its own row of request-status chips.
 
 // Draft is last: it is not yet part of the live pipeline.
-const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "draft"];
+const STATUS_FILTERS = ["", "submitted", "confirmed", "packed_stock_out", "delivered", "recorded", "draft"];
 
 function formatDate(value) {
   return formatDateTime(value);
@@ -57,7 +57,7 @@ const ORDER_DESK_COLUMNS = () => [
   { key: "payment", label: t("desk_col_payment"), width: "120px", cell: (o) => (o.payment_method ? `${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}${o.credit_term_days != null ? ` · ${o.credit_term_days}${t("days_short")}` : ""}` : "") },
   { key: "liters", label: t("desk_col_liters"), width: "90px", align: "end", cell: (o) => (Number(o.total_liters) > 0 ? formatLiters(Number(o.total_liters)) : "") },
   { key: "created", label: t("desk_col_date"), width: "130px", narrowWidth: "110px", sort: "date", narrow: true, cell: (o) => formatDateTime(o.created_at) },
-  { key: "delivered", label: t("desk_col_delivered"), width: "110px", cell: (o) => (o.status === "delivered" ? formatDayMonth(new Date(o.updated_at)) : "") },
+  { key: "delivered", label: t("desk_col_delivered"), width: "110px", cell: (o) => (o.status === "delivered" || o.status === "recorded" ? formatDayMonth(new Date(o.updated_at)) : "") },
   { key: "documents", label: t("desk_col_documents"), width: "70px", align: "end", cell: (o) => (o.document_count > 0 ? String(o.document_count) : "") },
 ].filter((c) => c.key !== "amount" || showsAmounts());
 const ORDER_DESK_DEFAULTS = ["amount", "code", "rep", "created"];

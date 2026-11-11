@@ -494,11 +494,10 @@ export function isFulfillmentRole(role) {
   return canManageWarehouse(role) || canDeliverOrders(role);
 }
 
-// Who can check/uncheck the accountant's "Recorded" flag on a delivered
-// order (v3 spec section 6) -- the accountant who actually reconciles it
-// against the Excel books, or admin as a backstop.
+// Who can give a delivered order the final status "Recorded" (or take it back): the accountant who checks it against the books, the CEO
+// (owner, 2026-11-11: "Recorded (by accountants, ceo, admin)"), or admin as a backstop.
 export function canRecordOrders(role) {
-  return role === "accountant" || role === "admin";
+  return role === "accountant" || role === "ceo" || role === "admin";
 }
 
 // Who sees the unrecorded-order backlog (count badge, recorded-list
@@ -534,10 +533,10 @@ export function canApproveBonusRewards(role) {
   return canReviewPayments(role);
 }
 
-// Payout recording -- confirmed with the user to mirror canRecordOrders
-// exactly.
+// Payout recording: the accountant or admin (it mirrored canRecordOrders until the CEO was given the order "Recorded" status on 2026-11-11;
+// paying bonuses out did not change).
 export function canRecordBonusPayouts(role) {
-  return canRecordOrders(role);
+  return role === "accountant" || role === "admin";
 }
 
 // Who can download the generated report files (Sales Director workbook,

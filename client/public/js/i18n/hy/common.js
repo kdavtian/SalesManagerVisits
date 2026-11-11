@@ -15,6 +15,7 @@ export const hyCommon = {
     order_status_confirmed: "Հաստատված",
     order_status_packed_stock_out: "Փաթեթավորված և դուրս գրված",
     order_status_delivered: "Առաքված",
+    order_status_recorded: "Հաշվառված",
     stock_issue_note_label: "Պաշարի խնդիր",
     not_allowed: "Չի թույլատրվում",
     total: "Ընդամենը",

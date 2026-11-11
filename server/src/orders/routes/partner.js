@@ -221,7 +221,7 @@ async function loadOrders(customerId, where = "", params = [], limit = 60, offse
         WHERE oi.order_id = ANY($1) ORDER BY oi.id`,
       [ids]
     ),
-    pool.query("SELECT order_id, new_status, changed_at FROM order_status_history WHERE order_id = ANY($1) ORDER BY changed_at, id", [ids]),
+    pool.query("SELECT order_id, new_status, changed_at FROM order_status_history WHERE order_id = ANY($1) AND old_status IS DISTINCT FROM 'recorded' ORDER BY changed_at, id", [ids]),
     pool.query("SELECT order_id, max(delivered_at) AS at FROM pod_records WHERE order_id = ANY($1) GROUP BY order_id", [ids]),
   ]);
   const podAt = new Map(pods.map((p) => [p.order_id, p.at]));
@@ -245,7 +245,7 @@ async function loadOrders(customerId, where = "", params = [], limit = 60, offse
     const attention = cancelled ? null : o.status === "draft" ? "returned" : (o.status === "submitted" || o.status === "confirmed") && (approval_status === "pending" || credit_status === "pending") ? "approval" : null;
     // Until KAD Motors confirms it, the customer may still cancel or change the order (Settings -> KAD OS -> App perks can switch this off).
     const can_edit = editable && o.status === "submitted" && !cancelled && o.placed_via_app;
-    return { ...rest, status, raw_status: o.status, attention, can_edit, replaced: replaced_by_order_id !== null, timeline, items: lines, saved_amd: Math.round(saved) };
+    return { ...rest, status, raw_status: o.status === "recorded" ? "delivered" : o.status, attention, can_edit, replaced: replaced_by_order_id !== null, timeline, items: lines, saved_amd: Math.round(saved) };
   });
 }
 

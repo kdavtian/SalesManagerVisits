@@ -15,6 +15,7 @@ export const enCommon = {
     order_status_confirmed: "Confirmed",
     order_status_packed_stock_out: "Packed & stock out",
     order_status_delivered: "Delivered",
+    order_status_recorded: "Recorded",
     stock_issue_note_label: "Stock issue",
     not_allowed: "Not allowed",
     total: "Total",

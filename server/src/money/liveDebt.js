@@ -31,8 +31,8 @@ export async function liveAdjustments(db, customerIds) {
     db.query(
       `WITH ${LIMITS_SQL},
             o AS (SELECT o.customer_id, o.id, o.order_code, o.total_amd,
-                         ${day("COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)")} AS delivered_day
-                  FROM orders o WHERE o.customer_id = ANY($1) AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL)
+                         ${day("COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded'), o.updated_at)")} AS delivered_day
+                  FROM orders o WHERE o.customer_id = ANY($1) AND o.status IN ('delivered', 'recorded') AND o.erp_matched_order_id IS NULL)
        SELECT o.customer_id, o.id, o.order_code, o.total_amd::float8 AS total, to_char(o.delivered_day, 'YYYY-MM-DD') AS date
        FROM o, lim WHERE o.delivered_day >= COALESCE(lim.orders_from, DATE '1900-01-01')
        ORDER BY o.customer_id, o.delivered_day DESC, o.id DESC`,
@@ -133,7 +133,7 @@ export async function liveDebtMap(db, rows, today, { gross = false } = {}) {
 // A customer who may owe money on the live debt: the Excel says so, or a delivered app order the Excel does not have yet
 // (the exact window is applied by liveAdjustments; this only narrows the list cheaply). Aliases: c = customers, erp = erp_customer_data.
 export const LIVE_DEBT_CANDIDATE_SQL = `(COALESCE(erp.debt_amd, 0) > 0 OR EXISTS (
-  SELECT 1 FROM orders lo WHERE lo.customer_id = c.id AND lo.status = 'delivered' AND lo.erp_matched_order_id IS NULL))`;
+  SELECT 1 FROM orders lo WHERE lo.customer_id = c.id AND lo.status IN ('delivered', 'recorded') AND lo.erp_matched_order_id IS NULL))`;
 
 /**
  * Every customer who owes money on the LIVE debt (release 5, owner 2026-11-03: reports, the weekly debt digest and Vaghinak's

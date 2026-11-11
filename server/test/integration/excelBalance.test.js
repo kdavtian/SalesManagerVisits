@@ -63,7 +63,7 @@ test("Excel debt + delivered app orders not in Excel - app payments not in Excel
   const counts = await markAppRowsInExcel(pool);
   assert.deepEqual(counts, { orders: 1, payments: 1 });
   assert.equal((await pool.query("SELECT erp_matched_order_id FROM orders WHERE id = $1", [inExcel])).rows[0].erp_matched_order_id, `${ERP}-A`);
-  assert.equal((await pool.query("SELECT status FROM orders WHERE id = $1", [inExcel])).rows[0].status, "delivered", "the status is untouched");
+  assert.equal((await pool.query("SELECT status FROM orders WHERE id = $1", [inExcel])).rows[0].status, "recorded", "found in the Excel: Recorded by itself (owner, 2026-11-11)");
   assert.ok((await pool.query("SELECT erp_match_key FROM payments WHERE id = $1", [paidInExcel])).rows[0].erp_match_key);
   assert.equal((await pool.query("SELECT erp_match_key FROM payments WHERE id = $1", [paidNotYet])).rows[0].erp_match_key, null);
 
