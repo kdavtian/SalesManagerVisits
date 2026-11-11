@@ -113,7 +113,9 @@ test("full order lifecycle: draft -> submit -> confirm -> pack -> deliver -> rec
     "submitted->confirmed",
     "confirmed->packed_stock_out",
     "packed_stock_out->delivered",
+    "delivered->recorded",
   ]);
+  assert.equal(withHistory.data.status, "recorded", "Recorded is the final status (owner, 2026-11-11)");
 });
 
 test("rejecting a submitted order returns it to draft, and the owner can then edit and resubmit", async () => {

@@ -81,11 +81,12 @@ test("order matching an ERP order (customer, date within a day, total) becomes D
   assert.ok(delivered.includes(orderA));
   assert.ok(!delivered.includes(wrongTotal) && !delivered.includes(dup1) && !delivered.includes(dup2) && !delivered.includes(draft));
   const o = (await pool.query("SELECT status, delivered_from_erp, erp_matched_order_id FROM orders WHERE id = $1", [orderA])).rows[0];
-  assert.deepEqual(o, { status: "delivered", delivered_from_erp: true, erp_matched_order_id: `E${stamp}A` });
-  const hist = await pool.query("SELECT old_status, new_status, changed_by FROM order_status_history WHERE order_id = $1", [orderA]);
-  assert.deepEqual(hist.rows, [{ old_status: "confirmed", new_status: "delivered", changed_by: null }]);
+  assert.deepEqual(o, { status: "recorded", delivered_from_erp: true, erp_matched_order_id: `E${stamp}A` }, "found in the Excel: delivered and recorded (owner, 2026-11-11)");
+  const hist = await pool.query("SELECT old_status, new_status, changed_by FROM order_status_history WHERE order_id = $1 ORDER BY id", [orderA]);
+  assert.deepEqual(hist.rows, [{ old_status: "confirmed", new_status: "delivered", changed_by: null }, { old_status: "delivered", new_status: "recorded", changed_by: null }]);
   for (const id of [wrongTotal, dup1, dup2, draft]) {
     assert.notEqual((await pool.query("SELECT status FROM orders WHERE id = $1", [id])).rows[0].status, "delivered");
+    assert.notEqual((await pool.query("SELECT status FROM orders WHERE id = $1", [id])).rows[0].status, "recorded");
   }
   // Running again changes nothing (the ERP order is used up).
   assert.deepEqual(await run(autoDeliverOrdersFromErp), []);

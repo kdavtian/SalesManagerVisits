@@ -5,12 +5,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NEXT_STATUS, applyDiscount, formatOrderCode } from "../src/orders/routes/orders.js";
 
-test("NEXT_STATUS: the exact v3 status machine, draft -> submitted -> confirmed -> packed_stock_out -> delivered", () => {
+test("NEXT_STATUS: the exact status machine, draft -> submitted -> confirmed -> packed_stock_out -> delivered -> recorded", () => {
   assert.deepEqual(NEXT_STATUS.draft, ["submitted"]);
   assert.deepEqual(NEXT_STATUS.submitted, ["confirmed", "draft"]);
   assert.deepEqual(NEXT_STATUS.confirmed, ["packed_stock_out", "draft"]);
   assert.deepEqual(NEXT_STATUS.packed_stock_out, ["delivered", "draft"]);
-  assert.deepEqual(NEXT_STATUS.delivered, [], "delivered is terminal -- no state machine exit");
+  assert.deepEqual(NEXT_STATUS.delivered, ["recorded"], "delivered -> recorded (accountant / CEO / admin, or the Excel)");
+  assert.deepEqual(NEXT_STATUS.recorded, [], "recorded is terminal");
 });
 
 test("NEXT_STATUS: every non-terminal state can loop back to draft except the initial draft->submitted step", () => {
@@ -20,8 +21,8 @@ test("NEXT_STATUS: every non-terminal state can loop back to draft except the in
   }
 });
 
-test("NEXT_STATUS: covers exactly the 5 known statuses, no stray states", () => {
-  assert.deepEqual(Object.keys(NEXT_STATUS).sort(), ["confirmed", "delivered", "draft", "packed_stock_out", "submitted"]);
+test("NEXT_STATUS: covers exactly the 6 known statuses, no stray states", () => {
+  assert.deepEqual(Object.keys(NEXT_STATUS).sort(), ["confirmed", "delivered", "draft", "packed_stock_out", "recorded", "submitted"]);
 });
 
 test("applyDiscount: a flat AMD discount subtracts directly", () => {
