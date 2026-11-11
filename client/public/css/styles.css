@@ -1255,6 +1255,16 @@ form [aria-invalid="true"] {
   color: var(--accent);
 }
 
+/* "Recorded", the final order status: a deeper green than Delivered, so the two read apart at a glance. */
+.badge-recorded {
+  background: rgba(11, 107, 58, 0.16);
+  color: #0b6b3a;
+}
+html[data-theme="dark"] .badge-recorded {
+  background: rgba(95, 211, 154, 0.18);
+  color: #5fd39a;
+}
+
 .badge-info {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent);

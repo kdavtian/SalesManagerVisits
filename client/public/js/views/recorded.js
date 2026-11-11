@@ -8,6 +8,8 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, formatDayMonth, labelColon } from "../util.js";
 import { t } from "../i18n.js";
 import { notInExcelBadgeHtml } from "../orderFlags.js";
+import { canRecordOrders } from "../shared/roles.js";
+import { state } from "../state.js";
 
 
 function formatDate(value) {
@@ -110,14 +112,20 @@ export async function renderRecorded(root, navigate) {
             : ""
         }
         <div class="sheet-actions" style="margin-top:8px;">
-          ${
-            r.recorded
-              ? `<span class="muted">${t("recorded_recorded_by")}${labelColon()}${escapeHtml(r.recorded_by_name || "")}</span>
-                 <button type="button" class="btn" data-unrecord="${r.id}">${t("recorded_undo")}</button>`
-              : `<button type="button" class="btn btn-primary btn-block" data-record="${r.id}">${t("recorded_mark_recorded")}</button>`
-          }
+          ${recordActionsHtml(r)}
         </div>
       </div>`;
+  }
+
+  // Who recorded it (or "found in the Excel" when the sync did), and the button to record / undo -- only for the roles the server lets do it
+  // (accountant, CEO, admin: canRecordOrders); the operations director sees the backlog without the buttons.
+  function recordActionsHtml(r) {
+    const allowed = canRecordOrders(state.user?.role);
+    if (r.recorded) {
+      const who = r.recorded_by_name ? `${t("recorded_recorded_by")}${labelColon()}${escapeHtml(r.recorded_by_name)}` : t("recorded_by_excel");
+      return `<span class="muted">${who}</span>${allowed ? `<button type="button" class="btn" data-unrecord="${r.id}">${t("recorded_undo")}</button>` : ""}`;
+    }
+    return allowed ? `<button type="button" class="btn btn-primary btn-block" data-record="${r.id}">${t("recorded_mark_recorded")}</button>` : "";
   }
 
   // Desktop detail pane -- same fields as the mobile card, but the
@@ -149,12 +157,7 @@ export async function renderRecorded(root, navigate) {
           : ""
       }
       <div class="sheet-actions" style="margin-top:8px;">
-        ${
-          r.recorded
-            ? `<span class="muted">${t("recorded_recorded_by")}${labelColon()}${escapeHtml(r.recorded_by_name || "")}</span>
-               <button type="button" class="btn" data-unrecord="${r.id}">${t("recorded_undo")}</button>`
-            : `<button type="button" class="btn btn-primary btn-block" data-record="${r.id}">${t("recorded_mark_recorded")}</button>`
-        }
+        ${recordActionsHtml(r)}
       </div>`;
   }
 

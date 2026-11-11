@@ -260,10 +260,10 @@ test("isFulfillmentRole: union of canManageWarehouse and canDeliverOrders", () =
   assert.equal(isFulfillmentRole("sales_manager"), false);
 });
 
-test("canRecordOrders: accountant/admin only", () => {
+test("canRecordOrders: accountant/CEO/admin only", () => {
   assert.equal(canRecordOrders("accountant"), true);
   assert.equal(canRecordOrders("admin"), true);
-  assert.equal(canRecordOrders("ceo"), false);
+  assert.equal(canRecordOrders("ceo"), true);
   assert.equal(canRecordOrders("operations_director"), false);
 });
 
@@ -300,8 +300,8 @@ test("canApproveBonusRewards: mirrors canReviewPayments", () => {
   for (const role of ROLES) assert.equal(canApproveBonusRewards(role), canReviewPayments(role), role);
 });
 
-test("canRecordBonusPayouts: mirrors canRecordOrders", () => {
-  for (const role of ROLES) assert.equal(canRecordBonusPayouts(role), canRecordOrders(role), role);
+test("canRecordBonusPayouts: accountant/admin only (the CEO records orders, not payouts)", () => {
+  for (const role of ROLES) assert.equal(canRecordBonusPayouts(role), role === "accountant" || role === "admin", role);
 });
 
 test("tasks: management creates, sales director only for sales managers, CEO-level for anyone", async () => {

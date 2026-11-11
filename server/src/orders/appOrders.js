@@ -254,7 +254,8 @@ export function partnerStatus(status, onRoute) {
     case "submitted": return "received";
     case "confirmed": return "confirmed";
     case "packed_stock_out": return onRoute ? "on_the_way" : "packed";
-    case "delivered": return "delivered";
+    case "delivered":
+    case "recorded": return "delivered"; // the customer sees no difference: booked by the accountant
     default: return "on_hold"; // draft: sent back for a correction
   }
 }

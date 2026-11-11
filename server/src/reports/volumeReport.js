@@ -214,7 +214,7 @@ export async function buildVolumeReport({ query, scopeUserId = null }) {
            JOIN orders o ON o.id = oi.order_id
            JOIN customers c0 ON c0.id = o.customer_id
            LEFT JOIN products p0 ON p0.id = oi.product_id
-          WHERE o.status IN ('confirmed', 'packed_stock_out', 'delivered')
+          WHERE o.status IN ('confirmed', 'packed_stock_out', 'delivered', 'recorded')
             AND o.erp_matched_order_id IS NULL AND NOT COALESCE(o.delivered_from_erp, false)
             AND (o.created_at AT TIME ZONE 'Asia/Yerevan')::date > COALESCE((SELECT max(order_date) FROM erp_order_lines), DATE '1900-01-01')
             AND (o.created_at AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $1 AND $2

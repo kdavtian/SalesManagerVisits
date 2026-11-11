@@ -219,8 +219,8 @@ async function detectCashGap(db, s, created) {
     `WITH win AS (
        SELECT o.customer_id, c.assigned_manager_id AS rep_id, o.total_amd
          FROM orders o JOIN customers c ON c.id = o.customer_id
-        WHERE o.status = 'delivered' AND o.payment_term_days = 0 AND c.assigned_manager_id IS NOT NULL
-          AND (SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered')
+        WHERE o.status IN ('delivered', 'recorded') AND o.payment_term_days = 0 AND c.assigned_manager_id IS NOT NULL
+          AND (SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded')
               BETWEEN now() - interval '30 days' AND now() - interval '3 days'
      ), expected AS (SELECT rep_id, sum(total_amd) AS expected FROM win GROUP BY rep_id),
      recorded AS (

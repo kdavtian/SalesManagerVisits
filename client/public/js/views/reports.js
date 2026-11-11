@@ -392,6 +392,7 @@ const ORDER_PIPELINE_STATUS_KEYS = {
   confirmed: "order_status_confirmed",
   packed_stock_out: "order_status_packed_stock_out",
   delivered: "order_status_delivered",
+  recorded: "order_status_recorded",
 };
 
 async function renderOrdersPipelineReport(root, navigate) {

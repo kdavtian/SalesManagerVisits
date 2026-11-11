@@ -7,6 +7,8 @@ import { getDocumentTexts } from "../../shared/documentTexts.js";
 import { loadBlankOrders, previousDebts } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
 import { outOfStockProducts, outOfStockResponse, shortStockProducts } from "../orderStock.js";
+import { DELIVERED_AT } from "../appStock.js";
+import { isDone, recordOrder, unrecordOrder } from "../orderRecord.js";
 import { Router } from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -48,7 +50,8 @@ export const NEXT_STATUS = {
   submitted: ["confirmed", "draft"],
   confirmed: ["packed_stock_out", "draft"],
   packed_stock_out: ["delivered", "draft"],
-  delivered: [],
+  delivered: ["recorded"], // PATCH /:id/recorded (accountant / CEO / admin) or the ERP sync when the Excel shows the order (orderRecord.js)
+  recorded: [],
 };
 
 // The generic PATCH /:id below only ever writes "confirmed" directly --
@@ -499,7 +502,7 @@ ordersRouter.post("/price-check", async (req, res) => {
 // Orders list sorting (owner, 2026-10-18: the desktop column headings sort the WHOLE history, not only the loaded rows).
 // Whitelisted -- the value goes into the SQL text. Each entry is the natural order; "reverse=1" flips every term.
 // date and amount are served by indexes (orders_created_at_idx, orders_total_amd_idx), so page 1 stays ~1 ms on 60k orders.
-const ORDER_STATUS_FLOW = "CASE o.status WHEN 'draft' THEN 0 WHEN 'submitted' THEN 1 WHEN 'confirmed' THEN 2 WHEN 'packed_stock_out' THEN 3 WHEN 'delivered' THEN 4 ELSE 5 END";
+const ORDER_STATUS_FLOW = "CASE o.status WHEN 'draft' THEN 0 WHEN 'submitted' THEN 1 WHEN 'confirmed' THEN 2 WHEN 'packed_stock_out' THEN 3 WHEN 'delivered' THEN 4 WHEN 'recorded' THEN 5 ELSE 6 END";
 const ORDER_SORTS = {
   date: [["o.created_at", "DESC"], ["o.id", "DESC"]],
   amount: [["o.total_amd", "DESC"], ["o.id", "DESC"]],
@@ -742,7 +745,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
   // lands here), so unlike the "unrecorded" backlog it can't be assumed
   // small -- same fetch-one-extra-row-for-has_more pattern as GET / above.
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.total_amd, o.updated_at AS delivered_at, o.recorded, o.recorded_at, o.not_in_excel_at,
+    `SELECT o.id, o.order_code, o.total_amd, ${DELIVERED_AT} AS delivered_at, o.status, o.recorded, o.recorded_at, o.not_in_excel_at,
             c.id AS customer_id, c.name AS customer_name, c.erp_customer_id,
             rb.name AS recorded_by_name,
             pod.id AS pod_record_id, pod.payment_id,
@@ -754,17 +757,17 @@ ordersRouter.get("/recorded-list", async (req, res) => {
      LEFT JOIN LATERAL (
        SELECT * FROM pod_records WHERE order_id = o.id ORDER BY id DESC LIMIT 1
      ) pod ON true
-     WHERE o.status = 'delivered' AND o.recorded = $1
+     WHERE o.status = $1
      ORDER BY o.updated_at DESC
      LIMIT $2 OFFSET $3`,
-    [recorded, PAGE_SIZE + 1, offsetNum]
+    [recorded ? "recorded" : "delivered", PAGE_SIZE + 1, offsetNum]
   );
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
 ordersRouter.get("/unrecorded-count", async (req, res) => {
   if (!seesUnrecordedBadge(req.user.role)) return res.json({ count: 0 });
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'delivered' AND recorded = false");
+  const { rows } = await pool.query("SELECT COUNT(*)::int AS count FROM orders WHERE status = 'delivered'");
   res.json({ count: rows[0].count });
 });
 
@@ -1254,7 +1257,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   );
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
-  if (!["confirmed", "packed_stock_out", "delivered"].includes(order.status)) {
+  if (!["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status)) {
     return res.status(409).json({ error: "Only a confirmed order can be sent to accounting" });
   }
   const method = req.body?.payment_method ?? order.payment_method;
@@ -1632,8 +1635,9 @@ ordersRouter.post("/:id/link-erp", async (req, res) => {
        VALUES ($1, $2, 'delivered', $3, $4)`,
       [order.id, order.status, `Linked by hand to Excel order ${erpOrderId}`, req.user.id]
     );
+    const recordedRow = await recordOrder(client, order.id, { userId: req.user.id, reason: `Recorded: Excel order ${erpOrderId}` });
     await client.query("COMMIT");
-    res.json(updatedRows[0]);
+    res.json(recordedRow ?? updatedRows[0]);
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -1717,7 +1721,7 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
   if (order.cancelled_at) return res.status(409).json({ error: "This order was cancelled -- it can no longer be changed", code: "cancelled_by_customer" });
-  if (!["confirmed", "packed_stock_out", "delivered"].includes(order.status)) {
+  if (!["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status)) {
     return res.status(409).json({ error: "A draft or submitted order is changed with Edit, not corrected", code: "use_edit" });
   }
   const reason = String(req.body?.reason ?? "").trim();
@@ -1844,24 +1848,44 @@ async function orderCorrections(orderId) {
   return rows;
 }
 
+// Recorded = the final status (owner, 2026-11-11): the accountant, the CEO or the admin checked the delivered order. { recorded: false } undoes
+// a mistake (back to delivered). The old client sends the same body, so it keeps working.
 ordersRouter.patch("/:id/recorded", async (req, res) => {
   if (!canRecordOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const orderId = Number(req.params.id);
+  if (!Number.isInteger(orderId) || orderId <= 0 || orderId > 2147483647) return res.status(404).json({ error: "Order not found" });
   const { recorded } = req.body ?? {};
   if (typeof recorded !== "boolean") return res.status(400).json({ error: "recorded (boolean) is required" });
 
-  const { rows } = await pool.query("SELECT status FROM orders WHERE id = $1", [req.params.id]);
-  if (!rows[0]) return res.status(404).json({ error: "Order not found" });
-  if (rows[0].status !== "delivered") {
-    return res.status(409).json({ error: "Only a delivered order can be marked recorded" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query("SELECT * FROM orders WHERE id = $1 FOR UPDATE", [orderId]);
+    const order = rows[0];
+    if (!order) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Order not found" });
+    }
+    // already where it was asked to be (a double tap, or a retry after a lost answer): nothing to do
+    if (order.status === (recorded ? "recorded" : "delivered") && isDone(order.status)) {
+      await client.query("ROLLBACK");
+      return res.json(order);
+    }
+    if (!isDone(order.status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: "Only a delivered order can be marked recorded", code: "not_delivered" });
+    }
+    const updated = recorded
+      ? await recordOrder(client, orderId, { userId: req.user.id, reason: "Recorded" })
+      : await unrecordOrder(client, orderId, { userId: req.user.id });
+    await client.query("COMMIT");
+    res.json(updated);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-
-  const { rows: updatedRows } = await pool.query(
-    recorded
-      ? "UPDATE orders SET recorded = true, recorded_by = $1, recorded_at = now(), not_in_excel_at = NULL WHERE id = $2 RETURNING *"
-      : "UPDATE orders SET recorded = false, recorded_by = NULL, recorded_at = NULL WHERE id = $1 RETURNING *",
-    recorded ? [req.user.id, req.params.id] : [req.params.id]
-  );
-  res.json(updatedRows[0]);
 });
 
 // Permanent removal (not the same as rejecting, which keeps the order as a record), for a duplicate or

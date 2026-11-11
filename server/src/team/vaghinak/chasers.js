@@ -134,7 +134,7 @@ export async function downpaymentChase({ db, day, settings, pick, now = new Date
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      JOIN users u ON u.id = o.user_id AND u.role = 'sales_manager' AND u.status = 'active' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
-     WHERE o.downpayment_amd > 0 AND o.status IN ('packed_stock_out', 'delivered') AND o.created_at > now() - interval '60 days'`,
+     WHERE o.downpayment_amd > 0 AND o.status IN ('packed_stock_out', 'delivered', 'recorded') AND o.created_at > now() - interval '60 days'`,
     [day]
   );
   const missing = rows.filter((o) => o.paid < o.down);

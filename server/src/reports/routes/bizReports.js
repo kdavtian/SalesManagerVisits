@@ -59,7 +59,7 @@ bizReportsRouter.get("/delivery-speed", async (req, res) => {
     SELECT o.id, o.order_code, o.status, o.delivered_from_erp, c.name AS customer_name,
       (SELECT min(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.new_status = 'confirmed') AS confirmed_at,
       (SELECT max(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.old_status = 'confirmed' AND x.new_status = 'packed_stock_out') AS packed_at,
-      (SELECT max(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.new_status = 'delivered') AS delivered_at
+      (SELECT max(x.changed_at) FROM order_status_history x WHERE x.order_id = o.id AND x.new_status = 'delivered' AND x.old_status IS DISTINCT FROM 'recorded') AS delivered_at
     FROM orders o JOIN customers c ON c.id = o.customer_id`;
   const { rows: done } = await pool.query(
     `WITH b AS (${base})
@@ -67,7 +67,7 @@ bizReportsRouter.get("/delivery-speed", async (req, res) => {
             ${HOURS("confirmed_at", "packed_at")}::float8 AS pack_hours,
             ${HOURS("packed_at", "delivered_at")}::float8 AS deliver_hours,
             ${HOURS("confirmed_at", "delivered_at")}::float8 AS total_hours
-     FROM b WHERE status = 'delivered' AND confirmed_at IS NOT NULL AND delivered_at >= now() - ($1 || ' days')::interval
+     FROM b WHERE status IN ('delivered', 'recorded') AND confirmed_at IS NOT NULL AND delivered_at >= now() - ($1 || ' days')::interval
      ORDER BY delivered_at DESC LIMIT 2000`,
     [days]
   );
@@ -122,7 +122,7 @@ bizReportsRouter.get("/unpaid-invoices", async (req, res) => {
   });
   const appCodes = new Map();
   if (customers.length) {
-    const { rows: codes } = await pool.query("SELECT id, order_code FROM orders WHERE customer_id = ANY($1) AND status = 'delivered' AND erp_matched_order_id IS NULL", [customers.map((c) => c.id)]);
+    const { rows: codes } = await pool.query("SELECT id, order_code FROM orders WHERE customer_id = ANY($1) AND status IN ('delivered', 'recorded') AND erp_matched_order_id IS NULL", [customers.map((c) => c.id)]);
     for (const o of codes) appCodes.set(`app-${o.id}`, o.order_code);
   }
   const q = String(req.query.q ?? "").trim().toLowerCase();

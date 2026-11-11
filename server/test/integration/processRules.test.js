@@ -15,7 +15,7 @@ test.before(async () => {
   await startTestServer();
   users = {};
   cookies = {};
-  for (const role of ["admin", "sales_director", "sales_manager", "accountant", "delivery_manager"]) {
+  for (const role of ["admin", "sales_director", "sales_manager", "accountant", "delivery_manager", "ceo", "operations_director"]) {
     users[role] = await createUser(role);
     cookies[role] = await loginAs(users[role].email);
   }
@@ -125,7 +125,7 @@ test("manual link: an unmatched confirmed order can be linked to a free Excel or
   assert.equal((await apiRequest(`/api/orders/${o.id}/link-erp`, { method: "POST", cookie: cookies.accountant, body: { erp_order_id: "nope" } })).status, 409);
   const linked = await apiRequest(`/api/orders/${o.id}/link-erp`, { method: "POST", cookie: cookies.accountant, body: { erp_order_id: excelId } });
   assert.equal(linked.status, 200, JSON.stringify(linked.data));
-  assert.equal(linked.data.status, "delivered");
+  assert.equal(linked.data.status, "recorded", "linked to the Excel: delivered and recorded at once (the Excel proves it)");
   assert.equal(linked.data.delivered_from_erp, true);
   assert.equal(linked.data.erp_matched_order_id, excelId);
   // The same Excel order cannot be linked twice.
@@ -278,4 +278,84 @@ test("the accountant's list: ticking every line does not close it (it closes whe
   const { rows: after } = await pool.query("SELECT bool_and(done) AS all_done FROM task_items WHERE task_id = $1", [task.id]);
   assert.equal(after[0].all_done, true, "the ticks survive a run");
   await pool.query("UPDATE orders SET recorded = true WHERE id = $1", [late.id]);
+});
+
+// Owner, 2026-11-11: "Recorded" is the final status after delivered -- given by the accountant, the CEO or the admin, or by the sync when the Excel
+// shows the order. A recorded order counts exactly like a delivered one (stock it holds until the Excel shows it, live debt, returns).
+test("Recorded: the accountant / CEO / admin record a delivered order; it still counts as delivered; undo keeps the delivery date", async () => {
+  const { liveAdjustments } = await import("../../src/money/liveDebt.js");
+  const customer = await erpCustomer("rec");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 20 WHERE id = $1", [product.id]);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, 1)", [customer.erp_customer_id, `ITEST-REC-TODAY-${stamp}`]);
+  const o = await order(customer, product, 4);
+  await pool.query("UPDATE orders SET status = 'delivered', updated_at = now() - interval '3 days' WHERE id = $1", [o.id]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_at) VALUES ($1, 'packed_stock_out', 'delivered', now() - interval '3 days')", [o.id]);
+  const record = (cookie, recorded = true) => apiRequest(`/api/orders/${o.id}/recorded`, { method: "PATCH", cookie, body: { recorded } });
+
+  // who may: accountant, CEO, admin -- not the rep, not the operations director (they see the backlog only)
+  assert.equal((await record(cookies.sales_manager)).status, 403);
+  assert.equal((await record(cookies.operations_director)).status, 403);
+  // a submitted order cannot be recorded
+  const notYet = await order(customer, product, 1);
+  const early = await apiRequest(`/api/orders/${notYet.id}/recorded`, { method: "PATCH", cookie: cookies.ceo, body: { recorded: true } });
+  assert.equal(early.status, 409);
+
+  const debtBefore = (await liveAdjustments(pool, [customer.id])).get(customer.id);
+  const r1 = await record(cookies.ceo);
+  assert.equal(r1.status, 200, JSON.stringify(r1.data));
+  assert.equal(r1.data.status, "recorded");
+  assert.equal(r1.data.recorded, true, "the old tick follows the status (old phones)");
+  // a double tap / retry changes nothing and writes no second timeline row
+  const r2 = await record(cookies.accountant);
+  assert.equal(r2.status, 200);
+  assert.equal(r2.data.recorded_by, users.ceo.id, "the first one recorded it");
+  const { rows: hist } = await pool.query("SELECT old_status, new_status, changed_by FROM order_status_history WHERE order_id = $1 AND new_status = 'recorded'", [o.id]);
+  assert.deepEqual(hist, [{ old_status: "delivered", new_status: "recorded", changed_by: users.ceo.id }]);
+
+  // still counted as delivered: holds its pieces until the Excel shows it, still in the live debt with the same delivery date
+  const view = async () => (await apiRequest("/api/products", { cookie: cookies.sales_manager })).data.find((x) => x.id === product.id);
+  assert.equal((await view()).reserved_qty, 4);
+  const debtAfter = (await liveAdjustments(pool, [customer.id])).get(customer.id);
+  assert.deepEqual(debtAfter.orders, debtBefore.orders);
+  // it shows on the Recorded tab, not on the backlog
+  const tab = async (recorded) => (await apiRequest(`/api/orders/recorded-list?recorded=${recorded}`, { cookie: cookies.accountant })).data.rows.map((r) => r.id);
+  assert.ok((await tab(true)).includes(o.id));
+  assert.ok(!(await tab(false)).includes(o.id));
+  // a return is still possible (a recorded order was delivered)
+  const ret = await apiRequest(`/api/returns/order/${o.id}/returnable`, { cookie: cookies.sales_manager });
+  assert.equal(ret.status, 200, JSON.stringify(ret.data));
+  assert.equal(ret.data.kind, "return");
+
+  // undo: back to delivered, and the delivery date does NOT move to the undo time
+  const undo = await record(cookies.admin, false);
+  assert.equal(undo.status, 200, JSON.stringify(undo.data));
+  assert.equal(undo.data.status, "delivered");
+  assert.equal(undo.data.recorded, false);
+  assert.deepEqual((await liveAdjustments(pool, [customer.id])).get(customer.id).orders, debtBefore.orders);
+});
+
+test("Recorded: the sync records by itself a delivered order it finds in the Excel; KAD OS and Lily still see it as delivered", async () => {
+  const { markAppRowsInExcel } = await import("../../src/erp/erpAutoMatch.js");
+  const { partnerStatus } = await import("../../src/orders/appOrders.js");
+  const customer = await erpCustomer("recx");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 20 WHERE id = $1", [product.id]);
+  const o = await order(customer, product, 3); // 3000
+  await pool.query("UPDATE orders SET status = 'delivered' WHERE id = $1", [o.id]);
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status) VALUES ($1, 'packed_stock_out', 'delivered')", [o.id]);
+  const excelId = `ITEST-RECX-${stamp}`;
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, revenue_amd) VALUES ($1, $2, CURRENT_DATE, 3000)", [customer.erp_customer_id, excelId]);
+  await markAppRowsInExcel(pool);
+  const { rows } = await pool.query("SELECT status, recorded, recorded_by, erp_matched_order_id FROM orders WHERE id = $1", [o.id]);
+  assert.deepEqual(rows[0], { status: "recorded", recorded: true, recorded_by: null, erp_matched_order_id: excelId });
+  const list = await apiRequest("/api/orders/recorded-list?recorded=true", { cookie: cookies.accountant });
+  const row = list.data.rows.find((r) => r.id === o.id);
+  assert.ok(row && row.recorded_by_name == null, "shown as found in the Excel (no person)");
+  assert.equal(partnerStatus("recorded", false), "delivered");
+  // the orders list filters by the new status
+  const filtered = await apiRequest("/api/orders?status=recorded", { cookie: cookies.accountant });
+  assert.equal(filtered.status, 200);
+  const items = filtered.data.rows ?? filtered.data.orders ?? filtered.data;
+  assert.ok(Array.isArray(items) && items.some((x) => x.id === o.id));
 });

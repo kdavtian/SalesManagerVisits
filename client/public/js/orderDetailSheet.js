@@ -11,7 +11,7 @@ import { escapeHtml, formatAmd, formatPriceOrFree, activateDialog, formatDateTim
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { state } from "./state.js";
-import { canCorrectOrders, canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts, seesAmountPapers } from "./shared/roles.js";
+import { canCorrectOrders, canConfirmOrders, canConfirmSubmittedOrders, canMarkDeliveredWithoutRoute, canSetAccountingStatus, canApproveReturns, canRecordOrders, canManageSignedDocuments, approvesOwnOrderChanges, seesOrderAmounts, seesAmountPapers } from "./shared/roles.js";
 import { getProductCatalog } from "./productCatalog.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "./stepper.js";
 import { searchProducts, debounce } from "./productSearch.js";
@@ -23,7 +23,7 @@ import { openErpLinkSheet } from "./erpLinkSheet.js";
 import { openReturnSheet } from "./returnSheet.js";
 import { openAccountingDocSheet, accountingDocShort, accountingStatusLabel, ACCOUNTING_STATUS_BADGE } from "./accountingDocSheet.js";
 import { installInlineClearButton } from "./searchBar.js";
-import { notInExcelBadgeHtml } from "./orderFlags.js";
+import { notInExcelBadgeHtml, isDone } from "./orderFlags.js";
 export { notInExcelBadgeHtml };
 
 // v3 5-state machine (see migrations/051_warehouse_delivery_v3.sql):
@@ -37,6 +37,8 @@ export const STATUS_META = {
   confirmed: { key: "order_status_confirmed", cls: "badge-success", iconTint: "success" },
   packed_stock_out: { key: "order_status_packed_stock_out", cls: "badge-info", iconTint: "info" },
   delivered: { key: "order_status_delivered", cls: "badge-success", iconTint: "success" },
+  // the final stage (owner, 2026-11-11): the accountant / CEO / admin checked the delivered order, or the Excel already shows it
+  recorded: { key: "order_status_recorded", cls: "badge-recorded", iconTint: "success" },
 };
 
 // A KAD OS order the customer cancelled (it sits in "draft" on the server, marked cancelled_at): a red "Cancelled" chip instead of "Draft".
@@ -87,7 +89,7 @@ const sortProducts = (list) => [...list].sort(compareProducts);
 // stock-issue/delivery-failure) shows up here too since it's a real status
 // change, not something to hide -- it's exactly the kind of thing this was
 // asked to make visible.
-const ACCOUNTING_ELIGIBLE = new Set(["confirmed", "packed_stock_out", "delivered"]);
+const ACCOUNTING_ELIGIBLE = new Set(["confirmed", "packed_stock_out", "delivered", "recorded"]);
 const ACCOUNTING_STATUS_OPTIONS = ["pending", "in_progress", "waybill_created", "partially_created", "exported_unsigned", "signed", "needs_attention", "cancelled"];
 
 // Where the order stands with accounting (Lily): which document, its
@@ -381,7 +383,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     }
     // One tap to order the same lines again -- only for an order that was actually delivered. An order still on its way
     // is never ordered twice, and the extra button only confused reps and reviewers (owner, 2026-10-16).
-    if (order.status === "delivered") {
+    if (order.status === "delivered" && !order.cancelled_at && canRecordOrders(state.user.role)) {
+      buttons.push({ label: t("recorded_mark_recorded"), action: "record-order", cls: "btn btn-primary" });
+    }
+    if (isDone(order.status)) {
       buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
     }
     // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
@@ -389,7 +394,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
     }
     // After review (confirmed, packed, delivered) admin, CEO and the accountant can still correct a mistake, with a reason that is kept.
-    if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered"].includes(order.status) && canCorrectOrders(state.user.role)) {
+    if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status) && canCorrectOrders(state.user.role)) {
       buttons.push({ label: t("ocr_btn"), action: "correct-order", cls: "btn" });
     }
     // Permanent delete (distinct from a director's reject, which keeps
@@ -398,7 +403,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
     // Return (delivered) / cancel (not delivered yet): the rep asks, management decides (views/returns.js).
     if (!order.cancelled_at && order.status !== "draft" && (order.user_id === state.user.id || canApproveReturns(state.user.role))) {
-      buttons.push({ label: t(order.status === "delivered" ? "rt_btn_return" : "rt_btn_cancel"), action: "order-return", cls: "btn" });
+      buttons.push({ label: t(isDone(order.status) ? "rt_btn_return" : "rt_btn_cancel"), action: "order-return", cls: "btn" });
     }
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
@@ -512,6 +517,20 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     });
     actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
       btn.addEventListener("click", async () => {
+        if (btn.dataset.action === "record-order") {
+          btn.disabled = true;
+          try {
+            renderView(await api.setOrderRecorded(orderId, true).then(() => api.getOrder(orderId)));
+            window.dispatchEvent(new Event("recorded-changed"));
+            notifyOrdersChanged();
+            onChanged?.();
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            btn.disabled = false;
+          }
+          return;
+        }
         if (btn.dataset.action === "reorder-order") {
           leaveSheetTo(overlay, navigate || ((h) => (location.hash = h)), reorderHash(order.customer_id, `app:${orderId}`));
           return;

@@ -49,6 +49,8 @@ export const ORDER_STATUS_ICONS = {
   submitted: statusSvg(`<path d="M21.5 3 10.5 14"/><path d="m21.5 3-6.6 18-4.4-7-7-4.4z"/>`),
   confirmed: statusSvg(`<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m8.7 14.4 2.2 2.2 4.4-4.6"/>`),
   packed_stock_out: statusSvg(`<path d="m3 8.2 6.5-3.2L16 8.2v7.6L9.5 19 3 15.8z"/><path d="m3 8.2 6.5 3.3L16 8.2M9.5 11.5V19"/><path d="M17.8 12.5h4M20 10.3l2.2 2.2-2.2 2.2"/>`),
+  // Recorded: a page with a double tick -- delivered AND booked by the accountant
+  recorded: statusSvg(`<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="m7.6 14.6 2 2 3.6-3.8"/><path d="m11.8 16.4.2.2 3.6-3.8"/>`),
   delivered: statusSvg(`<path d="M14 17.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10.5a1 1 0 0 0 1 1h1.5"/><path d="M14.5 17.5h-5"/><path d="M19 17.5h2a1 1 0 0 0 1-1v-3.4a1 1 0 0 0-.2-.6l-3-3.7a1 1 0 0 0-.8-.4H14"/><circle cx="17" cy="17.5" r="2"/><circle cx="7" cy="17.5" r="2"/><path d="m5.2 10 2 2 3.6-3.8"/>`),
 };
 

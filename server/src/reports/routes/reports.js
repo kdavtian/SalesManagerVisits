@@ -232,7 +232,7 @@ reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), as
     `SELECT count(*)::int AS delivered_count,
             AVG(EXTRACT(EPOCH FROM (o.updated_at - o.created_at)) / 3600) AS avg_cycle_hours
      FROM orders o
-     ${where} AND o.status = 'delivered'`,
+     ${where} AND o.status IN ('delivered', 'recorded')`,
     params
   );
 
@@ -684,7 +684,7 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
       asOfDate
         ? `${debtExpr} > 0`
         : `(erp.debt_amd > 0 OR EXISTS (SELECT 1 FROM orders lo JOIN customers lc ON lc.id = lo.customer_id
-             WHERE lc.erp_customer_id = erp.erp_customer_id AND lo.status = 'delivered' AND lo.erp_matched_order_id IS NULL))`
+             WHERE lc.erp_customer_id = erp.erp_customer_id AND lo.status IN ('delivered', 'recorded') AND lo.erp_matched_order_id IS NULL))`
     );
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";

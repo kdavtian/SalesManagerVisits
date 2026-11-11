@@ -62,9 +62,9 @@ export async function reconcile(db = pool) {
     db.query(
       `WITH d AS (
          SELECT o.id, o.customer_id, o.total_amd,
-                ${YEREVAN_DAY("COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)")} AS delivered_day
+                ${YEREVAN_DAY("COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded'), o.updated_at)")} AS delivered_day
            FROM orders o
-          WHERE o.status = 'delivered' AND o.cancelled_at IS NULL AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+          WHERE o.status IN ('delivered', 'recorded') AND o.cancelled_at IS NULL AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
             AND o.updated_at > now() - make_interval(days => ${LIVE_WINDOW_DAYS + 30}))
        SELECT c.erp_customer_id AS customer_erp_id, d.total_amd AS amount_amd, (${TODAY} - d.delivered_day)::int AS age_days
          FROM d JOIN customers c ON c.id = d.customer_id

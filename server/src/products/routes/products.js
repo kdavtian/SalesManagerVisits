@@ -213,11 +213,11 @@ productsRouter.get("/:id/holding-orders", async (req, res) => {
   if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(404).json({ error: "Not found" });
   const { rows } = await pool.query(
     `SELECT o.id, o.order_code, o.status, (o.user_id = $2 OR c.assigned_manager_id = $2) AS mine, c.name AS customer_name, SUM(oi.quantity)::int AS quantity,
-            to_char(COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = o.status), o.updated_at) AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS since
+            to_char(COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = CASE WHEN o.status = 'recorded' THEN 'delivered' ELSE o.status END), o.updated_at) AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS since
      FROM order_items oi JOIN orders o ON o.id = oi.order_id LEFT JOIN customers c ON c.id = o.customer_id
      WHERE oi.product_id = $1 AND (${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL})
      GROUP BY o.id, c.name, c.assigned_manager_id
-     ORDER BY array_position(ARRAY['submitted', 'confirmed', 'packed_stock_out', 'delivered'], o.status), o.id DESC LIMIT 200`,
+     ORDER BY array_position(ARRAY['submitted', 'confirmed', 'packed_stock_out', 'delivered', 'recorded'], o.status), o.id DESC LIMIT 200`,
     [id, req.user.id]
   );
   const all = canConfirmOrders(req.user.role) || canDeliverOrders(req.user.role) || canRecordOrders(req.user.role);

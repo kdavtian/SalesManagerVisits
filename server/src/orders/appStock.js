@@ -25,10 +25,10 @@ export const PACKED_OUT_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_item
 // not of the wall clock: when the upload stops for two weeks (a holiday, a broken bot) the app must not hand those pieces back to sale while the
 // Excel stock still includes them (review of 2026-11-11). No Excel orders at all: the wall clock.
 export const EXCEL_NOW_SQL = `LEAST(now(), COALESCE((SELECT max(order_date) FROM erp_order_lines)::timestamp AT TIME ZONE 'Asia/Yerevan' + interval '1 day', now()))`;
-export const DELIVERED_AT = `COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`;
+export const DELIVERED_AT = `COALESCE((SELECT max(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded'), o.updated_at)`;
 // Delivered in the app, not found in the Excel, inside the match window. `o` = the orders alias. updated_at is checked first (a delivery is never
 // later than the order's last change), so the history lookup runs only for the few recent ones -- the products list stays fast.
-export const DELIVERED_NOT_IN_EXCEL_COND = `(o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+export const DELIVERED_NOT_IN_EXCEL_COND = `(o.status IN ('delivered', 'recorded') AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
      AND o.updated_at > ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days'
      AND ${DELIVERED_AT} > ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days')`;
 export const DELIVERED_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
@@ -38,7 +38,7 @@ export const DELIVERED_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FRO
 // ERP id, a sale the accountant forgot), the app's number is TOO HIGH by exactly this much: the shelf holds less than the app says.
 export const DELIVERED_OLDER_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
               WHERE oi.product_id = p.id AND o.cancelled_at IS NULL
-                AND o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
+                AND o.status IN ('delivered', 'recorded') AND o.erp_matched_order_id IS NULL AND NOT o.delivered_from_erp
                 AND ${DELIVERED_AT} BETWEEN ${EXCEL_NOW_SQL} - interval '180 days' AND ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
 export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
               WHERE ri.product_id = p.id AND r.kind = 'return' AND r.status = 'done' AND COALESCE(ri.condition, 'good') = 'good'

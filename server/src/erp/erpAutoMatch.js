@@ -1,3 +1,4 @@
+import { recordOrder } from "../orders/orderRecord.js";
 // After every ERP sync: anything the workbook already shows is settled in KAD
 // too (owner's rule).
 //  - A confirmed / packed order that matches an ERP order (same ERP customer,
@@ -50,6 +51,8 @@ export async function autoDeliverOrdersFromErp(client) {
        VALUES ($1, $2, 'delivered', $3, NULL)`,
       [m.order_id, old, `From ERP (order ${m.erp_order_id} in the workbook)`]
     );
+    // the Excel proves it: delivered AND recorded (owner, 2026-11-11)
+    await recordOrder(client, m.order_id, { reason: `Recorded: found in the Excel (order ${m.erp_order_id})` });
     delivered.push(m.order_id);
   }
   return delivered;
@@ -116,9 +119,9 @@ export async function markAppRowsInExcel(client) {
        GROUP BY erp_customer_id, order_id
      ), cand AS (
        SELECT o.id, c.erp_customer_id, ROUND(o.total_amd) AS total, ${YEREVAN_DAY.replace("%s", "o.created_at")} AS created_d,
-              ${YEREVAN_DAY.replace("%s", `COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered'), o.updated_at)`)} AS delivered_d
+              ${YEREVAN_DAY.replace("%s", `COALESCE((SELECT MAX(h.changed_at) FROM order_status_history h WHERE h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded'), o.updated_at)`)} AS delivered_d
        FROM orders o JOIN customers c ON c.id = o.customer_id
-       WHERE o.status = 'delivered' AND o.erp_matched_order_id IS NULL AND c.erp_customer_id IS NOT NULL
+       WHERE o.status IN ('delivered', 'recorded') AND o.erp_matched_order_id IS NULL AND c.erp_customer_id IS NOT NULL
      ), pairs AS (
        SELECT cand.id AS order_id, erp.order_id AS erp_order_id
        FROM cand JOIN erp ON erp.erp_customer_id = cand.erp_customer_id
@@ -130,7 +133,9 @@ export async function markAppRowsInExcel(client) {
        AND (SELECT COUNT(*) FROM pairs q WHERE q.erp_order_id = p.erp_order_id) = 1`
   );
   for (const m of orders) {
-    await client.query("UPDATE orders SET erp_matched_order_id = $2 WHERE id = $1 AND erp_matched_order_id IS NULL", [m.order_id, m.erp_order_id]);
+    const { rowCount } = await client.query("UPDATE orders SET erp_matched_order_id = $2 WHERE id = $1 AND erp_matched_order_id IS NULL", [m.order_id, m.erp_order_id]);
+    // found in the Excel: a delivered order becomes Recorded by itself (one already recorded by the accountant stays as it is)
+    if (rowCount) await recordOrder(client, m.order_id, { reason: `Recorded: found in the Excel (order ${m.erp_order_id})` });
   }
 
   const { rows: pays } = await client.query(

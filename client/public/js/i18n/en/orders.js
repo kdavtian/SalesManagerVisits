@@ -90,6 +90,7 @@ export const enOrders = {
     recorded_view_signature: "View signature",
     recorded_recorded_by: "Recorded by",
     recorded_undo: "Undo",
+    recorded_by_excel: "Found in the Excel (automatic)",
     recorded_mark_recorded: "Mark recorded",
     recorded_empty_unrecorded: "No delivered orders waiting to be recorded.",
     recorded_empty_recorded: "No recorded orders yet.",

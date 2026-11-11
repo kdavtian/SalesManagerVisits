@@ -221,7 +221,7 @@ async function loadOrders(customerId, where = "", params = [], limit = 60, offse
         WHERE oi.order_id = ANY($1) ORDER BY oi.id`,
       [ids]
     ),
-    pool.query("SELECT order_id, new_status, changed_at FROM order_status_history WHERE order_id = ANY($1) ORDER BY changed_at, id", [ids]),
+    pool.query("SELECT order_id, new_status, changed_at FROM order_status_history WHERE order_id = ANY($1) AND old_status IS DISTINCT FROM 'recorded' ORDER BY changed_at, id", [ids]),
     pool.query("SELECT order_id, max(delivered_at) AS at FROM pod_records WHERE order_id = ANY($1) GROUP BY order_id", [ids]),
   ]);
   const podAt = new Map(pods.map((p) => [p.order_id, p.at]));

@@ -142,7 +142,7 @@ function serializeOrder(o, items) {
     waybill_status: o.accounting_status,
     doc_type: o.accounting_doc_type,
     payment_method: o.payment_method,
-    kad_order_status: o.kad_status,
+    kad_order_status: o.kad_status === "recorded" ? "delivered" : o.kad_status, // Lily's contract has no "recorded" (booked = still delivered)
     is_test: o.accounting_is_test,
     discount_pct: Number(o.discount_pct),
     discount_amd: Number(o.discount_amd),

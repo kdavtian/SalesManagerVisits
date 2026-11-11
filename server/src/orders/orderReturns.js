@@ -4,6 +4,7 @@
 //   return: the order was delivered -> approval, then the warehouse manager confirms what came back (good / damaged), then it is done.
 // Money: Excel stays the truth. The return carries a provisional credit (what the customer paid per unit x quantity) that the customer card shows
 // until the negative line arrives from Excel (matchReturnsToErp) or the accountant marks it recorded.
+import { isDone } from "./orderRecord.js";
 import { pool } from "../db/pool.js";
 import { notifyApproversOf, notifyDecisionOf } from "../system/requests/notify.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -61,7 +62,7 @@ export async function requestReturn(user, body) {
     const factor = creditFactor(order, items);
     let kind;
     let picked = [];
-    if (order.status === "delivered") {
+    if (isDone(order.status)) {
       kind = "return";
       const wanted = Array.isArray(body.items) ? body.items : [];
       if (!wanted.length) throw new ReturnError("Choose what is returned");
