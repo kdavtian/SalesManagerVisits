@@ -758,7 +758,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
        SELECT * FROM pod_records WHERE order_id = o.id ORDER BY id DESC LIMIT 1
      ) pod ON true
      WHERE o.status = $1
-     ORDER BY o.updated_at DESC
+     ORDER BY ${recorded ? "o.recorded_at DESC NULLS LAST, " : ""}o.updated_at DESC
      LIMIT $2 OFFSET $3`,
     [recorded ? "recorded" : "delivered", PAGE_SIZE + 1, offsetNum]
   );
@@ -1635,7 +1635,8 @@ ordersRouter.post("/:id/link-erp", async (req, res) => {
        VALUES ($1, $2, 'delivered', $3, $4)`,
       [order.id, order.status, `Linked by hand to Excel order ${erpOrderId}`, req.user.id]
     );
-    const recordedRow = await recordOrder(client, order.id, { userId: req.user.id, reason: `Recorded: Excel order ${erpOrderId}` });
+    // the Excel proves it (no person recorded it: the accountant's digest counts only orders a person recorded)
+    const recordedRow = await recordOrder(client, order.id, { reason: `Recorded: Excel order ${erpOrderId}` });
     await client.query("COMMIT");
     res.json(recordedRow ?? updatedRows[0]);
   } catch (err) {
@@ -1828,7 +1829,7 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   (async () => {
     try {
       const { rows: [c] } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-      const inExcel = Boolean(order.erp_matched_order_id || order.delivered_from_erp);
+      const inExcel = Boolean(order.erp_matched_order_id || order.delivered_from_erp || order.status === "recorded"); // recorded = booked in the Excel
       const body = `${c?.name || ""} · ${order.order_code || `#${order.id}`}: ${Math.round(Number(order.total_amd)).toLocaleString("en-US")} → ${Math.round(Number(total)).toLocaleString("en-US")} դր։ Պատճառ՝ ${reason}${inExcel ? "։ Ուղղեք նաև Excel-ում։" : ""}`;
       const { rows: people } = await pool.query("SELECT id FROM users WHERE status = 'active' AND (role = 'accountant' OR id = $1) AND id <> $2", [order.user_id, req.user.id]);
       for (const p of people) notifyUser(p.id, "order_corrected", { title: "Պատվերն ուղղվել է", body, url: `/#/orders?open=${order.id}` });

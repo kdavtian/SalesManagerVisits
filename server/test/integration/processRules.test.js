@@ -127,6 +127,7 @@ test("manual link: an unmatched confirmed order can be linked to a free Excel or
   assert.equal(linked.status, 200, JSON.stringify(linked.data));
   assert.equal(linked.data.status, "recorded", "linked to the Excel: delivered and recorded at once (the Excel proves it)");
   assert.equal(linked.data.delivered_from_erp, true);
+  assert.equal(linked.data.recorded_by, null, "the Excel proves it: no person is credited with recording it");
   assert.equal(linked.data.erp_matched_order_id, excelId);
   // The same Excel order cannot be linked twice.
   const o2 = await order(customer, product, 5);

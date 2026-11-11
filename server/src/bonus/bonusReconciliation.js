@@ -60,7 +60,7 @@ export async function runReconciliationSweep({ lookbackHours = DEFAULT_LOOKBACK_
 
   const { rows: orders } = await pool.query(
     `SELECT DISTINCT o.id FROM orders o
-     JOIN order_status_history h ON h.order_id = o.id AND h.new_status = 'delivered'
+     JOIN order_status_history h ON h.order_id = o.id AND h.new_status = 'delivered' AND h.old_status IS DISTINCT FROM 'recorded'
      LEFT JOIN bonus_source_contributions sc ON sc.source_table = 'order' AND sc.source_id = o.id
      WHERE h.changed_at >= $1 AND sc.id IS NULL`,
     [since]
