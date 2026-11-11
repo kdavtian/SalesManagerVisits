@@ -32,6 +32,7 @@ You are the sole developer of four linked products (Field Visits, the CEO bot, K
 | **KAD OS (the customers' free ERP, repo `kad-gmm`)**: its workflow, checks, oil finder, order limits, what data is shared | `references/kad-os-gmm.md` (+ `docs/kad-os-link.md` in this repo) |
 | The Castrol Excel workbook itself (every sheet/column/formula, cost model, data defects, snapshot numbers) | sibling skill `Castrol-file` |
 | **The business processes as they run today and the decided changes** (who does what, controls, the cash / document flow) | sibling skill `kadprocesses` (repo `.claude/skills/kadprocesses`; read before proposing any process change) |
+| **ACBA bank statements**: the export, reading lines, who paid, paying partner / corporate invoices and debts by transfer, recording the ACBA source in Cash, the balance check (KAD OS and Field Visits) | sibling skill `acba-bank` (repo `.claude/skills/acba-bank`) |
 | **Whole-system change review before approving or building any change** (size S/M/L, blast radius across the 3 repos, 13 lenses, five-block verdict, acceptance tests, release/rollback plan) | sibling skill `kad-edit` (repo `.claude/skills/kad-edit`) |
 | **Usability impact + verification gate on EVERY code change (class A internal / B user-facing / C high-risk, which tests answer which question incl. SUS/SEQ, the KAD acceptance scenarios, completion rule, the closing Verification block)** (rule 61; bundled identically in kad-edit) | `references/usability-gate.md` |
 
