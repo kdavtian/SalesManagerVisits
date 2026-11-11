@@ -1133,7 +1133,7 @@ ordersRouter.patch("/:id", async (req, res) => {
       return res.status(409).json({ error: "This order's customer has no ERP customer ID -- link one before confirming" });
     }
     // Submitted orders do not hold stock (owner, 2026-11-11): confirming is the moment the pieces are taken, so they must still be there.
-    const short = await shortStockProducts(order.id);
+    const short = await shortStockProducts(order.id, { lines: nextLines });
     if (short.length) {
       return res.status(409).json({
         error: `Not enough stock to confirm: ${short.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`,
@@ -1761,6 +1761,16 @@ ordersRouter.post("/:id/correct", async (req, res) => {
     term = payment_term_days === null || payment_term_days === "" ? null : Number(payment_term_days);
     const minDays = method === "invoice" ? 1 : 0;
     if (term !== null && (!Number.isInteger(term) || term < minDays || term > 365)) return res.status(400).json({ error: `payment_term_days must be a whole number of days between ${minDays} and 365` });
+  }
+  // A correction of an order that already holds its pieces (confirmed / packed) may not add pieces the shelf does not have (owner,
+  // 2026-11-11: confirming checks the real stock; a correction must not get around it). A quantity kept or lowered always passes.
+  if (order.status === "confirmed" || order.status === "packed_stock_out") {
+    const had = new Map();
+    for (const b of before) had.set(b.product_id, (had.get(b.product_id) ?? 0) + Number(b.quantity));
+    const short = (await shortStockProducts(order.id, { lines })).filter((p) => p.wanted > (had.get(p.id) ?? 0));
+    if (short.length) {
+      return res.status(409).json({ error: `Not enough stock: ${short.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`, code: "short_stock", products: short });
+    }
   }
   const subtotal = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
   const total = applyDiscount(subtotal, pct, amd);

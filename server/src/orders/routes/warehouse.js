@@ -20,7 +20,7 @@ import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
-import { HOLDS_STOCK_SQL } from "../appStock.js";
+import { HOLDS_STOCK_SQL, SUBMITTED_SQL } from "../appStock.js";
 
 
 export const warehouseRouter = Router();
@@ -292,7 +292,7 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
      )
      SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
             COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                      WHERE oi.product_id = p.id AND ${HOLDS_STOCK_SQL}), 0)::int AS reserved_qty
+                      WHERE oi.product_id = p.id AND (${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL})), 0)::int AS reserved_qty
      FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
      WHERE p.active`,
     [today]

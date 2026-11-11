@@ -608,6 +608,8 @@ export const enCommon = {
     wish_period_d90: "90 days",
     wish_period_d365: "Year",
     wish_period_all: "All",
+    order_short_stock_error: "Not enough stock: {items}",
+    order_short_stock_item: "{wanted} wanted, {left} left",
     order_out_of_stock_error: "Out of stock, remove from the order: {names}",
     category_all: "All categories",
     category_merch: "Merch",

@@ -206,3 +206,21 @@ test("confirming takes the pieces: a submitted order that no longer fits the sto
   const snap = await evaluateCredit(pool, customer.id, 0);
   assert.equal(snap.openOrders, Number(second.total_amd), "only the submitted order: the delivered one is already in the Excel debt");
 });
+
+test("an edit sent together with the confirmation is checked with its new quantities; a correction of a confirmed order cannot add pieces the shelf does not have", async () => {
+  const customer = await erpCustomer("short2");
+  const product = await createProduct({ unit_price_amd: 1000 });
+  await pool.query("UPDATE products SET stock_qty = 5 WHERE id = $1", [product.id]);
+  const o = await order(customer, product, 2);
+  const both = await apiRequest(`/api/orders/${o.id}`, { method: "PATCH", cookie: cookies.sales_director, body: { items: [{ product_id: product.id, quantity: 50 }], status: "confirmed" } });
+  assert.equal(both.status, 409, JSON.stringify(both.data));
+  assert.equal(both.data.code, "short_stock");
+  const ok = await apiRequest(`/api/orders/${o.id}`, { method: "PATCH", cookie: cookies.sales_director, body: { status: "confirmed" } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  const correct = (quantity) => apiRequest(`/api/orders/${o.id}/correct`, { method: "POST", cookie: cookies.accountant, body: { reason: "customer asked", items: [{ product_id: product.id, quantity }] } });
+  const tooMany = await correct(20);
+  assert.equal(tooMany.status, 409, JSON.stringify(tooMany.data));
+  assert.equal(tooMany.data.code, "short_stock");
+  const fewer = await correct(1);
+  assert.equal(fewer.status, 200, JSON.stringify(fewer.data));
+});

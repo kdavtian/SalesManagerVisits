@@ -2,8 +2,9 @@
 // which are out of stock"). The New order screen already hid the Add button, but nothing on the server checked: a KAD OS order, an
 // order edit, a reorder or a replayed offline order could still carry a product we do not have.
 //
-// A product is out of stock when its Excel stock minus what other orders hold (submitted / confirmed / packed, and delivered but not in the
-// Excel yet -- appStock.js HOLDS_STOCK_SQL, the same "reserved" as products.js) leaves nothing. Unknown stock (no Excel figure) passes for
+// A product is out of stock when its Excel stock minus what other orders hold (confirmed / packed, and delivered but not in the Excel yet --
+// appStock.js HOLDS_STOCK_SQL, the same "reserved" as products.js) leaves nothing. Submitted orders do not hold (owner, 2026-11-11): the
+// full-quantity gate is shortStockProducts below, at confirming and at a correction. Unknown stock (no Excel figure) passes for
 // our own staff, as on the order screen, but not for a customer ordering in KAD OS (its catalog never shows such a product).
 // Only what an order ADDS is checked: a product already in the order may keep its quantity (or go down) when the stock ran out later.
 import { pool } from "../db/pool.js";
@@ -41,14 +42,22 @@ export function outOfStockResponse(res, products) {
 
 // At CONFIRMING (owner, 2026-11-11: submitted orders do not hold stock, so two of them may want the same last pieces): the order's own
 // quantities must fit in what is left after the orders that already hold stock. Unknown stock passes. -> [{ id, name, unit, wanted, available }]
-export async function shortStockProducts(orderId, db = pool) {
+// `lines` = the order's lines as they WILL be (an edit or a correction sent with the same request); default: as stored.
+export async function shortStockProducts(orderId, { lines = null, db = pool } = {}) {
+  const wanted = new Map();
+  for (const l of lines ?? []) {
+    const id = Number(l.product_id);
+    if (Number.isInteger(id) && Number(l.quantity) > 0) wanted.set(id, (wanted.get(id) ?? 0) + Number(l.quantity));
+  }
   const { rows } = await db.query(
-    `WITH mine AS (SELECT product_id, SUM(quantity)::int AS wanted FROM order_items WHERE order_id = $1 AND product_id IS NOT NULL GROUP BY product_id)
+    `WITH mine AS (
+       SELECT product_id, SUM(quantity)::int AS wanted FROM order_items WHERE $2::int[] IS NULL AND order_id = $1 AND product_id IS NOT NULL GROUP BY product_id
+       UNION ALL SELECT id, qty FROM unnest($2::int[], $3::int[]) AS t(id, qty))
      SELECT p.id, p.name, p.unit, mine.wanted,
             (p.stock_qty - COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
                                       WHERE oi.product_id = p.id AND o.id <> $1 AND ${HOLDS_STOCK_SQL}), 0))::int AS available
      FROM mine JOIN products p ON p.id = mine.product_id WHERE p.stock_qty IS NOT NULL`,
-    [orderId]
+    [orderId, lines ? [...wanted.keys()] : null, lines ? [...wanted.values()] : null]
   );
   return rows.filter((r) => r.wanted > r.available).map((r) => ({ id: r.id, name: r.name, unit: r.unit, wanted: r.wanted, available: Math.max(0, r.available) }));
 }
