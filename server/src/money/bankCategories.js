@@ -40,13 +40,13 @@ const FEE = /commission|գանձում|կոմիսիա|комисс|statement fee
 // ctx: { rules: Map(key -> [{ category_id, hits }]), categories: Map(lower name -> id), ownNumbers: Set }
 export async function suggestionContext(db = pool) {
   const [{ rows: rules }, { rows: cats }, { rows: own }] = await Promise.all([
-    db.query("SELECT key, category_id, hits FROM bank_category_rules ORDER BY hits DESC, updated_at DESC"),
+    db.query("SELECT r.key, r.category_id, r.hits FROM bank_category_rules r JOIN cash_categories c ON c.id = r.category_id WHERE c.active IS NOT FALSE ORDER BY r.hits DESC, r.updated_at DESC"),
     db.query("SELECT id, name FROM cash_categories WHERE active IS NOT FALSE"),
     db.query("SELECT account_number FROM cash_accounts WHERE account_number IS NOT NULL"),
   ]);
   const byKey = new Map();
   for (const r of rules) byKey.set(r.key, [...(byKey.get(r.key) ?? []), r]);
-  return { rules: byKey, categories: new Map(cats.map((c) => [c.name.toLowerCase(), c.id])), ownNumbers: new Set(own.map((o) => o.account_number)) };
+  return { rules: byKey, categories: new Map(cats.map((c) => [c.name.toLowerCase(), c.id])), ownNumbers: new Set(own.map((o) => String(o.account_number).replace(/\s+/g, "").toUpperCase())) };
 }
 
 // -> { category_id, confidence: 'high' | 'low', reason } or null
@@ -62,7 +62,7 @@ export function suggestCategory(line, ctx) {
   const pick = (...names) => names.map((n) => ctx.categories.get(n.toLowerCase())).find(Boolean) ?? null;
   const text = `${line.description ?? ""} ${line.counterparty ?? ""}`;
   // a transfer between two of OUR accounts is neither income nor expense
-  if (line.counterparty_account && ctx.ownNumbers.has(String(line.counterparty_account).replace(/\s+/g, ""))) {
+  if (line.counterparty_account && ctx.ownNumbers.has(String(line.counterparty_account).replace(/\s+/g, "").toUpperCase())) {
     const id = pick("Transfer");
     if (id) return { category_id: id, confidence: "high", reason: "own_account" };
   }

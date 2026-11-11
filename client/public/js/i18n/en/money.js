@@ -275,7 +275,7 @@ export const enMoney = {
     bk_check_day_in: "day in",
     bk_check_day_out: "day out",
     bk_check_day_balance: "day balance",
-    bk_suggested: "Suggested from earlier rows. Check it.",
+    bk_suggested: "A guess from earlier rows: choose the category yourself.",
     bk_suggested_sure: "Suggested: the accountant booked this payer the same way before.",
     bk_check_title: "Check against the Excel Cashflow",
     bk_check_hint: "The accountant books every transaction in the Excel. This compares the statement with those rows.",

@@ -10,6 +10,7 @@ import { canEditCashflow } from "../../shared/roles.js";
 import { cleanEntry } from "../cashflow.js";
 import { readStatement, hashLines, FIELDS } from "../bankStatement.js";
 import { reconcile, learnFromMatches, checkAgainstLedger } from "../bankReconcile.js";
+import { learn } from "../bankCategories.js";
 import { recordBankLines } from "../payments2/bankPayments.js";
 
 export const bankRouter = Router();
@@ -183,7 +184,6 @@ bankRouter.get("/lines", async (req, res) => {
     from: DATE.test(String(req.query.from ?? "")) ? req.query.from : null,
     to: DATE.test(String(req.query.to ?? "")) ? req.query.to : null,
   });
-  await learnFromMatches(lines);
   const limit = Math.min(300, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
   const shown = state ? lines.filter((l) => l.state === state) : lines;
   const { rows: imports } = await pool.query(
@@ -227,6 +227,8 @@ bankRouter.post("/lines/:id/add", edit, async (req, res) => {
     const r = await client.query("UPDATE bank_statement_lines SET status = 'added', entry_id = $2, decided_by = $3, decided_at = now() WHERE id = $1 AND status = 'open'", [line.id, entry.id, req.user.id]);
     if (!r.rowCount) throw Object.assign(new Error("This line is already decided"), { status: 409 });
     await client.query("COMMIT");
+    // the category the accountant chose by hand is the best lesson there is
+    await learn(pool, { ...line, amount, counterparty_account: line.counterparty_account }, c.value.category_id).catch(() => {});
     res.status(201).json({ entry_id: entry.id });
   } catch (err) {
     await client.query("ROLLBACK");
