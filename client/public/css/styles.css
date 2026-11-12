@@ -10672,3 +10672,15 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   .req-bar { left: var(--sidebar-width); bottom: 0; max-width: none; padding: 12px 16px 16px; }
   .req-bar > * { width: 100%; max-width: 760px; margin-left: 0; }
 }
+
+/* Admin > Sales directions (owner, 2026-11-12) */
+.sc-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.sc-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.sc-card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-card-title strong { overflow-wrap: anywhere; }
+.sc-manager { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--text-dim); }
+.sc-manager select { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); font: inherit; font-size: 1rem; }
+.sc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sc-row-inactive { opacity: 0.6; }
+.sc-field-hint { display: block; font-size: 0.8rem; margin-top: 4px; font-weight: 400; }
+.sc-sheet form { display: flex; flex-direction: column; gap: 10px; }

@@ -1112,6 +1112,7 @@ export const enCommon = {
     job_vaghinak_weekly_digest: "Vaghinak: weekly digest",
     job_vaghinak_birthdays: "Vaghinak: staff birthdays",
     job_usage_retention: "Usage analytics: delete rows older than 90 days",
+    job_sales_channel_rules: "Sales directions: re-read their rules (admin panel)",
     job_nav_timing_retention: "Screen speed timings: delete rows older than 30 days",
     job_vaghinak_route_plan_analysis: "Vaghinak: route-plan suggestions (weekly)",
     job_task_deadline_reminders: "Task deadline reminders",

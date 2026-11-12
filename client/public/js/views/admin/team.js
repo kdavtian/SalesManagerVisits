@@ -1,7 +1,7 @@
 // Settings > Administration > Team: the user list, the user card and its records sheet (moved out of admin.js with the refactor tool,
 // docs/architecture-roadmap.md step 6).
 import { api } from "../../api.js";
-import { SALES_CHANNELS, activateDialog, escapeHtml, formatAmd, formatDateTime, formatPhoneDisplay, labelColon, openInfoPopup, parseUserAgent, regionLabelHy, showToast } from "../../util.js";
+import { salesChannelOptionsHtml as channelOptionsHtml, activateDialog, escapeHtml, formatAmd, formatDateTime, formatPhoneDisplay, labelColon, openInfoPopup, parseUserAgent, regionLabelHy, showToast } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { state } from "../../state.js";
@@ -39,11 +39,9 @@ export function userInitials(name) {
   return initials.toUpperCase();
 }
 
+// the directions of the admin panel, keeping the person's current position even when it is not one of them (saving used to wipe it)
 export function salesChannelOptionsHtml(selected) {
-  return (
-    `<option value="">${t("select_sales_channel")}</option>` +
-    SALES_CHANNELS.map((c) => `<option value="${escapeHtml(c)}" ${c === selected ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")
-  );
+  return channelOptionsHtml(selected, t("select_sales_channel"));
 }
 
 export function lastSeenSummary(u) {

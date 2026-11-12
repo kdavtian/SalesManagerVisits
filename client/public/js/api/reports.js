@@ -103,6 +103,10 @@ export const reportsApi = {
   },
   listGeneratedReports: () => request(`/reports/documents`),
   getPerfChannels: () => request("/team-performance/channels"),
+  // the sales directions and their rules (admin panel, owner 2026-11-12)
+  listSalesChannels: () => request("/sales-channels"),
+  createSalesChannel: (data) => json("/sales-channels", "POST", data),
+  updateSalesChannel: (id, data) => json(`/sales-channels/${id}`, "PATCH", data),
   updatePerfChannelManager: (channelId, managerUserId) =>
     json(`/team-performance/channels/${channelId}`, "PATCH", { manager_user_id: managerUserId }),
   getPerfPlanForMonth: (month) => request(`/team-performance/plans?month=${month}`),

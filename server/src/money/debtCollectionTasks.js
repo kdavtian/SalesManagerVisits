@@ -19,6 +19,7 @@
 //    created at once and the sales director is told the promise was broken.
 // A second kind, `reorder_followup`, asks the rep to call or visit a customer who
 // stopped ordering in their usual rhythm (see createReorderFollowupTasks).
+import { isCallChannel, debtSkippedSql, rulesOf } from "../shared/salesChannelRules.js";
 import { bulletNames } from "../utils/bullets.js";
 import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -74,8 +75,8 @@ export async function closeFrozenDebtTasks(today = yerevanToday(), customerId = 
 export const DEBT_TASK_TITLE = "Հավաքագրիր պարտքը";
 export const REORDER_TASK_TITLE = "Հաճախորդը վաղուց չի պատվիրել՝ զանգահարիր կամ այցելիր";
 // Customers nobody has to visit (owner, 2026-10-18): Vaghinak gives their rep a CALL task instead of a visit task.
-export const CALL_CHANNELS = ["SM B2B", "CVO", "PCO", "OEM"];
-export const isCallChannel = (channel) => CALL_CHANNELS.includes(String(channel ?? ""));
+// Which directions are chased by phone is the direction's own setting (sales_channels.debt_mode = 'call': SM B2B, CVO, PCO, OEM today).
+export { isCallChannel };
 export const DEBT_CALL_TITLE = "Զանգահարիր՝ հիշեցրու պարտքի մասին";
 export const REORDER_CALL_TITLE = "Զանգահարիր՝ հարցրու՝ պատվեր պետք է՞";
 const MAX_PER_REP = 15;
@@ -106,8 +107,8 @@ const PAID_SINCE_TASK_SQL = paidSinceSql(">=", true);
 // the task's title even names it as "last payment"). The app's own events close a same-day payment (taskAutoComplete.js).
 const PAID_AFTER_TASK_SQL = paidSinceSql(">");
 
-// KF and CAS are never chased; OEM (like CVO, PCO and SM B2B) is chased by CALL tasks only (CALL_CHANNELS).
-const SKIPPED_CHANNELS_SQL = `COALESCE(c.sales_channel, '') <> ALL(ARRAY['KF', 'CAS'])`;
+// Directions never chased (sales_channels.debt_mode = 'none': KF and CAS today); the phone ones get CALL tasks (isCallChannel).
+const SKIPPED_CHANNELS_SQL = `NOT ${debtSkippedSql("c.sales_channel")}`;
 // Overdue = the oldest unpaid invoice is older than the credit term (see debtAge.js).
 
 // Who is shown as the creator of automatic tasks: a sales director, else the CEO, else an admin.
@@ -506,7 +507,7 @@ export async function autoTaskDiagnostics(now = new Date()) {
   const live = new Set((await stillOverdueLive(rows, today)).map((r) => r.customer_id));
   for (const r of rows) {
     if (!live.has(r.customer_id)) buckets.paid_in_app++;
-    else if (!(r.sales_channel !== "KF" && r.sales_channel !== "CAS") && !r.force_collect) buckets.channel_skipped++;
+    else if (rulesOf(r.sales_channel).debt_mode === "none" && !r.force_collect) buckets.channel_skipped++;
     else if (r.on_hold) buckets.on_hold++;
     else if (r.has_open) buckets.has_open++;
     else if (r.promise_running) buckets.promise_running++;

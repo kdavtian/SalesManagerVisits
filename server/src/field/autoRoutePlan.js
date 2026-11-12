@@ -9,7 +9,7 @@
 //   - never for the channels nobody visits (KF, CAS, CVO, PCO, OEM) or the office check-in place, nor when nothing of that area is planned.
 // Switch: app_settings.auto_route_plan_new_customers (App configuration, ON by default, migration 178).
 import { pool } from "../db/pool.js";
-import { NO_VISIT_CHANNELS } from "../customers/routes/customers.js";
+import { isNoVisitChannel } from "../shared/salesChannelRules.js";
 import { scopeOfChannel } from "./planScopes.js";
 import { distM, hasLocation } from "../orders/routePlanner.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -89,7 +89,7 @@ export async function placeNewCustomer(customerId, actorId) {
     );
     if (!c?.rep_id) return { status: "skipped", reason: "no_rep" };
     if (!c.region) return { status: "skipped", reason: "no_area" };
-    if (NO_VISIT_CHANNELS.includes(c.sales_channel) || c.checkin_for_all) return { status: "skipped", reason: "not_visited" };
+    if (isNoVisitChannel(c.sales_channel) || c.checkin_for_all) return { status: "skipped", reason: "not_visited" };
     const client = await pool.connect();
     let result;
     try {

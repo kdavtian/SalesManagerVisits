@@ -5,7 +5,7 @@ import { pool } from "../db/pool.js";
 import { NOT_NO_VISIT_CHANNEL_SQL } from "../customers/routes/customers.js";
 import { batchExpandAreas } from "./routes/visitPlans.js";
 import { planRep, pathKm, hasLocation } from "../orders/routePlanner.js";
-import { MAIN_SCOPE, SEPARATE_PLAN_CHANNELS, scopeOfChannel, loadChannelMap, mergeScopeIds } from "./planScopes.js";
+import { MAIN_SCOPE, separateChannels, scopeOfChannel, loadChannelMap, mergeScopeIds } from "./planScopes.js";
 
 // Week is shown Monday-first; day_of_week stays 0 = Sunday .. 6 = Saturday.
 export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -53,7 +53,7 @@ async function insertRules(db, setId, userId, daysMap) {
 // own, then the plans' lists of a weekday are joined into the one rule the app reads.
 export function planRepByScope(customers, days) {
   const merged = new Map(days.map((d) => [d.dow, []]));
-  for (const scope of [MAIN_SCOPE, ...SEPARATE_PLAN_CHANNELS]) {
+  for (const scope of [MAIN_SCOPE, ...separateChannels()]) {
     const group = customers.filter((c) => scopeOfChannel(c.sales_channel) === scope);
     if (!group.length) continue;
     for (const [dow, ids] of planRep(group, days)) merged.set(dow, [...(merged.get(dow) ?? []), ...ids]);
@@ -246,7 +246,7 @@ export async function getSet(id) {
   const outReps = [];
   for (const rep of reps) {
     const allMine = byRep.get(rep.id);
-    for (const scope of [MAIN_SCOPE, ...SEPARATE_PLAN_CHANNELS]) {
+    for (const scope of [MAIN_SCOPE, ...separateChannels()]) {
       const mine = allMine.filter((c) => scopeOfChannel(c.sales_channel) === scope);
       const planned = new Set();
       const days = WEEK_ORDER.map((dow) => {

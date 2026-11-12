@@ -10,7 +10,7 @@
 import { api } from "./api.js";
 import { t, getLang } from "./i18n.js";
 import { icons } from "./icons.js";
-import { activateDialog, escapeHtml, groupDigits, openInfoPopup, SALES_CHANNELS, channelDisplayLabel } from "./util.js";
+import { activateDialog, escapeHtml, groupDigits, openInfoPopup, SALES_CHANNELS, channelDisplayLabel, salesChannelRule } from "./util.js";
 import {
   RATE_MARKET_HINT,
   commissionPct,
@@ -19,7 +19,18 @@ import {
   mergeSavedRates,
   netCost,
   priceForNetMargin,
+  setChannelCommissionKinds,
 } from "./costModel.js";
+
+// each direction's commission kind from the admin panel (the same map the server's discount check uses)
+function loadCommissionKinds() {
+  const map = {};
+  for (const code of SALES_CHANNELS) {
+    const rule = salesChannelRule(code);
+    if (rule?.commission_kind) map[code.toUpperCase()] = rule.commission_kind;
+  }
+  setChannelCommissionKinds(map);
+}
 
 const STORE_KEY = "fv_cost_calc";
 const STORE_VERSION = 2; // 1 = the first calculator (no per-brand freight, commissions or cost items): its rates are dropped
@@ -51,6 +62,7 @@ const NEW_BRANDS = ["Castrol", "Royal", "Lotos", "Orlen", "Other"];
 const ITEM_UNITS = { pct: "cc_unit_pct", liter: "cc_unit_liter", pack: "cc_unit_pack" };
 
 export function openCostCalculator({ products: given = [], product = null } = {}) {
+  loadCommissionKinds();
   let products = given;
   const store = loadStore();
   let appRates = null; // freight / customs / excise ... from App configuration (loaded just after opening)

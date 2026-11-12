@@ -19,6 +19,13 @@
 // Channels that pay no commission at all (owner, 2026-10-17); every other channel pays the director's share, and channels
 // run by a field sales manager ("SM ...") pay the rep's share as well: SM YVN 4 %, CVO/PCO/OEM 2 %, KF and CAS 0 %.
 export const COMMISSION_FREE_CHANNELS = Object.freeze(["KF", "CAS"]);
+// Since 2026-11-12 every direction carries its own commission kind (sales_channels.commission_kind, set in the admin panel): 'rep' = the
+// director's and the sales manager's share, 'trade' = the director's only, 'none' = no commission. The server and the phone both load the
+// directions into this map (uppercase code -> kind); a code missing from it keeps the rule above.
+let CHANNEL_COMMISSION_KINDS = {};
+export function setChannelCommissionKinds(map) {
+  CHANNEL_COMMISSION_KINDS = { ...(map ?? {}) };
+}
 export const BRAND_KEYS = Object.freeze(["Castrol", "Royal", "Lotos", "Other"]);
 
 // Overhead items measured from the cash ledger (Cashflow sheet), 12 months to 2026-09: 320.1 M AMD of sales (1,537 orders,
@@ -84,6 +91,10 @@ export function commissionPct(channel, rates = COST_RATES_DEFAULT) {
   const r = { ...COST_RATES_DEFAULT, ...rates };
   if (channel == null || String(channel).trim() === "") return num(r.commDirector) + num(r.commRep);
   const c = String(channel).trim().toUpperCase();
+  const kind = CHANNEL_COMMISSION_KINDS[c];
+  if (kind === "none") return 0;
+  if (kind === "trade") return num(r.commDirector);
+  if (kind === "rep") return num(r.commDirector) + num(r.commRep);
   if (COMMISSION_FREE_CHANNELS.includes(c)) return 0;
   return num(r.commDirector) + (/^SM(\s|$)/.test(c) ? num(r.commRep) : 0);
 }

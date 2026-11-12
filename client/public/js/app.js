@@ -119,7 +119,7 @@ import { startLocationBroadcast, stopLocationBroadcast } from "./locationBroadca
 import { startDriverArrival, stopDriverArrival } from "./driverArrival.js";
 import { setOfficeNavigator } from "./officeDetect.js";
 import { startUsageTracking } from "./usageTracker.js";
-import { pruneParkedSheet, installPhoneMask } from "./util.js";
+import { pruneParkedSheet, installPhoneMask, loadSalesChannels } from "./util.js";
 import { QUICK_ACTION_ROUTE } from "./quickActions.js";
 import { installStatusBarTap } from "./statusBarTap.js";
 import { startErrorMonitoring } from "./errorMonitoring.js";
@@ -858,6 +858,7 @@ async function init() {
       })
       .catch(() => {});
     loadPins(); // pinned screens (Home's top row, the sidebar), from the server
+    loadSalesChannels(api.listSalesChannels); // the sales directions of the admin panel (every direction dropdown, the map's rules)
   }
   // Every count in ONE request (GET /api/badges; owner, 2026-11-04: it used to be nine separate requests at start, the slowest part of a
   // cold start on mobile data). The single-purpose refresh*Badge() calls stay for the moment right after an action that changes one count.

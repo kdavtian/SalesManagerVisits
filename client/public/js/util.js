@@ -506,7 +506,53 @@ export function matchSubregion(guess, region) {
 // table's seed data/display_order (migrations 037, 055, 062) -- SM CAS is
 // kept (a legacy channel, not deleted) but sorts last since 062 dropped it
 // out of the requested 9-channel order.
+// Since 2026-11-12 the directions are edited in the admin panel (GET /api/sales-channels): this list is filled from the server at start
+// (and kept on the phone for the next start / offline); the built-in values below are only the first-start fallback. It is the SAME array
+// object, so every screen importing it sees the update.
 export const SALES_CHANNELS = ["SM YVN", "SM Davtashen", "SM Shirak", "SM B2B", "OEM", "CVO", "PCO", "CAS", "KF", "SM CAS"];
+// code -> the direction's rules (visit_mode, route_autofill, ...), from the same answer
+const CHANNEL_RULES = new Map();
+const CHANNEL_CACHE_KEY = "fv.salesChannels.v1";
+function applyChannelList(list) {
+  if (!Array.isArray(list) || !list.length) return;
+  CHANNEL_RULES.clear();
+  for (const c of list) CHANNEL_RULES.set(c.code, c);
+  SALES_CHANNELS.splice(0, SALES_CHANNELS.length, ...list.filter((c) => c.active).map((c) => c.code));
+  window.dispatchEvent?.(new Event("sales-channels-changed"));
+}
+try {
+  applyChannelList(JSON.parse(localStorage.getItem(CHANNEL_CACHE_KEY) || "null"));
+} catch {
+  /* no cache yet */
+}
+// `fetchList` = api.listSalesChannels (passed in: util.js must not import api.js). Never throws.
+export async function loadSalesChannels(fetchList) {
+  try {
+    const list = await fetchList();
+    applyChannelList(list);
+    try {
+      localStorage.setItem(CHANNEL_CACHE_KEY, JSON.stringify(list));
+    } catch {
+      /* private mode: memory only */
+    }
+    return list;
+  } catch {
+    return null;
+  }
+}
+// The rules of a direction, or null when the list is not loaded / the code is unknown (callers keep their old built-in behaviour then).
+export const salesChannelRule = (code) => CHANNEL_RULES.get(String(code ?? "")) ?? null;
+
+// <option>s for a direction <select>: the active directions, plus the CURRENT value even when it is not one of them (an inactive or unknown
+// direction) -- otherwise opening and saving the form silently wiped it (review 2026-11-12).
+export function salesChannelOptionsHtml(selected, placeholder, { label = (c) => c } = {}) {
+  const codes = [...SALES_CHANNELS];
+  if (selected && !codes.includes(selected)) codes.push(selected);
+  return (
+    `<option value="">${escapeHtml(placeholder ?? "")}</option>` +
+    codes.map((c) => `<option value="${escapeHtml(c)}" ${c === selected ? "selected" : ""}>${escapeHtml(label(c))}</option>`).join("")
+  );
+}
 
 // api.js (normalizeCustomer) writes the literal uppercase "POTENTIAL"/
 // "COMPETITORS" into a customer's sales_channel so it sorts and filters

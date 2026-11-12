@@ -1112,6 +1112,7 @@ export const hyCommon = {
     job_vaghinak_weekly_digest: "Վաղինակ՝ շաբաթական ամփոփում",
     job_vaghinak_birthdays: "Վաղինակ՝ աշխատակիցների ծննդյան օրեր",
     job_usage_retention: "Օգտագործման վիճակագրություն՝ 90 օրից հին տողերի ջնջում",
+    job_sales_channel_rules: "Վաճառքի ուղղություններ՝ կանոնների թարմացում (ադմին վահանակ)",
     job_nav_timing_retention: "Էկրանների արագության չափումներ՝ 30 օրից հին տողերի ջնջում",
     job_vaghinak_route_plan_analysis: "Վաղինակ՝ երթուղային պլանի առաջարկներ (շաբաթական)",
     job_task_deadline_reminders: "Առաջադրանքների ժամկետի հիշեցումներ",
