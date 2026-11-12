@@ -68,6 +68,8 @@ export const icons = {
   printer: uiSvg(`<rect x="7" y="3" width="10" height="5" rx="1"/><path d="M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="7" y="13.5" width="10" height="7.5" rx="1"/><path d="M9.8 17h4.4"/><circle cx="17.3" cy="10.7" r=".9" fill="currentColor" stroke="none"/>`),
   tag: uiSvg(`<path d="M20 13 13 20l-9-9V4h7z"/><circle cx="8" cy="8" r="1"/>`),
   trash: uiSvg(`<path d="M3 6h18"/><path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6"/><path d="M19 6l-.9 13a2 2 0 0 1-2 1.9H7.9a2 2 0 0 1-2-1.9L5 6"/><path d="M10 11v6M14 11v6"/>`),
+  // Telegram-style paper plane: "send to the accountant" in the order sheet's top bar
+  paperPlane: uiSvg(`<path d="M21.5 3 3.2 10.3a.7.7 0 0 0 .05 1.32l6.75 2.13 2.13 6.75a.7.7 0 0 0 1.32.05L21.5 3Z"/><path d="m10 13.75 5.2-5.2"/>`),
   pencil: uiSvg(`<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>`),
   repeat: uiSvg(`<path d="m17 2 4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>`),
   note: uiSvg(`<path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/>`),

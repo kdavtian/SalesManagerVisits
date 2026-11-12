@@ -254,8 +254,13 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     overlay.querySelector(".sheet").classList.add("order-detail-sheet");
     overlay.querySelector(".sheet").classList.remove("sheet-adding");
+    // Send to the accountant (owner, 2026-11-12): a paper-plane icon next to Print / Close instead of a full-width button. Its label (send /
+    // send again / change the document) stays as the accessible name and tooltip.
+    const canSendToAccounting = canConfirmSubmittedOrders(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null);
+    const sendLabel = order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting");
     overlay.querySelector(".sheet").innerHTML = `
       <div class="sheet-head-actions">
+        ${canSendToAccounting ? `<button type="button" class="icon-btn${order.accounting_status === "needs_attention" ? " icon-btn-alert" : ""}" data-action="accounting-document" aria-label="${escapeHtml(sendLabel)}" title="${escapeHtml(sendLabel)}">${icons.paperPlane}</button>` : ""}
         ${seesAmountPapers(state.user.role) ? `<button type="button" class="icon-btn" data-action="print-blank" aria-label="${t("print_blank")}" title="${t("print_blank")}">${icons.printer}</button>` : ""}
         <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       </div>
@@ -360,13 +365,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
       buttons.push({ label: t("order_unconfirm"), action: "unconfirm-order", cls: "btn" });
     }
-    if (canConfirmSubmittedOrders(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
-      buttons.push({
-        label: order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting"),
-        action: "accounting-document",
-        cls: "btn",
-      });
-    }
     if (canConfirmSubmittedOrders(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
     }
@@ -378,24 +376,25 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       // in server/src/shared/roles.js for why this manual override exists. A CONFIRMED order can be marked delivered
       // right away too (management skips the warehouse "packed" step).
       if (canMarkDeliveredWithoutRoute(state.user.role)) {
-        buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary" });
+        buttons.push({ label: t("mark_delivered_no_route"), action: "mark-delivered", cls: "btn btn-primary order-action-lead" });
       }
     }
-    // One tap to order the same lines again -- only for an order that was actually delivered. An order still on its way
-    // is never ordered twice, and the extra button only confused reps and reviewers (owner, 2026-10-16).
+    // A delivered order (owner, 2026-11-12): one big "Mark recorded" for the accountant / CEO / admin, Correct and Return under it.
     if (order.status === "delivered" && !order.cancelled_at && canRecordOrders(state.user.role)) {
-      buttons.push({ label: t("recorded_mark_recorded"), action: "record-order", cls: "btn btn-primary" });
+      buttons.push({ label: t("recorded_mark_recorded"), action: "record-order", cls: "btn btn-primary order-action-lead" });
     }
-    if (isDone(order.status)) {
+    // One tap to order the same lines again -- only for a finished order (owner, 2026-10-16: never for one still on its way). Not on a
+    // Delivered one any more (owner, 2026-11-12: that sheet is the accountant's "record it" step); a Recorded order keeps it.
+    if (order.status === "recorded") {
       buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
     }
     // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
     if (canEditThisOrder) {
-      buttons.push({ label: t("edit_order"), action: "edit-order", cls: "btn" });
+      buttons.push({ label: `${icons.pencil}${t("edit_order")}`, action: "edit-order", cls: "btn btn-has-icon" });
     }
     // After review (confirmed, packed, delivered) admin, CEO and the accountant can still correct a mistake, with a reason that is kept.
     if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status) && canCorrectOrders(state.user.role)) {
-      buttons.push({ label: t("ocr_btn"), action: "correct-order", cls: "btn" });
+      buttons.push({ label: `${icons.pencil}${t("ocr_btn")}`, action: "correct-order", cls: "btn btn-has-icon" });
     }
     // Permanent delete (distinct from a director's reject, which keeps
     // the order as a record back at draft) -- admin only, for a
@@ -403,7 +402,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // A sales manager may also delete their OWN order until management confirms it (draft / submitted).
     // Return (delivered) / cancel (not delivered yet): the rep asks, management decides (views/returns.js).
     if (!order.cancelled_at && order.status !== "draft" && (order.user_id === state.user.id || canApproveReturns(state.user.role))) {
-      buttons.push({ label: t(isDone(order.status) ? "rt_btn_return" : "rt_btn_cancel"), action: "order-return", cls: "btn" });
+      buttons.push({ label: `${isDone(order.status) ? icons.undo : icons.close}${t(isDone(order.status) ? "rt_btn_return" : "rt_btn_cancel")}`, action: "order-return", cls: "btn btn-has-icon" });
     }
     if (state.user.role === "admin" || (state.user.role === "sales_manager" && order.user_id === state.user.id && ["draft", "submitted"].includes(order.status))) {
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
@@ -426,6 +425,12 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
 
     actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
+    overlay.querySelector('.sheet-head-actions [data-action="accounting-document"]')?.addEventListener("click", async () => {
+      overlay.remove();
+      await openAccountingDocSheet(order);
+      notifyOrdersChanged();
+      onChanged?.();
+    });
     overlay.querySelector('.sheet-head-actions [data-action="print-blank"]')?.addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
     // Returns / cancellation requests on this order (loaded after the sheet is up).
     api
@@ -575,13 +580,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
             notifyOrdersChanged();
             onChanged?.();
           }
-          return;
-        }
-        if (btn.dataset.action === "accounting-document") {
-          overlay.remove();
-          await openAccountingDocSheet(order);
-          notifyOrdersChanged();
-          onChanged?.();
           return;
         }
         if (btn.dataset.action === "delete-order" && !confirm(t("confirm_delete_order"))) return;

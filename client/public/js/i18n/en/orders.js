@@ -8,7 +8,7 @@ export const enOrders = {
     draft_reason_label: "Note",
     confirmed_awaiting_warehouse: "Confirmed — waiting for the warehouse to pick and pack",
     packed_awaiting_route: "Packed — waiting to be added to a delivery route",
-    mark_delivered_no_route: "Mark delivered (no route)",
+    mark_delivered_no_route: "Mark as delivered",
     confirm_mark_delivered_no_route: "Mark this order as delivered without a delivery route or signature? Use this only when there's no driver to complete it in the app.",
     reject_order_note_prompt: "Reason for rejecting (optional)",
     orders_count_label: "orders",

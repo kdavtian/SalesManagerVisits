@@ -112,6 +112,9 @@ salesRouter.get("/", async (req, res) => {
             COALESCE(ecd.assigned_sales_rep, c.sales_channel) AS channel,
             sum(eol.revenue_amd) AS total_amd,
             sum(eol.qty) AS total_qty,
+            -- where the order came from (owner, 2026-11-12: an "App" / "Excel" chip): an app order the sync matched to this Excel order
+            EXISTS (SELECT 1 FROM orders ao JOIN customers ac ON ac.id = ao.customer_id
+                    WHERE ao.erp_matched_order_id = eol.order_id AND ac.erp_customer_id = eol.erp_customer_id) AS from_app,
             -- size_l is free-text from the ERP extract (usually a plain
             -- number, occasionally with a trailing "L" like products.unit).
             -- Stripping to just digits/dots (as an earlier version of this

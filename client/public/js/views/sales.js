@@ -202,12 +202,16 @@ async function renderSalesTab(root, navigate) {
   // (bold). The date itself lives on the group heading above, not the row
   // -- order_date is a date-only server field, so it's identical across
   // every card in one group and would just repeat.
+  // Where the order came from (owner, 2026-11-12): "App" = placed in the app and found in the Excel by the sync, "Excel" = entered in the
+  // Excel directly. Sits just left of the amount.
+  const sourceChipHtml = (o) =>
+    `<span class="badge ${o.from_app ? "badge-info" : "badge-neutral"} sales-src-chip">${t(o.from_app ? "sales_src_app" : "sales_src_excel")}</span>`;
   function rowHtml(o) {
     return `
       <button type="button" class="card sales-order-card ${unpaidRowClass(o)}" data-erp-customer-id="${escapeHtml(o.erp_customer_id)}" data-order-id="${escapeHtml(o.order_id)}">
         <div class="sales-order-row">
           <span class="muted">${[o.order_id, o.erp_customer_id, o.channel ? channelDisplayLabel(o.channel) : ""].filter(Boolean).map(escapeHtml).join(" · ")}</span>
-          <span class="text-amount sales-order-amount">${formatAmd(Number(o.total_amd))}</span>
+          ${sourceChipHtml(o)}<span class="text-amount sales-order-amount">${formatAmd(Number(o.total_amd))}</span>
         </div>
         <div class="sales-order-name-row">
           <strong>${escapeHtml(o.customer_name || "")}</strong>
@@ -254,7 +258,7 @@ async function renderSalesTab(root, navigate) {
       ${cell(escapeHtml(o.channel ? channelDisplayLabel(o.channel) : ""), "")}
       ${cell(escapeHtml(formatLiters(Number(o.total_liters || 0))), "", "dtl-end")}
       ${cell(unpaid ? dueChipHtml(o.due_days) : `<span class="muted">&mdash;</span>`, unpaid ? escapeHtml(formatAmd(Number(o.unpaid_amd))) : "")}
-      ${cell(`<strong class="text-amount">${formatAmd(Number(o.total_amd))}</strong>`, "", "dtl-end")}
+      ${cell(`${sourceChipHtml(o)}<strong class="text-amount">${formatAmd(Number(o.total_amd))}</strong>`, "", "dtl-end")}
       <span></span>
     </div>`;
   }

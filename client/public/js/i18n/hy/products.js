@@ -313,6 +313,8 @@ export const hyProducts = {
     xl_order_id: "Պատվերի ID",
     xl_liters: "Լիտր",
     xl_qty: "Քանակ",
+    sales_src_app: "App",
+    sales_src_excel: "Excel",
     sales_source_hint: "ERP-ում հաշվագրված եկամուտ (Excel տվյալներ), ոչ թե հավելվածի պատվերների հոսքը -- Ուղարկված/Հաստատված/Առաքված պատվերների գումարների համար տե՛ս Հաշվետվություններ։",
     sales_search_placeholder: "Պատվեր, ERP ID, հաճախորդ, ապրանք, >50000",
     sales_empty: "Այս ժամանակահատվածում պատվերներ չկան",
