@@ -1,4 +1,4 @@
-import { noVisitSql, isNoVisitChannel } from "../../shared/salesChannelRules.js";
+import { noVisitSql, isNoVisitChannel, RESERVED_CODES } from "../../shared/salesChannelRules.js";
 import { VOICE_NOTES_JSON_SQL } from "../../field/voiceNotes.js";
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
@@ -371,7 +371,9 @@ customersRouter.post("/", async (req, res) => {
   if (!name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: "name, lat and lng are required" });
   }
-  if (!(await isKnownChannel(sales_channel))) return res.status(400).json({ error: "Unknown sales direction", code: "unknown_sales_channel" });
+  if (!RESERVED_CODES.includes(String(sales_channel ?? "").toUpperCase()) && !(await isKnownChannel(sales_channel))) {
+    return res.status(400).json({ error: "Unknown sales direction", code: "unknown_sales_channel" });
+  }
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng must be numbers" });
   }
@@ -455,7 +457,7 @@ customersRouter.post("/", async (req, res) => {
         placeOutcome.values.region || null,
         placeOutcome.values.subregion || null,
         initialTier,
-        sales_channel || null,
+        RESERVED_CODES.includes(String(sales_channel ?? "").toUpperCase()) ? null : sales_channel || null, // display-only values are no direction
         resolvedManagerId,
         Number(credit_term_days) || 45,
         payment_method || "invoice",
@@ -921,6 +923,8 @@ customersRouter.patch("/:id", async (req, res) => {
   );
   const current = currentRows[0];
   if (!current) return res.status(404).json({ error: "Customer not found" });
+  // the client's display-only values (normalizeCustomer) are no direction: "no change"
+  if (RESERVED_CODES.includes(String(req.body?.sales_channel ?? "").toUpperCase())) delete req.body.sales_channel;
   // a direction must be one the admin panel knows (keeping the customer's current one is always fine)
   if (req.body?.sales_channel !== undefined && req.body.sales_channel !== current.sales_channel && !(await isKnownChannel(req.body.sales_channel))) {
     return res.status(400).json({ error: "Unknown sales direction", code: "unknown_sales_channel" });

@@ -14,16 +14,22 @@ export const salesChannelsRouter = Router();
 salesChannelsRouter.use(requireAuth);
 
 const COLUMNS = `c.id, c.code, c.name, c.active, c.manager_user_id, u.name AS manager_name, u.status AS manager_status, c.owner_role, c.display_order,
-  ${RULE_COLUMNS.map((k) => `c.${k}`).join(", ")},
-  (SELECT count(*)::int FROM customers cu WHERE cu.sales_channel = c.code) AS customer_count`;
+  ${RULE_COLUMNS.map((k) => `c.${k}`).join(", ")}`;
 
-async function listChannels(db = pool) {
-  const { rows } = await db.query(`SELECT ${COLUMNS} FROM sales_channels c LEFT JOIN users u ON u.id = c.manager_user_id ORDER BY c.display_order, c.code`);
+// counts = how many customers each direction has (the admin screen only: every phone reads this list at start)
+async function listChannels(db = pool, { counts = false } = {}) {
+  const count = counts ? ", (SELECT count(*)::int FROM customers cu WHERE cu.sales_channel = c.code) AS customer_count" : "";
+  const { rows } = await db.query(`SELECT ${COLUMNS}${count} FROM sales_channels c LEFT JOIN users u ON u.id = c.manager_user_id ORDER BY c.display_order, c.code`);
   return rows;
 }
 
+// the write is committed: a failed re-read of the rules is logged, never answered as an error (the lazy refresh catches up)
+async function refreshQuietly() {
+  await refreshChannelRules().catch((err) => console.error("Sales direction rules could not be re-read:", err.message));
+}
+
 salesChannelsRouter.get("/", async (req, res) => {
-  res.json(await listChannels());
+  res.json(await listChannels(pool, { counts: req.query.counts === "1" }));
 });
 
 class Invalid extends Error {
@@ -34,7 +40,7 @@ class Invalid extends Error {
 }
 
 // The editable fields of a body, checked; `partial` = only those present (PATCH). Throws Invalid.
-async function readFields(body, { partial }) {
+async function readFields(body, { partial, currentManagerId = undefined }) {
   const out = {};
   const has = (k) => body[k] !== undefined;
   if (!partial || has("name")) {
@@ -57,6 +63,9 @@ async function readFields(body, { partial }) {
   }
   if (has("manager_user_id")) {
     if (body.manager_user_id === null) out.manager_user_id = null;
+    // the manager the direction already has is kept as it is, even when that person was paused / left meanwhile (renaming or changing a rule
+    // must not need a new manager first -- review 2026-11-12)
+    else if (currentManagerId !== undefined && Number(body.manager_user_id) === currentManagerId) out.manager_user_id = currentManagerId;
     else {
       const id = Number(body.manager_user_id);
       if (!Number.isInteger(id)) throw new Invalid("manager_user_id must be a user id or null");
@@ -112,12 +121,19 @@ salesChannelsRouter.post("/", requireAdmin, async (req, res) => {
   }
   const cols = ["code", ...Object.keys(fields)];
   const vals = [code, ...Object.values(fields)];
-  const { rows } = await pool.query(
-    `INSERT INTO sales_channels (${cols.join(", ")}, updated_at) VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}, now()) RETURNING id`,
-    vals
-  );
-  await refreshChannelRules();
-  const created = (await listChannels()).find((c) => c.id === rows[0].id);
+  let rows;
+  try {
+    ({ rows } = await pool.query(
+      `INSERT INTO sales_channels (${cols.join(", ")}, updated_at) VALUES (${cols.map((_, i) => `$${i + 1}`).join(", ")}, now()) RETURNING id`,
+      vals
+    ));
+  } catch (err) {
+    // two admins creating the same code at once: the unique index answers
+    if (err.code === "23505") return res.status(409).json({ error: `The direction "${code}" already exists`, code: "code_exists" });
+    throw err;
+  }
+  await refreshQuietly();
+  const created = (await listChannels(pool, { counts: true })).find((c) => c.id === rows[0].id);
   res.status(201).json(created);
 });
 
@@ -125,9 +141,11 @@ salesChannelsRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(404).json({ error: "Not found" });
   if (req.body?.code !== undefined) return res.status(400).json({ error: "The code of a direction cannot be changed", code: "code_locked" });
+  const { rows: cur } = await pool.query("SELECT manager_user_id FROM sales_channels WHERE id = $1", [id]);
+  if (!cur[0]) return res.status(404).json({ error: "Not found" });
   let fields;
   try {
-    fields = await readFields(req.body ?? {}, { partial: true });
+    fields = await readFields(req.body ?? {}, { partial: true, currentManagerId: cur[0].manager_user_id });
   } catch (err) {
     if (err instanceof Invalid) return sendInvalid(res, err);
     throw err;
@@ -156,6 +174,6 @@ salesChannelsRouter.patch("/:id", requireAdmin, async (req, res) => {
   } finally {
     client.release();
   }
-  await refreshChannelRules();
-  res.json((await listChannels()).find((c) => c.id === id));
+  await refreshQuietly();
+  res.json((await listChannels(pool, { counts: true })).find((c) => c.id === id));
 });

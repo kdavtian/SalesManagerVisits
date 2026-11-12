@@ -46,6 +46,9 @@ export function defaultRules(code) {
 
 let byCode = new Map(Object.entries(BUILT_IN).map(([code, r]) => [code, { code, active: true, ...defaultRules(code), ...r }]));
 let loadedFromDb = false;
+let loadedAt = 0;
+let generation = 0; // a read that started before a newer one never overwrites it (review 2026-11-12)
+let inflight = null;
 pushCommissionKinds();
 
 function pushCommissionKinds() {
@@ -53,24 +56,50 @@ function pushCommissionKinds() {
 }
 
 export async function refreshChannelRules(db = pool) {
+  const mine = ++generation;
   const { rows } = await db.query(`SELECT code, active, ${RULE_COLUMNS.join(", ")} FROM sales_channels`);
+  if (mine !== generation) return byCode; // a newer read is on its way (or done): it decides
   byCode = new Map(rows.map((r) => [r.code, r]));
   loadedFromDb = true;
+  loadedAt = Date.now();
   pushCommissionKinds();
   return byCode;
 }
 export const channelRulesLoaded = () => loadedFromDb;
 
-// Kept fresh by the job scheduler (jobs/index.js "sales-channel-rules", every minute) and right after an admin edit; read once at start.
-export function startChannelRulesRefresh(db = pool) {
-  refreshChannelRules(db).catch((err) => console.error("Sales direction rules could not be read:", err.message));
+// Kept fresh PER PROCESS without a timer: a read older than a minute starts a new one in the background (the answer that triggered it uses
+// the copy it has); every admin edit refreshes at once. A failed read keeps the last good copy.
+const MAX_AGE_MS = 60_000;
+function keepFresh() {
+  if (inflight || Date.now() - loadedAt < MAX_AGE_MS) return;
+  inflight = refreshChannelRules()
+    .catch((err) => console.error("Sales direction rules could not be read:", err.message))
+    .finally(() => {
+      inflight = null;
+      if (!loadedFromDb) loadedAt = Date.now(); // a failing database is not asked again on every call
+    });
 }
 
-export const rulesOf = (code) => byCode.get(String(code ?? "")) ?? { code, active: false, ...defaultRules(code) };
+// At start, before the server answers anything (index.js awaits it): a failure leaves the built-in rules.
+export async function loadChannelRulesAtStart(db = pool) {
+  try {
+    await refreshChannelRules(db);
+  } catch (err) {
+    console.error("Sales direction rules could not be read at start (built-in rules used):", err.message);
+  }
+}
+
+export const rulesOf = (code) => {
+  keepFresh();
+  return byCode.get(String(code ?? "")) ?? { code, active: false, ...defaultRules(code) };
+};
 export const isNoVisitChannel = (code) => rulesOf(code).visit_mode === "no_visit";
-export const isCallChannel = (code) => byCode.has(String(code ?? "")) && rulesOf(code).debt_mode === "call";
-export const isSeparatePlanChannel = (code) => byCode.has(String(code ?? "")) && rulesOf(code).separate_plan === true;
-export const separatePlanChannels = () => [...byCode.values()].filter((r) => r.separate_plan).map((r) => r.code);
+export const isCallChannel = (code) => rulesOf(code).debt_mode === "call" && byCode.has(String(code ?? ""));
+export const isSeparatePlanChannel = (code) => rulesOf(code).separate_plan === true && byCode.has(String(code ?? ""));
+export const separatePlanChannels = () => {
+  keepFresh();
+  return [...byCode.values()].filter((r) => r.separate_plan).map((r) => r.code);
+};
 export const cashSourceOf = (code) => rulesOf(code).cash_source || "Cash";
 
 // SQL fragments read straight from the table (always current). `col` = the SQL expression of the customer's channel.

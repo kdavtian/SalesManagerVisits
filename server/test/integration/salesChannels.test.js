@@ -103,3 +103,40 @@ test("a customer's direction must be one the admin panel knows; an inactive dire
   const refused = await apiRequest("/api/customers", { method: "POST", cookie: adminCookie, body: { name: `ITEST SC off ${stamp}`, lat: 40.1, lng: 44.5, sales_channel: code2 } });
   assert.equal(refused.status, 400);
 });
+
+// Review 2026-11-12 of this change
+test("the display-only POTENTIAL / COMPETITORS values are never refused (the customer sheet sends them back); a left manager does not block renaming a direction", async () => {
+  // a potential customer: the phone shows "POTENTIAL" in sales_channel and the reassign sheet sends it back with the region and the manager
+  const made = await apiRequest("/api/customers", { method: "POST", cookie: adminCookie, body: { name: `ITEST SC pot ${stamp}`, lat: 40.1, lng: 44.5, sales_channel: "POTENTIAL" } });
+  assert.equal(made.status, 201, JSON.stringify(made.data));
+  createdCustomers.push(made.data.id);
+  assert.equal(made.data.sales_channel ?? null, null, "stored as no direction");
+  const saved = await apiRequest(`/api/customers/${made.data.id}`, { method: "PATCH", cookie: adminCookie, body: { region: "Kotayk", sales_channel: "POTENTIAL" } });
+  assert.notEqual(saved.status, 400, JSON.stringify(saved.data));
+
+  const rep = await createUser("sales_manager");
+  const ch = await apiRequest("/api/sales-channels", { method: "POST", cookie: adminCookie, body: { code: `SM Test${String(stamp).slice(-3)}L`, manager_user_id: rep.id } });
+  assert.equal(ch.status, 201, JSON.stringify(ch.data));
+  await pool.query("UPDATE users SET status = 'offboarded' WHERE id = $1", [rep.id]);
+  // the editor sends the same (now inactive) manager back with a new name: accepted, the manager stays
+  const renamed = await apiRequest(`/api/sales-channels/${ch.data.id}`, { method: "PATCH", cookie: adminCookie, body: { name: "Renamed", manager_user_id: rep.id } });
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.data));
+  assert.equal(renamed.data.manager_user_id, rep.id);
+  // but a NEW inactive manager is still refused
+  const other = await createUser("sales_manager");
+  await pool.query("UPDATE users SET status = 'paused' WHERE id = $1", [other.id]);
+  assert.equal((await apiRequest(`/api/sales-channels/${ch.data.id}`, { method: "PATCH", cookie: adminCookie, body: { manager_user_id: other.id } })).status, 400);
+});
+
+test("a rep whose position points at a direction the admin turned off can still add a customer (the guess is skipped)", async () => {
+  const code = `SM Test${String(stamp).slice(-2)}Off`;
+  const ch = await apiRequest("/api/sales-channels", { method: "POST", cookie: adminCookie, body: { code } });
+  assert.equal(ch.status, 201, JSON.stringify(ch.data));
+  await apiRequest(`/api/sales-channels/${ch.data.id}`, { method: "PATCH", cookie: adminCookie, body: { active: false } });
+  const rep = await createUser("sales_manager");
+  await pool.query("UPDATE users SET position = $2 WHERE id = $1", [rep.id, code]);
+  const made = await apiRequest("/api/customers", { method: "POST", cookie: await loginAs(rep.email), body: { name: `ITEST SC offrep ${stamp}`, lat: 40.1, lng: 44.5 } });
+  assert.equal(made.status, 201, JSON.stringify(made.data));
+  createdCustomers.push(made.data.id);
+  assert.notEqual(made.data.sales_channel, code);
+});

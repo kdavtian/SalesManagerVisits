@@ -104,7 +104,7 @@ export const reportsApi = {
   listGeneratedReports: () => request(`/reports/documents`),
   getPerfChannels: () => request("/team-performance/channels"),
   // the sales directions and their rules (admin panel, owner 2026-11-12)
-  listSalesChannels: () => request("/sales-channels"),
+  listSalesChannels: ({ counts = false } = {}) => request(`/sales-channels${counts ? "?counts=1" : ""}`),
   createSalesChannel: (data) => json("/sales-channels", "POST", data),
   updateSalesChannel: (id, data) => json(`/sales-channels/${id}`, "PATCH", data),
   updatePerfChannelManager: (channelId, managerUserId) =>

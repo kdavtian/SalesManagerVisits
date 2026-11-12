@@ -26,15 +26,12 @@ import { runExpenseWatch } from "../money/expenseWatch.js";
 import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 import { deleteOldUsage } from "../system/usageAnalytics.js";
 import { deleteOldNavTimings } from "../system/navTimings.js";
-import { refreshChannelRules } from "../shared/salesChannelRules.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const needsPush = { enabled: () => pushEnabled, why: "push notifications are not set up (VAPID keys)" };
 
 export const JOBS = [
-  // the sales directions' rules of the admin panel (an edit refreshes them at once; this catches another server / a direct change)
-  { name: "sales-channel-rules", everyMs: MINUTE, run: () => refreshChannelRules() },
   { name: "vaghinak-tick", everyMs: MINUTE, run: (now) => vaghinakTick(now) },
   { name: "vaghinak-wrap-up", everyMs: MINUTE, run: (now) => vaghinakWrapUp(now) },
   { name: "vaghinak-weekly-digest", everyMs: MINUTE, run: (now) => vaghinakWeeklyDigest(now) },

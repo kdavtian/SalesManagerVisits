@@ -17,19 +17,20 @@ export async function autoAssignSalesChannel(req, res, next) {
   // sales_channels.manager_user_id is the canonical channel<->manager association (migration 055). A rep who owns SEVERAL directions
   // (owner, 2026-11-12 review: Artak owns SM Davtashen and SM B2B) may choose which one the new customer belongs to; otherwise the first of
   // them in the directions' own order (was an arbitrary one: LIMIT 1 without ORDER BY).
-  let resolved = "";
   const { rows: owned } = await pool.query(
     "SELECT code FROM sales_channels WHERE manager_user_id = $1 AND active = true ORDER BY display_order, code",
     [req.user.id]
   );
   const submitted = String(req.body?.sales_channel ?? "").trim();
-  if (owned.some((r) => r.code === submitted)) resolved = submitted;
-  else if (owned[0]) resolved = owned[0].code;
-  // a rep who owns no direction yet: a direction the admin panel knows, sent by the form, is kept (the guesses below are for an empty one)
-  if (!resolved && !owned.length && submitted) {
-    const { rows } = await pool.query("SELECT code FROM sales_channels WHERE active = true AND code = $1", [submitted]);
-    if (rows[0]) return next();
-  }
+  let resolved = owned.some((r) => r.code === submitted) ? submitted : owned[0]?.code ?? "";
+
+  // every guess below must be an ACTIVE direction: a guess the admin turned off would make the customer impossible to save (the field is
+  // hidden from the rep), and a customer queued offline would be dropped by the queue on that refusal (review 2026-11-12)
+  const isActive = async (code) => {
+    if (!code) return false;
+    const { rows } = await pool.query("SELECT 1 FROM sales_channels WHERE active = true AND code = $1", [code]);
+    return rows.length > 0;
+  };
 
   // A position that IS a direction's code ("SM Gyumri") is that direction -- before the word guesses below, which would read "Gyumri" as
   // SM Shirak.
@@ -37,24 +38,27 @@ export async function autoAssignSalesChannel(req, res, next) {
     const { rows } = await pool.query("SELECT code FROM sales_channels WHERE active = true AND lower(code) = lower($1)", [String(req.user.position).trim()]);
     if (rows[0]) resolved = rows[0].code;
   }
-  // requireAuth already loaded the user's position: the old word guesses, for a rep not wired up in sales_channels yet.
-  if (!resolved) resolved = channelFromPosition(req.user.position);
-
-  // Legacy manager records may not yet have a structured/recognizable position: the most common direction of the rep's own customers
-  // (one the directions table knows).
+  // the old word guesses from the position, for a rep not wired up in sales_channels yet
+  if (!resolved) {
+    const guess = channelFromPosition(req.user.position);
+    if (await isActive(guess)) resolved = guess;
+  }
+  // Legacy manager records may not yet have a structured/recognizable position: the most common direction of the rep's own customers, when
+  // it is an active direction (as before: a book dominated by an unknown value guesses nothing).
   if (!resolved) {
     const { rows } = await pool.query(
-      `SELECT c.sales_channel, COUNT(*)::int AS uses
-         FROM customers c JOIN sales_channels sc ON sc.code = c.sales_channel AND sc.active
-        WHERE c.assigned_manager_id = $1
-        GROUP BY c.sales_channel
-        ORDER BY uses DESC, c.sales_channel
+      `SELECT sales_channel, COUNT(*)::int AS uses
+         FROM customers
+        WHERE assigned_manager_id = $1 AND sales_channel IS NOT NULL
+        GROUP BY sales_channel
+        ORDER BY uses DESC, sales_channel
         LIMIT 1`,
       [req.user.id]
     );
-    if (rows[0]?.sales_channel) resolved = rows[0].sales_channel;
+    if (await isActive(rows[0]?.sales_channel)) resolved = rows[0].sales_channel;
   }
 
+  // nothing could be worked out: what the form sent stays (the customer route checks it is a known direction)
   if (resolved) req.body.sales_channel = resolved;
   next();
 }

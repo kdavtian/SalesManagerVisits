@@ -16,7 +16,6 @@ function ruleChips(c) {
   chips.push([{ visit: "sc_debt_visit", call: "sc_debt_call", none: "sc_debt_none" }[c.debt_mode], "badge-neutral"]);
   chips.push([{ rep: "sc_comm_rep", trade: "sc_comm_trade", none: "sc_comm_none" }[c.commission_kind], "badge-neutral"]);
   if (c.separate_plan) chips.push(["sc_separate_plan", "badge-info"]);
-  if (c.director_report_excluded) chips.push(["sc_report_excluded", "badge-warning"]);
   return chips.map(([key, cls]) => `<span class="badge ${cls}">${escapeHtml(t(key))}</span>`).join(" ");
 }
 
@@ -25,7 +24,7 @@ export async function renderSalesChannelsSection(container) {
   let channels;
   let managers;
   async function load() {
-    const [list, users] = await Promise.all([api.listSalesChannels(), api.listUsers()]);
+    const [list, users] = await Promise.all([api.listSalesChannels({ counts: true }), api.listUsers()]);
     channels = list;
     // a direction's manager: an active sales manager, sales director or accountant (the server checks the same)
     managers = users.filter((u) => ownsSalesChannels(u.role) && (u.status ?? "active") === "active");
@@ -134,7 +133,6 @@ export async function renderSalesChannelsSection(container) {
           </div>
           <label class="checkbox-row"><input type="checkbox" name="separate_plan" ${v.separate_plan ? "checked" : ""} /> <span>${t("sc_separate_plan_long")}</span></label>
           <label class="checkbox-row"><input type="checkbox" name="route_autofill" ${v.route_autofill ? "checked" : ""} /> <span>${t("sc_route_autofill")}</span></label>
-          <label class="checkbox-row"><input type="checkbox" name="director_report_excluded" ${v.director_report_excluded ? "checked" : ""} /> <span>${t("sc_report_excluded_long")}</span></label>
           ${isNew ? "" : `<label class="checkbox-row"><input type="checkbox" name="active" ${v.active ? "checked" : ""} /> <span>${t("sc_active")}</span></label>`}
           <p class="form-error" id="sc-form-error" hidden></p>
           <div class="sheet-actions sheet-actions-floating">
@@ -169,11 +167,14 @@ export async function renderSalesChannelsSection(container) {
         cash_source: String(f.get("cash_source") ?? "").trim() || null,
         separate_plan: form.separate_plan.checked,
         route_autofill: form.route_autofill.checked,
-        director_report_excluded: form.director_report_excluded.checked,
       };
       const order = String(f.get("display_order") ?? "").trim();
       if (order) body.display_order = Number(order);
       if (!isNew) body.active = form.active.checked;
+      // unchanged fields are not sent: an unchanged manager who has left meanwhile must not block the save; an unchanged visit type must not
+      // recompute every customer of the direction
+      if (!isNew && body.manager_user_id === (v.manager_user_id ?? null)) delete body.manager_user_id;
+      if (!isNew && body.visit_type_key === v.visit_type_key) delete body.visit_type_key;
       if (isNew) body.code = String(f.get("code") ?? "").trim();
       if (isNew && !body.code) {
         errorEl.textContent = t("sc_code_required");

@@ -546,6 +546,9 @@ export const salesChannelRule = (code) => CHANNEL_RULES.get(String(code ?? "")) 
 // <option>s for a direction <select>: the active directions, plus the CURRENT value even when it is not one of them (an inactive or unknown
 // direction) -- otherwise opening and saving the form silently wiped it (review 2026-11-12).
 export function salesChannelOptionsHtml(selected, placeholder, { label = (c) => c } = {}) {
+  // "POTENTIAL" / "COMPETITORS" are written into sales_channel by the client for display only (api/core.js normalizeCustomer): they are no
+  // direction, the select shows "choose" for them (saving them was refused by the server -- review 2026-11-12)
+  if (selected === "POTENTIAL" || selected === "COMPETITORS") selected = "";
   const codes = [...SALES_CHANNELS];
   if (selected && !codes.includes(selected)) codes.push(selected);
   return (
