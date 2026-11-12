@@ -1291,6 +1291,9 @@ export function activateDialog(overlay) {
   const observer = new MutationObserver(() => {
     if (overlay.isConnected) return;
     observer.disconnect();
+    // back to where the focus was, unless the user has meanwhile put it somewhere (a closed sheet leaves it on <body>)
+    const now = document.activeElement;
+    if (now && now !== document.body && now !== document.documentElement) return;
     if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
   });
   observer.observe(document.body, { childList: true });

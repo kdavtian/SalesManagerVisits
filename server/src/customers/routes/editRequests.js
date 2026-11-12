@@ -144,7 +144,7 @@ editRequestsRouter.get("/", async (req, res) => {
     conditions.push(`er.status = $${params.length}`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   const { rows } = await pool.query(
     `SELECT er.*, u.name AS requested_by_name, c.name AS customer_name
      FROM customer_edit_requests er

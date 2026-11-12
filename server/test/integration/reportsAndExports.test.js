@@ -81,6 +81,13 @@ test("GET /api/reports/new-customers: a sales manager only sees customers they c
   assert.deepEqual(res.data.by_manager.map((m) => m.user_id), [users.sales_manager.id]);
 });
 
+// Nightly log 2026-11-12: "All" with no other filter built "WHERE ORDER BY" (a 500); every such list now falls back to WHERE TRUE
+test("GET /api/reports/new-customers?period=all with no other filter answers (no empty WHERE)", async () => {
+  const res = await apiRequest("/api/reports/new-customers?period=all", { cookie: cookies.admin });
+  assert.equal(res.status, 200, JSON.stringify(res.data));
+  assert.ok(Array.isArray(res.data.customers));
+});
+
 test("GET /api/reports/* rejects an unauthenticated request with 401", async () => {
   const res = await apiRequest("/api/reports/checkins");
   assert.equal(res.status, 401);

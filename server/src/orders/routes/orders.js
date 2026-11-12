@@ -584,7 +584,7 @@ ordersRouter.get("/", async (req, res) => {
       conditions.push(`o.accounting_status = $${params.length}`);
     }
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   const offsetNum = Math.max(0, Number(offset) || 0);
   // Queue priority (KAD OS): while looking at orders still waiting for a step, app orders come first (newest app order first, then the rest).
   const waiting = status === "submitted" || status === "confirmed" || status === "packed_stock_out";

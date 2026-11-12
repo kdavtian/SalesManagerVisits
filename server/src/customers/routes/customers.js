@@ -205,7 +205,7 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`(c.name, c.id) > ($${params.length - 1}, $${params.length})`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   // Outstanding debt is opt-in (see task spec: "off by default, to make
   // app run faster") -- the LEFT JOIN and its per-row lookup only happen
   // when the Customers list toggle actually asks for it.

@@ -185,7 +185,7 @@ tasksRouter.get("/", async (req, res) => {
     conditions.push(`t.customer_id = $${params.length}`);
   }
   const { rows } = await pool.query(
-    `${TASK_SELECT} WHERE ${conditions.join(" AND ")}
+    `${TASK_SELECT} WHERE ${conditions.join(" AND ") || "TRUE"}
      ORDER BY (t.status = 'open') DESC, t.due_date ASC, t.id DESC LIMIT 500`,
     params
   );

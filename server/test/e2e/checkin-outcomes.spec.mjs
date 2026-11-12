@@ -48,10 +48,15 @@ test("check-in outcomes, note for Other, KAD products and competitors sheets", a
   ]);
   await page.locator('.brand-sheet-competitors [data-action="close-sheet"]').click();
 
-  // Take photo is a wide button; High resolution sits at the left edge under it
+  // Take photo is the wide button of its row, the voice note button sits next to it (owner, 2026-11-12); High resolution sits at the
+  // left edge under them
   const camera = await page.locator("#camera-btn").boundingBox();
-  expect(camera.width).toBeGreaterThan(300);
+  const voice = await page.locator("#voice-slot button").first().boundingBox();
+  expect(camera.width).toBeGreaterThan(150);
   expect(camera.height).toBeGreaterThanOrEqual(56);
+  expect(voice.height).toBeGreaterThanOrEqual(44);
+  expect(voice.x).toBeGreaterThanOrEqual(camera.x + camera.width - 1); // beside it, not overlapping
+  expect(Math.abs(voice.y + voice.height / 2 - (camera.y + camera.height / 2))).toBeLessThan(4); // on the same row
   const toggle = await page.locator(".high-res-photo-toggle").boundingBox();
   expect(toggle.x).toBeLessThan(camera.x + 24);
 

@@ -65,7 +65,7 @@ filesRouter.get("/", async (req, res) => {
   if (issues === "1") conditions.push("f.ai_status IN ('issues', 'unreadable')");
   params.push(PAGE + 1, Math.max(0, Number(offset) || 0));
   const { rows } = await pool.query(
-    `SELECT ${FILE_COLUMNS}, c.name AS customer_name ${FROM} WHERE ${conditions.join(" AND ")}
+    `SELECT ${FILE_COLUMNS}, c.name AS customer_name ${FROM} WHERE ${conditions.join(" AND ") || "TRUE"}
      ORDER BY f.created_at DESC, f.id DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );

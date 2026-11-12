@@ -299,7 +299,13 @@ export async function renderRoute(ctx) {
   const [path, queryString] = hash.split("?");
   if (path !== ctx.currentPath) {
     ctx.currentPath = path;
-    requestAnimationFrame(() => ctx.app.focus({ preventScroll: true }));
+    // ...unless the user is already typing somewhere else (the desktop top-bar search right after Enter opened a screen): the frame-late
+    // focus used to pull the cursor out of the search box mid-word (2026-11-12)
+    requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (a && !ctx.app.contains(a) && a.matches?.("input, textarea, select, [contenteditable='true']")) return;
+      ctx.app.focus({ preventScroll: true });
+    });
   }
   const query = new URLSearchParams(queryString || "");
   const customerMatch = path.match(/^#\/customers\/(\d+)$/);

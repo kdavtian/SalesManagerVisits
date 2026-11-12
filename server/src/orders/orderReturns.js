@@ -258,7 +258,7 @@ export async function listReturns(user, { status, orderId, customerId, limit = 1
      FROM order_returns r
      JOIN orders o ON o.id = r.order_id JOIN customers c ON c.id = r.customer_id
      LEFT JOIN users ru ON ru.id = r.requested_by LEFT JOIN users du ON du.id = r.decided_by
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+     ${where.length ? `WHERE ${where.join(" AND ") || "TRUE"}` : ""}
      ORDER BY (r.status IN ('requested', 'approved')) DESC, r.requested_at DESC LIMIT ${Math.min(300, Math.max(1, Number(limit) || 100))}`,
     params
   );

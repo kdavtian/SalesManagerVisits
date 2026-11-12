@@ -581,7 +581,7 @@ checkinsRouter.get("/", async (req, res) => {
     conditions.push(`ch.amount_collected_amd IS NOT NULL`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   const offsetNum = Math.max(0, Number(offset) || 0);
 
   // Fetch one extra row to know whether there's a next page, without a

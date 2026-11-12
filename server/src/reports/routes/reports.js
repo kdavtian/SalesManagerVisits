@@ -126,7 +126,7 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
             u.id AS created_by_id, u.name AS created_by_name
      FROM customers c
      JOIN users u ON u.id = c.created_by
-     WHERE ${conditions.join(" AND ")}
+     WHERE ${conditions.join(" AND ") || "TRUE"}
      ORDER BY c.created_at DESC`,
     params
   );
@@ -134,7 +134,7 @@ reportsRouter.get("/new-customers", requireReportAccess("new_customers"), async 
   const { rows: byManager } = await pool.query(
     `SELECT u.id AS user_id, u.name AS user_name, count(c.id)::int AS new_customers
      FROM users u
-     LEFT JOIN customers c ON c.created_by = u.id AND ${conditions.join(" AND ")}
+     LEFT JOIN customers c ON c.created_by = u.id AND ${conditions.join(" AND ") || "TRUE"}
      WHERE u.role = 'sales_manager' AND u.status = 'active'${mineOnly ? ` AND u.id = $${params.length + 1}` : ""}
      GROUP BY u.id, u.name
      ORDER BY new_customers DESC, u.name`,
@@ -180,7 +180,7 @@ reportsRouter.get("/checkins", requireReportAccess("checkins"), async (req, res)
     params.push(outcome);
     conditions.push(`$${params.length} = ANY(ch.outcomes)`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
 
   const { rows } = await pool.query(
     `SELECT ch.id, ch.timestamp, ch.outcomes, ch.note,
@@ -217,7 +217,7 @@ reportsRouter.get("/orders-pipeline", requireReportAccess("orders_pipeline"), as
     params.push(manager_id);
     conditions.push(`o.user_id = $${params.length}`);
   }
-  const where = `WHERE ${conditions.join(" AND ")}`;
+  const where = `WHERE ${conditions.join(" AND ") || "TRUE"}`;
 
   const { rows: byStatus } = await pool.query(
     `SELECT o.status, count(*)::int AS count, COALESCE(sum(o.total_amd), 0) AS total_amd
@@ -306,7 +306,7 @@ reportsRouter.get("/brand-availability", requireReportAccess("brand_availability
             ch.brand_status, ch.timestamp AS as_of
      FROM checkins ch
      JOIN customers c ON c.id = ch.customer_id
-     WHERE ${conditions.join(" AND ")}
+     WHERE ${conditions.join(" AND ") || "TRUE"}
      ORDER BY c.id, ch.timestamp DESC`,
     params
   );
@@ -337,7 +337,7 @@ reportsRouter.get("/payments", requireReportAccess("payments"), async (req, res)
     params.push(status);
     conditions.push(`p.status = $${params.length}`);
   }
-  const where = `WHERE ${conditions.join(" AND ")}`;
+  const where = `WHERE ${conditions.join(" AND ") || "TRUE"}`;
 
   const { rows: kpiRows } = await pool.query(
     `SELECT
@@ -471,7 +471,7 @@ reportsRouter.get("/erp-payments", requireReportAccess("erp_payments"), async (r
     });
     conditions.push(`(${parts.join(" OR ")})`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
 
   const { rows } = await pool.query(
     `SELECT to_char(cf.cashflow_date, 'YYYY-MM-DD') AS date, cf.amount_amd, cf.erp_customer_id,
@@ -687,7 +687,7 @@ reportsRouter.get("/customer-debt", requireReportAccess("customer_debt"), async 
              WHERE lc.erp_customer_id = erp.erp_customer_id AND lo.status IN ('delivered', 'recorded') AND lo.erp_matched_order_id IS NULL))`
     );
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   // Aging filter (comma-separated bucket keys, see debtAging.js): narrows the customer list and the
   // totals, while the by-bucket summary keeps showing every bucket so the filter chips stay available.
   const agingList = String(aging ?? "").split(",").map((a) => a.trim()).filter((a) => AGING_BUCKETS.includes(a));
@@ -835,7 +835,7 @@ reportsRouter.get("/brand-volume", requireReportAccess("brand_volume"), async (r
     params.push(sales_channel);
     conditions.push(`p.channel_code = $${params.length}`);
   }
-  const where = `WHERE ${conditions.join(" AND ")}`;
+  const where = `WHERE ${conditions.join(" AND ") || "TRUE"}`;
 
   const { rows } = await pool.query(
     `SELECT p.channel_code, sc.name AS channel_name, p.brand, p.liters

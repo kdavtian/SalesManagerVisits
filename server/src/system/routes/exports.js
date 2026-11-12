@@ -44,7 +44,7 @@ exportsRouter.get("/payments.csv", async (req, res) => {
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id
      JOIN customers c ON c.id = ch.customer_id
-     WHERE ${conditions.join(" AND ")}
+     WHERE ${conditions.join(" AND ") || "TRUE"}
      ORDER BY ch.timestamp DESC`,
     params
   );
@@ -113,7 +113,7 @@ exportsRouter.get("/orders.csv", async (req, res) => {
     params.push(to);
     conditions.push(`o.created_at < ($${params.length}::date + interval '1 day')`);
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
 
   const { rows } = await pool.query(
     `SELECT o.id AS order_id, o.created_at, o.status, u.name AS rep_name, c.name AS customer_name,

@@ -27,12 +27,13 @@ test("a rep gets the kinds of their role, grouped; a switch is saved", async ({ 
   await pool.query("DELETE FROM notification_settings WHERE scope_type = 'user' AND scope_value = $1", [String(rep.id)]);
 });
 
-test("the admin sees every kind in four groups", async ({ page, fixtures }) => {
+test("the admin sees every kind, in its groups", async ({ page, fixtures }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const admin = await fixtures.createUser("admin");
   await loginViaUi(page, admin.email);
   await openSwitches(page);
-  await expect(page.locator("#notification-prefs-list .settings-list-group-title")).toHaveCount(4);
+  // one heading per group the admin has (a hard-coded 4 went stale when the Requests group came, #613)
+  await expect(page.locator("#notification-prefs-list .settings-list-group-title")).toHaveCount(notificationGroupsFor("admin").filter((g) => g.types.length).length);
   // every kind the admin can receive, counted from the shared list (a hard-coded number went stale when kinds were added)
   const kinds = notificationGroupsFor("admin").reduce((n, g) => n + g.types.length, 0);
   await expect(page.locator("#notification-prefs-list [id^='notif-pref-']:not([id^='notif-pref-reset-'])")).toHaveCount(kinds);

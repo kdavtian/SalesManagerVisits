@@ -432,7 +432,7 @@ paymentsRouter.get("/", async (req, res) => {
     );
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   // Default: Sales Channel then newest-first within each channel (per spec).
   // A manager only ever sees their own single channel, so channel grouping
   // is a no-op for them -- date-only sort reads identically either way.

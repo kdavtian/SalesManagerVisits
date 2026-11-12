@@ -19,7 +19,7 @@ orderMetaRouter.get("/summary", async (req, res) => {
   const params = [];
   const conditions = [];
   visibilityCondition(req, params, conditions);
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
 
   const { rows } = await pool.query(
     `SELECT
@@ -76,7 +76,7 @@ orderMetaRouter.get("/list", async (req, res) => {
     conditions.push(`c.region = $${params.length}`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   const offsetNum = Math.max(0, Number(offset) || 0);
   params.push(PAGE_SIZE + 1, offsetNum);
 
