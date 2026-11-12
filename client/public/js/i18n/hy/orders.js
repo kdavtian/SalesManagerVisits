@@ -246,6 +246,8 @@ export const hyOrders = {
     reserved_by_orders_prefix: "արդեն այլ պատվերներում՝ ",
     submitted_shortage: "{n} հատ արդեն ուղարկված պատվերներում է․ դրանց հաստատումից հետո կարող է մնալ միայն {left}։",
     submitted_shortage_see: "Տեսնել պատվերները",
+    vaghinak_checked_badge: "Ստուգված",
+    vaghinak_checked_hint: "Վաղինակը կարդացել է ստորագրված թերթիկը՝ պատվերի համարը, գումարը, վճարումը և երկու ստորագրությունները համապատասխանում են։",
     not_in_excel_badge: "Excel-ում չկա",
     not_in_excel_hint: "Առաքված է, բայց 14 օր անց Excel-ում դեռ չկա։ Հաշվապահը մուտքագրում է այն առաքման ամսաթվով կամ նշում «Գրանցված»։",
     holding_orders_title: "Այս ապրանքը պահող պատվերները",

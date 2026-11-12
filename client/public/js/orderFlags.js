@@ -6,6 +6,12 @@ import { t } from "./i18n.js";
 // order offers (re-order, return, correction) a recorded one offers too. The server twin is server/src/orders/orderRecord.js isDone.
 export const isDone = (status) => status === "delivered" || status === "recorded";
 
+// "Checked" (owner, 2026-11-12): Vaghinak read the order's signed paper and it matches (server: orders/vaghinakChecked.js). A tick so the state is
+// not told by colour alone.
+export function vaghinakCheckedBadgeHtml(order) {
+  return order?.vaghinak_checked ? `<span class="badge badge-recorded" title="${t("vaghinak_checked_hint")}">✓ ${t("vaghinak_checked_badge")}</span>` : "";
+}
+
 // "Not in Excel" (owner, 2026-11-11): delivered, but the Excel still does not show it after 14 days -- the accountant has it on their list.
 export function notInExcelBadgeHtml(order) {
   return order?.not_in_excel_at ? `<span class="badge badge-danger" title="${t("not_in_excel_hint")}">${t("not_in_excel_badge")}</span>` : "";

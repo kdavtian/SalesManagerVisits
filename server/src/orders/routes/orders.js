@@ -8,6 +8,7 @@ import { loadBlankOrders, previousDebts } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
 import { outOfStockProducts, outOfStockResponse, shortStockProducts } from "../orderStock.js";
 import { DELIVERED_AT } from "../appStock.js";
+import { VAGHINAK_CHECKED_SQL } from "../vaghinakChecked.js";
 import { isDone, recordOrder, unrecordOrder } from "../orderRecord.js";
 import { Router } from "express";
 import fs from "node:fs";
@@ -605,7 +606,8 @@ ordersRouter.get("/", async (req, res) => {
        (SELECT COALESCE(SUM(oi.quantity * NULLIF(regexp_replace(p.unit, 'L$', ''), '')::numeric), 0)
         FROM order_items oi JOIN products p ON p.id = oi.product_id
         WHERE oi.order_id = o.id AND p.unit ~ '^[0-9.]+L$') AS total_liters,
-       (SELECT COUNT(*)::int FROM order_documents d WHERE d.order_id = o.id) AS document_count
+       (SELECT COUNT(*)::int FROM order_documents d WHERE d.order_id = o.id) AS document_count,
+       ${VAGHINAK_CHECKED_SQL} AS vaghinak_checked
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id
@@ -745,7 +747,7 @@ ordersRouter.get("/recorded-list", async (req, res) => {
   // lands here), so unlike the "unrecorded" backlog it can't be assumed
   // small -- same fetch-one-extra-row-for-has_more pattern as GET / above.
   const { rows } = await pool.query(
-    `SELECT o.id, o.order_code, o.total_amd, ${DELIVERED_AT} AS delivered_at, o.status, o.recorded, o.recorded_at, o.not_in_excel_at,
+    `SELECT o.id, o.order_code, o.total_amd, ${DELIVERED_AT} AS delivered_at, o.status, o.recorded, ${VAGHINAK_CHECKED_SQL} AS vaghinak_checked, o.recorded_at, o.not_in_excel_at,
             c.id AS customer_id, c.name AS customer_name, c.erp_customer_id,
             rb.name AS recorded_by_name,
             pod.id AS pod_record_id, pod.payment_id,
@@ -773,7 +775,8 @@ ordersRouter.get("/unrecorded-count", async (req, res) => {
 
 ordersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id, c.customer_tier, c.assigned_manager_id AS customer_manager_id
+    `SELECT o.*, u.name AS user_name, c.name AS customer_name, c.erp_customer_id, c.customer_tier, c.assigned_manager_id AS customer_manager_id,
+            ${VAGHINAK_CHECKED_SQL} AS vaghinak_checked
      FROM orders o
      JOIN users u ON u.id = o.user_id
      JOIN customers c ON c.id = o.customer_id

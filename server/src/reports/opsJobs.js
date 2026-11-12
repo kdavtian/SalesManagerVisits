@@ -6,6 +6,7 @@ import { excelStatus, dataScorecard } from "./opsReports.js";
 import { createOpsTask, closeOpsTasks, usersWithRole } from "../team/opsTasks.js";
 import { isWorkingDay, minuteOfDay } from "../team/vaghinak/engine.js";
 import { flagOrdersNotInExcel } from "../orders/notInExcel.js";
+import { checkRecentDocuments } from "../customers/aiBlankCheck.js";
 
 const CHECK_LABELS = {
   customers_no_channel: "Հաճախորդներ՝ առանց ուղղության",
@@ -35,6 +36,9 @@ export async function runOpsJobs(now = new Date(), db = pool) {
   if (!workday) return result;
   // delivered orders the Excel still does not show after the match window: flag + the accountant's list (orders/notInExcel.js)
   result.notInExcel = await flagOrdersNotInExcel(db).catch((err) => console.error("Not-in-Excel flagging failed:", err.message));
+  // Vaghinak reads the papers of delivered orders uploaded while the check was off (only while the AI check is switched on; capped per month).
+  // Not awaited: a dozen model calls must not hold up the other jobs; a round still running is not started twice.
+  checkRecentDocuments({ db }).catch((err) => console.error("Vaghinak document round failed:", err.message));
 
   if (!excel.today_synced && minute >= 10 * 60) {
     for (const id of await accountants(db)) {

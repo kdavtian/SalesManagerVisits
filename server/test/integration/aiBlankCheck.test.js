@@ -7,7 +7,8 @@ import path from "node:path";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { uploadDirPath } from "../../src/shared/upload.js";
-import { judgeBlank, checkFileWithAi, setAiCheckEnabled, setAiCheckMonthlyCapUsd, getAiCheckSettings } from "../../src/customers/aiBlankCheck.js";
+import { judgeBlank, judgeSlip, checkFileWithAi, checkRecentDocuments, setAiCheckEnabled, setAiCheckMonthlyCapUsd, getAiCheckSettings } from "../../src/customers/aiBlankCheck.js";
+import { VAGHINAK_CHECKED_SQL } from "../../src/orders/vaghinakChecked.js";
 
 let rep;
 let customer;
@@ -32,7 +33,7 @@ test.after(async () => {
   await stopTestServer();
 });
 
-const GOOD = { legible: true, order_number: "AIC-1", total_amd: 55500, customer_signature_present: true, rep_signature_present: true, notes: "" };
+const GOOD = { legible: true, order_number: "AIC-1", total_amd: 55500, customer_signature_present: true, rep_signature_present: true, payment_amd: null, notes: "" };
 const orders = [{ order_code: "AIC-1", total_amd: 55500 }];
 
 test("judgeBlank: ok, wrong number, wrong total, missing signatures, unreadable", () => {
@@ -48,14 +49,14 @@ test("judgeBlank: ok, wrong number, wrong total, missing signatures, unreadable"
   assert.equal(judgeBlank({ ...GOOD, total_amd: 1 }, [...orders, { order_code: "AIC-2", total_amd: 9 }]).status, "ok");
 });
 
-async function addBlank() {
+async function addBlank(kind = "order_blank", { orderIds = [orderId], paymentId = null } = {}) {
   const sharp = (await import("sharp")).default;
   const bytes = await sharp({ create: { width: 200, height: 300, channels: 3, background: "#ddd" } }).jpeg().toBuffer();
   const name = `aic-${Date.now()}-${fileIds.length}.jpg`;
   fs.writeFileSync(path.join(uploadDirPath, name), bytes);
   const { rows } = await pool.query(
-    "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, order_ids, created_by) VALUES ($1, 'order_blank', $2, 'image/jpeg', $3, $4, $5) RETURNING id",
-    [customer.id, name, bytes.length, [orderId], rep.id]
+    "INSERT INTO customer_files (customer_id, kind, file_path, mime, size_bytes, order_ids, payment_id, created_by) VALUES ($1, $6, $2, 'image/jpeg', $3, $4, $7, $5) RETURNING id",
+    [customer.id, name, bytes.length, orderIds, rep.id, kind, paymentId]
   );
   fileIds.push(rows[0].id);
   return rows[0].id;
@@ -126,4 +127,58 @@ test("only the admin can switch the AI check or set its cap; everyone reads the 
   const recheck = await apiRequest(`/api/files/${id}/ai-check`, { method: "POST", cookie: adminCookie });
   assert.equal(recheck.status, 409);
   assert.equal(recheck.data.code, "ai_check_off");
+});
+
+// Owner, 2026-11-12: Vaghinak reads the signed papers of delivered orders -- the payment written on them too -- and payment slips; a matching
+// paper gives the order a "Checked" chip.
+test("judgeBlank: the payment written on the paper must equal what was collected at delivery; judgeSlip: amount and both signatures", () => {
+  assert.equal(judgeBlank({ ...GOOD, payment_amd: 20000 }, orders, { collectedAmd: 20000 }).status, "ok");
+  assert.deepEqual(judgeBlank({ ...GOOD, payment_amd: 15000 }, orders, { collectedAmd: 20000 }).issues, [{ code: "payment_mismatch", found: 15000, expected: 20000 }]);
+  assert.deepEqual(judgeBlank(GOOD, orders, { collectedAmd: 20000 }).issues, [{ code: "payment_not_read", expected: 20000 }]);
+  assert.equal(judgeBlank(GOOD, orders, { collectedAmd: 0 }).status, "ok", "nothing collected: nothing to compare");
+  const slip = { legible: true, amount_amd: 30000, receiver_signature_present: true, payer_signature_present: true, notes: "" };
+  assert.equal(judgeSlip(slip, { amount_amd: 30000 }).status, "ok");
+  assert.equal(judgeSlip(slip, { amount_amd: 31000 }).issues[0].code, "payment_mismatch");
+  assert.deepEqual(judgeSlip({ ...slip, payer_signature_present: false }, null).issues, [{ code: "no_customer_signature" }]);
+  assert.equal(judgeSlip({ ...slip, legible: false }, null).status, "unreadable");
+});
+
+test("Checked chip: a delivered order whose blank matches is checked; a later correction of its total takes the chip away; a slip is read as a slip", async () => {
+  await setAiCheckEnabled(true);
+  const { rows: [o] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd, order_code) VALUES ($1, $2, 'delivered', 40000, 'AIC-9') RETURNING id", [customer.id, rep.id]);
+  const checked = async () => (await pool.query(`SELECT ${VAGHINAK_CHECKED_SQL} AS c FROM orders o WHERE o.id = $1`, [o.id])).rows[0].c;
+  try {
+    assert.equal(await checked(), false);
+    const id = await addBlank("signed_act", { orderIds: [o.id] });
+    // the round picks up unchecked papers of delivered orders
+    const before = await checkRecentDocuments({ client: fakeModel({ ...GOOD, order_number: "AIC-9", total_amd: 40000 }), limit: 50 });
+    assert.ok(before >= 1);
+    assert.equal((await pool.query("SELECT ai_status FROM customer_files WHERE id = $1", [id])).rows[0].ai_status, "ok");
+    assert.equal(await checked(), true);
+    // the API carries it on the order
+    const admin = await createUser("admin");
+    const res = await apiRequest(`/api/orders/${o.id}`, { cookie: await loginAs(admin.email) });
+    assert.equal(res.data.vaghinak_checked, true);
+    await pool.query("UPDATE orders SET total_amd = 45000 WHERE id = $1", [o.id]);
+    assert.equal(await checked(), false, "corrected after the check: the old paper no longer proves it");
+
+    // a payment slip goes through the slip reader (its tool) and is compared with its payment
+    const { rows: [pay] } = await pool.query(
+      `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by)
+       VALUES ($1, 'x', 12000, now(), $2, 'x', 'approved', $2) RETURNING id`,
+      [customer.id, rep.id]
+    );
+    {
+      const slipId = await addBlank("payment_slip", { orderIds: [], paymentId: pay.id });
+      let usedTool = null;
+      const slipModel = { messages: { create: async (req) => { usedTool = req.tool_choice.name; return { content: [{ type: "tool_use", input: { legible: true, amount_amd: 12000, receiver_signature_present: true, payer_signature_present: true, notes: "" } }], usage: { input_tokens: 10, output_tokens: 10 } }; } } };
+      assert.equal((await checkFileWithAi(slipId, { client: slipModel })).status, "ok");
+      assert.equal(usedTool, "report_slip");
+      await pool.query("DELETE FROM customer_files WHERE id = $1", [slipId]);
+      await pool.query("DELETE FROM payments WHERE id = $1", [pay.id]);
+    }
+  } finally {
+    await pool.query("DELETE FROM customer_files WHERE $1 = ANY(order_ids)", [o.id]);
+    await pool.query("DELETE FROM orders WHERE id = $1", [o.id]);
+  }
 });

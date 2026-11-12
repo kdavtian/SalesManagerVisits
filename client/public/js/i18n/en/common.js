@@ -972,6 +972,8 @@ export const enCommon = {
     ai_issue_total_mismatch: "Total on the paper: {found}. In the order: {expected}.",
     ai_issue_no_customer_signature: "No customer signature found.",
     ai_issue_no_rep_signature: "No signature of the person who handed over found.",
+    ai_issue_payment_mismatch: "Payment on the paper: {found}. In the app: {expected}.",
+    ai_issue_payment_not_read: "The payment on the paper could not be read (the app has {expected}).",
     show_more_n: "Show {n} more",
     verified: "Verified",
     off: "off",

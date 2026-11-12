@@ -972,6 +972,8 @@ export const hyCommon = {
     ai_issue_total_mismatch: "Թերթիկի վրա գումարը՝ {found}։ Պատվերում՝ {expected}։",
     ai_issue_no_customer_signature: "Հաճախորդի ստորագրությունը չի գտնվել։",
     ai_issue_no_rep_signature: "Հանձնողի ստորագրությունը չի գտնվել։",
+    ai_issue_payment_mismatch: "Թերթիկի վրա վճարումը՝ {found}։ Հավելվածում՝ {expected}։",
+    ai_issue_payment_not_read: "Թերթիկի վրա վճարումը չի կարդացվում (հավելվածում՝ {expected})։",
     show_more_n: "Ցույց տալ ևս {n}",
     verified: "Հաստատված",
     off: "շեղում",
