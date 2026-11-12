@@ -1877,6 +1877,24 @@ input[type="search"]:focus-visible {
   background: var(--bg-card-pressed);
 }
 
+/* Take photo + Voice note side by side (owner, 2026-11-12); they stack on the narrowest phones. */
+.capture-row { display: flex; gap: 10px; width: 100%; }
+.capture-row > .camera-btn, .capture-row > .voice-slot { flex: 1 1 0; min-width: 0; }
+.voice-slot .camera-btn { width: 100%; }
+@media (max-width: 340px) { .capture-row { flex-direction: column; } }
+.voice-btn-live { border-style: solid; border-color: var(--danger, #d92d20); color: var(--danger, #d92d20); font-variant-numeric: tabular-nums; }
+.voice-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger, #d92d20); animation: voice-pulse 1s ease-in-out infinite; }
+@keyframes voice-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .voice-dot { animation: none; } }
+.voice-preview { display: flex; align-items: center; gap: 8px; min-height: 64px; }
+/* a recording to play back gets the whole row under Take photo (the player needs the width for its time line) */
+.capture-row:has(.voice-preview) { flex-wrap: wrap; }
+.capture-row > .voice-slot:has(.voice-preview) { flex-basis: 100%; }
+.voice-preview audio { flex: 1; min-width: 0; height: 44px; }
+.voice-note-card { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.voice-note-card audio { width: 100%; height: 44px; }
+.voice-transcript { white-space: pre-wrap; margin: 0; line-height: 1.45; }
+
 /* Opt-in for the next photo taken -- see checkin.js's photo-input change
    handler. Small and unobtrusive on purpose: the default (unchecked) is
    right for the overwhelming majority of check-in photos, this is only

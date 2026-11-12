@@ -93,6 +93,21 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
             .join("")}
         </div>`
       : "";
+  // The visit's voice note and its Armenian text (owner, 2026-11-12). The audio streams from the server only when played (preload none).
+  const voiceNotes = ch.voice_notes ?? [];
+  const voiceText = (n) =>
+    n.transcript_status === "done"
+      ? n.transcript
+        ? `<p class="voice-transcript">${escapeHtml(n.transcript)}</p>`
+        : `<p class="muted">${t("voice_text_empty")}</p>`
+      : `<p class="muted">${t(n.transcript_status === "off" ? "voice_text_off" : n.transcript_status === "failed" ? "voice_text_failed" : "voice_text_pending")}</p>`;
+  const voiceSectionHtml = () =>
+    voiceNotes.length
+      ? `<h3 class="visit-detail-section-title">${t("voice_note_title")}</h3>
+         ${voiceNotes
+           .map((n) => `<div class="voice-note-card"><audio controls preload="none" src="${api.voiceNoteAudioUrl(n.id)}"></audio>${voiceText(n)}</div>`)
+           .join("")}`
+      : "";
   const filesSectionHtml = () =>
     visitFiles.length
       ? `<h3 class="visit-detail-section-title">${t("files_documents")}</h3>
@@ -175,6 +190,7 @@ export function openVisitDetailSheet(ch, onPhotoDeleted, navigate) {
           : ""
       }
 
+      ${voiceSectionHtml()}
       ${photoSectionHtml("photo_optional", visitPhotos)}
       ${filesSectionHtml()}
     </div>

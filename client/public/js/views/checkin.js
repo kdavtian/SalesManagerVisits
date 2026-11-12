@@ -1,3 +1,4 @@
+import { mountVoiceRecorder, voiceFileName } from "../voiceRecorder.js";
 import { api } from "../api.js";
 import { renderPotentialCard } from "../potential.js";
 import { showToast, escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
@@ -186,10 +187,13 @@ export async function renderCheckin(root, navigate, customerId) {
       <div class="camera-field">
         <input type="file" name="photo" accept="image/*" capture="environment" id="photo-input" class="visually-hidden" />
         <div class="photo-thumb-grid" id="photo-thumb-grid"></div>
-        <button type="button" class="camera-btn" id="camera-btn" aria-label="${t("take_photo")}">
-          ${CAMERA_ICON}
-          <span id="camera-btn-label">${t("take_photo")}</span>
-        </button>
+        <div class="capture-row">
+          <button type="button" class="camera-btn" id="camera-btn" aria-label="${t("take_photo")}">
+            ${CAMERA_ICON}
+            <span id="camera-btn-label">${t("take_photo")}</span>
+          </button>
+          <div class="voice-slot" id="voice-slot"></div>
+        </div>
         <label class="high-res-photo-toggle">
           <input type="checkbox" id="high-res-photo-toggle" />
           <span class="high-res-photo-label">${t("high_res_photo")}</span>
@@ -253,6 +257,8 @@ export async function renderCheckin(root, navigate, customerId) {
   const resultEl = container.querySelector("#checkin-result");
   const photoInput = container.querySelector("#photo-input");
   const cameraBtn = container.querySelector("#camera-btn");
+  // the voice note next to Take photo (owner, 2026-11-12)
+  const voice = mountVoiceRecorder(container.querySelector("#voice-slot"));
   const cameraBtnLabel = container.querySelector("#camera-btn-label");
   const photoThumbGrid = container.querySelector("#photo-thumb-grid");
   const highResToggle = container.querySelector("#high-res-photo-toggle");
@@ -998,6 +1004,12 @@ export async function renderCheckin(root, navigate, customerId) {
     const availableProductsPayload = [...selectedAvailableProducts];
     if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
+    voice.stop();
+    const voiceNote = voice.recording();
+    if (voiceNote) {
+      formData.append("voice_note", voiceNote.blob, voiceFileName(voiceNote.mime));
+      formData.set("voice_duration_s", voiceNote.durationS);
+    }
     const orderBlankBlobs = outcomes.includes("customer_unavailable") ? blankPhotos.map((photo) => photo.blob) : [];
     orderBlankBlobs.forEach((blob, i) => formData.append("order_blank_photos", blob, `order-blank-${i}.jpg`));
     // The customer signed on the phone: for the ticked delivered orders (the act), or for the money collected (the payment slip).
@@ -1030,6 +1042,7 @@ export async function renderCheckin(root, navigate, customerId) {
           deliveredOrderIds,
           availableProducts: availableProductsPayload,
           photos: photos.map((photo) => photo.blob),
+          voiceNote: voiceNote ? { blob: voiceNote.blob, mime: voiceNote.mime, durationS: voiceNote.durationS } : null,
           orderBlankPhotos: orderBlankBlobs,
           customerSignature: signatureBlob,
           repSignature: signatureBlob ? ownSignaturePending : null,
