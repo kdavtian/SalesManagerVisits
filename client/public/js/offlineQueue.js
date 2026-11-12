@@ -250,9 +250,11 @@ async function submitCheckin(entry) {
   if (entry.customerSignature) form.append("customer_signature", entry.customerSignature, "customer-signature.png");
   if (entry.repSignature) form.append("rep_signature", entry.repSignature, "rep-signature.png");
   // the visit's voice note (owner, 2026-11-12) waits here with the photos
-  if (entry.voiceNote?.blob) {
-    const ext = entry.voiceNote.mime === "audio/mp4" ? "m4a" : entry.voiceNote.mime === "audio/ogg" ? "ogg" : "webm";
-    form.append("voice_note", entry.voiceNote.blob, `voice-note.${ext}`);
+  const v = entry.voiceNote;
+  const voiceBlob = v?.blob instanceof Blob ? v.blob : v?.bytes?.bytes ? toBlob(v.bytes) : null; // bytes (fileBytes) or a Blob, never a lost {}
+  if (voiceBlob) {
+    const ext = v.mime === "audio/mp4" ? "m4a" : v.mime === "audio/ogg" ? "ogg" : "webm";
+    form.append("voice_note", voiceBlob, `voice-note.${ext}`);
     if (entry.voiceNote.durationS) form.set("voice_duration_s", entry.voiceNote.durationS);
   }
   return api.createCheckin(form);

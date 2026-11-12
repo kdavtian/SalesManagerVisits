@@ -158,6 +158,8 @@ app.use(
         // fetch() (for the opt-in tile-cache-warming feature and idle
         // Armenia-region prewarming) in addition to Leaflet's own <img> tags.
         imgSrc: ["'self'", "data:", "blob:", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
+        // the check-in's voice note is played back from memory (blob:) before it is saved, and from the server after
+        mediaSrc: ["'self'", "blob:"],
         connectSrc: ["'self'", "https://*.tile.openstreetmap.org", "https://maps.wikimedia.org"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],

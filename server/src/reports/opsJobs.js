@@ -7,6 +7,7 @@ import { createOpsTask, closeOpsTasks, usersWithRole } from "../team/opsTasks.js
 import { isWorkingDay, minuteOfDay } from "../team/vaghinak/engine.js";
 import { flagOrdersNotInExcel } from "../orders/notInExcel.js";
 import { checkRecentDocuments } from "../customers/aiBlankCheck.js";
+import { retryTranscriptions } from "../field/voiceNotes.js";
 
 const CHECK_LABELS = {
   customers_no_channel: "Հաճախորդներ՝ առանց ուղղության",
@@ -39,6 +40,8 @@ export async function runOpsJobs(now = new Date(), db = pool) {
   // Vaghinak reads the papers of delivered orders uploaded while the check was off (only while the AI check is switched on; capped per month).
   // Not awaited: a dozen model calls must not hold up the other jobs; a round still running is not started twice.
   checkRecentDocuments({ db }).catch((err) => console.error("Vaghinak document round failed:", err.message));
+  // voice notes whose text is still missing (a restart mid-way, a failure, or made before the key was set)
+  retryTranscriptions({ db }).catch((err) => console.error("Voice note retry failed:", err.message));
 
   if (!excel.today_synced && minute >= 10 * 60) {
     for (const id of await accountants(db)) {

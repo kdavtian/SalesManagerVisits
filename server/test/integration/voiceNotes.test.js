@@ -48,10 +48,22 @@ test("a check-in carries a voice note; a file that is not audio is refused; the 
   const customer = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
   const cookie = await loginAs(rep.email);
 
+  // a recording that is not audio is left out -- the visit itself is still saved (a refused queued visit would be dropped with its money)
   const bad = await postCheckin(cookie, customer, Buffer.from("not audio at all"), { type: "audio/webm" });
-  assert.equal(bad.status, 400, JSON.stringify(bad.data));
+  assert.equal(bad.status, 201, JSON.stringify(bad.data));
+  assert.equal(bad.data.voice_note_rejected, true);
+  assert.equal(bad.data.voice_note_count, undefined);
   const notAudioType = await postCheckin(cookie, customer, WEBM, { type: "application/pdf", name: "x.pdf" });
-  assert.equal(notAudioType.status, 400);
+  assert.equal(notAudioType.status, 201);
+  assert.equal(notAudioType.data.voice_note_rejected, true);
+  // declared webm, really MP4: stored as what it is (Safari plays it, the speech service gets the right extension)
+  const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypM4A "), Buffer.alloc(200, 2)]);
+  const mislabelled = await postCheckin(cookie, customer, MP4, { type: "audio/webm" });
+  assert.equal(mislabelled.status, 201);
+  const { rows: [m] } = await pool.query("SELECT mime, file_path FROM checkin_voice_notes WHERE checkin_id = $1", [mislabelled.data.id]);
+  assert.equal(m.mime, "audio/mp4");
+  assert.match(m.file_path, /\.m4a$/);
+  assert.ok(fs.existsSync(path.join(uploadDirPath, m.file_path)));
 
   const ok = await postCheckin(cookie, customer, WEBM, { duration: "999" });
   assert.equal(ok.status, 201, JSON.stringify(ok.data));

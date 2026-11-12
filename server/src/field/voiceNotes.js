@@ -21,11 +21,13 @@ export async function transcribeVoiceNote(noteId, { db = pool, fetchImpl = globa
     await db.query("UPDATE checkin_voice_notes SET transcript_status = 'off' WHERE id = $1 AND transcript_status = 'pending'", [note.id]);
     return { status: "off" };
   }
+  await db.query("UPDATE checkin_voice_notes SET transcript_status = 'pending', transcript_attempts = transcript_attempts + 1, transcribed_at = now() WHERE id = $1", [note.id]);
   try {
-    const bytes = await fs.promises.readFile(path.join(uploadDirPath, note.file_path));
+    // streamed from disk (not read into memory first)
+    const file = await fs.openAsBlob(path.join(uploadDirPath, note.file_path), { type: note.mime });
     const form = new FormData();
     // the file name's extension tells the service the container (webm, m4a, mp3 ...)
-    form.append("file", new Blob([bytes], { type: note.mime }), path.basename(note.file_path));
+    form.append("file", file, path.basename(note.file_path));
     form.append("model", TRANSCRIBE_MODEL);
     form.append("language", "hy");
     form.append("response_format", "json");
@@ -43,9 +45,41 @@ export async function transcribeVoiceNote(noteId, { db = pool, fetchImpl = globa
   }
 }
 
-// Fire-and-forget after the check-in is saved: never delays the answer.
+// Fire-and-forget after the check-in is saved: never delays the answer. At most 2 at a time (a phone flushing its offline queue sends several).
+const queue = [];
+let running = 0;
 export function scheduleTranscription(noteId) {
-  transcribeVoiceNote(noteId).catch((err) => console.error("Voice note transcription failed:", err.message));
+  queue.push(noteId);
+  pump();
+}
+function pump() {
+  while (running < 2 && queue.length) {
+    const id = queue.shift();
+    running++;
+    transcribeVoiceNote(id)
+      .catch((err) => console.error("Voice note transcription failed:", err.message))
+      .finally(() => {
+        running--;
+        pump();
+      });
+  }
+}
+
+// Retry round (from the ops jobs): a note left "pending" by a restart, a "failed" one (3 tries at most, an hour apart), and an "off" one once
+// the key is set (the text can be made later). A few per run.
+export async function retryTranscriptions({ db = pool, limit = 10 } = {}) {
+  if (!isSpeechConfigured()) return 0;
+  const { rows } = await db.query(
+    `SELECT id FROM checkin_voice_notes
+     WHERE created_at > now() - interval '30 days' AND transcript_attempts < 3
+       AND (transcript_status = 'off'
+            OR (transcript_status = 'pending' AND COALESCE(transcribed_at, created_at) < now() - interval '10 minutes')
+            OR (transcript_status = 'failed' AND COALESCE(transcribed_at, created_at) < now() - interval '1 hour'))
+     ORDER BY id LIMIT $1`,
+    [limit]
+  );
+  rows.forEach((r) => scheduleTranscription(r.id));
+  return rows.length;
 }
 
 // The voice notes of a list of check-ins, for the visit sheet (no audio bytes: the sheet plays them from the audio route).

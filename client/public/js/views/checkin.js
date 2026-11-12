@@ -2,7 +2,7 @@ import { mountVoiceRecorder, voiceFileName } from "../voiceRecorder.js";
 import { api } from "../api.js";
 import { renderPotentialCard } from "../potential.js";
 import { showToast, escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
-import { enqueueCheckin } from "../offlineQueue.js";
+import { enqueueCheckin, fileBytes } from "../offlineQueue.js";
 import { openFileViewer } from "../fileViewer.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openOrderMenu } from "../orderMenu.js";
@@ -1004,8 +1004,8 @@ export async function renderCheckin(root, navigate, customerId) {
     const availableProductsPayload = [...selectedAvailableProducts];
     if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
-    voice.stop();
-    const voiceNote = voice.recording();
+    // a recording still running when Save is tapped is finished first (MediaRecorder hands over its data a moment after stop)
+    const voiceNote = await voice.finish();
     if (voiceNote) {
       formData.append("voice_note", voiceNote.blob, voiceFileName(voiceNote.mime));
       formData.set("voice_duration_s", voiceNote.durationS);
@@ -1042,7 +1042,8 @@ export async function renderCheckin(root, navigate, customerId) {
           deliveredOrderIds,
           availableProducts: availableProductsPayload,
           photos: photos.map((photo) => photo.blob),
-          voiceNote: voiceNote ? { blob: voiceNote.blob, mime: voiceNote.mime, durationS: voiceNote.durationS } : null,
+          // kept as plain bytes, not a Blob: Safari refuses a Blob in IndexedDB in some states (offlineQueue.js, payments do the same)
+          voiceNote: voiceNote ? { bytes: await fileBytes(voiceNote.blob), mime: voiceNote.mime, durationS: voiceNote.durationS } : null,
           orderBlankPhotos: orderBlankBlobs,
           customerSignature: signatureBlob,
           repSignature: signatureBlob ? ownSignaturePending : null,

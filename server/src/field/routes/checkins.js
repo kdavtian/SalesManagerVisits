@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { checkinUpload, uploadDirPath, VOICE_FIELD, looksLikeAudio } from "../../shared/upload.js";
+import { checkinUpload, uploadDirPath, VOICE_FIELD, sniffAudio } from "../../shared/upload.js";
 import { scheduleTranscription, VOICE_NOTES_JSON_SQL, MAX_VOICE_SECONDS } from "../voiceNotes.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } from "../../utils/imageThumbs.js";
@@ -195,15 +195,31 @@ checkinsRouter.post("/", (req, res, next) => {
   // The customer's electronic signature on the delivery-acceptance act, and the rep's own one when it is not on their profile yet.
   const customerSignature = req.files?.customer_signature?.[0] ?? null;
   const repSignature = req.files?.rep_signature?.[0] ?? null;
-  // A voice note of the visit (owner, 2026-11-12): audio, checked by its own bytes below; deleted with the photos on every refusal.
-  const voiceFile = req.files?.[VOICE_FIELD]?.[0] ?? null;
+  // A voice note of the visit (owner, 2026-11-12): checked by its own bytes; its real container sets the stored type and extension. A file that
+  // is not audio is left out -- never the reason the visit (with its money, delivery and photos) is refused: a queued visit refused with a 4xx
+  // would be dropped by the offline queue. Deleted with the photos on every refusal below.
+  let voiceFile = req.files?.[VOICE_FIELD]?.[0] ?? null;
+  let voiceNoteRejected = Boolean(req.voiceNoteRejected);
+  let voiceType = null;
+  if (voiceFile) {
+    voiceType = sniffAudio(voiceFile.path);
+    if (!voiceType) {
+      fs.unlink(voiceFile.path, () => {});
+      voiceFile = null;
+      voiceNoteRejected = true;
+    } else if (!voiceFile.filename.endsWith(`.${voiceType.ext}`)) {
+      const renamed = voiceFile.filename.replace(/\.[^.]+$/, "") + `.${voiceType.ext}`;
+      fs.renameSync(voiceFile.path, path.join(path.dirname(voiceFile.path), renamed));
+      voiceFile = { ...voiceFile, filename: renamed, path: path.join(path.dirname(voiceFile.path), renamed) };
+    }
+  }
   const files = [...visitFiles, ...blankFiles, ...slipFiles, ...[customerSignature, repSignature, voiceFile].filter(Boolean)];
 
   // multer's fileFilter only ever sees the client-declared Content-Type
   // (see upload.js) -- this checks the bytes actually written to disk
   // match one of the allowed image signatures, catching a renamed
   // non-image file fileFilter alone can't.
-  if (files.some((f) => f !== voiceFile && !matchesDeclaredImageType(f.path, f.mimetype)) || (voiceFile && !looksLikeAudio(voiceFile.path))) {
+  if (files.some((f) => f !== voiceFile && !matchesDeclaredImageType(f.path, f.mimetype))) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "One or more uploaded files are not valid images" });
   }
@@ -338,7 +354,7 @@ checkinsRouter.post("/", (req, res, next) => {
       const seconds = Math.round(Number(voice_duration_s));
       const { rows: vn } = await client.query(
         "INSERT INTO checkin_voice_notes (checkin_id, file_path, mime, size_bytes, duration_s, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
-        [checkin.id, voiceFile.filename, String(voiceFile.mimetype).split(";")[0], voiceFile.size, Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, MAX_VOICE_SECONDS) : null, req.user.id]
+        [checkin.id, voiceFile.filename, voiceType.mime, voiceFile.size, Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, MAX_VOICE_SECONDS) : null, req.user.id]
       );
       voiceNoteId = vn[0].id;
     }
@@ -474,6 +490,7 @@ checkinsRouter.post("/", (req, res, next) => {
     ...checkin,
     photo_count: visitFiles.length,
     voice_note_count: voiceNoteId ? 1 : undefined,
+    voice_note_rejected: voiceNoteRejected || undefined,
     order_blank_count: blankFiles.length,
     payment_slip_photo_count: slipFiles.length || undefined,
     customer_confirmation: amountCollected != null ? confirmation : undefined,
