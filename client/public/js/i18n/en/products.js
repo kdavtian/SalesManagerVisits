@@ -317,4 +317,6 @@ export const enProducts = {
     sales_search_placeholder: "Order, ERP ID, customer, product, >50000",
     sales_empty: "No orders in this range",
     sales_order_count: "orders",
+    sales_src_app: "App",
+    sales_src_excel: "Excel",
 };

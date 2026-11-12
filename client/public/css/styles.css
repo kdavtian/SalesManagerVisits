@@ -6267,6 +6267,13 @@ form select,
   grid-template-columns: 1fr 1fr;
 }
 
+/* Sales: the App / Excel chip just left of the amount */
+.sales-src-chip { flex: none; font-size: 0.72rem; padding: 1px 7px; white-space: nowrap; }
+.sales-order-row .sales-src-chip { margin-left: auto; }
+.sales-order-row .sales-src-chip + .sales-order-amount { margin-left: 6px; }
+.sales-desk-row .dtl-end .sales-src-chip { margin-right: 6px; vertical-align: 1px; }
+.sales-desk-row .dtl-end .dtl-main { white-space: nowrap; } /* chip + amount stay on one line */
+
 .sales-order-amount {
   font-weight: 700;
   white-space: nowrap;
@@ -8911,6 +8918,13 @@ html[data-text-size="xlarge"] { font-size: 130%; }
   margin: -4px 0 0 8px;
 }
 .sheet-head-actions .sheet-close-x { position: static; float: none; margin: 0; }
+/* Send to the accountant after the documents failed: the paper plane turns red with a dot, so the retry is not missed. */
+.sheet-head-actions .icon-btn-alert { position: relative; color: var(--danger, #d92d20); }
+.sheet-head-actions .icon-btn-alert::after {
+  content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger, #d92d20);
+}
+/* The one main step of an order sheet (Mark recorded, Mark delivered) on its own full-width row on phones; the other buttons pair up under it. */
+.order-detail-sheet .sheet-actions .order-action-lead { flex: 1 0 100%; }
 .order-share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; }
 .order-share-btn svg { width: 20px; height: 20px; }
 .vg-summary-top .badge { margin-left: auto; }

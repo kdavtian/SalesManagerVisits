@@ -8,7 +8,7 @@ export const hyOrders = {
     draft_reason_label: "Նշում",
     confirmed_awaiting_warehouse: "Հաստատված — սպասում է պահեստի կողմից փաթեթավորման",
     packed_awaiting_route: "Փաթեթավորված — սպասում է առաքման երթուղուն",
-    mark_delivered_no_route: "Նշել որպես առաքված (առանց երթուղու)",
+    mark_delivered_no_route: "Նշել որպես առաքված",
     confirm_mark_delivered_no_route: "Նշե՞լ այս պատվերը որպես առաքված՝ առանց առաքման երթուղու կամ ստորագրության։ Օգտագործեք միայն այն դեպքում, երբ հավելվածում առաքումը ավարտող վարորդ չկա։",
     reject_order_note_prompt: "Մերժման պատճառը (ոչ պարտադիր)",
     orders_count_label: "պատվեր",
