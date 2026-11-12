@@ -52,7 +52,7 @@ const SHARE_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" 
 // What the AI check found, in short lines (empty until the check is on and has run). Each issue is a code the app words itself.
 const issueText = (issue) => t(`ai_issue_${issue.code}`).replace("{found}", escapeHtml(String(issue.found ?? ""))).replace("{expected}", escapeHtml(String(issue.expected ?? "")));
 export function aiSummaryHtml(file) {
-  if (!file.ai_status || file.ai_status === "pending") return "";
+  if (!file.ai_status || file.ai_status === "pending" || file.ai_status === "error") return ""; // a failed check is retried, not shown
   if (file.ai_status === "ok") return `<p class="file-ai file-ai-ok">${t("file_ai_ok")}</p>`;
   const issues = file.ai_result?.issues ?? [];
   const lines = issues.length ? issues.map((i) => `<li>${issueText(i)}</li>`).join("") : "";

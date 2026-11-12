@@ -4,7 +4,7 @@ import { escapeHtml, formatAmd, activateDialog, channelDisplayLabel, formatLiter
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { loadWithCache } from "../listCache.js";
-import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml, notInExcelBadgeHtml } from "../orderDetailSheet.js";
+import { STATUS_META, orderStatusMeta, openOrderDetailSheet, paymentMethodBadgeHtml, appBadgeHtml, notInExcelBadgeHtml, vaghinakCheckedBadgeHtml } from "../orderDetailSheet.js";
 import { isDesktop, createDeskTable, renderDeskFilters, openDeskMenu } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { dockedKey } from "../dockSheet.js";
@@ -53,7 +53,7 @@ const ORDER_DESK_COLUMNS = () => [
   { key: "rep", label: t("desk_col_rep"), width: "130px", cell: (o) => o.user_name || "" },
   { key: "erp_id", label: t("desk_col_id"), width: "84px", cell: (o) => o.erp_customer_id || "" },
   { key: "channel", label: t("desk_col_channel"), width: "110px", cell: (o) => (o.sales_channel ? channelDisplayLabel(String(o.sales_channel)) : "") },
-  { key: "status_text", label: t("desk_col_status"), width: "120px", sort: "status", cell: (o) => t(orderStatusMeta(o).key) },
+  { key: "status_text", label: t("desk_col_status"), width: "120px", sort: "status", cell: (o) => `${t(orderStatusMeta(o).key)}${o.vaghinak_checked ? ` · ✓ ${t("vaghinak_checked_badge")}` : ""}` },
   { key: "payment", label: t("desk_col_payment"), width: "120px", cell: (o) => (o.payment_method ? `${t(o.payment_method === "cash" ? "payment_method_cash" : "payment_method_invoice")}${o.credit_term_days != null ? ` · ${o.credit_term_days}${t("days_short")}` : ""}` : "") },
   { key: "liters", label: t("desk_col_liters"), width: "90px", align: "end", cell: (o) => (Number(o.total_liters) > 0 ? formatLiters(Number(o.total_liters)) : "") },
   { key: "created", label: t("desk_col_date"), width: "130px", narrowWidth: "110px", sort: "date", narrow: true, cell: (o) => formatDateTime(o.created_at) },
@@ -594,6 +594,7 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
             <div class="list-row-bottom">
               ${appBadgeHtml(o)}${notInExcelBadgeHtml(o)}
               <span class="badge ${meta.cls}">${t(meta.key)}</span>
+              ${vaghinakCheckedBadgeHtml(o)}
               ${o.delivered_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
               ${paymentMethodBadgeHtml(o.payment_method)}
               ${o.accounting_status ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>` : ""}
