@@ -4,7 +4,7 @@ import { createMapSideTable } from "../../mapSideTable.js";
 import { api } from "../../api.js";
 import { t } from "../../i18n.js";
 import { TASK_PIN_SVG } from "../map.js";
-import { categoryIconSlug, channelDisplayLabel, escapeHtml, getCurrentPosition, isNeverVisited } from "../../util.js";
+import { categoryIconSlug, channelDisplayLabel, escapeHtml, getCurrentPosition, isNeverVisited, salesChannelRule } from "../../util.js";
 import { getPerfMode } from "../../perfMode.js";
 import { reorderChipHtml } from "../../reorder.js";
 import { icons } from "../../icons.js";
@@ -128,11 +128,16 @@ export async function loadDebtFlags(ctx, { repaint = true } = {}) {
 }
 
 // Competitors and the non-field channels (CVO, OEM, PCO, CAS, KF) are drawn 35% smaller, so the field customers stand out (owner, 2026-11-03).
-const SMALL_PIN_CHANNELS = new Set(["CVO", "OEM", "PCO", "CAS", "KF"]);
+// Which channels those are follows the direction's own setting (admin panel: "not visited"); the old list until the directions are loaded.
+const SMALL_PIN_FALLBACK = new Set(["CVO", "OEM", "PCO", "CAS", "KF"]);
 const SMALL_PIN_SCALE = 0.65;
+const smallPinChannel = (code) => {
+  const rule = salesChannelRule(code);
+  return rule ? rule.visit_mode === "no_visit" : SMALL_PIN_FALLBACK.has(code);
+};
 export const pinPx = (ctx, c, tier) => {
   const size = ctx.pinSize(tier);
-  return tier === "competitor" || SMALL_PIN_CHANNELS.has(c.sales_channel) ? Math.round(size * SMALL_PIN_SCALE) : size;
+  return tier === "competitor" || smallPinChannel(c.sales_channel) ? Math.round(size * SMALL_PIN_SCALE) : size;
 };
 
 export function pinArtHtml(ctx, c, tier) {

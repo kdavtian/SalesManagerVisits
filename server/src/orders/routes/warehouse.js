@@ -192,7 +192,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
     params.push(size);
     conditions.push(`lower(regexp_replace(trim(p.unit), '\\s+', '', 'g')) = lower(regexp_replace(trim($${params.length}), '\\s+', '', 'g'))`);
   }
-  const where = `WHERE ${conditions.join(" AND ")}`;
+  const where = `WHERE ${conditions.join(" AND ") || "TRUE"}`;
   const today = yerevanToday();
   params.push(today);
   const todayParamIndex = params.length;

@@ -1,7 +1,7 @@
 // Customer card > account settings sheet (moved out of customerDetail.js with the refactor tool, docs/architecture-roadmap.md step 6).
 import { api } from "../../api.js";
 import { dockSheet } from "../../dockSheet.js";
-import { REGION_LIST, SALES_CHANNELS, YEREVAN_DISTRICTS, activateCombobox, activateDialog, escapeHtml, formatAmd, formatDateTime, regionLabelHy, showToast, subregionLabelHy } from "../../util.js";
+import { REGION_LIST, salesChannelOptionsHtml, YEREVAN_DISTRICTS, activateCombobox, activateDialog, escapeHtml, formatAmd, formatDateTime, regionLabelHy, showToast, subregionLabelHy } from "../../util.js";
 import { placeNoticeText, wirePlaceInput } from "../../places.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
@@ -56,10 +56,7 @@ export async function openAccountSettingsSheet(customer, onDone) {
                <label id="reassign-subregion-wrap">${t("subregion")}<input name="subregion" id="reassign-subregion" value="${escapeHtml(customer.subregion ?? "")}" /></label>
                <label>${t("sales_channel")}
                  <select name="sales_channel">
-                   <option value="">${t("select_placeholder")}</option>
-                   ${SALES_CHANNELS.map(
-                     (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
-                   ).join("")}
+                   ${salesChannelOptionsHtml(customer.sales_channel, t("select_placeholder"))}
                  </select>
                </label>
                <label>${t("assigned_manager")}
@@ -74,10 +71,7 @@ export async function openAccountSettingsSheet(customer, onDone) {
             ? `<p class="proposed-changes-label">${t("sales_channel")}</p>
                <label><span class="visually-hidden">${t("sales_channel")}</span>
                  <select name="sales_channel">
-                   <option value="">${t("select_placeholder")}</option>
-                   ${SALES_CHANNELS.map(
-                     (c) => `<option value="${escapeHtml(c)}" ${c === customer.sales_channel ? "selected" : ""}>${escapeHtml(c)}</option>`
-                   ).join("")}
+                   ${salesChannelOptionsHtml(customer.sales_channel, t("select_placeholder"))}
                  </select>
                </label>`
             : ""

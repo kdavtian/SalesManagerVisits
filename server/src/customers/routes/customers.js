@@ -1,3 +1,4 @@
+import { noVisitSql, isNoVisitChannel, RESERVED_CODES } from "../../shared/salesChannelRules.js";
 import { VOICE_NOTES_JSON_SQL } from "../../field/voiceNotes.js";
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
@@ -47,14 +48,20 @@ customersRouter.param("id", async (req, res, next, id) => {
   return res.status(404).json({ error: "Customer not found" });
 });
 
-// KF/CAS/CVO/PCO/OEM are channels Castrol serves through a route that
-// doesn't involve field visits (key accounts / distributor-managed / OEM
-// contracts), so these customers never need to show up as "overdue" or
-// "not visited" no matter how long since their last check-in.
-export const NO_VISIT_CHANNELS = ["KF", "CAS", "CVO", "PCO", "OEM"];
+// Directions served without field visits (key accounts / distributor-managed / OEM contracts: KF, CAS, CVO, PCO, OEM today) never show up
+// as "overdue" or "not visited", however long since their last check-in. Which ones they are is the direction's own setting
+// (sales_channels.visit_mode, admin panel; shared/salesChannelRules.js).
 // The Castrol Office (customers.checkin_for_all) is a check-in place for every rep, not a sales visit:
 // it is exempt exactly like the no-visit channels.
-export const NOT_NO_VISIT_CHANNEL_SQL = `(COALESCE(c.sales_channel, '') <> ALL(ARRAY[${NO_VISIT_CHANNELS.map((v) => `'${v}'`).join(",")}]) AND NOT COALESCE(c.checkin_for_all, false))`;
+// A customer's direction is empty, or an ACTIVE direction of the admin panel (sales_channels): before 2026-11-12 any text was stored, so a typo
+// or a direction the rules do not know silently got the default rules.
+async function isKnownChannel(code) {
+  if (code === null || code === undefined || String(code).trim() === "") return true;
+  const { rows } = await pool.query("SELECT 1 FROM sales_channels WHERE code = $1 AND active", [String(code)]);
+  return rows.length > 0;
+}
+
+export const NOT_NO_VISIT_CHANNEL_SQL = `(NOT ${noVisitSql("c.sales_channel")} AND NOT COALESCE(c.checkin_for_all, false))`;
 
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days
@@ -198,7 +205,7 @@ customersRouter.get("/", async (req, res) => {
     conditions.push(`(c.name, c.id) > ($${params.length - 1}, $${params.length})`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : "";
   // Outstanding debt is opt-in (see task spec: "off by default, to make
   // app run faster") -- the LEFT JOIN and its per-row lookup only happen
   // when the Customers list toggle actually asks for it.
@@ -364,6 +371,9 @@ customersRouter.post("/", async (req, res) => {
   if (!name || lat === undefined || lng === undefined) {
     return res.status(400).json({ error: "name, lat and lng are required" });
   }
+  if (!RESERVED_CODES.includes(String(sales_channel ?? "").toUpperCase()) && !(await isKnownChannel(sales_channel))) {
+    return res.status(400).json({ error: "Unknown sales direction", code: "unknown_sales_channel" });
+  }
   if (typeof lat !== "number" || typeof lng !== "number") {
     return res.status(400).json({ error: "lat and lng must be numbers" });
   }
@@ -447,7 +457,7 @@ customersRouter.post("/", async (req, res) => {
         placeOutcome.values.region || null,
         placeOutcome.values.subregion || null,
         initialTier,
-        sales_channel || null,
+        RESERVED_CODES.includes(String(sales_channel ?? "").toUpperCase()) ? null : sales_channel || null, // display-only values are no direction
         resolvedManagerId,
         Number(credit_term_days) || 45,
         payment_method || "invoice",
@@ -908,11 +918,17 @@ customersRouter.patch("/:id", async (req, res) => {
   const onlyChannelField = fieldsPresent.length === 1 && fieldsPresent[0] === "sales_channel";
 
   const { rows: currentRows } = await pool.query(
-    "SELECT created_by, erp_customer_id, customer_tier, name, lat, lng, region, subregion FROM customers WHERE id = $1",
+    "SELECT created_by, erp_customer_id, customer_tier, name, lat, lng, region, subregion, sales_channel FROM customers WHERE id = $1",
     [req.params.id]
   );
   const current = currentRows[0];
   if (!current) return res.status(404).json({ error: "Customer not found" });
+  // the client's display-only values (normalizeCustomer) are no direction: "no change"
+  if (RESERVED_CODES.includes(String(req.body?.sales_channel ?? "").toUpperCase())) delete req.body.sales_channel;
+  // a direction must be one the admin panel knows (keeping the customer's current one is always fine)
+  if (req.body?.sales_channel !== undefined && req.body.sales_channel !== current.sales_channel && !(await isKnownChannel(req.body.sales_channel))) {
+    return res.status(400).json({ error: "Unknown sales direction", code: "unknown_sales_channel" });
+  }
 
   if (onlyErpField) {
     // Linking to ERP has its own ownership-based rule (see
@@ -1519,7 +1535,7 @@ function scheduleForCustomer(customer, ctx) {
   const customerId = customer.id;
   // KF/CAS/CVO/PCO/OEM are never visited in the field: no due date, no overdue days, no planned visits
   // (not even from a Route Plans area rule that happens to cover their region).
-  if (NO_VISIT_CHANNELS.includes(customer.sales_channel) || customer.checkin_for_all) {
+  if (isNoVisitChannel(customer.sales_channel) || customer.checkin_for_all) {
     return {
       today,
       no_visit: true,

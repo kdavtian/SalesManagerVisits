@@ -4,6 +4,7 @@
 // columns of the workbook's Cash table, so the accountant can paste it), the accountant marks it "Recorded in Excel", or the next sync closes
 // it by itself when every payment of it is found in the Excel. Control loop: a rep's hand-off still unconfirmed at 20:00, a sheet not recorded
 // after 2 days and any counted-amount discrepancy become tasks for the right person (Vaghinak's name on them).
+import { cashSourceOf } from "../shared/salesChannelRules.js";
 import ExcelJS from "exceljs";
 import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -16,8 +17,9 @@ export const NOT_RECORDED_DAYS = 2;
 export const EVENING_MINUTE = 20 * 60;
 
 // The workbook's Cashflow `Source` for a customer payment ("Oil order"): the rep's cash box by sales channel (same rule as the Excel formula).
-const CHANNEL_SOURCE = { "SM YVN": "Cash YVN", "SM Davtashen": "Cash DVT", "SM Shirak": "Cash Shirak" };
-export const cashSource = (channel) => CHANNEL_SOURCE[channel] ?? "Cash";
+// The direction's own setting (sales_channels.cash_source, admin panel): SM YVN "Cash YVN", SM Davtashen "Cash DVT", SM Shirak "Cash Shirak"
+// today; every other direction the central "Cash".
+export const cashSource = (channel) => cashSourceOf(channel);
 
 const yerevanDay = (value) => new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Yerevan" });
 const dmy = (day) => day.split("-").reverse().join("-");

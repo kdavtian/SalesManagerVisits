@@ -396,7 +396,7 @@ async function productMapping(req, res) {
   }
   if (req.query.unmapped === "1" || req.query.unmapped === "true") conditions.push("hc_code IS NULL");
   const { rows } = await pool.query(
-    `SELECT id, sku, name, brand, unit, hc_code, active FROM products ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY id`,
+    `SELECT id, sku, name, brand, unit, hc_code, active FROM products ${conditions.length ? `WHERE ${conditions.join(" AND ") || "TRUE"}` : ""} ORDER BY id`,
     params
   );
   res.json({

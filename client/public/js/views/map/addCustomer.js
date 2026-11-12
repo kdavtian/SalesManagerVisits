@@ -2,7 +2,7 @@
 // function takes the screen's state as `ctx` (see the ctx object at the top of renderMapInner).
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
-import { CATEGORY_LIST, REGION_LIST, SALES_CHANNELS, YEREVAN_DISTRICTS, activateCategorySelector, activateCombobox, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, getCurrentPosition, matchRegion, matchSubregion, normalizePhone, regionLabelHy, setTierSelectorValue, showToast, subregionLabelHy, tierSelectorHtml } from "../../util.js";
+import { CATEGORY_LIST, REGION_LIST, SALES_CHANNELS, salesChannelRule, YEREVAN_DISTRICTS, activateCategorySelector, activateCombobox, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, getCurrentPosition, matchRegion, matchSubregion, normalizePhone, regionLabelHy, setTierSelectorValue, showToast, subregionLabelHy, tierSelectorHtml } from "../../util.js";
 import { api } from "../../api.js";
 import { canEditDirectly, canReassignCustomers, state } from "../../state.js";
 import { movesAnyPinAtOnce } from "../../shared/roles.js";
@@ -543,16 +543,21 @@ export function openNewCustomerForm(ctx, latlng) {
   }
   wirePlaceInput(overlay.querySelector("#new-customer-subregion"), () => regionSelect.value);
   const channelSelect = overlay.querySelector("#new-customer-channel");
-  // A sales manager never picks the channel: it is preset from their position and the field is hidden (the server sets it from
-  // the rep anyway, as the authority). Was fieldVisitEnhancements.js, step 7b.
+  // A sales manager's channel is preset (the server sets it from the rep anyway, as the authority). Was fieldVisitEnhancements.js, step 7b.
+  // A rep who owns SEVERAL directions in the admin panel (Artak: SM Davtashen + SM B2B) picks one of THEM; with one, it is preset and hidden.
   if (state.user?.role === "sales_manager") {
-    const guessed = managerChannelGuess();
-    if (guessed) {
-      if (![...channelSelect.options].some((o) => o.value === guessed)) channelSelect.add(new Option(guessed, guessed));
-      channelSelect.value = guessed;
-    }
+    const owned = SALES_CHANNELS.filter((c) => salesChannelRule(c)?.manager_user_id === state.user.id);
     const channelLabel = channelSelect.closest("label");
-    if (channelLabel) channelLabel.hidden = true;
+    if (owned.length > 1) {
+      channelSelect.innerHTML = owned.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+    } else {
+      const guessed = owned[0] || managerChannelGuess();
+      if (guessed) {
+        if (![...channelSelect.options].some((o) => o.value === guessed)) channelSelect.add(new Option(guessed, guessed));
+        channelSelect.value = guessed;
+      }
+      if (channelLabel) channelLabel.hidden = true;
+    }
   }
   const managerSelect = overlay.querySelector("#new-customer-manager");
   let managerOptionsHtml = `<option value="">${t("unassigned")}</option>`;
@@ -574,7 +579,12 @@ export function openNewCustomerForm(ctx, latlng) {
   // don't follow the geographic route-distribution mapping, so the rep
   // picks the channel (and therefore manager) themselves instead of
   // getting an auto-filled guess.
-  const NO_AUTOFILL_CHANNELS = new Set(["CVO", "PCO", "OEM"]);
+  // which directions those are is the direction's own setting (admin panel: route_autofill); the old list when the directions are not loaded
+  const NO_AUTOFILL_FALLBACK = new Set(["CVO", "PCO", "OEM"]);
+  const noAutofill = (code) => {
+    const rule = salesChannelRule(code);
+    return rule ? rule.route_autofill === false : NO_AUTOFILL_FALLBACK.has(code);
+  };
   function refreshRouteSuggestion() {
     const region = regionSelect.value;
     if (!region) return;
@@ -584,7 +594,7 @@ export function openNewCustomerForm(ctx, latlng) {
       .lookupRouteDistribution(region, subregion)
       .then((match) => {
         if (!match) return;
-        if (match.sales_channel && NO_AUTOFILL_CHANNELS.has(match.sales_channel)) return;
+        if (match.sales_channel && noAutofill(match.sales_channel)) return;
         if (match.sales_channel && !channelSelect.value) channelSelect.value = match.sales_channel;
         if (match.assigned_manager_id && !managerSelect.value) {
           managerSelect.innerHTML = managerOptionsHtml;
@@ -788,6 +798,10 @@ export function openNewCustomerForm(ctx, latlng) {
 
 // The channel a sales manager works in, read from their position (or name).
 function managerChannelGuess() {
+  // a position that IS a direction's code ("SM Gyumri") first: the word guesses below would read "Gyumri" as SM Shirak
+  const position = String(state.user?.position || "").trim().toLowerCase();
+  const exact = SALES_CHANNELS.find((c) => c.toLowerCase() === position);
+  if (exact) return exact;
   const source = `${state.user?.position || ""} ${state.user?.name || ""}`.toLowerCase();
   if (source.includes("davtashen") || source.includes("դավթաշեն")) return "SM Davtashen";
   if (source.includes("shirak") || source.includes("gyumri") || source.includes("շիրակ") || source.includes("գյումրի")) return "SM Shirak";

@@ -229,7 +229,7 @@ export function paintSettingsMarkup(ctx) {
           ${settingsRow({ icon: ICON.calendar, label: t("visit_types_title"), id: "row-visit-types", color: "green" })}
           ${ctx.admin ? settingsRow({ icon: ICON.gps, label: t("offices_title"), id: "row-offices", color: "blue" }) : ""}
           ${settingsRow({ icon: ICON.book, label: t("doc_texts_title"), id: "row-doc-texts", color: "orange" })}
-          ${settingsRow({ icon: ICON.database, label: t("sales_channel_owners_title"), id: "row-sales-channel-owners", color: "purple" })}
+          ${settingsRow({ icon: ICON.database, label: t("sales_directions_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
           ${ctx.canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
         </div>`

@@ -9,7 +9,7 @@
 import { pool } from "../db/pool.js";
 import { distM, hasLocation } from "../orders/routePlanner.js";
 import { MAIN_SCOPE, scopeOfChannel } from "./planScopes.js";
-import { NO_VISIT_CHANNELS } from "../customers/routes/customers.js";
+import { isNoVisitChannel } from "../shared/salesChannelRules.js";
 import { notifyUser } from "../shared/notifications.js";
 
 export const MIN_OUTLIER_M = 3000;
@@ -85,7 +85,7 @@ export async function runRoutePlanAnalysis(db = pool) {
       `SELECT id, region, subregion, sales_channel, checkin_for_all, customer_tier, lat::float8 AS lat, lng::float8 AS lng FROM customers WHERE assigned_manager_id = $1 OR id = ANY($2)`,
       [rep.id, [...new Set(rules.flatMap((r) => r.customer_ids ?? []))]]
     );
-    const visitable = (c) => scopeOfChannel(c.sales_channel) === MAIN_SCOPE && !NO_VISIT_CHANNELS.includes(c.sales_channel) && !c.checkin_for_all && c.customer_tier !== "competitor";
+    const visitable = (c) => scopeOfChannel(c.sales_channel) === MAIN_SCOPE && !isNoVisitChannel(c.sales_channel) && !c.checkin_for_all && c.customer_tier !== "competitor";
     const eligible = mine.filter(visitable);
     const byId = new Map(eligible.map((c) => [c.id, c]));
     const days = rules.map((r) => {

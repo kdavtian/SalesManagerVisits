@@ -2,7 +2,7 @@ import { Router } from "express";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, canReopenPlanAsDraft, seesAllPerformance, canCloseMonth } from "../../shared/roles.js";
+import { isPerfCeo, canEditChannelPlan, canReviewPlan, canReviseApprovedPlan, canReopenPlanAsDraft, seesAllPerformance, canCloseMonth, ownsSalesChannels } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { PERF_APPROVER_ROLES } from "../../shared/notificationPreferences.js";
 import { workingDaysForMonth } from "../../shared/workingDays.js";
@@ -173,8 +173,16 @@ teamPerformanceRouter.patch("/channels/:id", requireAdmin, async (req, res) => {
   if (manager_user_id !== null && manager_user_id !== undefined && !Number.isInteger(manager_user_id)) {
     return res.status(400).json({ error: "manager_user_id must be an integer or null" });
   }
+  if (!/^\d{1,9}$/.test(String(req.params.id))) return res.status(404).json({ error: "Not found" });
+  // only an active person who can own a direction (review 2026-11-12: a left rep or a missing id was accepted)
+  if (manager_user_id != null) {
+    const { rows: who } = await pool.query("SELECT role, status FROM users WHERE id = $1", [manager_user_id]);
+    if (!who[0] || who[0].status !== "active" || !ownsSalesChannels(who[0].role)) {
+      return res.status(400).json({ error: "The manager must be an active sales manager, sales director or accountant", code: "manager_invalid" });
+    }
+  }
   const { rows } = await pool.query(
-    `UPDATE sales_channels SET manager_user_id = $1 WHERE id = $2
+    `UPDATE sales_channels SET manager_user_id = $1, updated_at = now() WHERE id = $2
      RETURNING id, code, name, active, manager_user_id, owner_role, parent_channel_id, display_order`,
     [manager_user_id ?? null, req.params.id]
   );
@@ -199,6 +207,9 @@ async function channelCodesForUser(user) {
     [user.id]
   );
   if (rows.length) return rows.map((r) => r.code);
+  // a position that IS a direction's code ("SM Gyumri") before the old word guesses (which read "Gyumri" as SM Shirak)
+  const { rows: exact } = await pool.query("SELECT code FROM sales_channels WHERE active = true AND lower(code) = lower($1)", [String(user.position ?? "").trim()]);
+  if (exact[0]) return [exact[0].code];
   const fallback = channelFromPosition(user.position);
   return fallback ? [fallback] : [];
 }

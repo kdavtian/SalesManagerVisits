@@ -6,7 +6,7 @@ import { escapeHtml, formatAmd, openInfoPopup } from "../../util.js";
 import { openAdminSection } from "./sheets.js";
 import { renderNotificationDefaultsSection, renderReportsManagementSection } from "./notifications.js";
 import { renderTeamSection } from "../admin/team.js";
-import { renderClientErrorLogSection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderOfficesSection, renderPlacesSection, renderPointsCloseoutSection, renderQuickActionVisibilitySection, renderSalesChannelOwnersSection } from "../admin.js";
+import { renderClientErrorLogSection, renderDataQualitySection, renderNotificationDeliveryLogSection, renderOfficesSection, renderPlacesSection, renderPointsCloseoutSection, renderQuickActionVisibilitySection } from "../admin.js";
 import { renderDocumentTextsSection, renderVisitFrequencyTypesSection } from "../settingsDocTexts.js";
 import { renderSystemHealthSection } from "../systemHealth.js";
 
@@ -438,7 +438,7 @@ export function wireAdminRows(ctx) {
       openAdminSection(ctx.root, e.currentTarget, t("doc_texts_title"), renderDocumentTextsSection);
     });
     ctx.root.querySelector("#row-sales-channel-owners").addEventListener("click", (e) => {
-      openAdminSection(ctx.root, e.currentTarget, t("sales_channel_owners_title"), renderSalesChannelOwnersSection);
+      openAdminSection(ctx.root, e.currentTarget, t("sales_directions_title"), async (c) => (await import("../admin/salesChannels.js")).renderSalesChannelsSection(c));
     });
     ctx.root.querySelector("#row-data-quality").addEventListener("click", (e) => {
       openAdminSection(ctx.root, e.currentTarget, t("data_quality_title"), renderDataQualitySection);

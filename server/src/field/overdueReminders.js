@@ -3,6 +3,7 @@
 // push is set up. Runs a few times a day rather than continuously, and remembers who it
 // already nudged today so a rep gets at most one reminder per day.
 
+import { noVisitSql } from "../shared/salesChannelRules.js";
 import { pool } from "../db/pool.js";
 import { enabled as pushEnabled } from "../shared/push.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -26,15 +27,14 @@ export async function checkOverdueReminders() {
     if (lastNotifiedDate.get(plan.user_id) === today) continue;
     if (!plan.customer_ids?.length) continue;
 
-    // Competitors are market-intelligence records, not required field visits;
-    // KF/CAS/CVO/PCO customers are served through a channel that doesn't
-    // involve field visits at all. Filter both server-side too, so legacy
-    // plans cannot create false reminders.
+    // Competitors are market-intelligence records, not required field visits; customers of a direction served without field visits
+    // (sales_channels.visit_mode = 'no_visit': KF, CAS, CVO, PCO and -- owner 2026-11-12 -- OEM too) get no reminders. Filtered server-side
+    // too, so legacy plans cannot create false reminders.
     const { rows: eligibleRows } = await pool.query(
       `SELECT id FROM customers
        WHERE id = ANY($1)
          AND COALESCE(customer_tier, 'potential') <> 'competitor'
-         AND COALESCE(sales_channel, '') <> ALL(ARRAY['KF','CAS','CVO','PCO'])`,
+         AND NOT ${noVisitSql("sales_channel")}`,
       [plan.customer_ids]
     );
     const eligibleIds = eligibleRows.map((row) => row.id);

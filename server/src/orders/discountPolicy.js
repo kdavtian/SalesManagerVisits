@@ -18,6 +18,7 @@
 // cost or pack size is unknown the flat workbook net cost is used.
 import { netCost, litersOfUnit } from "../../../client/public/js/costModel.js";
 import { approves } from "../shared/roles.js";
+import { rulesOf } from "../shared/salesChannelRules.js";
 
 export const AUTO_APPROVE_PCT = 3;
 
@@ -49,6 +50,7 @@ export function displayNetCost(row) {
 // customerId (optional): the customer's own sales channel decides the commission in the floor (SM 4 %, CVO/PCO/OEM 2 %,
 // KF/CAS 0 %; owner, 2026-10-18). Without it (or without a channel) the dearest 4 % is used, as before.
 export async function orderCostCheck(db, lines, subtotal, total, { customerId = null } = {}) {
+  rulesOf(""); // keeps the directions' commission kinds (costModel) fresh -- read in the background, at most once a minute
   let channel = null;
   if (Number.isInteger(Number(customerId)) && customerId != null) {
     const { rows: c } = await db.query("SELECT sales_channel FROM customers WHERE id = $1", [Number(customerId)]);

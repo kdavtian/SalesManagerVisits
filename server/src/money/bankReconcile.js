@@ -22,7 +22,7 @@ export async function reconcile({ accountId = null, from = null, to = null, stat
             l.type_code, l.counterparty_account, l.learned_at,
             l.status, l.entry_id, l.decided_at, l.import_id
      FROM bank_statement_lines l JOIN cash_accounts a ON a.id = l.account_id
-     ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY l.line_date DESC, l.id DESC`,
+     ${where.length ? `WHERE ${where.join(" AND ") || "TRUE"}` : ""} ORDER BY l.line_date DESC, l.id DESC`,
     params
   );
   const matchedBy = new Map();

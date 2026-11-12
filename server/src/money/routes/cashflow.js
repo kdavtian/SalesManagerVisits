@@ -74,7 +74,7 @@ function filters(q, params) {
     const p = params.push(`%${text.replace(/[%_]/g, "\\$&")}%`);
     where.push(`(e.info ILIKE $${p} OR e.ref ILIKE $${p} OR e.erp_customer_id ILIKE $${p} OR cu.name ILIKE $${p} OR e.sales_rep ILIKE $${p})`);
   }
-  return where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return where.length ? `WHERE ${where.join(" AND ") || "TRUE"}` : "";
 }
 
 const FROM = `FROM cash_entries e
