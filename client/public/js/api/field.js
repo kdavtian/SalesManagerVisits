@@ -11,6 +11,7 @@ export const fieldApi = {
     return request(`/checkins${qs ? `?${qs}` : ""}`, options);
   },
   checkinPhotoByIdUrl: (photoId) => `/api/checkins/photos/${photoId}`,
+  voiceNoteAudioUrl: (noteId) => `/api/checkins/voice-notes/${noteId}/audio`,
   checkinPhotoThumbUrl: (photoId) => `/api/checkins/photos/${photoId}?size=thumb`,
   deleteCheckinPhotoById: (photoId) => request(`/checkins/photos/${photoId}`, { method: "DELETE" }),
   fuelReport: (month, retry = false) => request(`/fuel/report?month=${month}${retry ? "&retry=1" : ""}`),

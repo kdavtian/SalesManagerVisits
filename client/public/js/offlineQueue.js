@@ -249,6 +249,14 @@ async function submitCheckin(entry) {
   entry.paymentSlipPhotos?.forEach((blob, i) => form.append("payment_slip_photos", blob, `payment-slip-${i}.jpg`));
   if (entry.customerSignature) form.append("customer_signature", entry.customerSignature, "customer-signature.png");
   if (entry.repSignature) form.append("rep_signature", entry.repSignature, "rep-signature.png");
+  // the visit's voice note (owner, 2026-11-12) waits here with the photos
+  const v = entry.voiceNote;
+  const voiceBlob = v?.blob instanceof Blob ? v.blob : v?.bytes?.bytes ? toBlob(v.bytes) : null; // bytes (fileBytes) or a Blob, never a lost {}
+  if (voiceBlob) {
+    const ext = v.mime === "audio/mp4" ? "m4a" : v.mime === "audio/ogg" ? "ogg" : "webm";
+    form.append("voice_note", voiceBlob, `voice-note.${ext}`);
+    if (entry.voiceNote.durationS) form.set("voice_duration_s", entry.voiceNote.durationS);
+  }
   return api.createCheckin(form);
 }
 

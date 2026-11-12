@@ -514,7 +514,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
           </div>
           <span class="card-trailing">
             <span class="visit-range-icon ${ch.within_range ? "is-ok" : "is-bad"}" role="img" aria-label="${ch.within_range ? t("location_verified") : t("location_mismatch_away")}">${ch.within_range ? icons.checkCircle : icons.mapWarning}</span>
-            ${ch.photos?.length ? `<span class="checkin-row-photo-count">📷 ${ch.photos.length}</span>` : ""}
+            ${ch.voice_notes?.length ? `<span class="checkin-row-photo-count" aria-label="${t("voice_note_title")}">🎤</span>` : ""}${ch.photos?.length ? `<span class="checkin-row-photo-count">📷 ${ch.photos.length}</span>` : ""}
             <span class="chevron">&#8250;</span>
           </span>
         </button>`;

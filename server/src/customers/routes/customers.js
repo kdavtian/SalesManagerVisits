@@ -1,3 +1,4 @@
+import { VOICE_NOTES_JSON_SQL } from "../../field/voiceNotes.js";
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
 import { pool } from "../../db/pool.js";
@@ -1829,6 +1830,7 @@ customersRouter.get("/:id/checkins", async (req, res) => {
          '[]'
        ) AS photos,
        COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files,
+       ${VOICE_NOTES_JSON_SQL} AS voice_notes,
        ${CHECKIN_ORDER_LINKS_SQL}
      FROM checkins ch
      JOIN users u ON u.id = ch.user_id

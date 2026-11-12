@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { photoUpload, uploadDirPath } from "../../shared/upload.js";
+import { checkinUpload, uploadDirPath, VOICE_FIELD, sniffAudio } from "../../shared/upload.js";
+import { scheduleTranscription, VOICE_NOTES_JSON_SQL, MAX_VOICE_SECONDS } from "../voiceNotes.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } from "../../utils/imageThumbs.js";
 import { haversineMeters, creditedDistanceMeters } from "../../utils/geo.js";
@@ -169,7 +170,8 @@ export function parseCapturedAt(value, now = Date.now()) {
 const MAX_ORDER_BLANK_PHOTOS = 6;
 
 checkinsRouter.post("/", (req, res, next) => {
-  photoUpload.fields([
+  checkinUpload.fields([
+    { name: VOICE_FIELD, maxCount: 1 },
     { name: "photos", maxCount: MAX_PHOTOS_PER_CHECKIN },
     { name: "order_blank_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
     { name: "payment_slip_photos", maxCount: MAX_ORDER_BLANK_PHOTOS },
@@ -180,7 +182,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -193,13 +195,31 @@ checkinsRouter.post("/", (req, res, next) => {
   // The customer's electronic signature on the delivery-acceptance act, and the rep's own one when it is not on their profile yet.
   const customerSignature = req.files?.customer_signature?.[0] ?? null;
   const repSignature = req.files?.rep_signature?.[0] ?? null;
-  const files = [...visitFiles, ...blankFiles, ...slipFiles, ...[customerSignature, repSignature].filter(Boolean)];
+  // A voice note of the visit (owner, 2026-11-12): checked by its own bytes; its real container sets the stored type and extension. A file that
+  // is not audio is left out -- never the reason the visit (with its money, delivery and photos) is refused: a queued visit refused with a 4xx
+  // would be dropped by the offline queue. Deleted with the photos on every refusal below.
+  let voiceFile = req.files?.[VOICE_FIELD]?.[0] ?? null;
+  let voiceNoteRejected = Boolean(req.voiceNoteRejected);
+  let voiceType = null;
+  if (voiceFile) {
+    voiceType = sniffAudio(voiceFile.path);
+    if (!voiceType) {
+      fs.unlink(voiceFile.path, () => {});
+      voiceFile = null;
+      voiceNoteRejected = true;
+    } else if (!voiceFile.filename.endsWith(`.${voiceType.ext}`)) {
+      const renamed = voiceFile.filename.replace(/\.[^.]+$/, "") + `.${voiceType.ext}`;
+      fs.renameSync(voiceFile.path, path.join(path.dirname(voiceFile.path), renamed));
+      voiceFile = { ...voiceFile, filename: renamed, path: path.join(path.dirname(voiceFile.path), renamed) };
+    }
+  }
+  const files = [...visitFiles, ...blankFiles, ...slipFiles, ...[customerSignature, repSignature, voiceFile].filter(Boolean)];
 
   // multer's fileFilter only ever sees the client-declared Content-Type
   // (see upload.js) -- this checks the bytes actually written to disk
   // match one of the allowed image signatures, catching a renamed
   // non-image file fileFilter alone can't.
-  if (files.some((f) => !matchesDeclaredImageType(f.path, f.mimetype))) {
+  if (files.some((f) => f !== voiceFile && !matchesDeclaredImageType(f.path, f.mimetype))) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(400).json({ error: "One or more uploaded files are not valid images" });
   }
@@ -320,6 +340,7 @@ checkinsRouter.post("/", (req, res, next) => {
   let signatureSavedPath = null;
   let paymentId = null;
   const blankFileIds = [];
+  let voiceNoteId = null;
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
@@ -329,6 +350,14 @@ checkinsRouter.post("/", (req, res, next) => {
       [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
+    if (voiceFile) {
+      const seconds = Math.round(Number(voice_duration_s));
+      const { rows: vn } = await client.query(
+        "INSERT INTO checkin_voice_notes (checkin_id, file_path, mime, size_bytes, duration_s, created_by) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        [checkin.id, voiceFile.filename, voiceType.mime, voiceFile.size, Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, MAX_VOICE_SECONDS) : null, req.user.id]
+      );
+      voiceNoteId = vn[0].id;
+    }
     for (const file of visitFiles) {
       await client.query("INSERT INTO checkin_photos (checkin_id, photo_path) VALUES ($1, $2)", [
         checkin.id,
@@ -460,6 +489,8 @@ checkinsRouter.post("/", (req, res, next) => {
   res.status(201).json({
     ...checkin,
     photo_count: visitFiles.length,
+    voice_note_count: voiceNoteId ? 1 : undefined,
+    voice_note_rejected: voiceNoteRejected || undefined,
     order_blank_count: blankFiles.length,
     payment_slip_photo_count: slipFiles.length || undefined,
     customer_confirmation: amountCollected != null ? confirmation : undefined,
@@ -473,6 +504,8 @@ checkinsRouter.post("/", (req, res, next) => {
 
   // The AI check of the photographed blanks (a switch in App configuration, OFF by default) runs after the answer, never delaying it.
   blankFileIds.forEach((id) => scheduleAiCheck(id));
+  // the voice note's text is made after the answer too (the speech service takes a few seconds)
+  if (voiceNoteId) scheduleTranscription(voiceNoteId);
 
   notifyCheckinDelivered({ delivered: deliveredOrders, customerName: customer.name, actorId: req.user.id });
 
@@ -566,6 +599,7 @@ checkinsRouter.get("/", async (req, res) => {
          '[]'
        ) AS photos,
        COALESCE((SELECT json_agg(json_build_object('id', cf.id, 'kind', cf.kind, 'mime', cf.mime, 'version', cf.version) ORDER BY cf.id) FROM customer_files cf WHERE cf.checkin_id = ch.id), '[]') AS files,
+       ${VOICE_NOTES_JSON_SQL} AS voice_notes,
        -- Lets an "Order placed" outcome row link straight to the order it
        -- created (see visitDetail.js). A scalar subquery, not a join, so a
        -- checkin never fans out into multiple rows even in the unlikely
@@ -638,6 +672,23 @@ checkinsRouter.delete("/:id/photo", requireAdmin, async (req, res) => {
   removeThumbnail(uploadDirPath, checkin.photo_path);
   await pool.query("UPDATE checkins SET photo_path = NULL WHERE id = $1", [req.params.id]);
   res.status(204).end();
+});
+
+// A visit's voice note (owner, 2026-11-12): the same people who see the visit's photos hear it -- the rep who recorded it and everyone who
+// sees all activity. Streamed with range support (iPhone Safari needs it to play audio).
+checkinsRouter.get("/voice-notes/:noteId/audio", async (req, res) => {
+  const noteId = Number(req.params.noteId);
+  if (!Number.isInteger(noteId) || noteId <= 0 || noteId > 2147483647) return res.status(404).json({ error: "Voice note not found" });
+  const { rows } = await pool.query(
+    "SELECT vn.file_path, vn.mime, ch.user_id FROM checkin_voice_notes vn JOIN checkins ch ON ch.id = vn.checkin_id WHERE vn.id = $1",
+    [noteId]
+  );
+  const note = rows[0];
+  if (!note) return res.status(404).json({ error: "Voice note not found" });
+  if (!seesAllActivity(req.user.role) && note.user_id !== req.user.id) return res.status(403).json({ error: "Not allowed" });
+  res.sendFile(path.join(uploadDirPath, note.file_path), { headers: { "Content-Type": note.mime, "Cache-Control": "private, max-age=31536000, immutable" } }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: "Voice note not found" });
+  });
 });
 
 checkinsRouter.get("/photos/:photoId", async (req, res) => {
