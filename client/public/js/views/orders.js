@@ -593,7 +593,8 @@ export function renderOrders(root, navigate, openId = null, { startNew = false }
             <div class="muted list-row-meta">${o.order_code ? `${escapeHtml(o.order_code)} · ` : ""}${escapeHtml(o.user_name)} · ${formatDate(o.created_at)}${o.checkin_id ? ` · ${t("order_at_visit")}` : ""}</div>
             <div class="list-row-bottom">
               ${appBadgeHtml(o)}${notInExcelBadgeHtml(o)}
-              <span class="badge ${meta.cls}">${t(meta.key)}</span>${vaghinakCheckedBadgeHtml(o)}
+              <span class="badge ${meta.cls}">${t(meta.key)}</span>
+              ${vaghinakCheckedBadgeHtml(o)}
               ${o.delivered_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}
               ${paymentMethodBadgeHtml(o.payment_method)}
               ${o.accounting_status ? `<span class="badge ${ACCOUNTING_STATUS_BADGE[o.accounting_status] ?? "badge-neutral"}">${accountingStatusLabel(o.accounting_status, o.accounting_doc_type)}</span>` : ""}
