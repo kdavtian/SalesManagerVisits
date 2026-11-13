@@ -57,6 +57,8 @@ for what that implies.
 | Approve a discount, a price change, a line below net cost or below landing cost | `canApproveDiscountRole` (`orders/discountPolicy.js`) | `admin`, `ceo`, `sales_director` approve anything (owner, 2026-11-05). `operations_director` only while every line stays at or above net cost. Nobody else. |
 | Discounts a person types | `decideDiscountApproval` | EVERY discount waits for approval, however small (before: up to 3 % was automatic). The KAD OS app's standing discount keeps the old 3 % automatic rule. |
 | Plan for another rep's route (day-of or recurring) | `canPlanForOthers` | `admin`, `sales_director`, `ceo`. A plain `sales_manager` only plans for themselves. |
+| Documents for signature (KAD OS e-signature): see all, send the agreement, cancel, new version, answer a dispute | `canManagePartnerDocuments` (APPROVALS `partnerDocuments`) | `admin`, `ceo`, `operations_director`, `sales_director`, `accountant` (1.549.0). Routes `/api/sign-documents/*`. A KAD OS account reaches only its own customer's documents through `/api/partner/documents`. |
+| Told when a customer signs / disputes / asks for a document | `answersPartnerDocuments` | `admin`, `ceo`, `accountant` for every kind for now. An overdue document gives the customer's sales manager a task (`document_unsigned`). |
 
 ## Warehouse and delivery
 

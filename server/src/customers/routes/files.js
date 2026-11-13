@@ -206,7 +206,7 @@ filesRouter.post("/customer/:customerId", (req, res, next) => {
     discard();
     return res.status(400).json({ error: "The file is not a valid image" });
   }
-  const kind = FILE_KINDS.includes(req.body?.kind) && req.body.kind !== "signed_act" ? req.body.kind : "other";
+  const kind = FILE_KINDS.includes(req.body?.kind) && !["signed_act", "signed_document"].includes(req.body.kind) ? req.body.kind : "other";
   const orderIds = parseOrderIds(req.body?.order_ids);
   const { rows: c } = await pool.query("SELECT id FROM customers WHERE id = $1", [customerId]);
   if (!c[0]) {
@@ -273,6 +273,9 @@ filesRouter.post("/:id/ai-check", async (req, res) => {
 
 filesRouter.delete("/:id", async (req, res) => {
   if (!canDeleteFile(req.user)) return res.status(403).json({ error: "Only the admin or the CEO can delete a document" });
+  // an electronically signed document is the legal original (docs: e-signature): it is never deleted, a correction is a new version
+  const { rows: signedDoc } = await pool.query("SELECT 1 FROM customer_files WHERE id = $1 AND partner_document_id IS NOT NULL", [Number(req.params.id)]);
+  if (signedDoc[0]) return res.status(409).json({ error: "An electronically signed document cannot be deleted", code: "signed_document" });
   const { rows } = await pool.query("DELETE FROM customer_files WHERE id = $1 RETURNING file_path", [Number(req.params.id)]);
   if (!rows[0]) return res.status(404).json({ error: "File not found" });
   fs.unlink(path.join(uploadDirPath, rows[0].file_path), () => {});

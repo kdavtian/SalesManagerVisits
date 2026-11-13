@@ -43,12 +43,12 @@ export async function lockSignedOrders(db, { customerId, checkinId = null, fileP
 }
 
 // pdfkit only embeds JPEG and PNG: every signature is turned into a PNG first (a phone may send WebP).
-async function signaturePng(relativePath) {
+export async function signaturePng(relativePath) {
   if (!relativePath) return null;
   try {
     // Loaded on use, like the thumbnails: a server without the image library must still start.
     const sharp = (await import("sharp")).default;
-    return await sharp(path.join(uploadDirPath, relativePath)).png().toBuffer();
+    return await sharp(path.join(uploadDirPath, relativePath), { limitInputPixels: 9_000_000 }).png().toBuffer();
   } catch {
     return null;
   }

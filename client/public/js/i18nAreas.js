@@ -44,6 +44,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/delivery": ["orders"],
   "#/accounting": ["customers", "money", "orders"],
   "#/documents": ["money", "orders"],
+  "#/sign-documents": ["money", "orders"],
   "#/recorded": ["orders"],
   "#/debt-balances": ["money"],
   "#/sales": ["money", "products"],

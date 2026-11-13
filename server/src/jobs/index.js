@@ -26,6 +26,7 @@ import { runExpenseWatch } from "../money/expenseWatch.js";
 import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 import { deleteOldUsage } from "../system/usageAnalytics.js";
 import { deleteOldNavTimings } from "../system/navTimings.js";
+import { remindOverdueDocuments } from "../orders/partnerDocuments.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -57,6 +58,8 @@ export const JOBS = [
   { name: "bonus-challenges", everyMs: HOUR, run: () => runChallengeEngineTick() },
   { name: "anti-fraud", everyMs: HOUR, run: () => runAntiFraud() },
   { name: "expense-watch", everyMs: HOUR, run: () => runExpenseWatch() },
+  // documents for signature past their deadline: the rep gets a task, then a reminder once a day (orders/partnerDocuments.js)
+  { name: "partner-document-reminders", everyMs: HOUR, run: (now) => remindOverdueDocuments(now) },
   { name: "overdue-visit-reminders", everyMs: 2 * HOUR, run: () => checkOverdueReminders(), ...needsPush },
 ];
 

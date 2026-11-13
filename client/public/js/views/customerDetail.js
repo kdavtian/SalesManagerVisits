@@ -20,6 +20,7 @@ import { openAccountSettingsSheet } from "./customer/accountSettings.js";
 import { openEditSheet } from "./customer/editSheet.js";
 import { openCustomerFiles } from "./customer/files.js";
 import { renderErpCard } from "./customer/erpCard.js";
+import { paintCustomerSignDocs } from "./customer/signDocs.js";
 import { openPaymentsReceivedSheet, openOrdersSheet, openOrderDetailSheet, renderPendingRequest } from "./customer/sheets.js";
 import { attentionStripHtml, bindAttention } from "../customerAttention.js";
 export { openOrderDetailSheet } from "./customer/sheets.js";
@@ -236,6 +237,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     <div class="cd-col cd-col-side">
     <div id="customer-tasks-slot"></div>
     <div id="customer-docs-slot"></div>
+    <div id="customer-sign-docs-slot"></div>
 
     ${
       noVisitChannel
@@ -455,6 +457,9 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
     slot.innerHTML = files.documentsSectionHtml(docs);
     files.bindDocumentRows(slot);
   });
+
+  // Documents the customer signs in KAD OS (management and the accountant; e-signature engine).
+  paintCustomerSignDocs(container.querySelector("#customer-sign-docs-slot"), Number(customerId));
 
   // Open tasks attached to this customer (above Next visit), plus "Add task" for management.
   fillPart(tasksEarly, "tasks", (value) => value && paintCustomerTaskBlock(value));

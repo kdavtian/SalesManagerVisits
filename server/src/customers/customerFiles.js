@@ -1,7 +1,7 @@
 // Customer documents: the one place that knows who may see / add / change a file and how a row is stored.
 import { seesAllCustomerFiles, canManageSignedDocuments, seesAmountPapers } from "../shared/roles.js";
 
-export const FILE_KINDS = ["order_blank", "signed_act", "payment_slip", "other"];
+export const FILE_KINDS = ["order_blank", "signed_act", "payment_slip", "signed_document", "other"];
 
 export const FILE_COLUMNS = `f.id, f.customer_id, f.kind, f.mime, f.size_bytes, f.order_ids, f.payment_id, f.checkin_id, f.note, f.version, f.created_at,
   f.created_by, u.name AS user_name, f.ai_status, f.ai_result,

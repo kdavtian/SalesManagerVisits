@@ -36,6 +36,8 @@ export const APPROVALS = {
   signedDocuments: { roles: ["admin", "ceo"], about: "Change an order after the customer signed; delete or replace documents others added" },
   pivot: { roles: ["admin", "ceo"], about: "Pivot report over every data source" },
   tasksAnyone: { roles: ["admin", "ceo"], about: "Give a task to anyone in the company" },
+  // documents the customer signs in KAD OS (e-signature engine, owner 2026-11-13)
+  partnerDocuments: { roles: ["admin", "ceo", "operations_director", "sales_director", "accountant"], about: "Documents for signature: send, cancel, make a new version, answer a dispute" },
 };
 export const approves = (key, role) => APPROVALS[key].roles.includes(role);
 /** The rules only the CEO (and admin, the owner's own account) holds: for the "CEO-only" list. */
@@ -734,6 +736,15 @@ export function ownsCustomers(role) {
 }
 export function ownsSalesChannels(role) {
   return role === "sales_manager" || role === "sales_director" || role === "accountant";
+}
+
+// Documents for signature (orders/partnerDocuments.js): who works them, and who is told when a customer signs, disputes or asks for one
+// (for now admin, CEO and the accountant for every kind; per kind later: operations for deliveries / returns, sales for deals).
+export function canManagePartnerDocuments(role) {
+  return approves("partnerDocuments", role);
+}
+export function answersPartnerDocuments(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
 }
 
 // The roles a rule allows, as a list (for SQL `role = ANY($1)`).

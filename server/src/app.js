@@ -95,6 +95,7 @@ import { expensesRouter } from "./money/routes/expenses.js";
 import { placesRouter } from "./customers/routes/places.js";
 import { askKadRouter } from "./team/routes/askKad.js";
 import { partnerRouter } from "./orders/routes/partner.js";
+import { signDocumentsRouter } from "./orders/routes/signDocuments.js";
 import { appOrdersAdminRouter } from "./orders/routes/appOrdersAdmin.js";
 import { opsControlRouter } from "./reports/routes/opsControl.js";
 import { tableExportRouter } from "./system/routes/tableExport.js";
@@ -283,7 +284,12 @@ app.use("/api/anti-fraud", express.json(), antiFraudRouter);
 app.use("/api/expenses", express.json(), expensesRouter);
 app.use("/api/places", express.json(), placesRouter);
 app.use("/api/ask-kad", express.json(), askKadRouter);
-app.use("/api/partner", express.json(), partnerRouter);
+// the partner API carries a drawn signature (base64 PNG) when a KAD OS customer signs a document
+const partnerJson = express.json();
+const partnerSignJson = express.json({ limit: "3mb" }); // only the signature call carries the drawn signature (base64 PNG)
+app.use("/api/partner", (req, res, next) => (req.method === "POST" && /^\/documents\/[^/]+\/sign$/.test(req.path) ? partnerSignJson : partnerJson)(req, res, next), partnerRouter);
+// documents for signature, KAD Motors side (not under /api/partner: a KAD OS account must never reach it)
+app.use("/api/sign-documents", express.json({ limit: "1mb" }), signDocumentsRouter);
 app.use("/api/app-orders", express.json(), appOrdersAdminRouter);
 app.use("/api/ops", express.json(), opsControlRouter);
 app.use("/api/table-export", express.json({ limit: "8mb" }), tableExportRouter);
