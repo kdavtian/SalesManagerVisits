@@ -271,7 +271,7 @@ test("RBAC: a sales manager and a KAD OS account cannot use the staff routes; th
   assert.ok(candidates.data.customers.some((c) => c.id === shopA.id && c.agreement_state === "signed"));
 });
 
-test("past the deadline: the rep gets one task, a reminder at most once a day, and the task closes when it is signed", async () => {
+test("past the deadline: the rep gets one task, a reminder every 2 days, and the task closes when it is signed", async () => {
   const doc = await createDocument({ customerId: shopB.id, kind: "deal", title: "Գնային համաձայնագիր", content: { text: "Զեղչ 5%" }, dueDays: 0, createdBy: admin.id });
   await pool.query("UPDATE partner_documents SET due_at = now() - interval '2 hours' WHERE id = $1", [doc.id]);
   const first = await remindOverdueDocuments(new Date());
@@ -284,8 +284,11 @@ test("past the deadline: the rep gets one task, a reminder at most once a day, a
   await remindOverdueDocuments(new Date());
   const { rows: overdueNotes } = await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'partner_document_overdue'", [rep.id]);
   assert.equal(overdueNotes.length, 0, "the same day: no second reminder (the task was the first one)");
-  // a day later the rep is reminded (the task already exists)
+  // a day later: still nothing (every 2 days, design section 5); two days later the rep is reminded (the task already exists)
   await remindOverdueDocuments(new Date(Date.now() + 25 * 3600 * 1000));
+  const { rows: dayLater } = await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'partner_document_overdue'", [rep.id]);
+  assert.equal(dayLater.length, 0);
+  await remindOverdueDocuments(new Date(Date.now() + 49 * 3600 * 1000));
   const { rows: later } = await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'partner_document_overdue'", [rep.id]);
   assert.equal(later.length, 1);
 

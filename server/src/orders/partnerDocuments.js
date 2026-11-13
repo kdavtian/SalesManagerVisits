@@ -45,7 +45,6 @@ const fail = (status, code, message, extra) => {
 
 // ---- input cleaning --------------------------------------------------------------------------------------------------------------------
 // control characters (a NUL breaks Postgres JSONB) are dropped, so odd input is a clean text and never a 500
-// eslint-disable-next-line no-control-regex
 const str = (v, max) => (v === null || v === undefined ? "" : String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, max));
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 const money = (v) => (num(v) === null ? null : Math.round(num(v)));
