@@ -13,7 +13,7 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments } from "../shared/roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, validHandoffRecipientRoles } from "../shared/roles.js";
 import { loadWithCache } from "../listCache.js";
 import { pickDate } from "../activityDatePicker.js";
 import { icons } from "../icons.js";
@@ -500,7 +500,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
     const excel = excelBadgeHtml(p).trim();
     const on = selected.has(p.id);
-    return `<div class="list-row dtl-row pay-desk-row${on ? " pay-row-selected" : ""}" role="button" tabindex="0" data-payment-id="${p.id}">
+    return `<div class="list-row dtl-row pay-desk-row${on ? " pay-row-selected" : ""}" role="${selectMode ? "checkbox" : "button"}" ${selectMode ? `aria-checked="${on}"` : ""} tabindex="0" data-payment-id="${p.id}">
       ${selectMode ? `<span class="pay-desk-check"><span class="order-select-check${on ? " is-on" : ""}"></span></span>` : "<span></span>"}
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
@@ -569,10 +569,22 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   // ---- Select several (owner, 2026-11-13: approve and hand over cash one by one, the chosen ones) ----
   // The check button in the header (or a row's check circle) starts it; a tap on a row ticks it. The bar at the bottom says how many and how
   // much, and offers what fits the ticked payments: Approve (the reviewer: pending ones) and Hand over (the cash this person holds).
-  function canHandOver(p) {
-    // the server's rule (cashCustody.js CASH_IN_HAND_SQL + not already in a handover): it re-checks every payment anyway
-    return p.current_holder_id === state.user.id && !p.pending_handoff_id && (p.status === "pending" || (p.status === "approved" && p.approved_from_erp && !p.approved_by));
+  // What this person may hand over is the server's answer (GET /cash-handoffs/available: cashCustody.js CASH_IN_HAND_SQL, the cut-over date,
+  // not already in a handover), read when select mode starts -- not a guess on the client. A role that hands cash to nobody (accountant,
+  // admin) gets no Hand over at all.
+  const handsOver = validHandoffRecipientRoles(state.user.role).length > 0;
+  let handable = { ids: new Set(), recipients: [] };
+  async function loadHandable() {
+    if (!handsOver) return;
+    try {
+      const data = await api.getHandoffAvailable();
+      handable = { ids: new Set((data.payments || []).map((p) => p.id)), recipients: data.recipients || [] };
+    } catch {
+      handable = { ids: new Set(), recipients: [] };
+    }
+    if (selectMode) updateSelectBar();
   }
+  const canHandOver = (p) => handable.ids.has(p.id);
   const fitsApprove = (p) => canReview && p.status === "pending" && !p.pending_handoff_id;
   const selectedRows = () => [...selected.keys()].map((id) => selected.get(id));
   function toggleSelected(id) {
@@ -586,6 +598,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   function setSelectMode(on) {
     selectMode = on;
     if (!on) selected.clear();
+    else loadHandable();
     updateSelectBar();
     paint();
   }
@@ -691,15 +704,13 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   async function startHandoverSelected(rows) {
     if (!rows.length) return;
-    let recipients = [];
-    try {
-      recipients = (await api.getHandoffAvailable()).recipients ?? [];
-    } catch (err) {
-      return showToast(err.message);
-    }
     openHandoverSheet({
       payments: rows,
-      recipients,
+      recipients: handable.recipients,
+      onStale: async (message) => {
+        showToast(message, { ms: 6000 });
+        await Promise.all([loadHandable(), load()]);
+      },
       onDone: async () => {
         setSelectMode(false);
         refreshPendingSummary();
@@ -710,6 +721,16 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   }
 
   function paint() {
+    // the selection follows the list: a ticked payment no longer shown (another filter, approved meanwhile) is dropped, the others are
+    // replaced by their fresh row, so the bar's count, money and buttons are always what is on screen
+    if (selected.size) {
+      const fresh = new Map(payments.map((p) => [p.id, p]));
+      for (const id of [...selected.keys()]) {
+        if (fresh.has(id)) selected.set(id, fresh.get(id));
+        else selected.delete(id);
+      }
+      if (selectMode) updateSelectBar();
+    }
     if (!payments.length) {
       listEl.classList.remove("dtl-list", "pay-desk-list");
       listEl.innerHTML = `<p class="empty-state">${

@@ -390,7 +390,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
               <button type="button" class="rps-link" id="handoff-pick-toggle"></button>
             </div>
             <div class="handoff-pick-list" id="handoff-pick-list">
-              ${groupByDay(data.payments)
+              ${groupByDay([...(data.payments || [])].sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date)))
                 .map(
                   (g) => `<div class="handoff-pick-day"><span>${escapeHtml(g.label)}</span><span class="muted">${g.rows.length} &middot; ${formatAmd(sumAmd(g.rows))}</span></div>
                 ${g.rows
@@ -474,7 +474,17 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
       const chosen = Number(recipientSelect?.value);
       // the receiver picked on the screen comes first in the sheet
       const recipients = [...data.recipients].sort((a, b) => (b.id === chosen) - (a.id === chosen));
-      openHandoverSheet({ payments: picked(), recipients, onBehalfOf: actingFor?.id, onDone: () => Promise.all([loadAvailable(), loadInbox()]) });
+      const reload = () => Promise.all([loadAvailable(), loadInbox()]);
+      openHandoverSheet({
+        payments: picked(),
+        recipients,
+        onBehalfOf: actingFor?.id,
+        onDone: reload,
+        onStale: async (message) => {
+          showToast(message, { ms: 6000 });
+          await reload();
+        },
+      });
     });
   }
 

@@ -75,7 +75,9 @@ const roleLabel = (role) => t(`role_${role}`) || role;
 
 // payments: the chosen rows ({ id, amount_amd, sales_channel, payment_date }); recipients: [{ id, name, role }] (the first is the
 // default: the holder's own boss); onBehalfOf: the rep whose cash a director declares (first hop), else undefined.
-export function openHandoverSheet({ payments, recipients, onBehalfOf, onDone }) {
+// onStale: the server refused because a chosen payment is no longer this person's to give (handed over or approved meanwhile): the sheet
+// closes and the screen reloads, so the next try starts from what is really there.
+export function openHandoverSheet({ payments, recipients, onBehalfOf, onDone, onStale }) {
   const total = sumAmd(payments);
   const days = groupByDay(payments);
   const overlay = document.createElement("div");
@@ -130,6 +132,11 @@ export function openHandoverSheet({ payments, recipients, onBehalfOf, onDone }) 
       window.dispatchEvent(new Event("payments-changed"));
       await onDone?.();
     } catch (err) {
+      if (err.status === 409 && onStale) {
+        close();
+        await onStale(err.message);
+        return;
+      }
       errorEl.textContent = err.message;
       errorEl.hidden = false;
       btn.disabled = false;

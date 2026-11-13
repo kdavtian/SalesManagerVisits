@@ -517,7 +517,7 @@ async function custodyBlocksReview(payment, user) {
 
 // Approves ONE pending payment, in its own transaction: the same checks for a single tap and for "approve the selected" (owner,
 // 2026-11-13: approve one by one OR several at once). Returns { row } or { status, error }.
-async function approveOnePayment(id, user) {
+async function approveOnePayment(id, user, { loadRow = true } = {}) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -564,7 +564,7 @@ async function approveOnePayment(id, user) {
     client.release();
   }
   notifyDecisionOf("payment", Number(id), { deciderId: user.id, approved: true });
-  return { row: await loadPaymentRow(id) };
+  return { row: loadRow ? await loadPaymentRow(id) : null };
 }
 
 paymentsRouter.post("/:id/approve", async (req, res) => {
@@ -582,14 +582,21 @@ paymentsRouter.post("/approve-many", async (req, res) => {
   const raw = req.body?.ids;
   if (!Array.isArray(raw) || !raw.length) return res.status(400).json({ error: "Select at least one payment" });
   const ids = [...new Set(raw.map(Number))];
-  if (ids.some((n) => !Number.isInteger(n) || n <= 0)) return res.status(400).json({ error: "Invalid payment id" });
+  if (ids.some((n) => !Number.isInteger(n) || n <= 0 || n > 2147483647)) return res.status(400).json({ error: "Invalid payment id" });
   if (ids.length > APPROVE_MANY_MAX) return res.status(400).json({ error: `At most ${APPROVE_MANY_MAX} payments at once` });
   const approved = [];
   const failed = [];
   for (const id of ids) {
-    const result = await approveOnePayment(id, req.user);
-    if (result.error) failed.push({ id, error: result.error });
-    else approved.push(id);
+    // an unexpected error on one payment (its own transaction is rolled back) is reported for it; the ones already approved stay
+    // approved and the answer says so, instead of a bare 500 after half the batch
+    try {
+      const result = await approveOnePayment(id, req.user, { loadRow: false });
+      if (result.error) failed.push({ id, error: result.error });
+      else approved.push(id);
+    } catch (err) {
+      console.error(`approve-many: payment ${id}:`, err.message);
+      failed.push({ id, error: "Could not be approved, try again" });
+    }
   }
   res.json({ approved, failed });
 });
