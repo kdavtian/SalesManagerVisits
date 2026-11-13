@@ -6,10 +6,10 @@ import { api } from "../../api.js";
 import { t } from "../../i18n.js";
 import { escapeHtml } from "../../util.js";
 import { state } from "../../state.js";
-import { canManagePartnerDocuments } from "../../shared/roles.js";
+import { canManagePartnerDocuments, canViewPartnerDocuments } from "../../shared/roles.js";
 
 export async function paintCustomerSignDocs(slot, customerId) {
-  if (!slot || !canManagePartnerDocuments(state.user?.role)) return;
+  if (!slot || !canViewPartnerDocuments(state.user?.role)) return;
   let data;
   try {
     data = await api.customerSignDocuments(customerId);
@@ -28,7 +28,7 @@ export async function paintCustomerSignDocs(slot, customerId) {
     <div class="card-list">
       ${data.documents.length ? data.documents.slice(0, 6).map((d) => sheet.documentRowHtml(d, { showCustomer: false })).join("") : `<p class="empty-state">${t("sd_empty")}</p>`}
     </div>
-    ${data.kad_os_linked && !data.agreement ? `<div class="sd-card-actions"><button type="button" class="btn btn-primary" id="sd-card-agreement">${escapeHtml(t("sd_send_agreement"))}</button></div>` : ""}`;
+    ${data.kad_os_linked && !data.agreement && canManagePartnerDocuments(state.user?.role) ? `<div class="sd-card-actions"><button type="button" class="btn btn-primary" id="sd-card-agreement">${escapeHtml(t("sd_send_agreement"))}</button></div>` : ""}`;
   slot.querySelectorAll("[data-sign-doc]").forEach((b) => b.addEventListener("click", () => sheet.openSignDocumentSheet(Number(b.dataset.signDoc), { onChanged: repaint })));
   const send = slot.querySelector("#sd-card-agreement");
   send?.addEventListener("click", async () => {

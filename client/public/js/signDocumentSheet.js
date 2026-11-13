@@ -7,6 +7,8 @@ import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { activateDialog, escapeHtml, formatDateTime, formatAmd, showToast } from "./util.js";
 import { openFileReadySheet } from "./fileReadySheet.js";
+import { state } from "./state.js";
+import { canManagePartnerDocuments } from "./shared/roles.js";
 
 const STATE_BADGE = { sent: "badge-info", viewed: "badge-info", signed: "badge-success", signed_remarks: "badge-warning", disputed: "badge-danger", replaced: "badge-neutral", cancelled: "badge-neutral" };
 const OPEN = ["sent", "viewed"];
@@ -58,7 +60,7 @@ function contentHtml(d) {
     ${c.text ? `<details class="sd-text"><summary>${t("sd_text")}</summary><p>${escapeHtml(c.text)}</p></details>` : ""}`;
 }
 
-function disputeHtml(d) {
+function disputeHtml(d, manages = true) {
   const x = d.dispute;
   if (!x) return "";
   const by = x.by ? [x.by.name, x.by.role].filter(Boolean).join(", ") : "";
@@ -69,7 +71,7 @@ function disputeHtml(d) {
       ${bullet(t("sd_signer"), by)}
       ${bullet(t("sd_kad_answer"), x.answer)}
     </ul>
-    ${d.state === "disputed" && !x.answer ? `<label class="sd-field"><span class="muted">${t("sd_answer")}</span><textarea id="sd-answer" rows="3" maxlength="2000" placeholder="${escapeHtml(t("sd_answer_placeholder"))}"></textarea></label>
+    ${manages && d.state === "disputed" && !x.answer ? `<label class="sd-field"><span class="muted">${t("sd_answer")}</span><textarea id="sd-answer" rows="3" maxlength="2000" placeholder="${escapeHtml(t("sd_answer_placeholder"))}"></textarea></label>
       <button type="button" class="btn btn-primary btn-block" id="sd-answer-send">${t("sd_answer_send")}</button>` : ""}`;
 }
 
@@ -105,19 +107,20 @@ export async function openSignDocumentSheet(id, { onChanged } = {}) {
       return;
     }
     if (!overlay.isConnected) return;
-    const canCancel = [...OPEN, "disputed"].includes(d.state);
+    const manages = canManagePartnerDocuments(state.user?.role); // a rep reads the document; management acts on it
+    const canCancel = manages && [...OPEN, "disputed"].includes(d.state);
     const canReplace = canCancel && d.kind === "agreement";
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
       <h2>${escapeHtml(d.title)}</h2>
-      <p class="muted">${escapeHtml(d.customer_name)} · ${escapeHtml(d.number)}${d.version > 1 ? ` · v${d.version}` : ""}</p>
+      <p class="muted">${escapeHtml(d.customer_name)} · ${escapeHtml(d.number)}</p>
       <p>${stateBadgeHtml(d.state)} ${d.overdue ? `<span class="badge badge-danger">${t("sd_overdue")}</span>` : ""}</p>
       ${d.cancelled_reason ? `<p class="muted">${escapeHtml(t("sd_cancelled_reason").replace("{reason}", d.cancelled_reason))}</p>` : ""}
       ${contentHtml(d)}
       <h3 class="list-group-heading">${t("sd_signatures")}</h3>
       <div class="sd-sides">${signerHtml("KAD Motors", d.kad_signer)}${signerHtml(t("sd_customer_side"), d.customer_signer, { audit: true })}</div>
-      ${disputeHtml(d)}
-      ${d.versions?.length > 1 ? `<h3 class="list-group-heading">${t("sd_versions")}</h3><div class="sd-versions">${d.versions.map((v) => `<button type="button" class="btn ${v.id === d.id ? "btn-primary" : ""}" data-version="${v.id}">v${v.version} · ${escapeHtml(t(`sd_state_${v.state}`))}</button>`).join("")}</div>` : ""}
+      ${disputeHtml(d, manages)}
+      ${d.versions?.length > 1 ? `<h3 class="list-group-heading">${t("sd_versions")}</h3><div class="sd-versions">${d.versions.map((v) => `<button type="button" class="btn ${v.id === d.id ? "btn-primary" : ""}" data-version="${v.id}">${escapeHtml(v.number ?? `v${v.version}`)} · ${escapeHtml(t(`sd_state_${v.state}`))}</button>`).join("")}</div>` : ""}
       <div id="sd-cancel-box" hidden>
         <label class="sd-field"><span class="muted">${t("sd_cancel_reason")}</span><input type="text" id="sd-cancel-reason" maxlength="500" /></label>
         <button type="button" class="btn btn-danger btn-block" id="sd-cancel-confirm">${t("sd_cancel_confirm")}</button>
