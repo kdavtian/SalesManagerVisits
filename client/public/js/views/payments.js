@@ -13,11 +13,12 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments } from "../shared/roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, validHandoffRecipientRoles } from "../shared/roles.js";
 import { loadWithCache } from "../listCache.js";
 import { pickDate } from "../activityDatePicker.js";
 import { icons } from "../icons.js";
 import { SEARCH_ICONS, installClearButton, installInlineClearButton } from "../searchBar.js";
+import { openHandoverSheet, groupByDay, sumAmd } from "../handoverSheet.js";
 
 
 const STATUS_META = {
@@ -54,9 +55,6 @@ function periodFilterParams(period) {
   return periodDates(period, today) ?? {}; // "all" (or anything unrecognized): no date constraint
 }
 
-function monthLabel(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
 
 // YYYY-MM-DD in Yerevan time (UTC+4 all year): the day the server counts the payment in. toISOString() alone gave YESTERDAY's date between
 // midnight and 04:00, so "Today" and the default payment date were a day behind in the early hours.
@@ -125,6 +123,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <h1>${t("payments_title")}</h1>
+        <button type="button" class="icon-btn" id="payments-select-btn" aria-pressed="false" aria-label="${t("pay_select")}" title="${t("pay_select")}">${icons.checkCircle}</button>
         <button type="button" class="icon-btn" id="payments-new-btn" aria-label="${t("add_payment")}">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
         </button>
@@ -139,6 +138,14 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         <div id="payment-filter-menu" class="dropdown-menu" role="menu" hidden></div>
       </div>
       <div class="card-list" id="payments-list"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <div class="orders-select-bar" id="payments-select-bar" hidden>
+        <div class="osb-summary">
+          <span id="payments-select-count"></span>
+          <button type="button" class="rps-link osb-all" id="payments-select-all">${t("pay_select_all")}</button>
+        </div>
+        <div class="pay-select-presets" id="payments-select-presets"></div>
+        <div class="osb-actions" id="payments-select-actions"></div>
+      </div>
     </div>
   `;
 
@@ -180,6 +187,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   // every other list's sort menu. The channel grouping itself has no
   // direction to reverse, only the date ordering within/across it does.
   let orderReversed = false;
+  let selectMode = false;
+  const selected = new Map(); // id -> the payment row as it was ticked
   let payments = [];
   let hasMore = false;
   let loadingMore = false;
@@ -337,7 +346,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   }
 
   function refreshIfStale(maxAgeMs) {
-    if (!listEl.isConnected || document.visibilityState === "hidden" || pagesLoaded > 1) return;
+    if (!listEl.isConnected || document.visibilityState === "hidden" || pagesLoaded > 1 || selectMode) return;
     if (Date.now() - lastLoadedAt < maxAgeMs) return;
     load({ silent: true });
     refreshPendingSummary();
@@ -440,32 +449,30 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   });
   enhancePayments(root); // the combined search pill: filter inside the field, clear "x" (searchBar.js)
 
+  // The status chip says what the list filter already says when the list is filtered by that status (every row of "Pending" was
+  // "Pending" -- the long Armenian label wrapped onto three lines and pushed Approve off the card, owner screenshot 2026-11-13).
+  const statusChipShown = (p) => !(activeFilter && activeFilter === p.status);
   function paymentRowHtml(p) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
-    // Status, amount and (when present) Approve all share one line now --
-    // the status badge is the one piece with unpredictable width (a long
-    // Armenian label), so it's the one allowed to wrap onto a second line
-    // (see .payment-status-badge) instead of pushing the amount/button off
-    // the row or forcing the row itself onto a second line.
+    const chips = `${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${
+      p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""
+    }${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
+    const approve = p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
+    const on = selected.has(p.id);
     return `
-      <div class="card list-row" data-payment-id="${p.id}">
-        <button class="payment-row-main" data-payment-id="${p.id}">
-          <div class="list-row-top">
-            <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
-          </div>
-          <div class="muted list-row-meta">
-            ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}${labelColon()}${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
-          </div>
-        </button>
-        <div class="payment-row-bottom-line">
-          <span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>
-          ${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}
-          <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
-          ${
-            p.status === "pending" && canReview
-              ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>`
-              : ""
-          }
+      <div class="card list-row pay-row${selectMode ? " pay-row-selecting" : ""}${on ? " pay-row-selected" : ""}" data-payment-id="${p.id}">
+        ${selectMode ? `<span class="pay-select-slot" aria-hidden="true"><span class="order-select-check${on ? " is-on" : ""}"></span></span>` : ""}
+        <div class="pay-row-body">
+          <button class="payment-row-main" data-payment-id="${p.id}" ${selectMode ? `role="checkbox" aria-checked="${on}"` : ""}>
+            <div class="list-row-top">
+              <strong>${escapeHtml(p.customer_name_snapshot)}</strong>
+              <span class="list-row-trailing-text text-amount">${formatAmd(Number(p.amount_amd))}</span>
+            </div>
+            <div class="muted list-row-meta">
+              ${p.erp_customer_id_snapshot ? `${t("customer_id_label")}${labelColon()}${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""} · ${formatDateTime(p.payment_date)}
+            </div>
+          </button>
+          ${chips || approve ? `<div class="payment-row-bottom-line"><span class="pay-row-chips">${chips}</span>${approve}</div>` : ""}
         </div>
       </div>
     `;
@@ -492,30 +499,32 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     const meta = STATUS_META[p.status] ?? STATUS_META.pending;
     const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
     const excel = excelBadgeHtml(p).trim();
-    return `<div class="list-row dtl-row pay-desk-row" role="button" tabindex="0" data-payment-id="${p.id}">
-      <span></span>
+    const on = selected.has(p.id);
+    return `<div class="list-row dtl-row pay-desk-row${on ? " pay-row-selected" : ""}" role="${selectMode ? "checkbox" : "button"}" ${selectMode ? `aria-checked="${on}"` : ""} tabindex="0" data-payment-id="${p.id}">
+      ${selectMode ? `<span class="pay-desk-check"><span class="order-select-check${on ? " is-on" : ""}"></span></span>` : "<span></span>"}
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
       ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
-      ${cell(`<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`, "")}
+      ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
-      <div class="dtl-cell dtl-end">${p.status === "pending" && canReview ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
+      <div class="dtl-cell dtl-end">${p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
       <span></span>
     </div>`;
   }
   function paintDesk() {
     const byDate = sort === "date" || !canSeeAll;
-    const groups = [];
-    for (const p of payments) {
-      const label = byDate ? monthLabel(p.payment_date) : p.sales_channel ? channelDisplayLabel(p.sales_channel) : t("all_channels");
-      if (groups.at(-1)?.label !== label) groups.push({ label, rows: [] });
-      groups.at(-1).rows.push(p);
-    }
-    const sum = (rows) => rows.reduce((n, r) => n + Number(r.amount_amd || 0), 0);
+    const groups = topGroups();
     listEl.classList.add("dtl-list", "pay-desk-list");
+    listEl.classList.toggle("pay-selecting", selectMode);
     listEl.innerHTML = `${deskHeadHtml("desk-thead-pay", DESK_CELLS)}<div>${groups
-      .map((g) => `<div class="dtl-group"><strong>${escapeHtml(g.label)}</strong><span class="muted">${g.rows.length} &middot; ${formatAmd(sum(g.rows))}</span></div>${g.rows.map(deskRowHtml).join("")}`)
+      .map(
+        (g) =>
+          (g.label === null ? "" : `<div class="dtl-group"><strong>${escapeHtml(g.label)}</strong><span class="muted">${g.rows.length} &middot; ${formatAmd(sumAmd(g.rows))}</span></div>`) +
+          groupByDay(g.rows)
+            .map((d) => `<div class="dtl-group pay-day-group"><span>${escapeHtml(d.label)}</span><span class="muted">${d.rows.length} &middot; ${formatAmd(sumAmd(d.rows))}</span></div>${d.rows.map(deskRowHtml).join("")}`)
+            .join("")
+      )
       .join("")}</div>${hasMore ? `<button type="button" class="btn btn-block" id="payments-load-more">${t("load_more")}</button>` : ""}`;
     const headEl = listEl.querySelector(".desk-thead");
     paintDeskHead(headEl, byDate ? "date" : "", orderReversed);
@@ -529,7 +538,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     });
     listEl.querySelector("#payments-load-more")?.addEventListener("click", loadMore);
     listEl.querySelectorAll(".pay-desk-row").forEach((row) => {
-      const open = () => openPaymentDetail(Number(row.dataset.paymentId));
+      const open = () => (selectMode ? toggleSelected(Number(row.dataset.paymentId)) : openPaymentDetail(Number(row.dataset.paymentId)));
       row.addEventListener("click", open);
       row.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && e.target === row && (e.preventDefault(), open()));
     });
@@ -544,7 +553,184 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   // "3 · 1,250,000 AMD" next to a group's name: how many payments and how much money are in it (the desktop table already did this)
   const groupSumHtml = (rows) => `<span class="muted list-group-sum">${rows.length} &middot; ${formatAmd(rows.reduce((n, r) => n + Number(r.amount_amd || 0), 0))}</span>`;
 
+  // The top level of the list: the direction (sorted by direction, people who see everyone) or nothing (sorted by date: the days are the
+  // groups). label null = no heading.
+  function topGroups() {
+    if (sort === "date" || !canSeeAll) return [{ label: null, rows: payments }];
+    const groups = [];
+    for (const p of payments) {
+      const label = p.sales_channel ? channelDisplayLabel(p.sales_channel) : t("all_channels");
+      if (groups.at(-1)?.label !== label) groups.push({ label, rows: [] });
+      groups.at(-1).rows.push(p);
+    }
+    return groups;
+  }
+
+  // ---- Select several (owner, 2026-11-13: approve and hand over cash one by one, the chosen ones) ----
+  // The check button in the header (or a row's check circle) starts it; a tap on a row ticks it. The bar at the bottom says how many and how
+  // much, and offers what fits the ticked payments: Approve (the reviewer: pending ones) and Hand over (the cash this person holds).
+  // What this person may hand over is the server's answer (GET /cash-handoffs/available: cashCustody.js CASH_IN_HAND_SQL, the cut-over date,
+  // not already in a handover), read when select mode starts -- not a guess on the client. A role that hands cash to nobody (accountant,
+  // admin) gets no Hand over at all.
+  const handsOver = validHandoffRecipientRoles(state.user.role).length > 0;
+  let handable = { ids: new Set(), recipients: [] };
+  async function loadHandable() {
+    if (!handsOver) return;
+    try {
+      const data = await api.getHandoffAvailable();
+      handable = { ids: new Set((data.payments || []).map((p) => p.id)), recipients: data.recipients || [] };
+    } catch {
+      handable = { ids: new Set(), recipients: [] };
+    }
+    if (selectMode) updateSelectBar();
+  }
+  const canHandOver = (p) => handable.ids.has(p.id);
+  const fitsApprove = (p) => canReview && p.status === "pending" && !p.pending_handoff_id;
+  const selectedRows = () => [...selected.keys()].map((id) => selected.get(id));
+  function toggleSelected(id) {
+    const p = payments.find((r) => r.id === id);
+    if (!p) return;
+    if (selected.has(id)) selected.delete(id);
+    else selected.set(id, p);
+    updateSelectBar();
+    paint();
+  }
+  function setSelectMode(on) {
+    selectMode = on;
+    if (!on) selected.clear();
+    else loadHandable();
+    updateSelectBar();
+    paint();
+  }
+  function updateSelectBar() {
+    const bar = root.querySelector("#payments-select-bar");
+    const btn = root.querySelector("#payments-select-btn");
+    bar.hidden = !selectMode;
+    btn.setAttribute("aria-pressed", String(selectMode));
+    btn.classList.toggle("is-active", selectMode);
+    root.querySelector(".detail-view").classList.toggle("pay-select-mode", selectMode);
+    if (!selectMode) return;
+    const rows = selectedRows();
+    root.querySelector("#payments-select-count").textContent = rows.length
+      ? t("pay_selected").replace("{n}", String(rows.length)).replace("{amount}", formatAmd(sumAmd(rows)))
+      : t("pay_pick_hint");
+    // quick picks: the pending ones the Excel already shows (the safest to approve), all pending, the cash I hold
+    const presets = [];
+    if (canReview) {
+      const inExcel = payments.filter((p) => fitsApprove(p) && p.in_excel);
+      if (inExcel.length) presets.push({ key: "excel", label: t("pay_pick_in_excel").replace("{n}", String(inExcel.length)), rows: inExcel });
+    }
+    const mine = payments.filter(canHandOver);
+    if (mine.length) presets.push({ key: "mine", label: t("pay_pick_my_cash").replace("{n}", String(mine.length)), rows: mine });
+    const presetsEl = root.querySelector("#payments-select-presets");
+    presetsEl.innerHTML = presets.map((x) => `<button type="button" class="map-filter-chip" data-preset="${x.key}">${escapeHtml(x.label)}</button>`).join("");
+    presetsEl.hidden = !presets.length;
+    presetsEl.querySelectorAll("[data-preset]").forEach((b) =>
+      b.addEventListener("click", () => {
+        selected.clear();
+        for (const p of presets.find((x) => x.key === b.dataset.preset).rows) selected.set(p.id, p);
+        updateSelectBar();
+        paint();
+      })
+    );
+    const toApprove = rows.filter(fitsApprove);
+    const toHand = rows.filter(canHandOver);
+    const actionsEl = root.querySelector("#payments-select-actions");
+    actionsEl.innerHTML =
+      `<button type="button" class="btn osb-secondary" id="payments-select-cancel">${t("cancel")}</button>` +
+      (canReview ? `<button type="button" class="btn btn-primary" id="payments-select-approve" ${toApprove.length ? "" : "disabled"}>${t("pay_approve_n").replace("{n}", String(toApprove.length))}</button>` : "") +
+      (mine.length || toHand.length ? `<button type="button" class="btn ${canReview ? "" : "btn-primary"}" id="payments-select-handover" ${toHand.length ? "" : "disabled"}>${t("pay_handover_n").replace("{n}", String(toHand.length))}</button>` : "");
+    actionsEl.querySelector("#payments-select-cancel").addEventListener("click", () => setSelectMode(false));
+    actionsEl.querySelector("#payments-select-approve")?.addEventListener("click", () => openApproveSelected(toApprove, rows.length - toApprove.length));
+    actionsEl.querySelector("#payments-select-handover")?.addEventListener("click", () => startHandoverSelected(toHand));
+  }
+
+  // Approve the chosen ones: one review sheet with what deserves a second look (not in the Excel yet, the customer did not confirm,
+  // entered days later), then ONE explicit button. The server approves each on its own and says which could not be.
+  function openApproveSelected(rows, skipped) {
+    if (!rows.length) return;
+    const notInExcel = rows.filter((p) => p.erp_customer_id_snapshot && !p.in_excel && !p.approved_from_erp).length;
+    const unconfirmed = rows.filter((p) => p.customer_confirmation === "none").length;
+    const backdated = rows.filter((p) => Number(p.days_back) > 0).length;
+    const warn = (n, key) => (n ? `<li>${t(key).replace("{n}", String(n))}</li>` : "");
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.id = "payments-approve-overlay";
+    overlay.innerHTML = `
+      <div class="sheet">
+        <h2>${t("pay_approve_title")}</h2>
+        <p class="handover-sheet-total"><strong>${t("handoff_items_n").replace("{n}", rows.length)}</strong> <strong class="text-amount">${formatAmd(sumAmd(rows))}</strong></p>
+        <div class="handover-sheet-days">${groupByDay(rows)
+          .map((d) => `<div class="handover-sheet-day"><span>${escapeHtml(d.label)}</span><span class="muted">${d.rows.length}</span><span class="text-amount">${formatAmd(sumAmd(d.rows))}</span></div>`)
+          .join("")}</div>
+        ${notInExcel || unconfirmed || backdated ? `<ul class="pay-approve-warnings">${warn(notInExcel, "pay_warn_not_in_excel")}${warn(unconfirmed, "pay_warn_unconfirmed")}${warn(backdated, "pay_warn_backdated")}</ul>` : ""}
+        ${skipped ? `<p class="muted">${t("pay_approve_skipped").replace("{n}", String(skipped))}</p>` : ""}
+        <p class="form-error" id="payments-approve-error" hidden></p>
+        <div class="sheet-actions">
+          <button type="button" class="btn" id="payments-approve-cancel">${t("cancel")}</button>
+          <button type="button" class="btn btn-primary" id="payments-approve-go">${t("pay_approve_n").replace("{n}", String(rows.length))}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    const close = () => overlay.remove();
+    overlay.addEventListener("click", (e) => e.target === overlay && close());
+    overlay.querySelector("#payments-approve-cancel").addEventListener("click", close);
+    overlay.querySelector("#payments-approve-go").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const errorEl = overlay.querySelector("#payments-approve-error");
+      errorEl.hidden = true;
+      try {
+        const { approved, failed } = await api.approvePayments(rows.map((p) => p.id));
+        close();
+        setSelectMode(false);
+        notifyPaymentsChanged();
+        refreshPendingSummary();
+        load();
+        showToast(
+          failed.length
+            ? t("pay_bulk_partial").replace("{ok}", String(approved.length)).replace("{fail}", String(failed.length)).replace("{why}", failed[0].error)
+            : t("pay_approved_n").replace("{n}", String(approved.length)),
+          { ms: failed.length ? 6000 : 3000 }
+        );
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.hidden = false;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function startHandoverSelected(rows) {
+    if (!rows.length) return;
+    openHandoverSheet({
+      payments: rows,
+      recipients: handable.recipients,
+      onStale: async (message) => {
+        showToast(message, { ms: 6000 });
+        await Promise.all([loadHandable(), load()]);
+      },
+      onDone: async () => {
+        setSelectMode(false);
+        refreshPendingSummary();
+        await load();
+        showToast(t("pay_handed_over_n").replace("{n}", String(rows.length)));
+      },
+    });
+  }
+
   function paint() {
+    // the selection follows the list: a ticked payment no longer shown (another filter, approved meanwhile) is dropped, the others are
+    // replaced by their fresh row, so the bar's count, money and buttons are always what is on screen
+    if (selected.size) {
+      const fresh = new Map(payments.map((p) => [p.id, p]));
+      for (const id of [...selected.keys()]) {
+        if (fresh.has(id)) selected.set(id, fresh.get(id));
+        else selected.delete(id);
+      }
+      if (selectMode) updateSelectBar();
+    }
     if (!payments.length) {
       listEl.classList.remove("dtl-list", "pay-desk-list");
       listEl.innerHTML = `<p class="empty-state">${
@@ -553,39 +739,19 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       return;
     }
     if (deskQuery.matches) return paintDesk();
-    listEl.classList.remove("dtl-list", "pay-desk-list");
+    listEl.classList.remove("dtl-list", "pay-desk-list", "pay-selecting");
 
-    if (sort === "date" || !canSeeAll) {
-      // Simple newest-first grouped by month.
-      const groups = [];
-      let currentMonth = null;
-      for (const p of payments) {
-        const label = monthLabel(p.payment_date);
-        if (label !== currentMonth) {
-          groups.push({ label, rows: [] });
-          currentMonth = label;
-        }
-        groups[groups.length - 1].rows.push(p);
-      }
-      listEl.innerHTML = groups
-        .map((g) => `<h3 class="list-group-heading">${escapeHtml(g.label)} ${groupSumHtml(g.rows)}</h3>${g.rows.map(paymentRowHtml).join("")}`)
-        .join("");
-    } else {
-      // Channel-then-date (server order) -- group by channel instead of month.
-      const groups = [];
-      let currentChannel = null;
-      for (const p of payments) {
-        const label = p.sales_channel ? channelDisplayLabel(p.sales_channel) : t("all_channels");
-        if (label !== currentChannel) {
-          groups.push({ label, rows: [] });
-          currentChannel = label;
-        }
-        groups[groups.length - 1].rows.push(p);
-      }
-      listEl.innerHTML = groups
-        .map((g) => `<h3 class="list-group-heading">${escapeHtml(g.label)} ${groupSumHtml(g.rows)}</h3>${g.rows.map(paymentRowHtml).join("")}`)
-        .join("");
-    }
+    // Grouped by day (owner, 2026-11-13: "group also by day"): sorted by date, one heading per day; sorted by direction, the direction
+    // and under it its days. Every heading has its count and money.
+    listEl.innerHTML = topGroups()
+      .map(
+        (g) =>
+          (g.label === null ? "" : `<h3 class="list-group-heading">${escapeHtml(g.label)} ${groupSumHtml(g.rows)}</h3>`) +
+          groupByDay(g.rows)
+            .map((d) => `<h4 class="pay-day-heading"><span>${escapeHtml(d.label)}</span> ${groupSumHtml(d.rows)}</h4>${d.rows.map(paymentRowHtml).join("")}`)
+            .join("")
+      )
+      .join("");
 
     if (hasMore) {
       listEl.insertAdjacentHTML("beforeend", `<button type="button" class="btn btn-block" id="payments-load-more">${t("load_more")}</button>`);
@@ -593,7 +759,10 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     }
 
     listEl.querySelectorAll(".payment-row-main").forEach((row) => {
-      row.addEventListener("click", () => openPaymentDetail(Number(row.dataset.paymentId)));
+      row.addEventListener("click", () => (selectMode ? toggleSelected(Number(row.dataset.paymentId)) : openPaymentDetail(Number(row.dataset.paymentId))));
+    });
+    listEl.querySelectorAll(".pay-select-slot").forEach((slot) => {
+      slot.addEventListener("click", () => toggleSelected(Number(slot.closest("[data-payment-id]").dataset.paymentId)));
     });
     listEl.querySelectorAll(".payment-approve-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -620,6 +789,13 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   }
 
   root.querySelector("#payments-new-btn").addEventListener("click", () => openAddPaymentSheet());
+  root.querySelector("#payments-select-btn").addEventListener("click", () => setSelectMode(!selectMode));
+  root.querySelector("#payments-select-all").addEventListener("click", () => {
+    // every loaded row something can be done with (approve, or hand over)
+    for (const p of payments) if (fitsApprove(p) || canHandOver(p)) selected.set(p.id, p);
+    updateSelectBar();
+    paint();
+  });
 
   // Entry point into the cash custody chain (views/cashHandoffs.js). The
   // count is how many handovers are sitting waiting for THIS user to count

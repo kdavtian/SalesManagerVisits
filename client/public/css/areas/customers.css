@@ -2187,31 +2187,6 @@
 .order-select-slot { background: transparent; border-color: transparent; }
 .order-row-selected { border-color: var(--accent); }
 .orders-select-mode [data-order-id] { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
-/* Floating action row, stuck to the bottom above the tab bar. */
-.orders-select-bar {
-  position: fixed;
-  left: 16px;
-  right: 16px;
-  bottom: calc(12px + var(--nav-reserve));
-  max-width: 560px;
-  margin: 0 auto;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
-}
-.orders-select-bar[hidden] { display: none; }
-.osb-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.osb-summary > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.osb-all { min-height: 44px; padding: 0 4px; white-space: nowrap; }
-.osb-note input { width: 100%; box-sizing: border-box; height: 44px; }
-.osb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.osb-actions .osb-secondary { flex: 1 1 calc(50% - 4px); order: 2; }
 .detail-stat-tile {
   position: relative;
 }
@@ -3186,15 +3161,6 @@
   .map-side-list { width: 420px; }
   .mst-head,
   .mst-row { grid-template-columns: minmax(0, 1fr) 96px 36px; }
-}
-@media (min-width: 1024px) {
-  /* the Orders action bar (confirm / reject / deliver / print) sits at the bottom right beside the table */
-  .orders-select-bar {
-    left: auto;
-    right: 24px;
-    bottom: 24px;
-    width: 420px;
-  }
 }
 @media (min-width: 1400px) {
   .customer-panel-open {

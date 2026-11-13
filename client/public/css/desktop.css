@@ -1129,6 +1129,11 @@
   .sales-desk-list .dtl-row { grid-template-columns: var(--desk-cols-sales); }
   .pay-desk-list > .desk-thead,
   .pay-desk-list .dtl-row { grid-template-columns: var(--desk-cols-pay); }
+  /* selecting several (2026-11-13): the first column holds the check circle */
+  .pay-desk-list.pay-selecting { --desk-cols-pay: 34px 100px minmax(170px, 2.2fr) minmax(130px, 1.3fr) 170px 150px 140px 96px 12px; }
+  /* the status chips wrap inside their cell, each on one line (they ran into the Excel column) */
+  .pay-desk-row .pay-desk-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .pay-desk-row .pay-desk-chips .badge { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .dtl-list > .loading-state, .dtl-list > .empty-state { padding: 28px 16px; text-align: center; }
   #payments-list.dtl-list > .btn-block { margin: 12px 16px; width: auto; }
 }

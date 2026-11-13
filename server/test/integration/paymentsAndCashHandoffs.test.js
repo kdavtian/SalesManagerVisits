@@ -305,3 +305,46 @@ test("POST /api/cash-handoffs rejects an unauthenticated request with 401", asyn
   const res = await apiRequest("/api/cash-handoffs", { method: "POST", body: { to_user_id: users.sales_director.id, all: true } });
   assert.equal(res.status, 401);
 });
+
+// --- Select several (owner, 2026-11-13): approve the chosen payments; hand over only the chosen ones ---------------
+
+test("POST /api/payments/approve-many: only a reviewer; each payment approved on its own, the ones that cannot be are listed with why", async () => {
+  const a = await seedAvailablePayment(users.sales_manager.id, 7000);
+  const b = await seedAvailablePayment(users.sales_manager.id, 8000);
+  // c is inside a handover waiting to be confirmed: it must be refused, without blocking a and b
+  const c = await seedAvailablePayment(users.sales_manager.id, 9000);
+  const handed = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager, body: { to_user_id: users.sales_director.id, payment_ids: [c] } });
+  assert.equal(handed.status, 201, JSON.stringify(handed.data));
+  trackHandoff(handed.data.id);
+
+  assert.equal((await apiRequest("/api/payments/approve-many", { method: "POST", cookie: cookies.sales_manager, body: { ids: [a] } })).status, 403);
+  assert.equal((await apiRequest("/api/payments/approve-many", { method: "POST", cookie: cookies.accountant, body: { ids: [] } })).status, 400);
+  assert.equal((await apiRequest("/api/payments/approve-many", { method: "POST", cookie: cookies.accountant, body: { ids: ["x"] } })).status, 400);
+
+  const res = await apiRequest("/api/payments/approve-many", { method: "POST", cookie: cookies.accountant, body: { ids: [a, b, c, a] } });
+  assert.equal(res.status, 200, JSON.stringify(res.data));
+  assert.deepEqual(res.data.approved, [a, b]);
+  assert.equal(res.data.failed.length, 1);
+  assert.equal(res.data.failed[0].id, c);
+  const { rows } = await pool.query("SELECT id, status, current_holder_id FROM payments WHERE id = ANY($1) ORDER BY id", [[a, b, c]]);
+  assert.deepEqual(rows.map((r) => r.status), ["approved", "approved", "pending"]);
+  // the accountant approving cash directly now holds it (the same rule as the single Approve)
+  assert.equal(rows[0].current_holder_id, users.accountant.id);
+  // a second run approves nothing twice
+  const again = await apiRequest("/api/payments/approve-many", { method: "POST", cookie: cookies.accountant, body: { ids: [a] } });
+  assert.deepEqual(again.data.approved, []);
+  const { rows: hist } = await pool.query("SELECT count(*)::int AS n FROM payment_status_history WHERE payment_id = $1 AND new_status = 'approved'", [a]);
+  assert.equal(hist[0].n, 1);
+});
+
+test("POST /api/cash-handoffs with payment_ids hands over ONLY the chosen payments; the rest stays with the rep", async () => {
+  const keep = await seedAvailablePayment(users.sales_manager2.id, 4000);
+  const go1 = await seedAvailablePayment(users.sales_manager2.id, 6000);
+  const go2 = await seedAvailablePayment(users.sales_manager2.id, 1000);
+  const res = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager2, body: { to_user_id: users.sales_director.id, payment_ids: [go1, go2] } });
+  assert.equal(res.status, 201, JSON.stringify(res.data));
+  trackHandoff(res.data.id);
+  assert.equal(Number(res.data.amount_amd ?? res.data.total_amd), 7000);
+  const available = await apiRequest("/api/cash-handoffs/available", { cookie: cookies.sales_manager2 });
+  assert.deepEqual(available.data.payments.map((p) => p.id), [keep]);
+});

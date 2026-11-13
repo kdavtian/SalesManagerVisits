@@ -15,6 +15,7 @@ import { t } from "../i18n.js";
 import { state } from "../state.js";
 import { validHandoffRecipientRoles, offersHandoffOnBehalf } from "../shared/roles.js";
 import { deskSelectChip } from "../deskTable.js";
+import { openHandoverSheet, channelBreakdownHtml, groupByDay, sumAmd } from "../handoverSheet.js";
 
 
 const HANDOFF_STATUS_META = {
@@ -25,33 +26,6 @@ const HANDOFF_STATUS_META = {
 
 function roleLabel(role) {
   return t(`role_${role}`) || role;
-}
-
-function channelBreakdownHtml(byChannel, total) {
-  if (!byChannel?.length) return "";
-  return `
-    <table class="handoff-breakdown">
-      
-      <tbody>
-        ${byChannel
-          .map(
-            (c) => `<tr>
-              <th scope="row">${escapeHtml(channelDisplayLabel(c.sales_channel))}</th>
-              <td class="muted">${c.count}</td>
-              <td class="text-amount">${formatAmd(c.total_amd)}</td>
-            </tr>`
-          )
-          .join("")}
-      </tbody>
-      <tfoot>
-        <tr>
-          <th scope="row">${t("handoff_total")}</th>
-          <td></td>
-          <td class="text-amount"><strong>${formatAmd(total)}</strong></td>
-        </tr>
-      </tfoot>
-    </table>
-  `;
 }
 
 export async function renderCashHandoffs(root, navigate, focusHandoffId, { handover = false } = {}) {
@@ -411,6 +385,26 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
               ${channelBreakdownHtml(data.by_channel, data.total_amd)}
               <p class="muted">${t("handoff_items_n").replace("{n}", data.count)}</p>
             </div>
+            <div class="handoff-pick-head">
+              <strong>${t("handoff_pick_title")}</strong>
+              <button type="button" class="rps-link" id="handoff-pick-toggle"></button>
+            </div>
+            <div class="handoff-pick-list" id="handoff-pick-list">
+              ${groupByDay([...(data.payments || [])].sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date)))
+                .map(
+                  (g) => `<div class="handoff-pick-day"><span>${escapeHtml(g.label)}</span><span class="muted">${g.rows.length} &middot; ${formatAmd(sumAmd(g.rows))}</span></div>
+                ${g.rows
+                  .map(
+                    (p) => `<label class="handoff-pick-row">
+                      <input type="checkbox" data-pick="${p.id}" checked />
+                      <span class="handoff-pick-main"><strong>${escapeHtml(p.customer_name_snapshot || "")}</strong><span class="muted">${p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)} · ` : ""}${escapeHtml(channelDisplayLabel(p.sales_channel || "—"))}</span></span>
+                      <span class="text-amount">${formatAmd(Number(p.amount_amd))}</span>
+                    </label>`
+                  )
+                  .join("")}`
+                )
+                .join("")}
+            </div>
             ${
               data.recipients.length
                 ? `<label for="handoff-recipient-select">${t("handoff_give_to")}
@@ -451,67 +445,46 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
       });
     }
 
-    availableEl
-      .querySelector("#handoff-submit-all")
-      .addEventListener("click", () => openSubmitConfirm(data));
-  }
-
-  // Two-step confirmation. This codebase has no "tap again within N
-  // seconds" affordance anywhere -- every consequential single-tap action
-  // (delete order/customer/expense, reject an order, approve a payment)
-  // gates itself behind a second, explicit confirmation step. This follows
-  // that same shape, but as an in-app review sheet rather than a bare
-  // window.confirm(), because the whole point of the second step here is to
-  // re-read the amount and channel breakdown before committing custody of
-  // real money. One tap only opens the sheet; nothing is submitted until
-  // the second, differently-labelled button inside it is pressed.
-  function openSubmitConfirm(data) {
-    const recipientSelect = availableEl.querySelector("#handoff-recipient-select");
-    const recipientId = Number(recipientSelect?.value);
-    const recipient = data.recipients.find((r) => r.id === recipientId);
-    if (!recipient) return;
-
-    const overlay = document.createElement("div");
-    overlay.className = "sheet-overlay";
-    overlay.id = "handoff-confirm-overlay";
-    overlay.innerHTML = `
-      <div class="sheet">
-        <h2>${t("handoff_confirm_submit_title")}</h2>
-        <p>${t("handoff_confirm_submit_body")
-          .replace("{amount}", formatAmd(data.total_amd))
-          .replace("{name}", escapeHtml(recipient.name))}</p>
-        ${channelBreakdownHtml(data.by_channel, data.total_amd)}
-        <p class="muted">${t("handoff_confirm_submit_hint")}</p>
-        <p class="form-error" id="handoff-confirm-error" hidden></p>
-        <div class="sheet-actions">
-          <button type="button" class="btn" id="handoff-confirm-cancel">${t("cancel")}</button>
-          <button type="button" class="btn btn-primary" id="handoff-confirm-go">${t("handoff_confirm_submit_yes")}</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-    activateDialog(overlay);
-    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelector("#handoff-confirm-cancel").addEventListener("click", () => overlay.remove());
-
-    overlay.querySelector("#handoff-confirm-go").addEventListener("click", async (e) => {
-      e.target.disabled = true;
-      const errorEl = overlay.querySelector("#handoff-confirm-error");
-      errorEl.hidden = true;
-      try {
-        await api.createCashHandoff({
-          to_user_id: recipient.id,
-          all: true,
-          on_behalf_of_user_id: actingFor?.id,
-        });
-        overlay.remove();
-        window.dispatchEvent(new Event("payments-changed"));
-        await Promise.all([loadAvailable(), loadInbox()]);
-      } catch (err) {
-        errorEl.textContent = err.message;
-        errorEl.hidden = false;
-        e.target.disabled = false;
-      }
+    // Hand over one by one (owner, 2026-11-13): every payment is ticked at first; untick what stays with you. The button and the
+    // total follow the ticks.
+    const submitBtn = availableEl.querySelector("#handoff-submit-all");
+    const boxes = [...availableEl.querySelectorAll("[data-pick]")];
+    const picked = () => {
+      const ids = new Set(boxes.filter((b) => b.checked).map((b) => Number(b.dataset.pick)));
+      return (data.payments || []).filter((p) => ids.has(p.id));
+    };
+    const toggleBtn = availableEl.querySelector("#handoff-pick-toggle");
+    function syncPicked() {
+      const rows = picked();
+      const all = rows.length === boxes.length;
+      submitBtn.disabled = !canSubmit || rows.length === 0;
+      submitBtn.textContent = all ? t("handoff_submit_all") : t("handoff_submit_selected").replace("{n}", String(rows.length)).replace("{amount}", formatAmd(sumAmd(rows)));
+      if (toggleBtn) toggleBtn.textContent = all ? t("handoff_pick_none") : t("handoff_pick_all");
+      boxes.forEach((b) => b.closest(".handoff-pick-row")?.classList.toggle("handoff-pick-off", !b.checked));
+    }
+    boxes.forEach((b) => b.addEventListener("change", syncPicked));
+    toggleBtn?.addEventListener("click", () => {
+      const all = picked().length === boxes.length;
+      boxes.forEach((b) => (b.checked = !all));
+      syncPicked();
+    });
+    if (boxes.length) syncPicked();
+    submitBtn.addEventListener("click", () => {
+      const recipientSelect = availableEl.querySelector("#handoff-recipient-select");
+      const chosen = Number(recipientSelect?.value);
+      // the receiver picked on the screen comes first in the sheet
+      const recipients = [...data.recipients].sort((a, b) => (b.id === chosen) - (a.id === chosen));
+      const reload = () => Promise.all([loadAvailable(), loadInbox()]);
+      openHandoverSheet({
+        payments: picked(),
+        recipients,
+        onBehalfOf: actingFor?.id,
+        onDone: reload,
+        onStale: async (message) => {
+          showToast(message, { ms: 6000 });
+          await reload();
+        },
+      });
     });
   }
 

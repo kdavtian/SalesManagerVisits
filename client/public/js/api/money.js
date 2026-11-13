@@ -64,6 +64,7 @@ export const moneyApi = {
   getPaymentsPendingCount: () => request("/payments/pending-count"),
   getEligiblePaymentManagers: () => request("/payments/eligible-managers"),
   approvePayment: (id) => request(`/payments/${id}/approve`, { method: "POST" }),
+  approvePayments: (ids) => json("/payments/approve-many", "POST", { ids }),
   deletePayment: (id, reason) => json(`/payments/${id}`, "DELETE", { reason }),
   getDeletedPayments: () => request("/payments/deleted/list", { fresh: true }),
   rejectPayment: (id, reason) => json(`/payments/${id}/reject`, "POST", { reason }),

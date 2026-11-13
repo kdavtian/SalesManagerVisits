@@ -1777,3 +1777,81 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .ccm-sheet form label, #ccm-form label { display: block; margin-bottom: 8px; }
 .ccm-name .badge { align-self: flex-start; }
 .ccm-sheet h2 { display: flex; align-items: center; gap: 6px; padding-right: 52px; }
+/* Payments rows (owner screenshot 2026-11-13): name and amount on the first line, the chips wrap under it (each chip stays on one line),
+   Approve keeps its size at the right end -- the long Armenian status no longer wraps into three lines and pushes Approve off the card. */
+.list-row.pay-row { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: 10px; }
+.pay-row-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.pay-row .payment-row-main { flex-basis: auto; width: 100%; }
+.pay-row .list-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.pay-row .list-row-top > strong { min-width: 0; overflow-wrap: anywhere; }
+.pay-row .list-row-top > .text-amount { flex: none; white-space: nowrap; font-weight: 700; }
+.pay-row .payment-row-bottom-line { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: nowrap; }
+.pay-row-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-row-chips .badge, .pay-row .payment-status-badge { white-space: nowrap; }
+.pay-row .payment-row-bottom-line .payment-approve-btn { flex: none; margin-left: auto; min-height: 44px; padding: 0 16px; }
+.pay-select-slot { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; margin: -4px -6px -4px -4px; cursor: pointer; }
+.pay-row-selecting { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+/* the day under a direction (or the day itself when sorted by date): count and money at the right */
+.pay-day-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 10px 4px 6px; font-size: var(--fs-row-meta); font-weight: 600; color: var(--text-dim); }
+.pay-day-heading .list-group-sum { white-space: nowrap; }
+.pay-day-group { padding-left: 28px; font-size: var(--fs-row-meta); }
+.pay-desk-check { display: flex; align-items: center; justify-content: center; }
+.pay-select-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.pay-select-presets[hidden] { display: none; }
+.pay-approve-warnings { margin: 8px 0; padding-left: 20px; color: var(--warning, #b45309); }
+/* the hand over / approve sheet: the total and the days */
+.handover-sheet-total { display: flex; justify-content: space-between; gap: 8px; margin: 8px 0; }
+.handover-sheet-days { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.handover-sheet-day { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; font-size: var(--fs-row-meta); }
+/* Cash handovers: tick the payments that go now */
+.handoff-pick-head { display: flex; align-items: center; justify-content: space-between; margin: 14px 2px 6px; }
+.handoff-pick-head .rps-link { min-height: 44px; }
+.handoff-pick-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.handoff-pick-day { display: flex; justify-content: space-between; gap: 8px; margin: 8px 2px 2px; font-size: var(--fs-row-meta); font-weight: 600; color: var(--text-dim); }
+.handoff-pick-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); cursor: pointer; }
+.handoff-pick-row input { width: 22px; height: 22px; flex: none; margin: 0; }
+.handoff-pick-row.handoff-pick-off { opacity: 0.55; }
+.handoff-pick-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.handoff-pick-main strong { overflow-wrap: anywhere; }
+.handoff-pick-row .text-amount { flex: none; white-space: nowrap; font-weight: 600; }
+
+/* Floating action row, stuck to the bottom above the tab bar. */
+.orders-select-bar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(12px + var(--nav-reserve));
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.18);
+}
+.orders-select-bar[hidden] { display: none; }
+.osb-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.osb-summary > span { flex: 1; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.osb-all { min-height: 44px; padding: 0 4px; white-space: nowrap; }
+.osb-note input { width: 100%; box-sizing: border-box; height: 44px; }
+.osb-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.osb-actions .osb-secondary { flex: 1 1 calc(50% - 4px); order: 2; }
+@media (min-width: 1024px) {
+  /* the action bar (Orders: confirm / reject / deliver / print; Payments: approve / hand over) sits at the bottom right beside the table */
+  .orders-select-bar {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 420px;
+  }
+}
+/* Payments, selecting several: the ticked rows and room above the floating bar */
+.pay-row-selected { border-color: var(--accent); }
+.pay-select-mode #payments-list { padding-bottom: 210px; }
+/* Payments header: back, title, Select, + -- on a 320 px phone the title gives way (the + button went off the screen) */
+#payments-select-btn { flex: none; }
+.list-header-row:has(#payments-select-btn) h1 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

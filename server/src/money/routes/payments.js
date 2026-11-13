@@ -515,9 +515,9 @@ async function custodyBlocksReview(payment, user) {
   return null;
 }
 
-paymentsRouter.post("/:id/approve", async (req, res) => {
-  if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to approve payments" });
-
+// Approves ONE pending payment, in its own transaction: the same checks for a single tap and for "approve the selected" (owner,
+// 2026-11-13: approve one by one OR several at once). Returns { row } or { status, error }.
+async function approveOnePayment(id, user, { loadRow = true } = {}) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -526,20 +526,20 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
     // status already changed by the winner and bails out cleanly instead of
     // overwriting it (see the approve+reject race that corrupted payment
     // status and duplicated payment_status_history rows).
-    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [id]);
     const payment = rows[0];
     if (!payment) {
       await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Payment not found" });
+      return { status: 404, error: "Payment not found" };
     }
     if (payment.status !== "pending") {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: "Only a pending payment can be approved" });
+      return { status: 409, error: "Only a pending payment can be approved" };
     }
-    const blocked = await custodyBlocksReview(payment, req.user);
+    const blocked = await custodyBlocksReview(payment, user);
     if (blocked) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: blocked });
+      return { status: 409, error: blocked };
     }
 
     // Approving directly means the person received the money (payments redesign, release 3): admin or the accountant approving cash
@@ -549,12 +549,12 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
               rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
               current_holder_id = CASE WHEN $3 THEN $1 ELSE current_holder_id END
        WHERE id = $2`,
-      [req.user.id, req.params.id, req.user.role === "admin" || req.user.role === "accountant"]
+      [user.id, id, user.role === "admin" || user.role === "accountant"]
     );
     await client.query(
       `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
        VALUES ($1, 'pending', 'approved', 'Approved', $2)`,
-      [req.params.id, req.user.id]
+      [id, user.id]
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -563,8 +563,42 @@ paymentsRouter.post("/:id/approve", async (req, res) => {
   } finally {
     client.release();
   }
-  res.json(await loadPaymentRow(req.params.id));
-  notifyDecisionOf("payment", Number(req.params.id), { deciderId: req.user.id, approved: true });
+  notifyDecisionOf("payment", Number(id), { deciderId: user.id, approved: true });
+  return { row: loadRow ? await loadPaymentRow(id) : null };
+}
+
+paymentsRouter.post("/:id/approve", async (req, res) => {
+  if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to approve payments" });
+  const result = await approveOnePayment(Number(req.params.id), req.user);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(result.row);
+});
+
+// POST /approve-many { ids: [...] } -- the selected payments, each approved on its own (one that cannot be approved never blocks the
+// others), in the order sent. Answers which were approved and why the others were not.
+const APPROVE_MANY_MAX = 200;
+paymentsRouter.post("/approve-many", async (req, res) => {
+  if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to approve payments" });
+  const raw = req.body?.ids;
+  if (!Array.isArray(raw) || !raw.length) return res.status(400).json({ error: "Select at least one payment" });
+  const ids = [...new Set(raw.map(Number))];
+  if (ids.some((n) => !Number.isInteger(n) || n <= 0 || n > 2147483647)) return res.status(400).json({ error: "Invalid payment id" });
+  if (ids.length > APPROVE_MANY_MAX) return res.status(400).json({ error: `At most ${APPROVE_MANY_MAX} payments at once` });
+  const approved = [];
+  const failed = [];
+  for (const id of ids) {
+    // an unexpected error on one payment (its own transaction is rolled back) is reported for it; the ones already approved stay
+    // approved and the answer says so, instead of a bare 500 after half the batch
+    try {
+      const result = await approveOnePayment(id, req.user, { loadRow: false });
+      if (result.error) failed.push({ id, error: result.error });
+      else approved.push(id);
+    } catch (err) {
+      console.error(`approve-many: payment ${id}:`, err.message);
+      failed.push({ id, error: "Could not be approved, try again" });
+    }
+  }
+  res.json({ approved, failed });
 });
 
 paymentsRouter.post("/:id/reject", async (req, res) => {
