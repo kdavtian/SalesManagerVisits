@@ -141,4 +141,18 @@ export const ordersApi = {
   createCampaign: (data) => json("/app-orders/campaigns", "POST", data),
   updateCampaign: (id, data) => json(`/app-orders/campaigns/${id}`, "PATCH", data),
   deleteCampaign: (id) => request(`/app-orders/campaigns/${id}`, { method: "DELETE" }),
+  // Documents the customer signs in KAD OS (server/src/orders/routes/signDocuments.js)
+  listSignDocuments: (params = {}) => request(`/sign-documents?${new URLSearchParams(params)}`, { fresh: true }),
+  getSignDocument: (id) => request(`/sign-documents/${id}`, { fresh: true }),
+  customerSignDocuments: (customerId) => request(`/sign-documents/customer/${customerId}`, { fresh: true }),
+  agreementCandidates: () => request("/sign-documents/agreement-candidates", { fresh: true }),
+  sendAgreement: (customerId) => json("/sign-documents/agreement", "POST", { customer_id: customerId }),
+  cancelSignDocument: (id, reason) => json(`/sign-documents/${id}/cancel`, "POST", { reason }),
+  replaceSignDocument: (id) => json(`/sign-documents/${id}/replace`, "POST", {}),
+  answerSignDocument: (id, answer) => json(`/sign-documents/${id}/answer`, "POST", { answer }),
+  getSignDocumentPdf: async (id) => {
+    const res = await fetch(`/api/sign-documents/${id}/pdf`, { credentials: "include", headers: { "X-App-Version": APP_VERSION } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t("pdf_failed"));
+    return res.blob();
+  },
 };

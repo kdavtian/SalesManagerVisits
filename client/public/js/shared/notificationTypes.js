@@ -52,6 +52,11 @@ export const NOTIFICATION_GROUPS = [
       { type: "fraud_alert", roles: ["admin", "ceo", "operations_director", "sales_manager"] },
       // expense findings and the Monday report (expenseWatch.js)
       { type: "expense_alert", roles: ["admin", "ceo", "operations_director", "accountant"] },
+      // documents the customer signs in KAD OS (orders/partnerDocuments.js): signed, disputed, "send me one", past the deadline
+      { type: "partner_document_signed", roles: ["admin", "ceo", "accountant"] },
+      { type: "partner_document_disputed", roles: ["admin", "ceo", "accountant"] },
+      { type: "partner_document_request", roles: ["admin", "ceo", "accountant"] },
+      { type: "partner_document_overdue", roles: ["admin", "ceo", "sales_director", "sales_manager", "accountant"] },
     ],
   },
   {

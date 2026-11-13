@@ -19,6 +19,7 @@ const RULES = {
   signedDocuments: R.canManageSignedDocuments,
   pivot: R.usesPivot,
   tasksAnyone: R.tasksAnyone,
+  partnerDocuments: R.canManagePartnerDocuments,
 };
 
 test("every rule that reads the table agrees with it, for every role", () => {

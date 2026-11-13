@@ -12,6 +12,7 @@
 //   POST /orders    place an app order (same rules as POST /api/orders for a linked account); with replaces_order_id it CHANGES a still-unconfirmed order
 //   POST /orders/:id/cancel   cancel an app order that KAD Motors has not confirmed yet
 //   POST /payments/dispute    "I don't see my payments": tells management (not the rep) and returns the office number to call
+//   /documents/...            documents for signature (e-signature engine): list, read, PDF, sign, dispute, request (partnerDocuments.js)
 import { outOfStockProducts, outOfStockResponse } from "../orderStock.js";
 import { addWish, cleanWish, WishValidationError } from "../productWishes.js";
 import path from "node:path";
@@ -40,6 +41,7 @@ import { bullets } from "../../utils/bullets.js";
 import { recordCustomerDispute } from "../../money/antiFraud.js";
 import { normalizePhoneForStorage } from "../../shared/phoneFormat.js";
 import { OFFICE_PHONE } from "../../products/pricelistPdf.js";
+import { partnerDocumentsRouter } from "./partnerDocuments.js";
 
 export const partnerRouter = Router();
 partnerRouter.use(requireAuth);
@@ -49,6 +51,8 @@ partnerRouter.use(async (req, res, next) => {
   req.partner = link;
   next();
 });
+// documents for signature: behind the same guard, so every call belongs to the linked customer
+partnerRouter.use("/documents", partnerDocumentsRouter);
 
 const officePhone = () => normalizePhoneForStorage(OFFICE_PHONE);
 

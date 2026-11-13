@@ -8,7 +8,7 @@ import { openFileReadySheet } from "../fileReadySheet.js";
 import { deskSelectChip } from "../deskTable.js";
 import { methodologyListHtml, wireMethodologyList } from "../methodology.js";
 import { state } from "../state.js";
-import { canViewStockCount } from "../shared/roles.js";
+import { canViewStockCount, canManagePartnerDocuments } from "../shared/roles.js";
 
 const PERIODS = [
   ["today", "pb_today"],
@@ -16,7 +16,7 @@ const PERIODS = [
   ["month", "pb_month"],
   ["", "docs_all_time"],
 ];
-const KINDS = ["", "order_blank", "signed_act", "payment_slip", "other"];
+const KINDS = ["", "order_blank", "signed_act", "payment_slip", "signed_document", "other"];
 
 export function renderDocuments(root, navigate) {
   const filters = { period: "week", kind: "", user_id: "", linked: "", issues: "" };
@@ -32,6 +32,7 @@ export function renderDocuments(root, navigate) {
         <select id="doc-rep" aria-label="${t("all_managers")}"><option value="">${t("all_managers")}</option></select>
       </div>
       <div class="documents-flags" id="doc-flags"></div>
+      ${canManagePartnerDocuments(state.user?.role) ? `<button type="button" class="btn btn-block" id="doc-sign-documents">${t("sd_title")}</button>` : ""}
       <button type="button" class="btn btn-block" id="doc-print-slips" hidden>${t("docs_print_slips")}</button>
       <div class="card-list" id="doc-list"><p class="loading-state" role="status">${t("loading")}</p></div>
       <button type="button" class="btn btn-block" id="doc-more" hidden>${t("load_more")}</button>
@@ -74,6 +75,8 @@ export function renderDocuments(root, navigate) {
       .catch(() => {});
   }
   root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/dashboard"));
+  // documents the customers sign in KAD OS (e-signature engine): their own screen
+  root.querySelector("#doc-sign-documents")?.addEventListener("click", () => navigate("#/sign-documents"));
   const listEl = root.querySelector("#doc-list");
   const moreBtn = root.querySelector("#doc-more");
   const repSelect = root.querySelector("#doc-rep");

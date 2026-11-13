@@ -7,7 +7,9 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { escapeHtml, showToast } from "../util.js";
 
-const TEXT_KEYS = ["sign_order", "sign_payment", "sign_order_payment", "pdf_warning"];
+const TEXT_KEYS = ["sign_order", "sign_payment", "sign_order_payment", "pdf_warning", "e_agreement"];
+// the agreement on electronic documents (KAD OS) is a whole legal text: [customer] and [company] are filled in by the app
+const LONG_TEXT = { e_agreement: { rows: 12, max: 6000 } };
 
 function flashSaved(el) {
   el.hidden = false;
@@ -29,7 +31,7 @@ export async function renderDocumentTextsSection(container) {
       ${TEXT_KEYS.map(
         (k) => `<label class="settings-list-group-item doc-text-field">
           <span class="settings-row-label">${t(`doc_text_${k}`)}</span>
-          <textarea name="${k}" rows="${k === "pdf_warning" ? 4 : 3}" maxlength="600">${escapeHtml(s.document_texts?.[k] ?? "")}</textarea>
+          <textarea name="${k}" rows="${LONG_TEXT[k]?.rows ?? (k === "pdf_warning" ? 4 : 3)}" maxlength="${LONG_TEXT[k]?.max ?? 600}">${escapeHtml(s.document_texts?.[k] ?? "")}</textarea>
           <button type="button" class="btn-link doc-text-reset" data-reset="${k}">${t("doc_text_reset")}</button>
         </label>`
       ).join("")}

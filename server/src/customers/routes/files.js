@@ -206,7 +206,7 @@ filesRouter.post("/customer/:customerId", (req, res, next) => {
     discard();
     return res.status(400).json({ error: "The file is not a valid image" });
   }
-  const kind = FILE_KINDS.includes(req.body?.kind) && req.body.kind !== "signed_act" ? req.body.kind : "other";
+  const kind = FILE_KINDS.includes(req.body?.kind) && !["signed_act", "signed_document"].includes(req.body.kind) ? req.body.kind : "other";
   const orderIds = parseOrderIds(req.body?.order_ids);
   const { rows: c } = await pool.query("SELECT id FROM customers WHERE id = $1", [customerId]);
   if (!c[0]) {

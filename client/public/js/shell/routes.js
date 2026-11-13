@@ -425,6 +425,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/accounting.js"))).renderAccounting(ctx.app, ctx.navigate);
   } else if (path === "#/documents") {
     (await fresh(import("../views/documents.js"))).renderDocuments(ctx.app, ctx.navigate);
+  } else if (path === "#/sign-documents") {
+    (await fresh(import("../views/signDocuments.js"))).renderSignDocuments(ctx.app, ctx.navigate, query);
   } else if (path === "#/recorded") {
     (await fresh(import("../views/recorded.js"))).renderRecorded(ctx.app, ctx.navigate);
   } else if (path === "#/debt-balances") {

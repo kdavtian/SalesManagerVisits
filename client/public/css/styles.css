@@ -10684,3 +10684,20 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .sc-row-inactive { opacity: 0.6; }
 .sc-field-hint { display: block; font-size: 0.8rem; margin-top: 4px; font-weight: 400; }
 .sc-sheet form { display: flex; flex-direction: column; gap: 10px; }
+
+/* Documents for signature (signDocumentSheet.js: the screen #/sign-documents and the customer card's section, e-signature 2026-11-13) */
+.sd-bullets { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
+.sd-bullets li::before { content: "• "; color: var(--text-dim); }
+.sd-lines { margin: 8px 0; padding: 0; gap: 0; }
+.sd-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.sd-amount { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.sd-total { font-weight: 600; border-bottom: 0; }
+.sd-text summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.sd-text p { white-space: pre-line; font-size: 0.9rem; line-height: 1.45; }
+.sd-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.sd-side h4 { margin: 4px 0; }
+.sd-field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.sd-field textarea, .sd-field input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--control-border, var(--border)); border-radius: 12px; background: var(--bg-card); color: var(--text); font: inherit; }
+.sd-versions { display: flex; flex-wrap: wrap; gap: 8px; }
+.sd-versions .btn, .sd-card-actions .btn { min-height: 44px; }
+.sd-card-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
