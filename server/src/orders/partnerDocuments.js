@@ -244,9 +244,19 @@ export async function listForStaff({ kind, state, customerId, q, limit, offset }
 }
 
 /** Every version of a document's number, oldest first (the detail's history). */
-export async function versionsOf(number) {
-  const { rows } = await pool.query("SELECT id, version, state, created_at, signed_at FROM partner_documents WHERE number = $1 ORDER BY version", [number]);
-  return rows.map((r) => ({ id: r.id, version: r.version, state: r.state, created_at: iso(r.created_at), signed_at: iso(r.signed_at) }));
+/** Every document of a correction chain (each correction has its own number, linked by replaces_id), oldest first. `version` is its place. */
+export async function versionsOf(doc) {
+  const { rows } = await pool.query(
+    `WITH RECURSIVE back AS (
+       SELECT id, replaces_id FROM partner_documents WHERE id = $1
+       UNION SELECT p.id, p.replaces_id FROM partner_documents p JOIN back b ON p.id = b.replaces_id),
+     chain AS (
+       SELECT d.id, d.number, d.state, d.created_at, d.signed_at, 1 AS n FROM partner_documents d WHERE d.id = (SELECT id FROM back WHERE replaces_id IS NULL LIMIT 1)
+       UNION ALL SELECT p.id, p.number, p.state, p.created_at, p.signed_at, c.n + 1 FROM partner_documents p JOIN chain c ON p.replaces_id = c.id WHERE c.n < 50)
+     SELECT * FROM chain ORDER BY n`,
+    [doc.id]
+  );
+  return rows.map((r) => ({ id: r.id, number: r.number, version: r.n, state: r.state, created_at: iso(r.created_at), signed_at: iso(r.signed_at) }));
 }
 
 // ---- PDFs ----------------------------------------------------------------------------------------------------------------------------
@@ -353,7 +363,8 @@ export async function replaceDocument(id, { title, content, dueDays, createdBy }
     if (![...OPEN_STATES, "disputed"].includes(old.state)) fail(409, "already_decided", `The document is ${old.state}`, { state: old.state });
     const frozen = content === undefined ? old.content : cleanContent(content);
     newId = await insertVersion(client, {
-      customerId: old.customer_id, kind: old.kind, number: old.number, version: old.version + 1, title: str(title, 200) || old.title, content: frozen, dueDays,
+      // a correction is a NEW document with its own number (owner 2026-11-13); replaces_id keeps the chain to the one it replaces
+      customerId: old.customer_id, kind: old.kind, number: await nextNumber(client, new Date()), version: 1, title: str(title, 200) || old.title, content: frozen, dueDays,
       related: { order_ids: old.order_ids, payment_id: old.payment_id, return_id: old.return_id }, createdBy, replacesId: old.id,
     });
     await client.query("UPDATE partner_documents SET state = 'replaced', replaced_by_id = $2 WHERE id = $1", [old.id, newId]);

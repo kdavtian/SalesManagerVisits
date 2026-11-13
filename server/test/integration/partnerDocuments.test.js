@@ -207,17 +207,17 @@ test("dispute: reason required, marked lines kept, KAD answers; it cannot be sig
   assert.ok(list.data.counts.disputed >= 1);
 });
 
-test("replace: version 2 with the same number, version 1 replaced (signing it answers 409 changed), version 2 signs", async () => {
+test("replace: the correction gets a NEW number (owner 2026-11-13), the first is replaced (signing it answers 409 changed), version 2 signs", async () => {
   const sent = await apiRequest("/api/sign-documents/agreement", { method: "POST", cookie: adminCookie, body: { customer_id: shopB.id } });
   assert.equal(sent.status, 201);
   const v1 = sent.data;
   const r = await apiRequest(`/api/sign-documents/${v1.id}/replace`, { method: "POST", cookie: adminCookie, body: {} });
   assert.equal(r.status, 201, JSON.stringify(r.data));
   const v2 = r.data;
-  assert.equal(v2.number, v1.number);
-  assert.equal(v2.version, 2);
+  assert.notEqual(v2.number, v1.number, "a correction has its own number");
+  assert.match(v2.number, /^ACT-\d{4}-\d{6}$/);
   assert.equal(v2.replaces_id, v1.id);
-  assert.notEqual(v2.fingerprint, v1.fingerprint, "the version is part of the fingerprint");
+  assert.notEqual(v2.fingerprint, v1.fingerprint, "the number is part of the fingerprint");
   const old = await apiRequest(`/api/partner/documents/${v1.id}`, { cookie: partnerBCookie });
   assert.equal(old.data.state, "replaced");
   assert.equal(old.data.replaced_by_id, v2.id);
@@ -232,7 +232,12 @@ test("replace: version 2 with the same number, version 1 replaced (signing it an
   assert.equal(signedReplace.status, 409);
   assert.equal(signedReplace.data.code, "already_decided");
   const staff = await apiRequest(`/api/sign-documents/${v2.id}`, { cookie: adminCookie });
-  assert.deepEqual(staff.data.versions.map((v) => [v.version, v.state]), [[1, "replaced"], [2, "signed"]]);
+  assert.deepEqual(staff.data.versions.map((v) => [v.number, v.version, v.state]), [[v1.number, 1, "replaced"], [v2.number, 2, "signed"]]);
+  // the reps read a customer's documents (owner 2026-11-13), and only read
+  assert.equal((await apiRequest(`/api/sign-documents/customer/${shopB.id}`, { cookie: repCookie })).status, 200);
+  assert.equal((await apiRequest(`/api/sign-documents/${v2.id}`, { cookie: repCookie })).status, 200);
+  assert.equal((await apiRequest(`/api/sign-documents/${v2.id}/replace`, { method: "POST", cookie: repCookie, body: {} })).status, 403);
+  assert.equal((await apiRequest("/api/sign-documents", { cookie: repCookie })).status, 403, "the whole list stays with management");
 });
 
 test("cancel needs a reason; the partner then sees it under done", async () => {
@@ -260,11 +265,13 @@ test("request: recorded and the accountant is told", async () => {
   assert.equal((await apiRequest("/api/partner/documents/request", { method: "POST", cookie: partnerACookie, body: { kind: "nonsense" } })).status, 400);
 });
 
-test("RBAC: a sales manager and a KAD OS account cannot use the staff routes; the sales director can", async () => {
-  for (const [method, path, body] of [["GET", "/api/sign-documents"], ["GET", `/api/sign-documents/${agreement.id}`], ["POST", "/api/sign-documents/agreement", { customer_id: unlinked.id }], ["POST", `/api/sign-documents/${agreement.id}/cancel`, { reason: "x" }]]) {
+test("RBAC: a sales manager only reads one customer's documents; a KAD OS account never reaches the staff routes; the sales director can", async () => {
+  for (const [method, path, body] of [["GET", "/api/sign-documents"], ["POST", "/api/sign-documents/agreement", { customer_id: unlinked.id }], ["POST", `/api/sign-documents/${agreement.id}/cancel`, { reason: "x" }]]) {
     assert.equal((await apiRequest(path, { method, cookie: repCookie, body })).status, 403, `rep ${method} ${path}`);
     assert.equal((await apiRequest(path, { method, cookie: partnerACookie, body })).status, 403, `partner ${method} ${path}`);
   }
+  assert.equal((await apiRequest(`/api/sign-documents/${agreement.id}`, { cookie: repCookie })).status, 200, "the rep reads it");
+  assert.equal((await apiRequest(`/api/sign-documents/${agreement.id}`, { cookie: partnerACookie })).status, 403, "a KAD OS account does not");
   const list = await apiRequest("/api/sign-documents?kind=agreement", { cookie: directorCookie });
   assert.equal(list.status, 200);
   assert.ok(list.data.documents.every((d) => d.kind === "agreement"));

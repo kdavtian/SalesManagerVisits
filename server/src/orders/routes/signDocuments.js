@@ -11,7 +11,7 @@
 //   POST /:id/answer               { answer } -> KAD's comment on a dispute
 import { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
-import { canManagePartnerDocuments } from "../../shared/roles.js";
+import { canManagePartnerDocuments, canViewPartnerDocuments } from "../../shared/roles.js";
 import {
   listForStaff, loadDocument, presentDocument, versionsOf, createAgreement, agreementCandidates, agreementContent, cancelDocument,
   replaceDocument, answerDispute, isKadOsCustomer, currentAgreement,
@@ -20,9 +20,12 @@ import { sendDocumentError, sendDocumentPdf } from "./partnerDocuments.js";
 
 export const signDocumentsRouter = Router();
 signDocumentsRouter.use(requireAuth);
+// the reps read a customer's documents (the card's section, a document, its PDF); everything else is management and the accountant
+const READ_ONLY = /^\/(customer\/\d+|\d+(\/pdf)?)$/;
 signDocumentsRouter.use((req, res, next) => {
-  if (!canManagePartnerDocuments(req.user.role)) return res.status(403).json({ error: "Not allowed", code: "forbidden" });
-  next();
+  if (canManagePartnerDocuments(req.user.role)) return next();
+  if (req.method === "GET" && READ_ONLY.test(req.path) && canViewPartnerDocuments(req.user.role)) return next();
+  return res.status(403).json({ error: "Not allowed", code: "forbidden" });
 });
 
 const idOf = (v) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
@@ -66,7 +69,7 @@ async function found(req, res) {
 signDocumentsRouter.get("/:id", async (req, res) => {
   const doc = await found(req, res);
   if (!doc) return;
-  res.json({ ...presentDocument(doc, { staff: true }), versions: await versionsOf(doc.number) });
+  res.json({ ...presentDocument(doc, { staff: true }), versions: await versionsOf(doc) });
 });
 
 signDocumentsRouter.get("/:id/pdf", async (req, res) => {

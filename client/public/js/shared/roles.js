@@ -743,6 +743,11 @@ export function ownsSalesChannels(role) {
 export function canManagePartnerDocuments(role) {
   return approves("partnerDocuments", role);
 }
+// Read only (owner 2026-11-13: "reps see the documents section"): the sales reps and the sales director also SEE a customer's documents
+// and open them (the customer card, the PDF); sending, cancelling, correcting and answering stay with canManagePartnerDocuments.
+export function canViewPartnerDocuments(role) {
+  return canManagePartnerDocuments(role) || role === "sales_manager" || role === "sales_director";
+}
 export function answersPartnerDocuments(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }
