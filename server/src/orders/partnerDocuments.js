@@ -44,7 +44,9 @@ const fail = (status, code, message, extra) => {
 };
 
 // ---- input cleaning --------------------------------------------------------------------------------------------------------------------
-const str = (v, max) => (v === null || v === undefined ? "" : String(v).trim().slice(0, max));
+// control characters (a NUL breaks Postgres JSONB) are dropped, so odd input is a clean text and never a 500
+// eslint-disable-next-line no-control-regex
+const str = (v, max) => (v === null || v === undefined ? "" : String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim().slice(0, max));
 const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 const money = (v) => (num(v) === null ? null : Math.round(num(v)));
 
@@ -267,15 +269,19 @@ export async function pdfPathFor(row) {
   const signed = isSigned(row);
   const current = signed ? row.signed_pdf_path : row.pdf_path;
   if (current && fs.existsSync(path.join(uploadDirPath, current))) return path.join(uploadDirPath, current);
-  const { fileName } = await writePdf(row, { signed });
+  const { fileName, size } = await writePdf(row, { signed });
   await pool.query(`UPDATE partner_documents SET ${signed ? "signed_pdf_path" : "pdf_path"} = $2 WHERE id = $1`, [row.id, fileName]);
+  if (signed) await keepAsCustomerFile(row, fileName, size); // the signed PDF failed once: the card's Files still get it
   return path.join(uploadDirPath, fileName);
 }
 
-// The signed PDF, also kept as a customer document (the card's Files, the Documents inbox).
-async function storeSignedPdf(row) {
-  const { fileName, size } = await writePdf(row, { signed: true });
-  await pool.query("UPDATE partner_documents SET signed_pdf_path = $2 WHERE id = $1", [row.id, fileName]);
+// The signed PDF as a customer document, once per document (the card's Files, the Documents inbox).
+async function keepAsCustomerFile(row, fileName, size) {
+  const { rows } = await pool.query("SELECT id FROM customer_files WHERE partner_document_id = $1 LIMIT 1", [row.id]);
+  if (rows[0]) {
+    await pool.query("UPDATE customer_files SET file_path = $2, size_bytes = $3 WHERE id = $1", [rows[0].id, fileName, size]);
+    return;
+  }
   const createdBy = row.created_by ?? (await systemCreatorId());
   if (!createdBy) return;
   await pool.query(
@@ -283,6 +289,13 @@ async function storeSignedPdf(row) {
      VALUES ($1, 'signed_document', $2, 'application/pdf', $3, $4, $5, $6, $7, $8)`,
     [row.customer_id, fileName, size, row.order_ids ?? [], row.payment_id, `${row.title} ${row.number} v${row.version}`.slice(0, 300), createdBy, row.id]
   );
+}
+
+// The signed PDF, also kept as a customer document (the card's Files, the Documents inbox).
+async function storeSignedPdf(row) {
+  const { fileName, size } = await writePdf(row, { signed: true });
+  await pool.query("UPDATE partner_documents SET signed_pdf_path = $2 WHERE id = $1", [row.id, fileName]);
+  await keepAsCustomerFile(row, fileName, size);
 }
 
 // ---- making documents ----------------------------------------------------------------------------------------------------------------
@@ -294,7 +307,7 @@ async function nextNumber(db, at) {
 
 async function insertVersion(db, { customerId, kind, number, version, title, content, dueDays, related, createdBy, replacesId = null }) {
   const at = new Date();
-  const days = Number.isFinite(Number(dueDays)) && Number(dueDays) >= 0 && Number(dueDays) <= 365 ? Number(dueDays) : DUE_DAYS[kind];
+  const days = dueDays !== null && dueDays !== undefined && dueDays !== "" && Number.isFinite(Number(dueDays)) && Number(dueDays) >= 0 && Number(dueDays) <= 365 ? Number(dueDays) : DUE_DAYS[kind];
   const fingerprint = documentFingerprint({ content, customerId, kind, number, version });
   const { rows } = await db.query(
     `INSERT INTO partner_documents (customer_id, kind, number, version, state, title, content, fingerprint, due_at, sent_at, kad_signer,
@@ -426,9 +439,17 @@ export async function isKadOsCustomer(customerId) {
 
 export async function createAgreement({ customerId, createdBy }) {
   if (!(await isKadOsCustomer(customerId))) fail(409, "not_linked", "This customer has no KAD OS link: it cannot sign electronically yet");
-  const existing = await currentAgreement(customerId);
-  if (existing) fail(409, "agreement_exists", "This customer already has an agreement", { id: existing.id, state: existing.state });
-  return createDocument({ customerId, kind: "agreement", title: AGREEMENT_TITLE, content: await agreementContent(customerId), createdBy });
+  // one at a time per customer: a double tap (or two people at once) sends ONE agreement, the second hears "agreement_exists"
+  const lock = await pool.connect();
+  try {
+    await lock.query("SELECT pg_advisory_lock(hashtext('partner-agreement'), $1)", [Number(customerId)]);
+    const existing = await currentAgreement(customerId);
+    if (existing) fail(409, "agreement_exists", "This customer already has an agreement", { id: existing.id, state: existing.state });
+    return await createDocument({ customerId, kind: "agreement", title: AGREEMENT_TITLE, content: await agreementContent(customerId), createdBy });
+  } finally {
+    await lock.query("SELECT pg_advisory_unlock(hashtext('partner-agreement'), $1)", [Number(customerId)]).catch(() => {});
+    lock.release();
+  }
 }
 
 /** KAD OS customers and where their agreement stands (the "Send agreement" list). */
@@ -464,6 +485,10 @@ async function saveSignaturePng(base64) {
   if (!raw) fail(400, "signature_required", "signature_png is required");
   const buf = Buffer.from(raw, "base64");
   if (buf.length < 67 || buf.length > MAX_SIGNATURE_BYTES || !buf.subarray(0, 8).equals(PNG_MAGIC)) fail(400, "invalid_signature", "signature_png must be a PNG image (base64, at most 1.5 MB)");
+  // a small file can declare a huge picture (16000 x 16000 = 1 GB unpacked): the size in the PNG header is checked before anything decodes it
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  if (!width || !height || width > 3000 || height > 3000) fail(400, "invalid_signature", "signature_png is too large (at most 3000 x 3000 pixels)");
   let png = buf;
   let sharp = null;
   try {
@@ -473,7 +498,7 @@ async function saveSignaturePng(base64) {
   }
   if (sharp) {
     try {
-      png = await sharp(buf).png().toBuffer();
+      png = await sharp(buf, { limitInputPixels: 9_000_000 }).resize({ width: 1200, withoutEnlargement: true }).png().toBuffer();
     } catch {
       fail(400, "invalid_signature", "signature_png could not be read as an image");
     }
@@ -573,6 +598,11 @@ export async function requestDocument({ customerId, kind = "reconciliation", not
   const k = kind || "reconciliation";
   if (!DOCUMENT_KINDS.includes(k)) fail(400, "invalid_kind", `kind must be one of ${DOCUMENT_KINDS.join(", ")}`);
   const text = str(note, 500);
+  // the same request again within an hour (an impatient double tap, a loop) is not recorded nor told again
+  const { rows: recent } = await pool.query(
+    "SELECT 1 FROM partner_document_requests WHERE customer_id = $1 AND kind = $2 AND handled_at IS NULL AND created_at > now() - interval '1 hour' LIMIT 1", [customerId, k]
+  );
+  if (recent[0]) return;
   await pool.query("INSERT INTO partner_document_requests (customer_id, kind, note, requested_by) VALUES ($1, $2, $3, $4)", [customerId, k, text || null, userId]);
   const { rows } = await pool.query("SELECT name FROM customers WHERE id = $1", [customerId]);
   await tellAnswerers("partner_document_request", {
@@ -596,12 +626,12 @@ async function closeRepTaskIfDone(customerId) {
   for (const r of closed) await pool.query("UPDATE task_items SET done = true, done_at = COALESCE(done_at, now()) WHERE task_id = $1", [r.id]);
 }
 
-/** The job (jobs/index.js): open documents past their deadline -> the customer's sales manager gets a task (once) and a reminder once a day. */
+/** The job (jobs/index.js): open documents past their deadline -> the customer's sales manager gets a task (once) and a reminder every 2 days (the customer's KAD OS reminds before the deadline). */
 export async function remindOverdueDocuments(now = new Date()) {
   const { rows } = await pool.query(
     `SELECT d.id, d.number, d.version, d.title, d.customer_id, c.name AS customer_name, c.assigned_manager_id
        FROM partner_documents d JOIN customers c ON c.id = d.customer_id
-      WHERE d.state IN ('sent', 'viewed') AND d.due_at < $1 AND (d.last_reminded_at IS NULL OR d.last_reminded_at <= $1::timestamptz - interval '1 day')
+      WHERE d.state IN ('sent', 'viewed') AND d.due_at < $1 AND (d.last_reminded_at IS NULL OR d.last_reminded_at <= $1::timestamptz - interval '2 days')
       ORDER BY d.customer_id, d.due_at`,
     [now]
   );

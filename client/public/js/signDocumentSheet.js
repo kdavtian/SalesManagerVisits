@@ -135,7 +135,7 @@ export async function openSignDocumentSheet(id, { onChanged } = {}) {
       paint();
     }));
     const replaceBtn = sheet.querySelector("#sd-replace");
-    replaceBtn?.addEventListener("click", () => act(replaceBtn, async () => {
+    replaceBtn?.addEventListener("click", () => window.confirm(t("sd_new_version_confirm")) && act(replaceBtn, async () => {
       const next = await api.replaceSignDocument(d.id);
       id = next.id;
       showToast(t("sd_sent_ok"));
@@ -172,6 +172,8 @@ export async function openSignDocumentSheet(id, { onChanged } = {}) {
 /** Send the one-time agreement on electronic documents: the KAD OS customers, those without one first. onSent(document). */
 export async function openSendAgreementSheet({ customerId = null, onSent } = {}) {
   const send = async (cid) => {
+    // a legal document goes to the customer: one question first
+    if (!window.confirm(t("sd_send_agreement_confirm"))) return null;
     const doc = await api.sendAgreement(cid);
     showToast(t("sd_sent_ok"));
     onSent?.(doc);

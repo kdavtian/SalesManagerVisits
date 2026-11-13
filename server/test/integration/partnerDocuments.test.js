@@ -294,3 +294,33 @@ test("past the deadline: the rep gets one task, a reminder at most once a day, a
   const { rows: closed } = await pool.query("SELECT status FROM tasks WHERE id = $1", [tasks[0].id]);
   assert.equal(closed[0].status, "done");
 });
+
+test("review fixes: a double send makes one agreement; a huge PNG is refused; the signed original cannot be deleted; a NUL is cleaned; a repeated request is told once", async () => {
+  // two sends at once for a customer without an agreement: one 201, one 409
+  const both = await Promise.all([1, 2].map(() => apiRequest("/api/sign-documents/agreement", { method: "POST", cookie: adminCookie, body: { customer_id: shopB.id } })));
+  assert.deepEqual(both.map((r) => r.status).sort(), [201, 409]);
+  const doc = both.find((r) => r.status === 201).data;
+
+  // a small file that declares a 16000 x 16000 picture never reaches the image library
+  const big = Buffer.from(await sharp({ create: { width: 20, height: 20, channels: 4, background: "#000" } }).png().toBuffer());
+  big.writeUInt32BE(16000, 16);
+  big.writeUInt32BE(16000, 20);
+  const huge = await sign(partnerBCookie, doc.id, signBody(doc.fingerprint, { signature_png: big.toString("base64") }));
+  assert.equal(huge.status, 400);
+  assert.equal(huge.data.code, "invalid_signature");
+
+  // a NUL in the signer's name is dropped (no 500); the signed PDF becomes a customer file that cannot be deleted
+  const ok = await sign(partnerBCookie, doc.id, signBody(doc.fingerprint, { signer: { name: "Արամ\u0000 Պետրոսյան", role: "Տնօրեն", user_ref: "x" } }));
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.equal(ok.data.customer_signer.name, "Արամ Պետրոսյան");
+  const { rows: files } = await pool.query("SELECT id FROM customer_files WHERE partner_document_id = $1", [doc.id]);
+  assert.equal(files.length, 1);
+  const del = await apiRequest(`/api/files/${files[0].id}`, { method: "DELETE", cookie: adminCookie });
+  assert.equal(del.status, 409);
+  assert.equal(del.data.code, "signed_document");
+
+  // "send me a debt act" twice within the hour: recorded and told once
+  const before = (await pool.query("SELECT count(*)::int AS n FROM partner_document_requests WHERE customer_id = $1", [shopB.id])).rows[0].n;
+  for (let i = 0; i < 2; i += 1) assert.equal((await apiRequest("/api/partner/documents/request", { method: "POST", cookie: partnerBCookie, body: { kind: "reconciliation" } })).status, 200);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM partner_document_requests WHERE customer_id = $1", [shopB.id])).rows[0].n, before + 1);
+});

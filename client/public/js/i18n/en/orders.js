@@ -418,6 +418,8 @@ export const enOrders = {
   sd_all_kinds: "All kinds",
   sd_search: "Search customer",
   sd_empty: "No documents",
+  sd_send_agreement_confirm: "Send the agreement on electronic documents to the customer to sign?",
+  sd_new_version_confirm: "Send a new version? The current one is replaced.",
   sd_send_agreement: "Send agreement",
   sd_send: "Send",
   sd_sent_ok: "Sent to the customer's KAD OS",

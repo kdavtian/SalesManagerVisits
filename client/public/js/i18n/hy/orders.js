@@ -418,6 +418,8 @@ export const hyOrders = {
   sd_all_kinds: "Բոլոր տեսակները",
   sd_search: "Որոնել հաճախորդ",
   sd_empty: "Փաստաթղթեր չկան",
+  sd_send_agreement_confirm: "Ուղարկե՞լ էլեկտրոնային փաստաթղթերի համաձայնագիրը հաճախորդին ստորագրման։",
+  sd_new_version_confirm: "Ուղարկե՞լ նոր տարբերակը. նախորդը կփոխարինվի։",
   sd_send_agreement: "Ուղարկել համաձայնագիրը",
   sd_send: "Ուղարկել",
   sd_sent_ok: "Ուղարկվեց հաճախորդի KAD OS",

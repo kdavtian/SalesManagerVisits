@@ -48,7 +48,7 @@ export async function signaturePng(relativePath) {
   try {
     // Loaded on use, like the thumbnails: a server without the image library must still start.
     const sharp = (await import("sharp")).default;
-    return await sharp(path.join(uploadDirPath, relativePath)).png().toBuffer();
+    return await sharp(path.join(uploadDirPath, relativePath), { limitInputPixels: 9_000_000 }).png().toBuffer();
   } catch {
     return null;
   }

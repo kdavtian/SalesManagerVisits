@@ -285,7 +285,9 @@ app.use("/api/expenses", express.json(), expensesRouter);
 app.use("/api/places", express.json(), placesRouter);
 app.use("/api/ask-kad", express.json(), askKadRouter);
 // the partner API carries a drawn signature (base64 PNG) when a KAD OS customer signs a document
-app.use("/api/partner", express.json({ limit: "3mb" }), partnerRouter);
+const partnerJson = express.json();
+const partnerSignJson = express.json({ limit: "3mb" }); // only the signature call carries the drawn signature (base64 PNG)
+app.use("/api/partner", (req, res, next) => (req.method === "POST" && /^\/documents\/[^/]+\/sign$/.test(req.path) ? partnerSignJson : partnerJson)(req, res, next), partnerRouter);
 // documents for signature, KAD Motors side (not under /api/partner: a KAD OS account must never reach it)
 app.use("/api/sign-documents", express.json({ limit: "1mb" }), signDocumentsRouter);
 app.use("/api/app-orders", express.json(), appOrdersAdminRouter);
