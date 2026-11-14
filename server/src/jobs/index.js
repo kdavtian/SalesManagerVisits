@@ -27,6 +27,7 @@ import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 import { deleteOldUsage } from "../system/usageAnalytics.js";
 import { deleteOldNavTimings } from "../system/navTimings.js";
 import { remindOverdueDocuments } from "../orders/partnerDocuments.js";
+import { runAutoApprovePayments } from "../erp/erpAutoMatch.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -51,6 +52,8 @@ export const JOBS = [
   { name: "daily-summary", everyMs: 5 * MINUTE, run: () => checkDailySummary(), ...needsPush },
   { name: "ops-control", everyMs: 30 * MINUTE, run: () => runOpsJobs() },
   { name: "cash-sheets", everyMs: 30 * MINUTE, run: () => runCashSheetJobs() },
+  // payments the Excel already shows are approved without waiting for the next upload (erp/erpAutoMatch.js; owner 2026-11-14)
+  { name: "erp-auto-approve-payments", everyMs: 5 * MINUTE, run: () => runAutoApprovePayments() },
   { name: "stale-packed-orders", everyMs: 30 * MINUTE, run: () => checkStalePackedOrders(), ...needsPush },
   { name: "erp-sync-freshness", everyMs: HOUR, run: () => checkErpSyncFreshness(), ...needsPush },
   { name: "excel-file-age", everyMs: HOUR, run: () => checkWorkbookAge(), ...needsPush },
