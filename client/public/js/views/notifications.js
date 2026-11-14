@@ -135,8 +135,7 @@ function openNotificationSheet(notification, navigate, markAsRead) {
       <p class="notification-sheet-time muted">${formatDateTime(notification.created_at)}</p>
       <p class="notification-sheet-body">${escapeHtml(notification.body)}</p>
       <div class="sheet-actions">
-        ${notification.url ? `<button type="button" class="btn" id="notification-open-btn">${t("open")}</button>` : ""}
-        <button type="button" class="btn btn-primary" id="notification-close-btn">${t("close")}</button>
+        ${notification.url ? `<button type="button" class="btn btn-primary" id="notification-open-btn">${t("open")}</button>` : ""}
       </div>
     </div>
   `;
@@ -147,7 +146,7 @@ function openNotificationSheet(notification, navigate, markAsRead) {
     overlay.remove();
   }
   overlay.addEventListener("click", (e) => e.target === overlay && close());
-  overlay.querySelector("#notification-close-btn").addEventListener("click", close);
+
   overlay.querySelector("#notification-open-btn")?.addEventListener("click", () => {
     close();
     navigate(notificationHash(notification.url));

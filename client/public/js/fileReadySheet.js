@@ -2,6 +2,7 @@
 // in the sheet so it can be opened to look at before it is shared/saved (Open uses a blob URL in a
 // new tab -- the sheet stays here, so the app is never left on the file with no way back).
 import { t } from "./i18n.js";
+import { icons } from "./icons.js";
 import { activateDialog, saveBlob, escapeHtml, showToast } from "./util.js";
 import { api } from "./api.js";
 
@@ -9,10 +10,10 @@ import { api } from "./api.js";
 export function renderFileReady(sheet, blob, name, close) {
   const url = URL.createObjectURL(blob);
   sheet.innerHTML = `
+    <button type="button" class="icon-btn sheet-close-x" data-action="done" aria-label="${t("close")}">${icons.close}</button>
     <h2>${t("file_ready")}</h2>
     <p class="muted">${escapeHtml(name)}</p>
     <div class="sheet-actions">
-      <button type="button" class="btn" data-action="done">${t("close")}</button>
       <button type="button" class="btn" data-action="share">${t("file_share")}</button>
       <button type="button" class="btn btn-primary" data-action="open">${t("file_open")}</button>
     </div>

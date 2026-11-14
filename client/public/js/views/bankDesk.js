@@ -309,8 +309,7 @@ export async function renderBankDesk(root, navigate, query) {
     const p = memo.bank.find((x) => x.id === id);
     const overlay = sheet(`<h2>${escapeHtml(p.customer)} · ${nf(p.amount)}</h2><div id="bd-pay-body"><p class="loading-state" role="status">${t("loading")}</p></div>
       <p class="form-error" id="bd-sheet-error" hidden></p>
-      <div class="sheet-actions sheet-actions-floating" id="bd-pay-actions"><button type="button" class="btn" id="bd-x">${t("done")}</button></div>`);
-    overlay.querySelector("#bd-x").addEventListener("click", () => overlay.remove());
+      <div class="sheet-actions sheet-actions-floating" id="bd-pay-actions"></div>`);
     const err = (m) => Object.assign(overlay.querySelector("#bd-sheet-error"), { textContent: m, hidden: false });
     let detail;
     try {

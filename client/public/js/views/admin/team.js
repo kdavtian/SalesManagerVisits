@@ -146,12 +146,10 @@ export function openUserRecordsSheet(u, retryDelete, onPurged) {
       }
       <p class="form-error" id="records-sheet-error" hidden></p>
       <div class="sheet-actions">
-        <button type="button" class="btn" id="records-sheet-close">${t("done")}</button>
         ${report.canDeleteRecords && willClearRows ? `<button type="button" class="btn btn-danger" id="records-sheet-clear">${t("connected_records_clear_btn")}</button>` : ""}
       </div>
     `;
 
-    overlay.querySelector("#records-sheet-close").addEventListener("click", () => overlay.remove());
     // Two taps on purpose (no confirm() dialog): the first arms the button and shows what it will do, the second deletes.
     const purgeBtn = overlay.querySelector("#purge-btn");
     if (purgeBtn) {

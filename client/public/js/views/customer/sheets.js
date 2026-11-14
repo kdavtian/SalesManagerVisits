@@ -84,7 +84,6 @@ export async function openPaymentsReceivedSheet(customer) {
     <p class="form-error" id="debt-statement-error" hidden></p>
     <div class="sheet-actions">
       ${Number(customer.live_debt?.debt_amd ?? customer.erp_debt_amd) > 0 && seesAmountPapers(state.user.role) ? `<button type="button" class="btn" data-action="debt-statement">${t("debt_statement_button")}</button>` : ""}
-      <button type="button" class="btn" data-action="close-sheet">${t("done")}</button>
     </div>`;
     overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", () => overlay.remove()));
     overlay.querySelector('[data-action="show-more-payments"]')?.addEventListener("click", () => {
@@ -171,7 +170,7 @@ export async function openOrdersSheet(customer) {
             </div>`
           : `<p class="empty-state">${t("no_orders_found")}</p>`
       }
-      <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>`;
+`;
     bindClose();
     sheet.querySelector('[data-action="show-more-orders"]')?.addEventListener("click", () => {
       shown = orders.length;

@@ -93,7 +93,7 @@ export async function renderOpsControl(root, navigate, startTab) {
   function infoPopup(html) {
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
-    overlay.innerHTML = `<div class="sheet"><p>${escapeHtml(html)}</p><div class="sheet-actions"><button type="button" class="btn btn-primary" data-close>${t("done")}</button></div></div>`;
+    overlay.innerHTML = `<div class="sheet"><p>${escapeHtml(html)}</p></div>`;
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", (e) => (e.target === overlay || e.target.closest("[data-close]")) && overlay.remove());

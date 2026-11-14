@@ -299,17 +299,16 @@ export async function renderCashflow(root, navigate) {
           <button type="button" class="btn btn-primary btn-block" id="cf-req-send">${t("cf_request_send")}</button>
         </div>
         <div class="sheet-actions cf-d-actions">
-          <button type="button" class="btn" data-close>${t("close")}</button>
           ${d.right === "now" ? `<button type="button" class="btn btn-danger" id="cf-d-del">${t("cf_delete_short")}</button><button type="button" class="btn btn-primary" id="cf-d-edit">${t("cf_edit")}</button>` : ""}
           ${d.right === "request" && !d.pending_request ? `<button type="button" class="btn btn-danger" id="cf-d-reqdel">${t("cf_request_delete")}</button><button type="button" class="btn btn-primary" id="cf-d-reqedit">${t("cf_request_edit")}</button>` : ""}
         </div>`
-      : `<h2>${t("cf_details")}</h2><ul class="cf-log">${d.log.map(logLine).join("")}</ul><div class="sheet-actions"><button type="button" class="btn" data-close>${t("close")}</button></div>`;
+      : `<h2>${t("cf_details")}</h2><ul class="cf-log">${d.log.map(logLine).join("")}</ul>`;
     const fail = (m) => {
       const el = overlay.querySelector("#cf-d-error");
       el.textContent = m;
       el.hidden = false;
     };
-    overlay.querySelector("[data-close]").addEventListener("click", () => overlay.remove());
+    overlay.querySelector("[data-close]")?.addEventListener("click", () => overlay.remove());
     overlay.querySelector("#cf-d-customer")?.addEventListener("click", () => {
       overlay.remove();
       navigate(`#/customers/${e.customer_id}`);
@@ -359,8 +358,7 @@ export async function renderCashflow(root, navigate) {
   // ---- requests waiting for management (management decides; the accountant sees their own) ----------------------------------------
   async function openRequests() {
     const overlay = openSheet(`<h2>${t("cf_requests")}</h2><div id="cf-req-list"><p class="loading-state" role="status">${t("loading")}</p></div>
-      <div class="sheet-actions"><button type="button" class="btn" data-close>${t("close")}</button></div>`);
-    overlay.querySelector("[data-close]").addEventListener("click", () => overlay.remove());
+`);
     const listEl = overlay.querySelector("#cf-req-list");
     const paint = async () => {
       const r = await api.getCashRequests();

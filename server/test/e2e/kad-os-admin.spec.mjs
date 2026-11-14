@@ -68,7 +68,7 @@ test.describe("KAD OS orders (supplier admin)", () => {
       }
       await page.locator("#kos-code-copy").click();
       await expect(page.locator("#kos-code-copied")).toBeVisible();
-      await page.locator('.sheet-overlay [data-action="close"]').click();
+      await page.locator("body > .sheet-overlay .sheet-close-x").click();
       await expect(page.locator("#kos-links")).toContainText(customer.name);
       const link = (await pool.query("SELECT l.user_id, u.role FROM partner_links l JOIN users u ON u.id = l.user_id WHERE l.customer_id = $1", [customer.id])).rows[0];
       expect(link.role).toBe("customer");

@@ -54,7 +54,6 @@ function offerFileShare(file, blob, filename) {
         <h2>${t("file_ready")}</h2>
         <p class="muted">${escapeHtml(filename)}</p>
         <div class="sheet-actions">
-          <button type="button" class="btn" data-action="close">${t("close")}</button>
           <button type="button" class="btn btn-primary" data-action="share">${t("file_share")}</button>
         </div>
       </div>`;
@@ -1287,7 +1286,8 @@ export function activateDialog(overlay) {
     }
   });
 
-  requestAnimationFrame(() => (dialog.querySelector(selector) || dialog).focus());
+  // the X that sheetNav.js adds to every sheet is not where typing starts: the first real field or button is
+  requestAnimationFrame(() => ([...dialog.querySelectorAll(selector)].find((el) => !el.matches("[data-sheet-x]")) || dialog).focus());
   const observer = new MutationObserver(() => {
     if (overlay.isConnected) return;
     observer.disconnect();

@@ -68,7 +68,6 @@ export function openSyncQueueSheet() {
       <p class="muted">${t(navigator.onLine ? "sync_sheet_online_hint" : "sync_sheet_offline_hint")}${last ? ` · ${t("sync_sheet_last")} ${escapeHtml(formatDateTime(new Date(last).toISOString()))}` : ""}</p>
       <div class="sync-queue-list">${queue.map(itemHtml).join("")}</div>
       <div class="sheet-actions">
-        <button type="button" class="btn" data-action="close">${t("close")}</button>
         <button type="button" class="btn btn-primary" data-action="retry" ${retrying ? "disabled" : ""}>${t(retrying ? "sync_retrying" : "sync_retry_now")}</button>
       </div>`;
     sheet.querySelectorAll('[data-action="close"]').forEach((b) => b.addEventListener("click", close));

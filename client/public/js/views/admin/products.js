@@ -152,7 +152,6 @@ export async function renderProductsSection(container) {
           <button type="button" class="btn btn-block btn-danger" data-act="delete">${t("deactivate")}</button>
         </div>
         <p class="form-error" id="product-actions-error" hidden></p>
-        <div class="sheet-actions"><button type="button" class="btn" data-act="close">${t("done")}</button></div>
       </div>`;
     document.body.appendChild(overlay);
     activateDialog(overlay);
@@ -208,7 +207,6 @@ export async function renderProductsSection(container) {
           <label>${t("promo_note")}<input name="note" type="text" maxlength="200" /></label>
           <p class="form-error" id="promo-form-error" hidden></p>
           <div class="sheet-actions">
-            <button type="button" class="btn" id="close-promo">${t("done")}</button>
             <button type="submit" class="btn btn-primary">${t("add_promo")}</button>
           </div>
         </form>
@@ -216,7 +214,6 @@ export async function renderProductsSection(container) {
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
-    overlay.querySelector("#close-promo").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
     const promoListEl = overlay.querySelector("#promo-list");
@@ -429,14 +426,10 @@ export async function renderProductsSection(container) {
         <h2>${t("price_history")}</h2>
         <p class="muted">${escapeHtml(product.name)}</p>
         <div id="price-history-list" class="card-list"><p class="loading-state" role="status">${t("loading")}</p></div>
-        <div class="sheet-actions">
-          <button type="button" class="btn btn-block" id="close-price-history">${t("done")}</button>
-        </div>
       </div>
     `;
     document.body.appendChild(overlay);
     activateDialog(overlay);
-    overlay.querySelector("#close-price-history").addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
 
     const listEl = overlay.querySelector("#price-history-list");
