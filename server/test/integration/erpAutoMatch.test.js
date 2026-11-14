@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createCustomer, createUser, trackOrder, trackPayment } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp, runAutoApprovePayments } from "../../src/erp/erpAutoMatch.js";
+import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp } from "../../src/erp/erpAutoMatch.js";
 
 // The matchers work on Yerevan calendar dates; the database's CURRENT_DATE is
 // UTC, which differs from 20:00 UTC to midnight -- use Yerevan's today.
@@ -187,12 +187,3 @@ test("4-5 days apart only when the pairing is unique: two app payments of the sa
   for (const id of [a, b]) assert.equal((await pool.query("SELECT status FROM payments WHERE id = $1", [id])).rows[0].status, "pending");
 });
 
-test("the background job approves a payment the Excel already shows, without waiting for the next upload", async () => {
-  const rep = await createUser("sales_manager");
-  const c = await customerWithErp(rep, "J");
-  const p = await addPayment(c, rep.id, 41000, 1);
-  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 1, 41000)`, [c.erp_customer_id]);
-  const out = await runAutoApprovePayments();
-  assert.ok(out.approved >= 1);
-  assert.equal((await pool.query("SELECT status FROM payments WHERE id = $1", [p])).rows[0].status, "approved");
-});

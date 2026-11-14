@@ -1128,7 +1128,6 @@ export const enCommon = {
     job_daily_summary: "Daily summary (evening)",
     job_ops_control: "Operations control checks",
     job_cash_sheets: "Cash hand-over and sheet checks",
-    job_erp_auto_approve_payments: "Payments found in the Excel are approved",
     job_stale_packed_orders: "Packed orders not delivered",
     job_erp_sync_freshness: "Excel sync is arriving",
     job_excel_file_age: "Excel file age",
