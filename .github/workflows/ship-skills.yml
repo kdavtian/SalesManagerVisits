@@ -35,19 +35,19 @@ jobs:
           else
             echo "ok=1" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.ok == '1'
         with: { repository: kdavtian/KD-Mozg, path: KD-Mozg, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.ok == '1'
         with: { repository: kdavtian/SalesManagerVisits, path: SalesManagerVisits, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.ok == '1'
         with: { repository: kdavtian/castrol_ceo_report, path: castrol_ceo_report, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.ok == '1'
         with: { repository: kdavtian/KAD-GMM, path: KAD-GMM, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.token.outputs.ok == '1'
         with: { repository: KAD-Motors/KAD-Motors-Platform, path: KAD-Motors-Platform, token: "${{ secrets.SKILLS_SYNC_TOKEN }}" }
       - name: Copy, open the PRs, merge
