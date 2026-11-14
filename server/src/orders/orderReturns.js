@@ -5,6 +5,7 @@
 // Money: Excel stays the truth. The return carries a provisional credit (what the customer paid per unit x quantity) that the customer card shows
 // until the negative line arrives from Excel (matchReturnsToErp) or the accountant marks it recorded.
 import { isDone } from "./orderRecord.js";
+import { canApproveReturns } from "../shared/roles.js";
 import { pool } from "../db/pool.js";
 import { notifyApproversOf, notifyDecisionOf } from "../system/requests/notify.js";
 import { notifyUser } from "../shared/notifications.js";
@@ -102,9 +103,16 @@ export async function requestReturn(user, body) {
       );
     }
     await client.query("COMMIT");
+    // Someone who decides returns themselves (admin, CEO, ... per the approval settings) does not wait for anybody (owner, 2026-11-14: "Admin should be
+    // highest authority"): their request is approved at once. A cancel is then done (a packed order first goes back to the warehouse), a return waits
+    // only for the warehouse to take the goods back.
+    if (canApproveReturns(user.role)) {
+      const { status } = await decideReturn(user, ret.id, { approve: true, note: null });
+      return { id: ret.id, kind, status, self_decided: true };
+    }
     // every person who may decide it gets a push that opens the request card (owner, 2026-11-08)
     notifyApproversOf("return", ret.id);
-    return { id: ret.id, kind };
+    return { id: ret.id, kind, status: "requested" };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
