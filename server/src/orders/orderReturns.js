@@ -45,6 +45,33 @@ export function mayRequest(user, order, customerManagerId) {
 }
 
 export async function requestReturn(user, body) {
+  const made = await saveReturnRequest(user, body);
+  // Someone who decides returns themselves (admin, CEO, ... per the approval settings) does not wait for anybody (owner, 2026-11-14: "Admin should be
+  // highest authority"): their request is approved at once. A cancel is then done (a packed order first goes back to the warehouse), a return waits
+  // only for the warehouse to take the goods back. Decided after the request's own connection is released (never two connections at once), and if
+  // the decision fails (the order moved on meanwhile) the request simply waits like anyone's, with the approvers told.
+  if (canApproveReturns(user.role)) {
+    try {
+      const { status } = await decideReturn(user, made.id, { approve: true, note: null });
+      // the order's own rep hears that management cancelled / took back their order
+      if (made.orderUserId && made.orderUserId !== user.id) {
+        notifyUser(made.orderUserId, "order_status_changed", {
+          title: made.kind === "cancel" ? "Պատվերը չեղարկվեց" : "Պատվերի վերադարձ",
+          body: made.customerName ?? "",
+          url: "/#/orders",
+        }).catch(() => {});
+      }
+      return { id: made.id, kind: made.kind, status, self_decided: true };
+    } catch (err) {
+      console.error(`Return #${made.id}: deciding it at once failed, it waits for a decision:`, err.message);
+    }
+  }
+  // every person who may decide it gets a push that opens the request card (owner, 2026-11-08)
+  notifyApproversOf("return", made.id);
+  return { id: made.id, kind: made.kind, status: "requested" };
+}
+
+async function saveReturnRequest(user, body) {
   const orderId = Number(body.order_id);
   const reason = String(body.reason ?? "");
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
@@ -103,16 +130,7 @@ export async function requestReturn(user, body) {
       );
     }
     await client.query("COMMIT");
-    // Someone who decides returns themselves (admin, CEO, ... per the approval settings) does not wait for anybody (owner, 2026-11-14: "Admin should be
-    // highest authority"): their request is approved at once. A cancel is then done (a packed order first goes back to the warehouse), a return waits
-    // only for the warehouse to take the goods back.
-    if (canApproveReturns(user.role)) {
-      const { status } = await decideReturn(user, ret.id, { approve: true, note: null });
-      return { id: ret.id, kind, status, self_decided: true };
-    }
-    // every person who may decide it gets a push that opens the request card (owner, 2026-11-08)
-    notifyApproversOf("return", ret.id);
-    return { id: ret.id, kind, status: "requested" };
+    return { id: ret.id, kind, orderUserId: order.user_id, customerName: order.customer_name };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

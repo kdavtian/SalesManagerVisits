@@ -9808,7 +9808,7 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .rt-order-row { padding: 8px 10px; margin: 8px 0; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
 /* a waiting cancellation / return decided right on the order (owner, 2026-11-14) */
 .rt-order-decide { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.rt-order-decide .btn { flex: 1 1 0; min-height: 40px; padding: 8px 12px; }
+.rt-order-decide .btn { flex: 1 1 0; min-height: 44px; padding: 8px 12px; }
 .rt-order-decide input { flex: 1 1 100%; }
 /* a never-visited pin shows "!!" instead of the overdue "!" badge (both would sit in the same corner) */
 #leaflet-map .pin.pin-is-never.pin-status-overdue::after { display: none; }

@@ -150,12 +150,13 @@ function correctionsHtml(order) {
   </div>`;
 }
 
+const RETURN_REASON_CODES = ["damaged", "wrong_product", "expired", "changed_mind", "quality", "other"];
 // Why a cancelled order was cancelled: the customer's own words (KAD OS) or the reason chosen in the app (a code -> its label).
 function cancelReasonHtml(order) {
   if (!order.cancelled_at || !order.cancel_reason) return "";
   const byCustomer = (order.history ?? []).some((h) => /by the customer \(KAD OS\)/.test(h.reason ?? ""));
   const code = String(order.cancel_reason);
-  const text = /^[a-z_]+$/.test(code) && t(`rt_reason_${code}`) !== `rt_reason_${code}` ? t(`rt_reason_${code}`) : code;
+  const text = RETURN_REASON_CODES.includes(code) ? t(`rt_reason_${code}`) : code;
   return `<p class="muted order-cancel-reason">${t(byCustomer ? "kos_cancel_reason" : "cancel_reason_label")}${labelColon()}${escapeHtml(text)}</p>`;
 }
 
@@ -439,14 +440,16 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       onChanged?.();
     });
     overlay.querySelector('.sheet-head-actions [data-action="print-blank"]')?.addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
-    // Returns / cancellation requests on this order (loaded after the sheet is up).
+    // Returns / cancellation requests on this order (loaded after the sheet is up). The slot of THIS drawing: if the sheet was drawn again
+    // meanwhile, this answer is for a page that is gone.
+    const returnsSlot = overlay.querySelector("#order-returns-slot");
     api
       .listReturns({ order_id: orderId })
       .then((list) => {
-        const slot = overlay.querySelector("#order-returns-slot");
-        if (!slot || !list.length) return;
-        // a cancellation already waits: a second one would be refused, so the button goes (client rule = server rule)
-        if (list.some((r) => r.kind === "cancel" && ["requested", "approved"].includes(r.status))) actionsEl.querySelector('[data-action="order-return"]')?.remove();
+        const slot = returnsSlot;
+        if (!slot?.isConnected || !list.length) return;
+        // a cancellation already waits: a second one would be refused, so the button goes (client rule = server rule); a delivered order's Return stays
+        if (!isDone(order.status) && list.some((r) => r.kind === "cancel" && ["requested", "approved"].includes(r.status))) actionsEl.querySelector('[data-action="order-return"]')?.remove();
         const decides = canApproveReturns(state.user.role);
         const chip = { requested: ["rt_status_requested", "badge-warning"], approved: ["rt_status_approved", "badge-info"], rejected: ["rt_status_rejected", "badge-danger"], done: ["rt_status_done", "badge-success"] };
         slot.innerHTML = list
@@ -470,7 +473,9 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           if (btn.dataset.rt === "reject" && !box.querySelector("[data-rt-note]")) {
             // a rejection needs a reason (server): an inline field, no dialog
             box.insertAdjacentHTML("beforeend", `<input data-rt-note maxlength="500" placeholder="${escapeHtml(t("rt_reject_reason"))}" aria-label="${escapeHtml(t("rt_reject_reason"))}" />`);
-            box.querySelector("[data-rt-note]").focus();
+            const noteEl = box.querySelector("[data-rt-note]");
+            noteEl.addEventListener("keydown", (ev) => ev.key === "Enter" && btn.click()); // Enter sends the rejection
+            noteEl.focus();
             return;
           }
           box.querySelectorAll("button").forEach((b) => (b.disabled = true));

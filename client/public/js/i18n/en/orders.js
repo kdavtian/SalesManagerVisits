@@ -199,7 +199,7 @@ export const enOrders = {
     rt_return_hint_now: "You decide returns: once you confirm, the warehouse takes the goods back.",
     rt_done_cancel: "Order cancelled",
     rt_done_warehouse: "Approved: the warehouse takes the goods back",
-    rt_waiting_by: "Waiting for a decision by management (admin, CEO or a director)",
+    rt_waiting_by: "Waiting for a decision by management",
     rt_already_cancelled: "This order is already cancelled",
     rt_not_possible: "A return is not possible for this order",
     rt_none: "No requests",
