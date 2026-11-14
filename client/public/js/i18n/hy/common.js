@@ -1128,6 +1128,7 @@ export const hyCommon = {
     job_daily_summary: "Օրվա ամփոփում (երեկոյան)",
     job_ops_control: "Գործառնական վերահսկման ստուգումներ",
     job_cash_sheets: "Կանխիկի հանձնման և թերթիկների ստուգումներ",
+    job_erp_auto_approve_payments: "Excel-ում գտնված վճարումները հաստատվում են",
     job_stale_packed_orders: "Փաթեթավորված, բայց չառաքված պատվերներ",
     job_erp_sync_freshness: "Excel-ի համաժամեցումը հասնում է",
     job_excel_file_age: "Excel ֆայլի թարմությունը",

@@ -1,5 +1,6 @@
 import { recordOrder } from "../orders/orderRecord.js";
 import { EXCEL_MATCH_DAYS } from "../money/paymentExcelMatch.js";
+import { pool } from "../db/pool.js";
 // After every ERP sync: anything the workbook already shows is settled in KAD
 // too (owner's rule).
 //  - A confirmed / packed order that matches an ERP order (same ERP customer,
@@ -151,6 +152,24 @@ export async function autoApprovePaymentsFromErp(client) {
     done.add(m.payment_id);
   }
   return approved;
+}
+
+// Owner, 2026-11-14 ("not solved yet"): the approval waited for the next Excel upload, so a payment the Excel already showed could sit
+// pending for a day. The same matching now also runs every few minutes from the job scheduler (jobs/index.js) against the Excel rows the
+// app already has -- a payment entered after the upload is approved as soon as its row is there, and a deploy takes effect within minutes.
+export async function runAutoApprovePayments(db = pool) {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const approved = await autoApprovePaymentsFromErp(client);
+    await client.query("COMMIT");
+    return { approved: approved.length };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Which app rows Excel already holds (owner, 2026-10-27: "Excel includes only ALREADY DELIVERED orders ... if the order is included,
