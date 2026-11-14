@@ -1286,7 +1286,8 @@ export function activateDialog(overlay) {
     }
   });
 
-  requestAnimationFrame(() => (dialog.querySelector(selector) || dialog).focus());
+  // the X that sheetNav.js adds to every sheet is not where typing starts: the first real field or button is
+  requestAnimationFrame(() => ([...dialog.querySelectorAll(selector)].find((el) => !el.matches("[data-sheet-x]")) || dialog).focus());
   const observer = new MutationObserver(() => {
     if (overlay.isConnected) return;
     observer.disconnect();

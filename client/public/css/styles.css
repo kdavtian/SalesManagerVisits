@@ -2686,25 +2686,29 @@ label.checkbox-row input[type="checkbox"] {
 
 /* Every sheet's top (owner, 2026-11-14: "like KAD OS"): sheetNav.js adds a grab bar (phone only, where the sheet can be pulled down) and
    an X. The grab sits in the sheet's 20px top padding. */
-.sheet-grab-auto { margin: -12px auto 8px; }
+.sheet-grab.sheet-grab-auto { margin: -12px auto 8px; }
+/* sheets without top padding (their own header / scroll area inside) */
+:is(.oc-order-sheet, .pu-form-sheet, .pd-edit-sheet, .task-editor) > .sheet-grab.sheet-grab-auto { margin: 6px auto 2px; }
 @media (min-width: 768px) {
-  .sheet-grab-auto { display: none; }
+  .sheet-grab.sheet-grab-auto { display: none; }
 }
-.sheet-actions:empty { display: none; }
+.sheet-actions:not(:has(*)) { display: none; }
 .sheet-pinned-x { position: relative; }
 .sheet-close-x.sheet-close-x-pin { position: absolute; top: 16px; right: 16px; float: none; margin: 0; }
-.sheet-pinned-x > :is(h2, header, .sheet-head):first-of-type { padding-right: 52px; }
+.sheet-pinned-x h2, .sheet-pinned-x .sheet-head { padding-right: 52px; }
 /* Three or more buttons: the main action alone on top, full width and taller; the others share the row under it (owner, 2026-11-14:
    "big button Approve, under it Reject, Delete"). Two buttons (Cancel + Save) stay side by side.
    A decision sheet (approve / reject a payment, an order, a cash handover) says so with .sheet-actions-stack and stacks from two buttons. */
-.sheet-actions:has(> .btn:nth-of-type(3)):has(> .btn-primary),
-.sheet-actions-stack:has(> .btn-primary) { flex-wrap: wrap; }
-.sheet-actions:has(> .btn:nth-of-type(3)) > .btn-primary,
-.sheet-actions-stack > .btn-primary { order: -1; flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
+.sheet-actions:has(> .btn:nth-of-type(3)):has(> .btn-primary):not(:has(> .btn-primary ~ .btn-primary)),
+.sheet-actions-stack:has(> .btn-primary):not(:has(> .btn-primary ~ .btn-primary)) { flex-wrap: wrap; }
+.sheet-actions:has(> .btn:nth-of-type(3)):not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary,
+.sheet-actions-stack:not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary { order: -1; flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
+/* (a bar with two or more main buttons, e.g. a director's "approve price" + "approve credit" + "confirm" next to their "reject" pairs,
+   keeps its own order) */
 /* The smallest phones (320 px): a long Armenian main action ("Save the changes") gets the whole row too, with the others under it. */
 @media (max-width: 360px) {
-  .sheet-actions:has(> .btn-primary):has(> .btn:nth-of-type(2)) { flex-wrap: wrap; }
-  .sheet-actions:has(> .btn:nth-of-type(2)) > .btn-primary { order: -1; flex: 1 1 100%; }
+  .sheet-actions:has(> .btn-primary):has(> .btn:nth-of-type(2)):not(:has(> .btn-primary ~ .btn-primary)) { flex-wrap: wrap; }
+  .sheet-actions:has(> .btn:nth-of-type(2)):not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary { order: -1; flex: 1 1 100%; }
 }
 
 /* Edit Customer's Cancel/Save row: sticky to the bottom of .sheet's own

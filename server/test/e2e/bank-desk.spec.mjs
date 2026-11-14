@@ -78,7 +78,7 @@ test.describe("phone", () => {
       await page.locator(".bd-pay", { hasText: `E2E Tin Shop ${stamp}` }).click();
       await expect(page.locator(".bd-events")).toContainText("Recorded from the statement", { timeout: 10000 });
       await shot(page, "bd-5-detail");
-      await page.locator("#bd-x").click();
+      await page.locator("body > .sheet-overlay .sheet-close-x").click();
       // typing the 50,000 again: refused, then recorded as a separate payment
       await page.locator("#bd-add").click();
       await page.locator("#bd-pick").click();

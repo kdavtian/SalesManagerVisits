@@ -21,7 +21,11 @@ const isLocked = (overlay) => overlay.dataset.locked === "1";
 export function dismissSheet(overlay) {
   if (!overlay?.isConnected) return;
   const ev = new CustomEvent("sheet-dismiss", { cancelable: true });
-  if (overlay.dispatchEvent(ev)) overlay.remove();
+  if (!overlay.dispatchEvent(ev)) return;
+  // most sheets close themselves their own way on a tap on the dim background (cancel a running build, put the map pin back, resolve a
+  // waiting question): the X and the pull-down do the same as that tap; a sheet with no such handler is simply removed
+  overlay.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  if (overlay.isConnected) overlay.remove();
 }
 const closeSheet = dismissSheet;
 

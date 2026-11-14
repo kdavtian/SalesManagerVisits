@@ -95,7 +95,7 @@ test("accountant adds (chips sheet), opens the details with history, edits and d
     await page.locator(".cf-row", { hasText: "70KK770 fuel" }).click();
     await expect(page.locator(".cf-d-lines")).toContainText(/Excel/);
     await expect(page.locator("#cf-d-edit")).toHaveCount(0);
-    await page.locator(".sheet [data-close]").click();
+    await page.locator("body > .sheet-overlay .sheet-close-x").click();
 
     await page.locator("#cf-add").click();
     await expect(page.locator("#cf-form")).toBeVisible();
