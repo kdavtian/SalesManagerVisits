@@ -153,3 +153,35 @@ test("who sees what: a rep only their own, the warehouse manager and management 
   assert.ok(returnable.items.every((i) => i.left >= 0));
   assert.equal((await call("rep2", `/order/${mine[0].order_id}/returnable`)).status, 403);
 });
+
+// Owner, 2026-11-14: "The admin taps Cancel, gives the reason and it shows waiting for approval. Admin should be highest authority."
+// Someone who decides returns does not wait for anybody: a cancel is done at once (a packed order goes to the warehouse first), a return
+// goes straight to the warehouse. A rep's request still waits.
+test("a decider's own cancel or return is approved at once; a rep's still waits", async () => {
+  const admin = await createUser("admin");
+  const adminCookie = await loginAs(admin.email);
+  const asAdmin = (body) => apiRequest("/api/returns", { method: "POST", cookie: adminCookie, body });
+
+  const confirmed = await newOrder("confirmed");
+  const c = await asAdmin({ order_id: confirmed, reason: "changed_mind" });
+  assert.equal(c.status, 201, JSON.stringify(c.data));
+  assert.equal(c.data.status, "done");
+  const o = (await pool.query("SELECT status, cancelled_at FROM orders WHERE id = $1", [confirmed])).rows[0];
+  assert.deepEqual([o.status, Boolean(o.cancelled_at)], ["draft", true]);
+  assert.equal((await pool.query("SELECT status, decided_by FROM order_returns WHERE id = $1", [c.data.id])).rows[0].decided_by, admin.id);
+
+  const packed = await newOrder("packed_stock_out");
+  const p = await asAdmin({ order_id: packed, reason: "changed_mind" });
+  assert.equal(p.data.status, "approved", "a packed order waits only for the warehouse");
+  assert.equal((await pool.query("SELECT status FROM orders WHERE id = $1", [packed])).rows[0].status, "packed_stock_out");
+
+  const delivered = await newOrder("delivered");
+  const line = (await pool.query("SELECT id FROM order_items WHERE order_id = $1 ORDER BY id LIMIT 1", [delivered])).rows[0];
+  const r = await asAdmin({ order_id: delivered, reason: "damaged", items: [{ order_item_id: line.id, quantity: 1 }] });
+  assert.equal(r.data.status, "approved", "a return goes straight to the warehouse");
+
+  const repOrder = await newOrder("confirmed");
+  const w = await call("rep", "/", "POST", { order_id: repOrder, reason: "changed_mind" });
+  assert.equal(w.data.status, "requested");
+  assert.equal((await pool.query("SELECT cancelled_at FROM orders WHERE id = $1", [repOrder])).rows[0].cancelled_at, null);
+});

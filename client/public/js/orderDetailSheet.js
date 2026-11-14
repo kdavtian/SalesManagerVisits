@@ -150,6 +150,16 @@ function correctionsHtml(order) {
   </div>`;
 }
 
+const RETURN_REASON_CODES = ["damaged", "wrong_product", "expired", "changed_mind", "quality", "other"];
+// Why a cancelled order was cancelled: the customer's own words (KAD OS) or the reason chosen in the app (a code -> its label).
+function cancelReasonHtml(order) {
+  if (!order.cancelled_at || !order.cancel_reason) return "";
+  const byCustomer = (order.history ?? []).some((h) => /by the customer \(KAD OS\)/.test(h.reason ?? ""));
+  const code = String(order.cancel_reason);
+  const text = RETURN_REASON_CODES.includes(code) ? t(`rt_reason_${code}`) : code;
+  return `<p class="muted order-cancel-reason">${t(byCustomer ? "kos_cancel_reason" : "cancel_reason_label")}${labelColon()}${escapeHtml(text)}</p>`;
+}
+
 function orderTimelineHtml(history, currentStatus) {
   if (!history?.length) return "";
   const lastIdx = history.map((h) => h.new_status).lastIndexOf(currentStatus);
@@ -159,7 +169,8 @@ function orderTimelineHtml(history, currentStatus) {
       ${history
         .map((h, idx) => {
           // The step where the customer cancelled (or replaced) a KAD OS order is "Cancelled", not "Draft".
-          const meta = h.new_status === "draft" && /by the customer \(KAD OS\)/.test(h.reason ?? "") ? CANCELLED_META : STATUS_META[h.new_status];
+          // An order cancelled in the app (a cancellation request, server orderReturns.js) is "Cancelled" too.
+          const meta = h.new_status === "draft" && /by the customer \(KAD OS\)|^Cancelled \(request #/.test(h.reason ?? "") ? CANCELLED_META : STATUS_META[h.new_status];
           const hint = idx === lastIdx && WAITING_HINT[currentStatus] ? `<span class="order-step-hint">${t(WAITING_HINT[currentStatus])}</span>` : "";
           const label = meta ? t(meta.key) : escapeHtml(h.new_status);
           return `
@@ -317,6 +328,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       ${order.signed_at ? `<p class="order-signed-note">${t("signature_signed_on")} · ${escapeHtml(formatDateTime(order.signed_at))}${isSignedLocked(order) ? `<br />${t("signature_locked")}` : ""}</p>` : ""}
       <div id="order-signed-docs"></div>
       <div id="order-files-slot"></div>
+      ${cancelReasonHtml(order)}
+      ${!order.cancelled_at && order.status === "draft" && order.draft_reason ? `<p class="muted order-cancel-reason">${t("draft_reason_label")}${labelColon()}${escapeHtml(order.draft_reason)}</p>` : ""}
       <div id="order-returns-slot"></div>
       ${correctionsHtml(order)}
       ${orderTimelineHtml(order.history, order.status)}
@@ -336,11 +349,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     const buttons = [];
     if (order.cancelled_at) {
       // Closed by the customer in KAD OS: nothing to submit or fix; the red chip and the timeline say it, only the customer's reason is added.
-      if (order.cancel_reason) buttons.push({ label: `${t("kos_cancel_reason")}${labelColon()}${order.cancel_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
+      // (its reason is a line above the buttons, not a grey button: cancelReasonHtml)
     } else if (order.status === "draft" && (isOwnerOrAdmin || state.user.role === "accountant")) {
-      if (order.draft_reason) {
-        buttons.push({ label: `${t("draft_reason_label")}${labelColon()}${order.draft_reason}`, action: "noop", cls: "btn", disabledDisplay: true });
-      }
       buttons.push({ label: t("submit_order"), action: "submit-order", cls: "btn btn-primary" });
     }
     if (canApproveDiscount) {
@@ -430,20 +440,61 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       onChanged?.();
     });
     overlay.querySelector('.sheet-head-actions [data-action="print-blank"]')?.addEventListener("click", () => openPrintBlankSheet([{ id: order.id, order_code: order.order_code }]));
-    // Returns / cancellation requests on this order (loaded after the sheet is up).
+    // Returns / cancellation requests on this order (loaded after the sheet is up). The slot of THIS drawing: if the sheet was drawn again
+    // meanwhile, this answer is for a page that is gone.
+    const returnsSlot = overlay.querySelector("#order-returns-slot");
     api
       .listReturns({ order_id: orderId })
       .then((list) => {
-        const slot = overlay.querySelector("#order-returns-slot");
-        if (!slot || !list.length) return;
+        const slot = returnsSlot;
+        if (!slot?.isConnected || !list.length) return;
+        // a cancellation already waits: a second one would be refused, so the button goes (client rule = server rule); a delivered order's Return stays
+        if (!isDone(order.status) && list.some((r) => r.kind === "cancel" && ["requested", "approved"].includes(r.status))) actionsEl.querySelector('[data-action="order-return"]')?.remove();
+        const decides = canApproveReturns(state.user.role);
         const chip = { requested: ["rt_status_requested", "badge-warning"], approved: ["rt_status_approved", "badge-info"], rejected: ["rt_status_rejected", "badge-danger"], done: ["rt_status_done", "badge-success"] };
         slot.innerHTML = list
           .map((r) => {
             const [key, cls] = chip[r.status];
             const what = r.items.map((i) => `${escapeHtml(i.product_name)} × ${Number(i.quantity)}`).join(", ");
-            return `<div class="rt-order-row"><div><strong>${escapeHtml(t(r.kind === "return" ? "rt_kind_return" : "rt_kind_cancel"))}</strong> <span class="badge ${cls}">${escapeHtml(t(key))}</span></div><div class="muted">${what}</div>${r.decision_note ? `<div class="muted">${escapeHtml(r.decision_note)}</div>` : ""}</div>`;
+            // a request still waiting: who decides it, and (for them) Approve / Reject right here, no trip to the Returns screen
+            const waiting = r.status === "requested";
+            const decide = waiting && decides
+              ? `<div class="rt-order-decide" data-return-id="${r.id}"><button type="button" class="btn btn-primary" data-rt="approve">${escapeHtml(t("rt_approve"))}</button><button type="button" class="btn btn-danger" data-rt="reject">${escapeHtml(t("rt_reject"))}</button></div>`
+              : waiting ? `<div class="muted">${escapeHtml(t("rt_waiting_by"))}</div>` : "";
+            return `<div class="rt-order-row"><div><strong>${escapeHtml(t(r.kind === "return" ? "rt_kind_return" : "rt_kind_cancel"))}</strong> <span class="badge ${cls}">${escapeHtml(t(key))}</span></div><div class="muted">${what}</div>${r.decision_note ? `<div class="muted">${escapeHtml(r.decision_note)}</div>` : ""}${decide}</div>`;
           })
           .join("");
+        slot.addEventListener("click", async (e) => {
+          const btn = e.target.closest("[data-rt]");
+          if (!btn) return;
+          const box = btn.closest("[data-return-id]");
+          const id = Number(box.dataset.returnId);
+          errorEl.hidden = true;
+          if (btn.dataset.rt === "reject" && !box.querySelector("[data-rt-note]")) {
+            // a rejection needs a reason (server): an inline field, no dialog
+            box.insertAdjacentHTML("beforeend", `<input data-rt-note maxlength="500" placeholder="${escapeHtml(t("rt_reject_reason"))}" aria-label="${escapeHtml(t("rt_reject_reason"))}" />`);
+            const noteEl = box.querySelector("[data-rt-note]");
+            noteEl.addEventListener("keydown", (ev) => ev.key === "Enter" && btn.click()); // Enter sends the rejection
+            noteEl.focus();
+            return;
+          }
+          box.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          try {
+            if (btn.dataset.rt === "approve") await api.approveReturn(id, "");
+            else {
+              const note = box.querySelector("[data-rt-note]").value.trim();
+              if (!note) throw new Error(t("rt_reject_reason"));
+              await api.rejectReturn(id, note);
+            }
+            notifyOrdersChanged();
+            onChanged?.();
+            renderView(await api.getOrder(orderId));
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            box.querySelectorAll("button").forEach((b) => (b.disabled = false));
+          }
+        });
       })
       .catch(() => {});
     // Signed copies Lily stored on this order (loaded after the sheet is up).

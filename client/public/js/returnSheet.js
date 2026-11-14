@@ -3,6 +3,8 @@
 import { api } from "./api.js";
 import { t } from "./i18n.js";
 import { activateDialog, escapeHtml, showToast } from "./util.js";
+import { state } from "./state.js";
+import { canApproveReturns } from "./shared/roles.js";
 
 const REASONS = ["damaged", "wrong_product", "expired", "changed_mind", "quality", "other"];
 
@@ -22,16 +24,19 @@ export async function openReturnSheet(orderId, onDone) {
     return;
   }
   if (!info.kind) {
-    sheet.innerHTML = `<p class="muted">${escapeHtml(t(info.cancelled ? "rt_already_cancelled" : "rt_not_possible"))}</p><div class="sheet-actions"><button type="button" class="btn" id="rt-close">${escapeHtml(t("done"))}</button></div>`;
-    sheet.querySelector("#rt-close").addEventListener("click", () => overlay.remove());
+    sheet.innerHTML = `<p class="muted">${escapeHtml(t(info.cancelled ? "rt_already_cancelled" : "rt_not_possible"))}</p>`;
     return;
   }
   const isReturn = info.kind === "return";
+  // someone who decides returns does it at once (owner, 2026-11-14: "Admin should be highest authority"); a rep sends a request
+  const decides = canApproveReturns(state.user?.role);
+  const hint = !decides ? (isReturn ? "" : "rt_cancel_hint") : isReturn ? "rt_return_hint_now" : info.status === "packed_stock_out" ? "rt_cancel_hint_packed" : "rt_cancel_hint_now";
   const qty = new Map(info.items.map((i) => [i.id, 0]));
   let reason = "";
   sheet.innerHTML = `
     <h2>${escapeHtml(t(isReturn ? "rt_return_title" : "rt_cancel_title"))}</h2>
-    ${isReturn ? `<button type="button" class="btn btn-block" id="rt-all">${escapeHtml(t("rt_whole_order"))}</button>` : `<p class="muted">${escapeHtml(t("rt_cancel_hint"))}</p>`}
+    ${hint ? `<p class="muted">${escapeHtml(t(hint))}</p>` : ""}
+    ${isReturn ? `<button type="button" class="btn btn-block" id="rt-all">${escapeHtml(t("rt_whole_order"))}</button>` : ""}
     <div class="rt-lines">
       ${info.items
         .map(
@@ -48,7 +53,7 @@ export async function openReturnSheet(orderId, onDone) {
     <p class="form-error" id="rt-error" hidden></p>
     <div class="sheet-actions sheet-actions-floating">
       <button type="button" class="btn" id="rt-cancel">${escapeHtml(t("cancel"))}</button>
-      <button type="button" class="btn btn-primary" id="rt-send">${escapeHtml(t(isReturn ? "rt_send_return" : "rt_send_cancel"))}</button>
+      <button type="button" class="btn btn-primary" id="rt-send">${escapeHtml(t(decides ? (isReturn ? "rt_do_return" : "rt_do_cancel") : isReturn ? "rt_send_return" : "rt_send_cancel"))}</button>
     </div>`;
   const paint = () => sheet.querySelectorAll("[data-line]").forEach((row) => {
     const q = qty.get(Number(row.dataset.line));
@@ -90,9 +95,10 @@ export async function openReturnSheet(orderId, onDone) {
     if (problem) return;
     e.currentTarget.disabled = true;
     try {
-      await api.requestReturn({ order_id: orderId, reason, note, ...(isReturn ? { items: lines } : {}) });
+      const made = await api.requestReturn({ order_id: orderId, reason, note, ...(isReturn ? { items: lines } : {}) });
       overlay.remove();
-      showToast(t("rt_sent"));
+      // the server says what really happened: done (cancelled), approved (the warehouse is next) or requested (waits for management)
+      showToast(t(made?.status === "done" ? "rt_done_cancel" : made?.status === "approved" ? "rt_done_warehouse" : "rt_sent"));
       window.dispatchEvent(new Event("orders-changed"));
       onDone?.();
     } catch (err) {

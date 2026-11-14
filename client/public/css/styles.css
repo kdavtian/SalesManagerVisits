@@ -2682,6 +2682,10 @@ label.checkbox-row input[type="checkbox"] {
 .sheet-actions .btn {
   flex: 1;
   min-width: 0; /* a long Armenian label wraps inside its button instead of pushing the bar past a 320 px screen */
+  /* lower buttons (owner, 2026-11-14: "make buttons shorter in height"): 44 px, still a full touch target */
+  min-height: 44px;
+  padding: 9px 12px;
+  line-height: 1.2;
 }
 
 /* Every sheet's top (owner, 2026-11-14: "like KAD OS"): sheetNav.js adds a grab bar (phone only, where the sheet can be pulled down) and
@@ -2702,7 +2706,7 @@ label.checkbox-row input[type="checkbox"] {
 .sheet-actions:has(> .btn:nth-of-type(3)):has(> .btn-primary):not(:has(> .btn-primary ~ .btn-primary)),
 .sheet-actions-stack:has(> .btn-primary):not(:has(> .btn-primary ~ .btn-primary)) { flex-wrap: wrap; }
 .sheet-actions:has(> .btn:nth-of-type(3)):not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary,
-.sheet-actions-stack:not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary { order: -1; flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
+.sheet-actions-stack:not(:has(> .btn-primary ~ .btn-primary)) > .btn-primary { order: -1; flex: 1 1 100%; min-height: 48px; font-size: 1.02rem; }
 /* (a bar with two or more main buttons, e.g. a director's "approve price" + "approve credit" + "confirm" next to their "reject" pairs,
    keeps its own order) */
 /* The smallest phones (320 px): a long Armenian main action ("Save the changes") gets the whole row too, with the others under it. */
@@ -8976,6 +8980,11 @@ html[data-text-size="xlarge"] { font-size: 130%; }
 }
 /* The one main step of an order sheet (Mark recorded, Mark delivered) on its own full-width row on phones; the other buttons pair up under it. */
 .order-detail-sheet .sheet-actions .order-action-lead { flex: 1 0 100%; }
+/* Phone: the order's other actions two to a row, one line each (owner, 2026-11-14 screenshot: five tall buttons squeezed into one row). */
+@media (max-width: 899px) {
+  .order-detail-sheet .sheet-actions .btn:not(.btn-primary) { flex: 1 1 calc(50% - 5px); font-size: 0.9rem; }
+  .order-detail-sheet .sheet-actions .btn-has-icon svg { width: 16px; height: 16px; }
+}
 .order-share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; }
 .order-share-btn svg { width: 20px; height: 20px; }
 .vg-summary-top .badge { margin-left: auto; }
@@ -9797,6 +9806,10 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .rt-step b { min-width: 1.6em; text-align: center; font-variant-numeric: tabular-nums; }
 .rt-actions .btn { flex: 1 1 140px; min-height: 44px; }
 .rt-order-row { padding: 8px 10px; margin: 8px 0; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
+/* a waiting cancellation / return decided right on the order (owner, 2026-11-14) */
+.rt-order-decide { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.rt-order-decide .btn { flex: 1 1 0; min-height: 44px; padding: 8px 12px; }
+.rt-order-decide input { flex: 1 1 100%; }
 /* a never-visited pin shows "!!" instead of the overdue "!" badge (both would sit in the same corner) */
 #leaflet-map .pin.pin-is-never.pin-status-overdue::after { display: none; }
 
