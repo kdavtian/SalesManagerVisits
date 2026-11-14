@@ -28,7 +28,7 @@ export function openSearch({ navigate, settings }) {
             placeholder="${escapeHtml(t("search_placeholder_all"))}" aria-label="${escapeHtml(t("search_placeholder_all"))}" aria-controls="search-sheet-results" />
           <button type="button" class="search-sheet-clear" aria-label="${escapeHtml(t("clear_search"))}" hidden>${icons.close}</button>
         </div>
-        <button type="button" class="btn btn-ghost search-sheet-cancel" data-action="close">${escapeHtml(t("cancel"))}</button>
+        <button type="button" class="btn btn-ghost search-sheet-cancel" data-action="close" data-sheet-x>${escapeHtml(t("cancel"))}</button>
       </div>
       <div class="search-sheet-results" id="search-sheet-results" role="listbox"></div>
     </div>`;

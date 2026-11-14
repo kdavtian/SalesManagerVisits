@@ -228,14 +228,12 @@ export async function renderKadOsPerksSection(container) {
         <p class="muted settings-hint">${t("kos_code_steps")}</p>
         <p class="form-success" id="kos-code-copied" role="status" hidden>${t("kos_code_copied")}</p>
         <div class="sheet-actions">
-          <button type="button" class="btn" data-action="close">${t("close")}</button>
           <button type="button" class="btn btn-primary" id="kos-code-copy">${t("kos_code_copy")}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
     activateDialog(overlay);
     overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
-    overlay.querySelector('[data-action="close"]').addEventListener("click", () => overlay.remove());
     const box = overlay.querySelector("#kos-code");
     const copied = overlay.querySelector("#kos-code-copied");
     box.addEventListener("focus", () => box.select());

@@ -323,7 +323,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       </div>
       </div>
       <p class="form-error" id="order-detail-error" hidden></p>
-      <div class="sheet-actions" id="order-detail-actions" style="flex-wrap:wrap;"></div>
+      <div class="sheet-actions sheet-actions-stack" id="order-detail-actions" style="flex-wrap:wrap;"></div>
     `;
 
     const actionsEl = overlay.querySelector("#order-detail-actions");
@@ -421,9 +421,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
             b.action ? `data-action="${b.action}"` : `data-status="${b.status}"`
           }>${b.label}</button>`
       )
-      .join("") + (buttons.filter((b) => b.action !== "reorder-order").length <= 1 ? `<button type="button" class="btn" id="order-detail-close">${t("done")}</button>` : "");
-
-    actionsEl.querySelector("#order-detail-close")?.addEventListener("click", () => overlay.remove());
+      .join("");
     overlay.querySelector('[data-action="close-sheet"]')?.addEventListener("click", () => overlay.remove());
     overlay.querySelector('.sheet-head-actions [data-action="accounting-document"]')?.addEventListener("click", async () => {
       overlay.remove();

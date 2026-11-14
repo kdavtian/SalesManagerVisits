@@ -866,7 +866,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
             .join("")}
         </div>
         <p class="form-error" id="payment-detail-error" hidden></p>
-        <div class="sheet-actions" id="payment-detail-actions" style="flex-wrap:wrap;"></div>
+        <div class="sheet-actions sheet-actions-stack" id="payment-detail-actions"></div>
       `;
 
       const actionsEl = overlay.querySelector("#payment-detail-actions");
@@ -882,7 +882,6 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }
       if (canDeletePayments(state.user.role)) buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
-      buttons.push({ label: t("done"), action: "close", cls: "btn" });
 
       actionsEl.innerHTML = buttons
         .map((b) => `<button type="button" class="${b.cls}" data-action="${b.action}">${b.label}</button>`)
@@ -891,10 +890,6 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       actionsEl.querySelectorAll("[data-action]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const action = btn.dataset.action;
-          if (action === "close") {
-            overlay.remove();
-            return;
-          }
           if (action === "delete") {
             // Two steps, no browser dialog: the button turns into a reason field + "Delete for good" (the payment is archived, not lost).
             actionsEl.innerHTML = `<div class="payment-delete-box" style="width:100%;">

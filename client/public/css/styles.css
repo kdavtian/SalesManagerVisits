@@ -2681,6 +2681,30 @@ label.checkbox-row input[type="checkbox"] {
 
 .sheet-actions .btn {
   flex: 1;
+  min-width: 0; /* a long Armenian label wraps inside its button instead of pushing the bar past a 320 px screen */
+}
+
+/* Every sheet's top (owner, 2026-11-14: "like KAD OS"): sheetNav.js adds a grab bar (phone only, where the sheet can be pulled down) and
+   an X. The grab sits in the sheet's 20px top padding. */
+.sheet-grab-auto { margin: -12px auto 8px; }
+@media (min-width: 768px) {
+  .sheet-grab-auto { display: none; }
+}
+.sheet-actions:empty { display: none; }
+.sheet-pinned-x { position: relative; }
+.sheet-close-x.sheet-close-x-pin { position: absolute; top: 16px; right: 16px; float: none; margin: 0; }
+.sheet-pinned-x > :is(h2, header, .sheet-head):first-of-type { padding-right: 52px; }
+/* Three or more buttons: the main action alone on top, full width and taller; the others share the row under it (owner, 2026-11-14:
+   "big button Approve, under it Reject, Delete"). Two buttons (Cancel + Save) stay side by side.
+   A decision sheet (approve / reject a payment, an order, a cash handover) says so with .sheet-actions-stack and stacks from two buttons. */
+.sheet-actions:has(> .btn:nth-of-type(3)):has(> .btn-primary),
+.sheet-actions-stack:has(> .btn-primary) { flex-wrap: wrap; }
+.sheet-actions:has(> .btn:nth-of-type(3)) > .btn-primary,
+.sheet-actions-stack > .btn-primary { order: -1; flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
+/* The smallest phones (320 px): a long Armenian main action ("Save the changes") gets the whole row too, with the others under it. */
+@media (max-width: 360px) {
+  .sheet-actions:has(> .btn-primary):has(> .btn:nth-of-type(2)) { flex-wrap: wrap; }
+  .sheet-actions:has(> .btn:nth-of-type(2)) > .btn-primary { order: -1; flex: 1 1 100%; }
 }
 
 /* Edit Customer's Cancel/Save row: sticky to the bottom of .sheet's own
@@ -8830,7 +8854,12 @@ form select,
   line-height: 1.2;
 }
 .oc-terms .oc-seg { width: 128px; }
-.oc-terms .oc-seg.oc-seg-wide { flex: 1 1 auto; width: auto; }
+.oc-terms .oc-seg.oc-seg-wide { flex: 1 1 auto; width: auto; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.oc-terms .oc-seg.oc-seg-wide button { min-width: 0; padding: 0 4px; line-height: 1.1; }
+@media (max-width: 360px) {
+  .oc-terms .oc-seg.oc-seg-wide button { font-size: 0.82rem; }
+  .oc-terms-label { flex-basis: 76px; }
+}
 .oc-terms .oc-field { min-width: 0; }
 .oc-terms .oc-field-days { flex: 0 0 76px; width: 76px; }
 .oc-due { display: inline-flex; align-items: center; gap: 8px; font-size: 0.82rem; }

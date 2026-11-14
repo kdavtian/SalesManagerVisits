@@ -568,19 +568,17 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
           : ""
       }
       <p class="form-error" id="handoff-detail-error" hidden></p>
-      <div class="sheet-actions" style="flex-wrap:wrap;">
+      <div class="sheet-actions sheet-actions-stack">
         ${
           canDecide
             ? `<button type="button" class="btn btn-danger" id="handoff-reject-btn">${t("handoff_reject")}</button>
                <button type="button" class="btn btn-primary" id="handoff-confirm-btn">${t("handoff_confirm")}</button>`
             : ""
         }
-        <button type="button" class="btn" id="handoff-close-btn">${t("done")}</button>
       </div>
     `;
 
     const errorEl = overlay.querySelector("#handoff-detail-error");
-    overlay.querySelector("#handoff-close-btn").addEventListener("click", () => overlay.remove());
     activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 
     async function act(fn) {

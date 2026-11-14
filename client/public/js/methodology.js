@@ -43,7 +43,6 @@ export async function openMethodologySheet(key = "stock_days") {
     <p>${escapeHtml(t(m.intro))}</p>
     <ol class="methodology-steps">${m.steps.map((s) => `<li>${escapeHtml(tx(s))}</li>`).join("")}</ol>
     ${m.notes.map((n) => `<p class="muted methodology-note">${escapeHtml(tx(n))}</p>`).join("")}
-    <div class="sheet-actions"><button type="button" class="btn" data-action="close-sheet">${t("done")}</button></div>
   </div>`;
   document.body.appendChild(overlay);
   activateDialog(overlay);

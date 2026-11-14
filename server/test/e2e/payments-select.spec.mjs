@@ -69,3 +69,29 @@ test("cash handovers: the rep unticks one payment and hands over the rest; the u
   const inHandoff = rows.filter((r) => r.pending_handoff_id === handoff.id).map((r) => r.id).sort();
   expect(inHandoff).toEqual([made[0].id, made[2].id].sort());
 });
+
+// Owner, 2026-11-14 (screenshot of the Payment sheet): every sheet closes with an X in its corner and by pulling it down, like KAD OS; no
+// Close button in the action bar; the main action is one big button with the other actions under it.
+test("payment sheet: X closes it, no Close button, Approve on top full width with Reject under it", async ({ page, fixtures }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const rep = await fixtures.createUser("sales_manager");
+  const accountant = await fixtures.createUser("accountant");
+  const customer = await fixtures.createCustomer({ created_by: rep.id });
+  const p = await fixtures.createPayment({ customer_id: customer.id, customer_name_snapshot: customer.name, sales_manager_id: rep.id, current_holder_id: accountant.id, amount_amd: 36000 });
+  await loginViaUi(page, accountant.email);
+  await page.goto("/#/payments");
+  await page.locator(`.pay-row[data-payment-id="${p.id}"] .payment-row-main`).click();
+  const actions = page.locator("#payment-detail-actions");
+  await expect(actions.locator('[data-action="approve"]')).toBeVisible({ timeout: 10000 });
+  await expect(actions.locator('[data-action="close"]')).toHaveCount(0);
+  const bar = await actions.boundingBox();
+  const approve = await actions.locator('[data-action="approve"]').boundingBox();
+  const reject = await actions.locator('[data-action="reject"]').boundingBox();
+  expect(approve.width).toBeGreaterThan(bar.width - 2); // the whole row
+  expect(reject.y).toBeGreaterThan(approve.y + approve.height - 1); // under it
+  const x = page.locator("body > .sheet-overlay .sheet-close-x");
+  await expect(x).toHaveCount(1);
+  await expect(page.locator("body > .sheet-overlay .sheet-grab")).toBeVisible();
+  await x.click();
+  await expect(page.locator("body > .sheet-overlay")).toHaveCount(0);
+});

@@ -54,7 +54,6 @@ function offerFileShare(file, blob, filename) {
         <h2>${t("file_ready")}</h2>
         <p class="muted">${escapeHtml(filename)}</p>
         <div class="sheet-actions">
-          <button type="button" class="btn" data-action="close">${t("close")}</button>
           <button type="button" class="btn btn-primary" data-action="share">${t("file_share")}</button>
         </div>
       </div>`;
