@@ -1,11 +1,12 @@
 import { recordOrder } from "../orders/orderRecord.js";
+import { EXCEL_MATCH_DAYS } from "../money/paymentExcelMatch.js";
 // After every ERP sync: anything the workbook already shows is settled in KAD
 // too (owner's rule).
 //  - A confirmed / packed order that matches an ERP order (same ERP customer,
 //    date within 1 day, same total) is moved to Delivered, marked "from ERP",
 //    and taken out of the warehouse and delivery queues.
 //  - A pending cash payment that matches an ERP payment (same ERP customer,
-//    same amount, date within 3 days) is approved, marked "from ERP".
+//    same amount, date within EXCEL_MATCH_DAYS -- the same window as the "In Excel" chip) is approved, marked "from ERP".
 // Both only act on a UNIQUE match, never on a guess, and never twice on the
 // same ERP row.
 
@@ -58,9 +59,42 @@ export async function autoDeliverOrdersFromErp(client) {
   return delivered;
 }
 
+// Owner, 2026-11-14: "if a payment is already in the Excel, approve it automatically, like the orders". Two gaps left payments pending
+// with the green "In Excel" chip: (1) a payment inside a handover waiting to be confirmed was skipped, and in the same sync
+// markAppRowsInExcel linked it to its Excel row -- so every later sync saw that row as used (by the payment itself) and never approved it;
+// (2) this matched within 3 days, the chip within EXCEL_MATCH_DAYS. Now: the chip's window, payments in a handover too (approving does not
+// move the cash: it is still in hand until a person receives it -- cashCustody.js CASH_IN_HAND_SQL, and the handover's confirm records who
+// received it), and a pending payment already linked to its row is approved with that row.
 export async function autoApprovePaymentsFromErp(client) {
-  // ERP payment rows still unused: how many rows per key, minus those already
-  // used by a payment that was approved from them earlier.
+  const approved = [];
+  async function approve(paymentId, key) {
+    const { rowCount } = await client.query(
+      `UPDATE payments SET status = 'approved', approved_at = now(), approved_by = NULL, approved_from_erp = true, erp_match_key = $2,
+              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
+       WHERE id = $1 AND status = 'pending'`,
+      [paymentId, key]
+    );
+    if (!rowCount) return false;
+    await client.query(
+      `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
+       VALUES ($1, 'pending', 'approved', 'From ERP (payment found in the workbook)', NULL)`,
+      [paymentId]
+    );
+    approved.push(paymentId);
+    return true;
+  }
+
+  // (a) already linked to an Excel row that is still in the workbook
+  const { rows: linked } = await client.query(
+    `SELECT p.id, p.erp_match_key FROM payments p
+     WHERE p.status = 'pending' AND p.erp_match_key IS NOT NULL
+       AND EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.amount_amd > 0
+                     AND cf.erp_customer_id || '|' || cf.cashflow_date::text || '|' || ROUND(cf.amount_amd)::text = p.erp_match_key)
+     ORDER BY p.id`
+  );
+  for (const r of linked) await approve(r.id, r.erp_match_key);
+
+  // (b) ERP payment rows still unused: how many rows per key, minus those already used by a payment matched to them earlier.
   const { rows } = await client.query(
     `WITH erp AS (
        SELECT erp_customer_id, cashflow_date AS d, ROUND(amount_amd) AS amount,
@@ -74,33 +108,20 @@ export async function autoApprovePaymentsFromErp(client) {
      FROM payments p
      JOIN free f ON f.erp_customer_id = p.erp_customer_id_snapshot
       AND f.amount = ROUND(p.amount_amd)
-      AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - 3 AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + 3
-     WHERE p.status = 'pending' AND p.pending_handoff_id IS NULL AND f.left_n > 0
+      AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - ${EXCEL_MATCH_DAYS} AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + ${EXCEL_MATCH_DAYS}
+     WHERE p.status = 'pending' AND p.erp_match_key IS NULL AND f.left_n > 0
      ORDER BY gap, p.id`
   );
   // Closest dates first; each ERP row (key) can approve only as many payments as it has rows left.
   const left = new Map();
   const done = new Set();
-  const approved = [];
   for (const m of rows) {
     if (done.has(m.payment_id)) continue;
     const remaining = left.has(m.key) ? left.get(m.key) : m.left_n;
     if (remaining <= 0) continue;
-    const { rowCount } = await client.query(
-      `UPDATE payments SET status = 'approved', approved_at = now(), approved_by = NULL, approved_from_erp = true, erp_match_key = $2,
-              rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
-       WHERE id = $1 AND status = 'pending' AND pending_handoff_id IS NULL`,
-      [m.payment_id, m.key]
-    );
-    if (!rowCount) continue;
-    await client.query(
-      `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-       VALUES ($1, 'pending', 'approved', 'From ERP (payment found in the workbook)', NULL)`,
-      [m.payment_id]
-    );
+    if (!(await approve(m.payment_id, m.key))) continue;
     left.set(m.key, remaining - 1);
     done.add(m.payment_id);
-    approved.push(m.payment_id);
   }
   return approved;
 }
@@ -151,7 +172,7 @@ export async function markAppRowsInExcel(client) {
      FROM payments p
      JOIN free f ON f.erp_customer_id = p.erp_customer_id_snapshot
       AND f.amount = ROUND(p.amount_amd)
-      AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - 3 AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + 3
+      AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - ${EXCEL_MATCH_DAYS} AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + ${EXCEL_MATCH_DAYS}
      WHERE p.status <> 'rejected' AND p.erp_match_key IS NULL AND f.left_n > 0
      ORDER BY gap, p.id`
   );

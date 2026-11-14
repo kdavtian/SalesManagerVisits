@@ -115,3 +115,43 @@ test("pending payment matching an ERP payment (customer, exact amount, date with
   const hist = await pool.query("SELECT old_status, new_status FROM payment_status_history WHERE payment_id = $1", [match]);
   assert.deepEqual(hist.rows, [{ old_status: "pending", new_status: "approved" }]);
 });
+
+// Owner, 2026-11-14 (screenshot: payments with the green "In Excel" chip still waiting for approval): what the chip calls "in Excel" is
+// approved by the sync.
+test("a payment the Excel shows is approved even while it is inside a handover, and even when the sync linked it earlier; the window is the chip's", async () => {
+  const rep = await createUser("sales_manager");
+  const director = await createUser("sales_director");
+  const c = await customerWithErp(rep, "H");
+  // (1) inside a handover waiting for the director
+  const inHandoff = await addPayment(c, rep.id, 45000, 1);
+  const { rows: [h] } = await pool.query("INSERT INTO cash_handoffs (from_user_id, to_user_id, amount_amd, status, submitted_by) VALUES ($1, $2, 45000, 'pending', $1) RETURNING id", [rep.id, director.id]);
+  await pool.query("INSERT INTO cash_handoff_items (handoff_id, payment_id) VALUES ($1, $2)", [h.id, inHandoff]);
+  await pool.query("UPDATE payments SET pending_handoff_id = $1, current_holder_id = $2 WHERE id = $3", [h.id, rep.id, inHandoff]);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 1, 45000)`, [c.erp_customer_id]);
+  // (2) already linked to its Excel row by an earlier sync (markAppRowsInExcel), still pending: it used to block itself forever
+  const linked = await addPayment(c, rep.id, 61000, 2);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 2, 61000)`, [c.erp_customer_id]);
+  const { rows: [k] } = await pool.query(`SELECT $1 || '|' || (${YEREVAN_TODAY} - 2)::text || '|' || '61000' AS key`, [c.erp_customer_id]);
+  await pool.query("UPDATE payments SET erp_match_key = $2 WHERE id = $1", [linked, k.key]);
+  // (3) 4 days between the app and the Excel (the chip says "in Excel" up to 5)
+  const fourDays = await addPayment(c, rep.id, 33000, 5);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 1, 33000)`, [c.erp_customer_id]);
+
+  const approved = await run(autoApprovePaymentsFromErp);
+  assert.deepEqual([...approved].sort((a, b) => a - b), [inHandoff, linked, fourDays].sort((a, b) => a - b));
+  const rows = (await pool.query("SELECT id, status, approved_from_erp, approved_by, pending_handoff_id, current_holder_id FROM payments WHERE id = ANY($1)", [[inHandoff, linked, fourDays]])).rows;
+  for (const r of rows) {
+    assert.equal(r.status, "approved");
+    assert.equal(r.approved_from_erp, true);
+    assert.equal(r.approved_by, null, "nobody received the notes yet: the cash is still in hand");
+  }
+  // the handover still carries the payment, the rep still holds it until the director confirms
+  const ho = rows.find((r) => r.id === inHandoff);
+  assert.equal(ho.pending_handoff_id, h.id);
+  assert.equal(ho.current_holder_id, rep.id);
+  // nothing twice
+  assert.deepEqual(await run(autoApprovePaymentsFromErp), []);
+  await pool.query("UPDATE payments SET pending_handoff_id = NULL WHERE id = $1", [inHandoff]);
+  await pool.query("DELETE FROM cash_handoff_items WHERE handoff_id = $1", [h.id]);
+  await pool.query("DELETE FROM cash_handoffs WHERE id = $1", [h.id]);
+});
