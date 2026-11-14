@@ -155,3 +155,34 @@ test("a payment the Excel shows is approved even while it is inside a handover, 
   await pool.query("DELETE FROM cash_handoff_items WHERE handoff_id = $1", [h.id]);
   await pool.query("DELETE FROM cash_handoffs WHERE id = $1", [h.id]);
 });
+
+// Review 2026-11-14 of the change above
+test("a payment a person sent back to Pending is never approved again by the sync; a link to a row no longer in the Excel is re-matched", async () => {
+  const rep = await createUser("sales_manager");
+  const c = await customerWithErp(rep, "R");
+  const sentBack = await addPayment(c, rep.id, 52000, 1);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 1, 52000)`, [c.erp_customer_id]);
+  assert.deepEqual(await run(autoApprovePaymentsFromErp), [sentBack]);
+  // the accountant: "wrong Excel row" -> back to pending (the route keeps the link, as before)
+  await pool.query("UPDATE payments SET status = 'pending', approved_at = NULL, approved_from_erp = false WHERE id = $1", [sentBack]);
+  await pool.query("INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by) VALUES ($1, 'approved', 'pending', 'wrong row', $2)", [sentBack, rep.id]);
+  assert.deepEqual(await run(autoApprovePaymentsFromErp), [], "the reversal sticks");
+  assert.equal((await pool.query("SELECT status FROM payments WHERE id = $1", [sentBack])).rows[0].status, "pending");
+
+  // linked to a row the accountant then corrected in the workbook (another date): the link is dropped and the corrected row matches
+  const stale = await addPayment(c, rep.id, 27000, 2);
+  await pool.query("UPDATE payments SET erp_match_key = $2 WHERE id = $1", [stale, `${c.erp_customer_id}|2000-01-01|27000`]);
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 2, 27000)`, [c.erp_customer_id]);
+  assert.deepEqual(await run(autoApprovePaymentsFromErp), [stale]);
+});
+
+test("4-5 days apart only when the pairing is unique: two app payments of the same amount around one Excel row are left to the accountant", async () => {
+  const rep = await createUser("sales_manager");
+  const c = await customerWithErp(rep, "U");
+  const a = await addPayment(c, rep.id, 18000, 9);
+  const b = await addPayment(c, rep.id, 18000, 1);
+  // the Excel row is 4 days from each of them
+  await pool.query(`INSERT INTO erp_cashflow_lines (erp_customer_id, cashflow_date, amount_amd) VALUES ($1, ${YEREVAN_TODAY} - 5, 18000)`, [c.erp_customer_id]);
+  assert.deepEqual(await run(autoApprovePaymentsFromErp), []);
+  for (const id of [a, b]) assert.equal((await pool.query("SELECT status FROM payments WHERE id = $1", [id])).rows[0].status, "pending");
+});

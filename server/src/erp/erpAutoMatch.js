@@ -7,8 +7,8 @@ import { EXCEL_MATCH_DAYS } from "../money/paymentExcelMatch.js";
 //    and taken out of the warehouse and delivery queues.
 //  - A pending cash payment that matches an ERP payment (same ERP customer,
 //    same amount, date within EXCEL_MATCH_DAYS -- the same window as the "In Excel" chip) is approved, marked "from ERP".
-// Both only act on a UNIQUE match, never on a guess, and never twice on the
-// same ERP row.
+// Orders act only on a UNIQUE match. Payments: closest date first within 3 days, a unique pairing only at 4-5 days; never twice on the
+// same ERP row, and never again on a payment a person sent back to Pending.
 
 // Yerevan calendar date of a timestamptz.
 const YEREVAN_DAY = "((%s AT TIME ZONE 'Asia/Yerevan')::date)";
@@ -65,6 +65,14 @@ export async function autoDeliverOrdersFromErp(client) {
 // (2) this matched within 3 days, the chip within EXCEL_MATCH_DAYS. Now: the chip's window, payments in a handover too (approving does not
 // move the cash: it is still in hand until a person receives it -- cashCustody.js CASH_IN_HAND_SQL, and the handover's confirm records who
 // received it), and a pending payment already linked to its row is approved with that row.
+// Never automatic again (review 2026-11-14): a payment a person sent back from Approved to Pending (it was matched to the wrong Excel row), so
+// the sync cannot undo the reversal; and, while it is inside a handover, a payment from before the cash cut-over (approving it would take
+// it out of the cash-in-hand tracking while the notes are still travelling, cashCustody.js).
+const AUTO_APPROVE_OK_SQL = `p.status = 'pending'
+  AND NOT EXISTS (SELECT 1 FROM payment_status_history r WHERE r.payment_id = p.id AND r.old_status = 'approved' AND r.new_status = 'pending')
+  AND NOT (p.pending_handoff_id IS NOT NULL AND p.payment_date < (SELECT payments_cutover FROM app_settings WHERE id = 1))`;
+const CF_KEY_SQL = "cf.erp_customer_id || '|' || cf.cashflow_date::text || '|' || ROUND(cf.amount_amd)::text";
+
 export async function autoApprovePaymentsFromErp(client) {
   const approved = [];
   async function approve(paymentId, key) {
@@ -84,13 +92,23 @@ export async function autoApprovePaymentsFromErp(client) {
     return true;
   }
 
-  // (a) already linked to an Excel row that is still in the workbook
+  // (a) pending payments an earlier sync already linked to an Excel row. A link whose row is gone from the workbook (edited or deleted) is
+  // dropped, so (b) can match the payment again. A row still there approves at most as many payments as it has copies left (two copies
+  // linked two payments, one copy deleted: only one is approved).
+  await client.query(
+    `UPDATE payments p SET erp_match_key = NULL
+     WHERE ${AUTO_APPROVE_OK_SQL} AND p.erp_match_key IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.amount_amd > 0 AND ${CF_KEY_SQL} = p.erp_match_key)`
+  );
   const { rows: linked } = await client.query(
-    `SELECT p.id, p.erp_match_key FROM payments p
-     WHERE p.status = 'pending' AND p.erp_match_key IS NOT NULL
-       AND EXISTS (SELECT 1 FROM erp_cashflow_lines cf WHERE cf.amount_amd > 0
-                     AND cf.erp_customer_id || '|' || cf.cashflow_date::text || '|' || ROUND(cf.amount_amd)::text = p.erp_match_key)
-     ORDER BY p.id`
+    `WITH cand AS (
+       SELECT p.id, p.erp_match_key, ROW_NUMBER() OVER (PARTITION BY p.erp_match_key ORDER BY p.payment_date, p.id) AS rn
+       FROM payments p WHERE ${AUTO_APPROVE_OK_SQL} AND p.erp_match_key IS NOT NULL
+     )
+     SELECT cand.id, cand.erp_match_key FROM cand
+     WHERE cand.rn + (SELECT COUNT(*) FROM payments u WHERE u.erp_match_key = cand.erp_match_key AND u.status = 'approved')
+           <= (SELECT COUNT(*) FROM erp_cashflow_lines cf WHERE cf.amount_amd > 0 AND ${CF_KEY_SQL} = cand.erp_match_key)
+     ORDER BY cand.id`
   );
   for (const r of linked) await approve(r.id, r.erp_match_key);
 
@@ -109,14 +127,23 @@ export async function autoApprovePaymentsFromErp(client) {
      JOIN free f ON f.erp_customer_id = p.erp_customer_id_snapshot
       AND f.amount = ROUND(p.amount_amd)
       AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - ${EXCEL_MATCH_DAYS} AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + ${EXCEL_MATCH_DAYS}
-     WHERE p.status = 'pending' AND p.erp_match_key IS NULL AND f.left_n > 0
+     WHERE ${AUTO_APPROVE_OK_SQL} AND p.erp_match_key IS NULL AND f.left_n > 0
      ORDER BY gap, p.id`
   );
-  // Closest dates first; each ERP row (key) can approve only as many payments as it has rows left.
+  // Within 3 days: closest dates first, each ERP row (key) approves only as many payments as it has rows left (as before). 4-5 days apart
+  // only when the pairing is unique -- that payment has no other Excel row and that Excel row no other payment -- so a second payment of the
+  // same amount a few days later is never taken for this one.
+  const perPayment = new Map();
+  const perKey = new Map();
+  for (const m of rows) {
+    perPayment.set(m.payment_id, (perPayment.get(m.payment_id) ?? 0) + 1);
+    perKey.set(m.key, (perKey.get(m.key) ?? 0) + 1);
+  }
   const left = new Map();
   const done = new Set();
   for (const m of rows) {
     if (done.has(m.payment_id)) continue;
+    if (m.gap > 3 && (perPayment.get(m.payment_id) > 1 || perKey.get(m.key) > 1)) continue;
     const remaining = left.has(m.key) ? left.get(m.key) : m.left_n;
     if (remaining <= 0) continue;
     if (!(await approve(m.payment_id, m.key))) continue;
@@ -173,7 +200,8 @@ export async function markAppRowsInExcel(client) {
      JOIN free f ON f.erp_customer_id = p.erp_customer_id_snapshot
       AND f.amount = ROUND(p.amount_amd)
       AND f.d BETWEEN ${YEREVAN_DAY.replace("%s", "p.payment_date")} - ${EXCEL_MATCH_DAYS} AND ${YEREVAN_DAY.replace("%s", "p.payment_date")} + ${EXCEL_MATCH_DAYS}
-     WHERE p.status <> 'rejected' AND p.erp_match_key IS NULL AND f.left_n > 0
+     -- approved ones only: a pending payment is matched (and approved) by autoApprovePaymentsFromErp with its own rules (2026-11-14)
+     WHERE p.status = 'approved' AND p.erp_match_key IS NULL AND f.left_n > 0
      ORDER BY gap, p.id`
   );
   const left = new Map();
