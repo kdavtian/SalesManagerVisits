@@ -54,4 +54,8 @@ test("an offline visit that syncs late never writes over a number written after 
   await visit({ expected_volume_l: "300", captured_at: old }); // the queued visit of two hours ago arrives
   const r = await row();
   assert.equal(Number(r.expected_volume_l), 500);
+  // a visit queued so long that its own time is refused is kept, but its number is not written as new
+  const ancient = new Date(Date.now() - 30 * 86400000).toISOString();
+  await visit({ expected_volume_l: "100", captured_at: ancient });
+  assert.equal(Number((await row()).expected_volume_l), 500);
 });

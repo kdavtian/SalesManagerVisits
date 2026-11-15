@@ -355,8 +355,10 @@ checkinsRouter.post("/", (req, res, next) => {
     // Only when the visit really is at the shop (the number is asked from its owner); a 0 says nothing, so it is not saved. Dated with the visit's
     // own time (an offline visit syncs later) and never over a number written after that moment.
     const monthlyNeed = expected_volume_l === undefined || expected_volume_l === null || String(expected_volume_l).trim() === "" ? null : Number(expected_volume_l);
-    if (atCustomer && monthlyNeed !== null && monthlyNeed > 0 && monthlyNeed <= 1e6) {
-      const at = parseCapturedAt(captured_at);
+    const at = parseCapturedAt(captured_at);
+    // a visit that came with its own time which was refused (queued too long): the visit is kept, but its old number is not written as new
+    const staleCapture = captured_at !== undefined && captured_at !== null && captured_at !== "" && at === null;
+    if (atCustomer && !staleCapture && monthlyNeed !== null && monthlyNeed > 0 && monthlyNeed <= 1e6) {
       await client.query(
         `UPDATE customers SET expected_volume_l = $2, expected_volume_at = COALESCE($4::timestamptz, now()), expected_volume_by = $3
          WHERE id = $1 AND (expected_volume_at IS NULL OR expected_volume_at <= COALESCE($4::timestamptz, now()))`,
