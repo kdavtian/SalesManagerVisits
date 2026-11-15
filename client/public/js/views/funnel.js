@@ -45,7 +45,13 @@ export async function renderFunnel(root, navigate) {
   function stepText(step) {
     if (!step) return "";
     const p = step.params ?? {};
-    return fill(`fn_step_${step.kind}`, { group: t(`fn_group_${String(p.group ?? "").toLowerCase().replace(/\s+/g, "_")}`), brand: p.brand ?? "", share: p.share ?? 0, before: p.before ?? 0, now: p.now ?? 0 });
+    return fill(`fn_step_${step.kind}`, {
+      group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
+      brand: p.brand ? t(`competitor_${p.brand}`) : "",
+      share: p.share ?? 0,
+      before: p.before ?? 0,
+      now: p.now ?? 0,
+    });
   }
   const days = (since) => (since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86400000)) : null);
 
@@ -119,6 +125,7 @@ export async function renderFunnel(root, navigate) {
         paint();
       } catch (ex) {
         showToast(ex.message);
+        paint();
       }
     });
     body.querySelector("#fn-steps-mode")?.addEventListener("click", async (e) => {
@@ -143,6 +150,7 @@ export async function renderFunnel(root, navigate) {
         paint();
       } catch (ex) {
         showToast(ex.message);
+        paint();
       }
     });
     // a customer on stage 2+ gets its monthly need written right here (stage 4 measures our share of it); a potential one opens its card
@@ -201,7 +209,7 @@ export async function renderFunnel(root, navigate) {
     const live = data.steps_mode === "live";
     const byRepPicks = new Map();
     for (const p of picks) byRepPicks.set(p.rep_id, [...(byRepPicks.get(p.rep_id) ?? []), p]);
-    const repName = (id) => data.customers.find((c) => c.rep_id === id)?.rep_name ?? "";
+    const repName = (id) => data.customers.find((c) => c.rep_id === id)?.rep_name ?? "—";
     return `<h2 class="list-group-heading">${escapeHtml(t("fn_picks_title"))}${picks[0] ? ` · ${escapeHtml(picks[0].week_start)}` : ""}</h2>
       <div class="fn-picks-head">
         <span class="badge ${live ? "badge-success" : "badge-warning"}">${escapeHtml(t(live ? "fn_steps_live" : "fn_steps_shadow"))}</span>
@@ -220,7 +228,7 @@ export async function renderFunnel(root, navigate) {
               .join("")
           : `<p class="muted">${escapeHtml(t("fn_picks_none"))}</p>`
       }
-      ${canEdit ? `<div class="fn-picks-actions">${picks.length ? "" : `<button type="button" class="btn" id="fn-picks-run">${escapeHtml(t("fn_picks_run"))}</button>`}<button type="button" class="btn ${live ? "" : "btn-primary"}" id="fn-steps-mode">${escapeHtml(t(live ? "fn_steps_to_shadow" : "fn_steps_to_live"))}</button></div>` : ""}`;
+      ${canEdit ? `<div class="fn-picks-actions">${picks.length && picks[0].week_start === data.week ? "" : `<button type="button" class="btn" id="fn-picks-run">${escapeHtml(t("fn_picks_run"))}</button>`}<button type="button" class="btn ${live ? "" : "btn-primary"}" id="fn-steps-mode">${escapeHtml(t(live ? "fn_steps_to_shadow" : "fn_steps_to_live"))}</button></div>` : ""}`;
   }
 
   // The four stages in plain words, with the numbers in force; management with the right edits the numbers here.

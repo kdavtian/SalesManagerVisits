@@ -16,8 +16,10 @@ import { pool } from "../../db/pool.js";
 import { computeFunnel, PRODUCT_GROUP_SQL } from "./funnel.js";
 import { getVaghinakSettings } from "./settings.js";
 import { createOpsTask } from "../opsTasks.js";
+import { notifyUser } from "../../shared/notifications.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { mondayOf } from "./digest.js";
+import { hyCommon } from "../../../../client/public/js/i18n/hy/common.js";
 import { minuteOfDay, isWorkingDay } from "./engine.js";
 
 export const PICKS_PER_REP = 5;
@@ -52,9 +54,8 @@ export function stepOf(c, extra = {}, now = Date.now()) {
 }
 
 // Every open customer's step (with the funnel row), worth most first.
-export async function computeNextSteps({ db = pool, now = new Date() } = {}) {
-  const settings = await getVaghinakSettings(db);
-  const { cfg, customers } = await computeFunnel({ db, settings });
+export async function computeNextSteps({ db = pool, now = new Date(), funnel = null } = {}) {
+  const { cfg, customers } = funnel ?? (await computeFunnel({ db, settings: await getVaghinakSettings(db) }));
   const ids = customers.map((c) => c.id);
   if (!ids.length) return [];
   const [{ rows: facts }, { rows: groupsBought }, { rows: shelves }, { rows: before }] = await Promise.all([
@@ -71,8 +72,7 @@ export async function computeNextSteps({ db = pool, now = new Date() } = {}) {
     // the competitor brands seen on the shelf at the customer's last visit that recorded them
     db.query(
       `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'competitors' AS brands
-       FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'competitors') = 'array'
-         AND jsonb_array_length(brand_status -> 'competitors') > 0
+       FROM checkins WHERE customer_id = ANY($1::int[]) AND brand_status IS NOT NULL AND brand_status <> '{}'::jsonb
        ORDER BY customer_id, timestamp DESC`,
       [ids]
     ),
@@ -143,49 +143,78 @@ export function taskTitleOf(step) {
     case "reassess": return `Վերագնահատիր հեռանկարը՝ ${name}`;
     case "add_group": return `Առաջարկիր ${GROUP_HY[step.params.group] ?? step.params.group}՝ ${name}`;
     case "ask_need": return `Ճշտիր ամսական յուղի պահանջը՝ ${name}`;
-    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${step.params.brand})`;
+    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand})`;
     case "raise_share": return `Մեծացրու մեր բաժինը՝ ${name}`;
     case "keep_loyal": return `Ստուգիր, ինչու են պատվերները նվազել՝ ${name}`;
     default: return name;
   }
 }
 
-// Monday (working day, from 09:00 Yerevan): this week's 5 best steps per rep, once. Live mode also gives them as tasks.
+// The first working day of the week (from 09:00 Yerevan): this week's 5 best steps per rep, once. The same customer is not picked again while
+// its step task is still open or when it was picked in one of the last 2 weeks (the reps get fresh customers). Live mode also gives them as
+// tasks (one push per rep, not five). All in one transaction under a lock: the button and the job never pick twice, a failure picks nothing.
+const ROTATE_WEEKS = 2;
+const checkedEmpty = new Set(); // weeks already found to have nothing to pick (no hourly recompute)
 export async function runWeeklyPicks(now = new Date(), db = pool, { force = false } = {}) {
   const settings = await getVaghinakSettings(db);
   const day = yerevanToday(now);
   const week = mondayOf(day);
   if (!force) {
-    if (settings.mode === "off" || day !== week || minuteOfDay(now) < 9 * 60 || !(await isWorkingDay(db, day))) return { picked: 0 };
+    if (settings.mode === "off" || minuteOfDay(now) < 9 * 60 || !(await isWorkingDay(db, day)) || checkedEmpty.has(week)) return { picked: 0 };
   }
-  const { rowCount: done } = await db.query("SELECT 1 FROM sales_step_picks WHERE week_start = $1 LIMIT 1", [week]);
-  if (done) return { picked: 0 };
-  const steps = await computeNextSteps({ db, now });
-  const { rows: reps } = await db.query("SELECT id FROM users WHERE role = 'sales_manager' AND status = 'active'");
-  const repIds = new Set(reps.map((r) => r.id));
-  const perRep = new Map();
-  for (const s of steps) {
-    const rep = s.customer.rep_id;
-    if (!repIds.has(rep)) continue;
-    const list = perRep.get(rep) ?? [];
-    if (list.length < PICKS_PER_REP) list.push(s);
-    perRep.set(rep, list);
-  }
-  const live = settings.salesStepsMode === "live";
-  let picked = 0;
-  for (const [rep, list] of perRep) {
-    for (const s of list) {
-      let taskId = null;
-      if (live) {
-        taskId = await createOpsTask({ kind: "sales_step", title: taskTitleOf(s), assigneeId: rep, customerId: s.customer.id, dueIsNextVisit: true, db });
-      }
-      await db.query(
-        `INSERT INTO sales_step_picks (week_start, customer_id, rep_id, kind, params, value, task_id) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
-         ON CONFLICT (week_start, customer_id) DO NOTHING`,
-        [week, s.customer.id, rep, s.kind, JSON.stringify(s.params), s.value, taskId]
-      );
-      picked++;
+  const client = await db.connect();
+  const notifications = [];
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('sales_step_picks'))");
+    const { rowCount: done } = await client.query("SELECT 1 FROM sales_step_picks WHERE week_start = $1 LIMIT 1", [week]);
+    if (done) {
+      await client.query("ROLLBACK");
+      return { picked: 0 };
     }
+    const steps = await computeNextSteps({ db: client, now });
+    const { rows: reps } = await client.query("SELECT id FROM users WHERE role = 'sales_manager' AND status = 'active'");
+    const repIds = new Set(reps.map((r) => r.id));
+    const { rows: busy } = await client.query(
+      `SELECT customer_id FROM tasks WHERE auto_kind = 'sales_step' AND status = 'open'
+       UNION SELECT customer_id FROM sales_step_picks WHERE week_start >= $1::date - 7 * $2::int`,
+      [week, ROTATE_WEEKS]
+    );
+    const skip = new Set(busy.map((r) => r.customer_id));
+    const perRep = new Map();
+    for (const s of steps) {
+      const rep = s.customer.rep_id;
+      if (!repIds.has(rep) || skip.has(s.customer.id)) continue;
+      const list = perRep.get(rep) ?? [];
+      if (list.length < PICKS_PER_REP) list.push(s);
+      perRep.set(rep, list);
+    }
+    const live = settings.salesStepsMode === "live";
+    let picked = 0;
+    for (const [rep, list] of perRep) {
+      for (const s of list) {
+        const taskId = live
+          ? await createOpsTask({ kind: "sales_step", title: taskTitleOf(s), assigneeId: rep, customerId: s.customer.id, dueIsNextVisit: true, notify: false, db: client })
+          : null;
+        await client.query(
+          `INSERT INTO sales_step_picks (week_start, customer_id, rep_id, kind, params, value, task_id) VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+           ON CONFLICT (week_start, customer_id) DO NOTHING`,
+          [week, s.customer.id, rep, s.kind, JSON.stringify(s.params), s.value, taskId]
+        );
+        picked++;
+      }
+      if (live) notifications.push({ rep, n: list.length });
+    }
+    await client.query("COMMIT");
+    if (!picked) checkedEmpty.add(week);
+    for (const { rep, n } of notifications) {
+      notifyUser(rep, "task_assigned", { title: `Վաղինակ՝ այս շաբաթվա ${n} քայլը`, body: "Վաճառքի քայլեր քո հաճախորդների համար", url: "/#/tasks" }).catch(() => {});
+    }
+    return { picked, live };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
-  return { picked, live };
 }

@@ -3,28 +3,30 @@
 // customers' next steps in step 2.
 import express, { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
-import { seesAllPerformance } from "../../shared/roles.js";
+import { seesAllPerformance, editsVaghinakSettings } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
 import { computeFunnel } from "../vaghinak/funnel.js";
 import { computeNextSteps, runWeeklyPicks } from "../vaghinak/nextSteps.js";
 import { getVaghinakSettings } from "../vaghinak/settings.js";
-import { editsVaghinakSettings } from "../../shared/roles.js";
+import { mondayOf } from "../vaghinak/digest.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 
 export const funnelRouter = Router();
 funnelRouter.use(requireAuth);
 funnelRouter.use((req, res, next) => (seesAllPerformance(req.user.role) ? next() : res.status(403).json({ error: "Not allowed" })));
 
 funnelRouter.get("/", async (_req, res) => {
-  const [{ cfg, customers }, { rows: since }, { rows: moves }, steps, settings, { rows: picks }] = await Promise.all([
-    computeFunnel(),
+  const settings = await getVaghinakSettings();
+  const funnel = await computeFunnel({ settings });
+  const { cfg, customers } = funnel;
+  const [{ rows: since }, { rows: moves }, steps, { rows: picks }] = await Promise.all([
     pool.query("SELECT customer_id, since FROM customer_funnel_stage"),
     // this calendar month's moves, per customer (the screen counts only the customers its filters show)
     pool.query(
       `SELECT customer_id, from_stage, to_stage FROM customer_funnel_moves
        WHERE moved_at >= (date_trunc('month', now() AT TIME ZONE 'Asia/Yerevan') AT TIME ZONE 'Asia/Yerevan')`
     ),
-    computeNextSteps(),
-    getVaghinakSettings(),
+    computeNextSteps({ funnel }),
     // this week's picks (the latest Monday that has any)
     pool.query(
       `SELECT p.customer_id, p.rep_id, p.kind, p.params, p.value, p.week_start::text AS week_start, p.task_id, t.status AS task_status
@@ -37,6 +39,7 @@ funnelRouter.get("/", async (_req, res) => {
   res.json({
     settings: cfg,
     steps_mode: settings.salesStepsMode,
+    week: mondayOf(yerevanToday()),
     picks,
     moves,
     customers: customers.map((c) => ({

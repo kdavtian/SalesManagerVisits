@@ -133,9 +133,14 @@ test("Monday picks: shadow stores the steps without tasks; once a week; live als
     await runWeeklyPicks(new Date(), pool, { force: true });
     const live = (await pool.query("SELECT p.task_id, t.assignee_id, t.auto_kind FROM sales_step_picks p JOIN tasks t ON t.id = p.task_id WHERE p.customer_id = $1", [hi.id])).rows[0];
     assert.deepEqual([live?.assignee_id, live?.auto_kind], [rep.id, "sales_step"]);
+    // next week: a customer whose step task is still open is not picked again (fresh customers for the rep)
+    await pool.query("UPDATE sales_step_picks SET week_start = week_start - 21 WHERE customer_id = $1", [hi.id]);
+    await pool.query("DELETE FROM sales_step_picks WHERE week_start >= current_date - 7");
+    await runWeeklyPicks(new Date(), pool, { force: true });
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM sales_step_picks WHERE customer_id = $1 AND week_start >= current_date - 7", [hi.id])).rows[0].n, 0);
   } finally {
     await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: adminCookie, body: { salesStepsMode: "shadow" } });
-    await pool.query("DELETE FROM tasks WHERE auto_kind = 'sales_step' AND customer_id = ANY($1::int[])", [made]);
+    await pool.query("DELETE FROM tasks WHERE auto_kind = 'sales_step' AND assignee_id = $1", [rep.id]);
     await pool.query("DELETE FROM sales_step_picks WHERE customer_id = ANY($1::int[])", [made]);
   }
 });
