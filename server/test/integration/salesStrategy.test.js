@@ -7,6 +7,8 @@ import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer
 import { pool } from "../../src/db/pool.js";
 import { generateStrategy, runWeeklyStrategy, cleanFreeText, normalizeReport, strategyNameBook, claimStrategyRun } from "../../src/team/vaghinak/strategist.js";
 import { customerCode } from "../../src/team/askKad/anonymize.js";
+import { mondayOf } from "../../src/team/vaghinak/digest.js";
+import { yerevanToday } from "../../src/utils/yerevanDate.js";
 
 const tag = `ST${Date.now()}`;
 const SHOP = `Strategy Shop ${tag}`;
@@ -29,6 +31,7 @@ test.before(async () => {
 test.after(async () => {
   await pool.query("DELETE FROM sales_strategy_reports");
   await pool.query("DELETE FROM sales_strategy_runs");
+  await pool.query("DELETE FROM sales_step_picks WHERE customer_id = $1", [shop.id]);
   await pool.query("DELETE FROM checkins WHERE customer_id = $1", [shop.id]);
   await cleanupAll();
   await stopTestServer();
@@ -54,6 +57,12 @@ test("a malformed answer becomes a safe, bounded report", () => {
 
 test("one run: nothing identifying is sent, the stored report has the names back and the talking point knows its customer", async () => {
   const code = customerCode(`${tag}1`, shop.id);
+  // this week's pick of the shop, saved with its own details (they win over the customer's step of today)
+  await pool.query(
+    `INSERT INTO sales_step_picks (week_start, customer_id, rep_id, kind, params, value) VALUES ($1, $2, $3, 'add_group', '{"group":"Transmission"}', 100)
+     ON CONFLICT (week_start, customer_id) DO UPDATE SET kind = EXCLUDED.kind, params = EXCLUDED.params`,
+    [mondayOf(yerevanToday()), shop.id, rep.id]
+  );
   let sent = null;
   const fetchImpl = async (_url, init) => {
     sent = init.body;
@@ -73,6 +82,9 @@ test("one run: nothing identifying is sent, the stored report has the names back
   assert.ok(sent.includes(code), "the shop goes as its code");
   for (const leak of ["093.12.34.56", "shop@example.am", "@shopgram", "www.shop.am", FIRST]) assert.ok(!sent.includes(leak), leak);
   assert.ok(JSON.parse(sent).max_completion_tokens > 0, "the answer length is capped");
+  const input = JSON.parse(JSON.parse(sent).messages[1].content);
+  const pick = input.this_week_picks.find((p) => p.customer === code);
+  assert.deepEqual([pick?.step, pick?.step_details], ["add_group", { group: "Transmission" }], "the pick goes with its own saved details");
   assert.ok(row.report.headline.includes(SHOP), "the code is turned back into the name");
   assert.deepEqual(row.report.talking_points[0].customer_ids, [shop.id]);
   const run = (await pool.query("SELECT status, input_tokens, cost_usd::float8 AS cost FROM sales_strategy_runs ORDER BY id DESC LIMIT 1")).rows[0];

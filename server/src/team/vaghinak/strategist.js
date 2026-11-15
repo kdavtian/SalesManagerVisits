@@ -9,7 +9,7 @@
 import { pool } from "../../db/pool.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { computeFunnel } from "./funnel.js";
-import { computeNextSteps } from "./nextSteps.js";
+import { runWeeklyPicks } from "./nextSteps.js";
 import { getVaghinakSettings } from "./settings.js";
 import { mondayOf } from "./digest.js";
 import { minuteOfDay, isWorkingDay } from "./engine.js";
@@ -75,7 +75,7 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
   const byId = new Map(customers.map((c) => [c.id, c]));
   const custCode = (c) => customerCode(c.erp_customer_id, c.id);
   const week = mondayOf(yerevanToday(now));
-  const [{ rows: visits }, { rows: outcomeRows }, { rows: notes }, { rows: moves }, { rows: competitors }, { rows: since }, { rows: picks }, steps] = await Promise.all([
+  const [{ rows: visits }, { rows: outcomeRows }, { rows: notes }, { rows: moves }, { rows: competitors }, { rows: since }, { rows: picks }] = await Promise.all([
     db.query(
       `SELECT user_id, COUNT(*)::int AS visits, COUNT(DISTINCT customer_id)::int AS customers
        FROM checkins WHERE timestamp > now() - interval '7 days' GROUP BY user_id`
@@ -101,10 +101,8 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
        ORDER BY ch.customer_id, ch.timestamp DESC`
     ),
     db.query("SELECT customer_id, since FROM customer_funnel_stage"),
-    db.query("SELECT customer_id, rep_id, kind FROM sales_step_picks WHERE week_start = $1", [week]),
-    computeNextSteps({ db, now, funnel }),
+    db.query("SELECT customer_id, rep_id, kind, params FROM sales_step_picks WHERE week_start = $1", [week]),
   ]);
-  const stepOf = new Map(steps.map((s) => [s.customer.id, s]));
   // customers met in the notes / picks that are not in the funnel (closed, competitor) still get their real code
   const outside = [...new Set([...notes.map((n) => n.customer_id), ...picks.map((p) => p.customer_id)])].filter((id) => !byId.has(id));
   const erpOf = new Map(
@@ -159,8 +157,8 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
       competitors_on_shelves_by_region: regionBrands,
       this_week_picks: picks.map((p) => {
         const c = byId.get(p.customer_id);
-        const s = stepOf.get(p.customer_id);
-        return { rep: repCode(p.rep_id), customer: codeOfId(p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: s?.params ?? {}, region: c?.region ?? null, tier: c?.tier ?? null };
+        // the step as it was picked (kind and details together), not the customer's step of today
+        return { rep: repCode(p.rep_id), customer: codeOfId(p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: p.params ?? {}, region: c?.region ?? null, tier: c?.tier ?? null };
       }),
       field_notes_7_days: fieldNotes,
     },
@@ -336,6 +334,9 @@ export async function runWeeklyStrategy(now = new Date(), db = pool) {
   if (rowCount) return { skipped: "done" };
   const { rows: [f] } = await db.query("SELECT COUNT(*)::int AS n FROM sales_strategy_runs WHERE week_start = $1 AND status = 'failed'", [week]);
   if (f.n >= MAX_WEEKLY_FAILURES) return { skipped: "gave_up" };
+  // this week's picks first (the jobs start side by side after a restart): the talking points are written for them. Picking is locked and
+  // once a week, so this only waits for, or does, what the steps job would do anyway.
+  await runWeeklyPicks(now, db);
   const row = await generateStrategy({ db, now });
   return { generated: row.id };
 }
