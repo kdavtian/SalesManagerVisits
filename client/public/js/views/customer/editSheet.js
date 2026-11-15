@@ -138,7 +138,7 @@ export async function openEditSheet(customer, navigate, onDone) {
       close();
       navigate("#/customers");
     } catch (err) {
-      errorEl.textContent = err.body?.code === "customer_has_records" ? deleteBlockedText(err.body) : err.message;
+      errorEl.textContent = err.body?.code === "customer_has_records" ? deleteBlockedText(err.body, { closed: Boolean(customer.closed_at) }) : err.message;
       errorEl.classList.toggle("form-error-lines", err.body?.code === "customer_has_records");
       errorEl.hidden = false;
       errorEl.scrollIntoView({ block: "nearest" });
@@ -236,10 +236,10 @@ export async function openEditSheet(customer, navigate, onDone) {
 }
 
 // Why the delete was refused, one bullet line per reason (server: customers/customerLifecycle.js customerDeleteBlockers).
-export function deleteBlockedText(body) {
+export function deleteBlockedText(body, { closed = false } = {}) {
   const lines = [t("customer_delete_blocked")];
   if (body.payments) lines.push(`• ${t("customer_delete_blocked_payments").replace("{n}", body.payments).replace("{amount}", formatAmd(body.payments_amd ?? 0))}`);
   if (body.kad_os_accounts?.length) lines.push(`• ${t("customer_delete_blocked_kad_os").replace("{names}", body.kad_os_accounts.join(", "))}`);
-  if (body.payments && canCloseCustomers()) lines.push(t("customer_delete_blocked_close_hint"));
+  if (body.payments && canCloseCustomers() && !closed) lines.push(t("customer_delete_blocked_close_hint"));
   return lines.join("\n");
 }

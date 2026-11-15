@@ -610,7 +610,7 @@ customersRouter.get("/map-facts", async (req, res) => {
   const [ctx, { rows }] = await Promise.all([
     loadScheduleContext(req),
     pool.query(
-      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, c.erp_customer_id, c.credit_term_days, erp.debt_amd, ${REORDER_COLUMNS},
+      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.closed_at, c.assigned_manager_id, c.erp_customer_id, c.credit_term_days, erp.debt_amd, ${REORDER_COLUMNS},
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
               (SELECT max(eol.order_date)::text FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS last_order_date
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
@@ -1147,6 +1147,7 @@ customersRouter.post("/:id/reopen", async (req, res) => {
   if (!Number.isInteger(customerId)) return res.status(404).json({ error: "Customer not found" });
   const row = await reopenCustomer(pool, customerId);
   if (!row) return res.status(404).json({ error: "Customer not found" });
+  if (row.notClosed) return res.status(409).json({ error: "This customer is not closed", code: "customer_not_closed" });
   // back on a rep's route plan the way a new customer is placed (the plans it left on closing are not restored by hand)
   const route_plan = await placeNewCustomer(customerId, req.user.id);
   res.json({ id: customerId, route_plan });
@@ -1557,8 +1558,8 @@ function scheduleForCustomer(customer, ctx) {
   const { today, ruleRows, planRows, allRules, planByUserDate } = ctx;
   const customerId = customer.id;
   // KF/CAS/CVO/PCO/OEM are never visited in the field: no due date, no overdue days, no planned visits
-  // (not even from a Route Plans area rule that happens to cover their region).
-  if (isNoVisitChannel(customer.sales_channel) || customer.checkin_for_all) {
+  // (not even from a Route Plans area rule that happens to cover their region). A closed customer neither (customerLifecycle.js).
+  if (isNoVisitChannel(customer.sales_channel) || customer.checkin_for_all || customer.closed_at) {
     return {
       today,
       no_visit: true,
@@ -1621,7 +1622,7 @@ function scheduleForCustomer(customer, ctx) {
 
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
-    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days,
+    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.closed_at,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]

@@ -2,7 +2,7 @@
 // closed instead). Closed = out of the lists, the map, the plans and new orders; history, payments and the card stay; reopen undoes it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackPayment } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs, trackPayment, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
 let cookies;
@@ -95,4 +95,27 @@ test("close / reopen: only the roles that may close customers (admin); others ge
   }
   assert.equal((await apiRequest("/api/customers/999999999/close", { method: "POST", body: { reason: "x" }, cookie: cookies.admin })).status, 404);
   assert.equal((await apiRequest("/api/customers/999999999/reopen", { method: "POST", body: {}, cookie: cookies.admin })).status, 404);
+});
+
+test("close keeps the past: yesterday's visit plan keeps its stop, tomorrow's loses it; an older draft cannot be submitted; reopen of an open customer is 409", async () => {
+  const customer = await createCustomer({ created_by: users.admin.id, assigned_manager_id: users.sales_manager.id });
+  const { rows: plans } = await pool.query(
+    `INSERT INTO visit_plans (user_id, plan_date, customer_ids, status, created_by)
+     VALUES ($1, current_date - 30, $2, 'approved', $1), ($1, current_date + 30, $2, 'approved', $1) RETURNING id, plan_date`,
+    [users.sales_manager.id, [customer.id]]
+  );
+  planIds.push(...plans.map((p) => p.id));
+  const { rows: [draft] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd) VALUES ($1, $2, 'draft', 1000) RETURNING id", [customer.id, users.sales_manager.id]);
+  trackOrder(draft.id);
+
+  assert.equal((await apiRequest(`/api/customers/${customer.id}/reopen`, { method: "POST", body: {}, cookie: cookies.admin })).status, 409, "not closed yet");
+  assert.equal((await apiRequest(`/api/customers/${customer.id}/close`, { method: "POST", body: { reason: "moved away" }, cookie: cookies.admin })).status, 200);
+
+  const { rows: after } = await pool.query("SELECT id, customer_ids FROM visit_plans WHERE id = ANY($1) ORDER BY plan_date", [plans.map((p) => p.id)]);
+  assert.deepEqual(after[0].customer_ids, [customer.id], "the past plan is history");
+  assert.deepEqual(after[1].customer_ids, [], "the future plan drops it");
+
+  const submit = await apiRequest(`/api/orders/${draft.id}/submit`, { method: "POST", body: {}, cookie: cookies.sales_manager });
+  assert.equal(submit.status, 409);
+  assert.equal(submit.data.code, "customer_closed");
 });

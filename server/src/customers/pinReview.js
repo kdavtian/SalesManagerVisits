@@ -69,6 +69,7 @@ export async function buildPinReview(customerId = null) {
        AND ev.at > COALESCE(GREATEST(c.pin_set_at, d.dismissed_at), '-infinity'::timestamptz)
        AND (ev.accuracy_m IS NULL OR ev.accuracy_m <= ${MAX_ACCURACY_M})
        AND NOT COALESCE(c.checkin_for_all, false)
+       AND c.closed_at IS NULL -- a closed customer's pin needs no fixing (customerLifecycle.js)
        ${only}`,
     params
   );

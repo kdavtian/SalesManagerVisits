@@ -45,7 +45,18 @@ export async function closeCustomer(pool, customerId, userId, reason) {
       "UPDATE customers SET closed_at = now(), closed_by = $2, close_reason = $3 WHERE id = $1 RETURNING id, closed_at, closed_by, close_reason",
       [customerId, userId, reason]
     );
-    await removeFromPlans(client, customerId);
+    // Only what is still ahead: past visit plans are history (payroll / KPI adherence count their stops), and a saved route plan set
+    // that is not active keeps the customer (a closed one is skipped when that set is activated, and is back there after a reopen).
+    await client.query(
+      "UPDATE visit_plans SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids) AND plan_date >= (now() AT TIME ZONE 'Asia/Yerevan')::date",
+      [customerId]
+    );
+    await client.query("UPDATE visit_plan_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
+    await client.query(
+      `UPDATE route_plan_set_rules SET customer_ids = array_remove(customer_ids, $1)
+       WHERE $1 = ANY(customer_ids) AND set_id IN (SELECT id FROM route_plan_sets WHERE is_active)`,
+      [customerId]
+    );
     await client.query("COMMIT");
     return row;
   } catch (err) {
@@ -57,18 +68,15 @@ export async function closeCustomer(pool, customerId, userId, reason) {
 }
 
 // Reopen: back in field work. The plans it left are not restored by hand: the caller places it like a new customer (auto route plan).
+// Returns the row, null when there is no such customer, or { notClosed: true } (a stale second tap must not re-place an open customer).
 export async function reopenCustomer(db, customerId) {
   const { rows: [row] } = await db.query(
-    "UPDATE customers SET closed_at = NULL, closed_by = NULL, close_reason = NULL WHERE id = $1 RETURNING id",
+    "UPDATE customers SET closed_at = NULL, closed_by = NULL, close_reason = NULL WHERE id = $1 AND closed_at IS NOT NULL RETURNING id",
     [customerId]
   );
-  return row ?? null;
-}
-
-// For a route that starts new field work on a customer (an order, a visit): is it closed?
-export async function isCustomerClosed(db, customerId) {
-  const { rows: [c] } = await db.query("SELECT closed_at IS NOT NULL AS closed FROM customers WHERE id = $1", [customerId]);
-  return Boolean(c?.closed);
+  if (row) return row;
+  const { rows: [exists] } = await db.query("SELECT 1 FROM customers WHERE id = $1", [customerId]);
+  return exists ? { notClosed: true } : null;
 }
 
 export const CUSTOMER_CLOSED_ERROR = { error: "This customer is closed. Reopen it first.", code: "customer_closed" };

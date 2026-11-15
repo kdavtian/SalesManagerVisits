@@ -92,7 +92,7 @@ opsControlRouter.put("/legacy-balances/:customerId", requireDecide, async (req, 
 // ---- Credit limits: customers without a limit (unlimited credit) ----
 opsControlRouter.get("/credit-limits", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT count(*) FILTER (WHERE credit_limit_amd IS NULL AND erp_customer_id IS NOT NULL AND erp_customer_id <> '10000' AND NOT COALESCE(checkin_for_all, false))::int AS without_limit,
+    `SELECT count(*) FILTER (WHERE credit_limit_amd IS NULL AND erp_customer_id IS NOT NULL AND erp_customer_id <> '10000' AND NOT COALESCE(checkin_for_all, false) AND closed_at IS NULL)::int AS without_limit,
             count(*) FILTER (WHERE credit_limit_amd IS NOT NULL)::int AS with_limit
      FROM customers`
   );
