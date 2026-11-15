@@ -271,4 +271,8 @@ export const hyField = {
     task_cancel_reason_placeholder: "Չեղարկելու պատճառը (պարտադիր է)",
     task_cancel_reason_required: "Գրեք չեղարկելու պատճառը",
     collect_choose_outcome: "Ընտրեք՝ ինչպես անցավ",
+    monthly_need_label: "Խանութի ամսական յուղի վաճառքը՝ բոլոր ապրանքանիշերը (լիտր)",
+    monthly_need_placeholder: "օր.՝ 300",
+    monthly_need_hint_new: "Հարցրեք տիրոջը՝ ամսական քանի՞ լիտր յուղ եք վաճառում կամ օգտագործում՝ բոլոր ապրանքանիշերից։ Մենք չափում ենք դրա մեջ մեր բաժինը։",
+    monthly_need_hint_check: "Գրվել է 3 ամսից ավելի առաջ․ հաստատեք կամ գրեք նոր թիվը։",
 };

@@ -182,7 +182,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s, expected_volume_l } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -350,6 +350,12 @@ checkinsRouter.post("/", (req, res, next) => {
       [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
+    // The shop's whole monthly oil need, all brands (Sales Expert funnel, stage 4), when the rep wrote it at this visit. A number that makes no
+    // sense is left out -- never the reason a (possibly offline-queued) visit is refused.
+    const monthlyNeed = expected_volume_l === undefined || expected_volume_l === null || String(expected_volume_l).trim() === "" ? null : Number(expected_volume_l);
+    if (monthlyNeed !== null && monthlyNeed >= 0 && monthlyNeed <= 1e6) {
+      await client.query("UPDATE customers SET expected_volume_l = $2, expected_volume_at = now(), expected_volume_by = $3 WHERE id = $1", [customerId, Math.round(monthlyNeed * 10) / 10 || null, req.user.id]);
+    }
     if (voiceFile) {
       const seconds = Math.round(Number(voice_duration_s));
       const { rows: vn } = await client.query(

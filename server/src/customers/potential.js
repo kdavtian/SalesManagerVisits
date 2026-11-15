@@ -62,7 +62,7 @@ export async function setPotential(customerId, userId, body) {
     const sets = ["potential_level = $2", "potential_reasons = $3", "potential_reason_other = $4", "potential_updated_at = now()", "potential_updated_by = $5"];
     const params = [customerId, v.level, v.reasons, v.other, userId];
     if (v.hasDate) sets.push(`next_followup_date = $${params.push(v.date)}`);
-    if (v.hasVolume) sets.push(`expected_volume_l = $${params.push(v.volume)}`);
+    if (v.hasVolume) sets.push(`expected_volume_l = $${params.push(v.volume)}`, "expected_volume_at = now()", "expected_volume_by = $5");
     if (raiseCounterfeit) sets.push("counterfeit_flag = true", "counterfeit_resolved_at = NULL", "counterfeit_resolved_by = NULL", "counterfeit_resolved_comment = NULL");
     await client.query(`UPDATE customers SET ${sets.join(", ")} WHERE id = $1`, params);
     if (changed || v.note) {

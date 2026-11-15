@@ -271,4 +271,8 @@ export const enField = {
     task_cancel_reason_placeholder: "Reason to cancel (required)",
     task_cancel_reason_required: "Write the reason for cancelling",
     collect_choose_outcome: "Choose how it went",
+    monthly_need_label: "This shop's monthly oil sales, all brands (litres)",
+    monthly_need_placeholder: "e.g. 300",
+    monthly_need_hint_new: "Ask the owner: how many litres of oil a month do you sell or use, from every brand? We measure our share of it.",
+    monthly_need_hint_check: "Written over 3 months ago: confirm it or write the new number.",
 };

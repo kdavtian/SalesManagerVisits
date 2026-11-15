@@ -75,6 +75,15 @@ const BRAND_CARDS = [
   { key: "competitors", labelKey: "brand_group_competitors", groups: ["competitors"] },
 ];
 
+// The shop's whole monthly oil need (all brands, litres) is asked at the visit of a buying customer (owner, 2026-11-15: Sales Expert) when it
+// was never written or is older than 3 months; a potential customer gives it in its potential sheet, a competitor is never asked.
+const MONTHLY_NEED_EVERY_DAYS = 90;
+function asksMonthlyNeed(customer) {
+  if (!customer || ["potential", "competitor"].includes(customer.customer_tier)) return false;
+  if (customer.expected_volume_l == null || !customer.expected_volume_at) return true;
+  return Date.now() - new Date(customer.expected_volume_at).getTime() > MONTHLY_NEED_EVERY_DAYS * 86400000;
+}
+
 export async function renderCheckin(root, navigate, customerId) {
   root.innerHTML = `<div class="checkin-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".checkin-view");
@@ -177,6 +186,16 @@ export async function renderCheckin(root, navigate, customerId) {
           ).join("")}
         </div>
       </label>
+
+      ${
+        asksMonthlyNeed(customer)
+          ? `<label class="checkin-monthly-need" id="monthly-need-field">
+              <span>${t("monthly_need_label")}</span>
+              <input type="number" name="expected_volume_l" inputmode="numeric" min="0" max="1000000" step="1" value="${customer.expected_volume_l ?? ""}" placeholder="${t("monthly_need_placeholder")}" />
+              <small class="muted">${t(customer.expected_volume_l == null ? "monthly_need_hint_new" : "monthly_need_hint_check")}</small>
+            </label>`
+          : ""
+      }
 
       <label id="note-field">
         <span id="note-label">${t("note_optional")}</span>
@@ -992,6 +1011,9 @@ export async function renderCheckin(root, navigate, customerId) {
     formData.set("client_ref", clientRef);
     if (Number.isFinite(position.coords.accuracy)) formData.set("accuracy_m", Math.round(position.coords.accuracy));
     if (note) formData.set("note", note);
+    // the shop's monthly oil need (Sales Expert funnel, stage 4): sent only when the rep wrote or confirmed a number
+    const monthlyNeed = String(data.get("expected_volume_l") ?? "").trim();
+    if (monthlyNeed !== "" && Number(monthlyNeed) >= 0) formData.set("expected_volume_l", monthlyNeed);
     formData.set("outcomes", JSON.stringify(outcomes));
     // why there was no order: the SERVER closes the order tasks with the visit (order tasks cannot be closed by hand)
     if (skippedOrderTasks) formData.set("no_order_reason", skippedOrderTasks.reason);
