@@ -1,4 +1,4 @@
-// A customer's life after it is created: what keeps it from being deleted.
+// A customer's life after it is created: what keeps it from being deleted, closing and reopening it.
 
 // What keeps a customer from being deleted (the ON DELETE RESTRICT links): its payments, old and new (a voided new payment still
 // counts: payments are voided, never deleted), and KAD OS accounts linked to it. Named with numbers so the admin knows what to clear.
@@ -16,3 +16,59 @@ export async function customerDeleteBlockers(db, customerId) {
   );
   return { payments: p.payments, payments_amd: Math.round(p.payments_amd), kad_os_accounts: links.map((l) => l.name) };
 }
+
+// The plans that list customers in a plain integer array (Postgres cannot foreign-key those): a customer that is deleted or closed
+// leaves them, or it lingers as a ghost stop on a rep's plan.
+export async function removeFromPlans(db, customerId) {
+  await db.query("UPDATE visit_plans SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
+  await db.query("UPDATE visit_plan_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
+  await db.query("UPDATE route_plan_set_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
+}
+
+// Close (owner, 2026-11-15): the place stopped working with us. It leaves field work -- lists, map, visit / route plans, reminders, new
+// orders and visits -- and keeps its history, payments and debt (a payment can still be recorded on it). Reversible with reopenCustomer.
+// Returns the row, null when there is no such customer, or { already: true } when it was closed before.
+export async function closeCustomer(pool, customerId, userId, reason) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [c] } = await client.query("SELECT id, closed_at FROM customers WHERE id = $1 FOR UPDATE", [customerId]);
+    if (!c) {
+      await client.query("ROLLBACK");
+      return null;
+    }
+    if (c.closed_at) {
+      await client.query("ROLLBACK");
+      return { already: true };
+    }
+    const { rows: [row] } = await client.query(
+      "UPDATE customers SET closed_at = now(), closed_by = $2, close_reason = $3 WHERE id = $1 RETURNING id, closed_at, closed_by, close_reason",
+      [customerId, userId, reason]
+    );
+    await removeFromPlans(client, customerId);
+    await client.query("COMMIT");
+    return row;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Reopen: back in field work. The plans it left are not restored by hand: the caller places it like a new customer (auto route plan).
+export async function reopenCustomer(db, customerId) {
+  const { rows: [row] } = await db.query(
+    "UPDATE customers SET closed_at = NULL, closed_by = NULL, close_reason = NULL WHERE id = $1 RETURNING id",
+    [customerId]
+  );
+  return row ?? null;
+}
+
+// For a route that starts new field work on a customer (an order, a visit): is it closed?
+export async function isCustomerClosed(db, customerId) {
+  const { rows: [c] } = await db.query("SELECT closed_at IS NOT NULL AS closed FROM customers WHERE id = $1", [customerId]);
+  return Boolean(c?.closed);
+}
+
+export const CUSTOMER_CLOSED_ERROR = { error: "This customer is closed. Reopen it first.", code: "customer_closed" };

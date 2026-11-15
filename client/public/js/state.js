@@ -73,6 +73,7 @@ export const canCreateTasks = () => R.canCreateTasks(role());
 // the accountant / financial director sends REQUESTS (Խնդրանք) to the sales director: a task under another name (owner, 2026-10-27)
 export const sendsRequests = () => R.sendsRequests(role());
 export const canReassignCustomers = () => R.canReassignCustomers(role());
+export const canCloseCustomers = () => R.canCloseCustomers(role());
 export const canAssignErpCustomerId = (customer) => R.canAssignErpCustomerId(role(), customer.created_by, state.user?.id);
 export const canEditOwnSalesChannel = (customer) => R.canEditOwnSalesChannel(role(), customer.created_by, state.user?.id);
 

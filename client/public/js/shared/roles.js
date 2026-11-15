@@ -81,6 +81,11 @@ export function canDeleteOrEditDirectly(role) {
   return role === "admin";
 }
 
+// Close / reopen a customer (it leaves field work, keeps its history and payments; owner 2026-11-15): the same people who may delete one.
+export function canCloseCustomers(role) {
+  return role === "admin";
+}
+
 // Who can reassign a customer's region/subregion/sales channel/manager
 // without going through the edit-request approval flow -- a director is
 // senior enough to fix a mis-assigned customer on the spot.

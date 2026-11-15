@@ -57,7 +57,7 @@ async function searchCatalog(query) {
 export async function recordResults(query) {
   const shell = opsShellFor(state.user?.role);
   const [customers, orders, tasks, products] = await Promise.all([
-    shell ? [] : api.listCustomers({ search: query, limit: MAX_PER_GROUP }).catch(() => []),
+    shell ? [] : api.listCustomers({ search: query, limit: MAX_PER_GROUP, closed: 1 }).catch(() => []), // closed ones too, marked: the way to reopen one
     api.listOrders({ q: query, limit: MAX_PER_GROUP }, { fresh: true }).then((r) => r.rows ?? []).catch(() => []),
     searchTasks(query).catch(() => []),
     searchCatalog(query).catch(() => []),

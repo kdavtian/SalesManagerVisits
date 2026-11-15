@@ -102,7 +102,7 @@ export function openSearch({ navigate, settings }) {
     const html =
       group(
         t("nav_customers"),
-        customers.map((c) => ({ kind: "record", id: `c${c.id}`, label: c.name, hint: [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · "), icon: icons.customers, hash: `#/customers/${c.id}` }))
+        customers.map((c) => ({ kind: "record", id: `c${c.id}`, label: c.name, hint: [c.closed_at ? t("customer_closed_tag") : "", c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · "), icon: icons.customers, hash: `#/customers/${c.id}` }))
       ) +
       group(
         t("nav_orders"),

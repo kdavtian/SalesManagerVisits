@@ -82,10 +82,10 @@ export async function runRoutePlanAnalysis(db = pool) {
     const { rows: rules } = await db.query("SELECT day_of_week, areas, customer_ids FROM visit_plan_rules WHERE user_id = $1 AND active", [rep.id]);
     if (rules.length < 2) continue;
     const { rows: mine } = await db.query(
-      `SELECT id, region, subregion, sales_channel, checkin_for_all, customer_tier, lat::float8 AS lat, lng::float8 AS lng FROM customers WHERE assigned_manager_id = $1 OR id = ANY($2)`,
+      `SELECT id, region, subregion, sales_channel, checkin_for_all, customer_tier, closed_at, lat::float8 AS lat, lng::float8 AS lng FROM customers WHERE assigned_manager_id = $1 OR id = ANY($2)`,
       [rep.id, [...new Set(rules.flatMap((r) => r.customer_ids ?? []))]]
     );
-    const visitable = (c) => scopeOfChannel(c.sales_channel) === MAIN_SCOPE && !isNoVisitChannel(c.sales_channel) && !c.checkin_for_all && c.customer_tier !== "competitor";
+    const visitable = (c) => scopeOfChannel(c.sales_channel) === MAIN_SCOPE && !isNoVisitChannel(c.sales_channel) && !c.checkin_for_all && !c.closed_at && c.customer_tier !== "competitor";
     const eligible = mine.filter(visitable);
     const byId = new Map(eligible.map((c) => [c.id, c]));
     const days = rules.map((r) => {

@@ -31,6 +31,7 @@ import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_AP
 import { bullets } from "../../utils/bullets.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
+import { isCustomerClosed, CUSTOMER_CLOSED_ERROR } from "../../customers/customerLifecycle.js";
 import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
 export const ordersRouter = Router();
@@ -222,6 +223,8 @@ export async function createOrderHandler(req, res) {
     const { rows: existingRows } = await pool.query("SELECT id FROM orders WHERE user_id = $1 AND client_ref = $2", [req.user.id, client_ref]);
     if (existingRows[0]) return res.status(201).json(await loadOrderWithItems(existingRows[0].id));
   }
+  // A closed customer takes no new orders (customerLifecycle.js); reopening it is one tap for the admin.
+  if (await isCustomerClosed(pool, customerId)) return res.status(409).json(CUSTOMER_CLOSED_ERROR);
   // Required going forward (item 6) -- informational only, not a
   // reintroduction of the rejected payment-approval workflow. Nullable at
   // the DB level so it doesn't break pre-existing orders; enforced here.

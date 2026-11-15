@@ -82,14 +82,14 @@ export async function placeNewCustomer(customerId, actorId) {
   try {
     if (!(await getAutoRoutePlanEnabled())) return { status: "skipped", reason: "off" };
     const { rows: [c] } = await pool.query(
-      `SELECT c.id, c.name, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.lat::float8 AS lat, c.lng::float8 AS lng, c.visit_frequency_days,
+      `SELECT c.id, c.name, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.lat::float8 AS lat, c.lng::float8 AS lng, c.visit_frequency_days, c.closed_at,
               c.assigned_manager_id AS rep_id, u.name AS rep_name
        FROM customers c LEFT JOIN users u ON u.id = c.assigned_manager_id WHERE c.id = $1`,
       [customerId]
     );
     if (!c?.rep_id) return { status: "skipped", reason: "no_rep" };
     if (!c.region) return { status: "skipped", reason: "no_area" };
-    if (isNoVisitChannel(c.sales_channel) || c.checkin_for_all) return { status: "skipped", reason: "not_visited" };
+    if (isNoVisitChannel(c.sales_channel) || c.checkin_for_all || c.closed_at) return { status: "skipped", reason: "not_visited" };
     const client = await pool.connect();
     let result;
     try {
