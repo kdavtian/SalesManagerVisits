@@ -182,7 +182,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s, expected_volume_l } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -350,6 +350,21 @@ checkinsRouter.post("/", (req, res, next) => {
       [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
+    // The shop's whole monthly oil need, all brands (Sales Expert funnel, stage 4), when the rep wrote it at this visit. A number that makes no
+    // sense is left out -- never the reason a (possibly offline-queued) visit is refused.
+    // Only when the visit really is at the shop (the number is asked from its owner); a 0 says nothing, so it is not saved. Dated with the visit's
+    // own time (an offline visit syncs later) and never over a number written after that moment.
+    const monthlyNeed = expected_volume_l === undefined || expected_volume_l === null || String(expected_volume_l).trim() === "" ? null : Number(expected_volume_l);
+    const at = parseCapturedAt(captured_at);
+    // a visit that came with its own time which was refused (queued too long): the visit is kept, but its old number is not written as new
+    const staleCapture = captured_at !== undefined && captured_at !== null && captured_at !== "" && at === null;
+    if (atCustomer && !staleCapture && monthlyNeed !== null && monthlyNeed > 0 && monthlyNeed <= 1e6) {
+      await client.query(
+        `UPDATE customers SET expected_volume_l = $2, expected_volume_at = COALESCE($4::timestamptz, now()), expected_volume_by = $3
+         WHERE id = $1 AND (expected_volume_at IS NULL OR expected_volume_at <= COALESCE($4::timestamptz, now()))`,
+        [customerId, Math.round(monthlyNeed * 10) / 10, req.user.id, at]
+      );
+    }
     if (voiceFile) {
       const seconds = Math.round(Number(voice_duration_s));
       const { rows: vn } = await client.query(

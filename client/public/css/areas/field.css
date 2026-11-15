@@ -569,3 +569,6 @@
   .route-plan-week-row-standalone { max-width: 980px; }
   .sheet.route-plan-sheet { max-width: 760px; }
 }
+
+/* The shop's monthly oil need at the visit (Sales Expert funnel, stage 4) */
+.checkin-monthly-need small { display: block; margin-top: 4px; line-height: 1.3; }

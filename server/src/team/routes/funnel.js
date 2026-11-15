@@ -53,7 +53,7 @@ funnelRouter.put("/customers/:id/expected-volume", express.json(), async (req, r
   const value = raw === null || raw === "" || raw === undefined ? null : Number(raw);
   if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid customer" });
   if (value !== null && !(value >= 0 && value <= 1e6)) return res.status(400).json({ error: "Litres per month: 0 to 1,000,000" });
-  const { rowCount } = await pool.query("UPDATE customers SET expected_volume_l = $2 WHERE id = $1", [id, value || null]);
+  const { rowCount } = await pool.query("UPDATE customers SET expected_volume_l = $2, expected_volume_at = now(), expected_volume_by = $3 WHERE id = $1", [id, value || null, req.user.id]);
   if (!rowCount) return res.status(404).json({ error: "Customer not found" });
   res.json({ id, expected_volume_l: value || null });
 });
