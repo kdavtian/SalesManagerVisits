@@ -1,7 +1,7 @@
 // Vaghinak - Sales Expert, step 2: the next-step rule of one customer (team/vaghinak/nextSteps.js), without a database.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stepOf, taskTitleOf } from "../src/team/vaghinak/nextSteps.js";
+import { stepOf, taskTitleOf, similarProducts } from "../src/team/vaghinak/nextSteps.js";
 
 const now = Date.parse("2026-11-16T09:00:00Z");
 
@@ -31,4 +31,27 @@ test("a counterfeit-restricted customer gets no step; every kind has an Armenian
     const title = taskTitleOf({ kind, params: { group: "Grease", brand: "mobil" }, customer: { name: "Shop" } });
     assert.ok(title.includes("Shop") && /[Ա-֏]/.test(title), kind);
   }
+});
+
+test("similar shops buy this: the 2 products of the group most shops of the same tier buy; other tiers only when the tier has none", () => {
+  const rows = [
+    { tier: "silver", grp: "Transmission", id: 1, name: "ATF A", shops: 5 },
+    { tier: "silver", grp: "Transmission", id: 2, name: "ATF B", shops: 8 },
+    { tier: "silver", grp: "Transmission", id: 3, name: "ATF C", shops: 2 },
+    { tier: "gold", grp: "Transmission", id: 3, name: "ATF C", shops: 20 },
+    { tier: "gold", grp: "Grease", id: 4, name: "Grease G", shops: 3 },
+    { tier: "silver", grp: "Grease", id: 9, name: "Grease H", shops: 0 },
+  ].filter((r) => r.shops > 0);
+  const tierBuyers = new Map([["silver", new Set(Array.from({ length: 12 }, (_, i) => i))], ["gold", new Set([100, 101, 102, 103])]]);
+  assert.deepEqual(similarProducts(rows, "silver", "Transmission", tierBuyers), {
+    products: [{ id: 2, name: "ATF B", shops: 8 }, { id: 1, name: "ATF A", shops: 5 }],
+    buyers: 12,
+  });
+  // nobody in silver buys grease: fall back to every tier
+  assert.deepEqual(similarProducts(rows, "silver", "Grease", tierBuyers), { products: [{ id: 4, name: "Grease G", shops: 3 }], buyers: 16 });
+  assert.equal(similarProducts(rows, "silver", "EV fluids", tierBuyers), null);
+  // the step carries them, the old shape stays when there are none; the task title names them
+  const step = stepOf({ stage: 2, progress: 50 }, { missingGroup: "Transmission", similar: similarProducts(rows, "silver", "Transmission", tierBuyers) }, now);
+  assert.equal(step.params.products.length, 2);
+  assert.ok(taskTitleOf({ ...step, customer: { name: "Shop" } }).includes("ATF B, ATF A"));
 });

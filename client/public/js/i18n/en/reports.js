@@ -412,6 +412,8 @@ export const enReports = {
     fn_step_first_order: "Get the first order (trial order, prices, the decision maker)",
     fn_step_reassess: "Reassess the potential",
     fn_step_add_group: "Offer {group}",
+    fn_step_add_group_products: "Offer {group}: {products}",
+    fn_similar_product: "{name} ({shops} of {buyers} similar shops buy it)",
     fn_step_ask_need: "Ask the monthly oil need",
     fn_step_raise_share_competitor: "Raise our share ({share}%): {brand} is on the shelf",
     fn_step_raise_share: "Raise our share ({share}%)",

@@ -45,6 +45,13 @@ export async function renderFunnel(root, navigate) {
   function stepText(step) {
     if (!step) return "";
     const p = step.params ?? {};
+    if (step.kind === "add_group" && p.products?.length) {
+      return fill("fn_step_add_group_products", {
+        group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
+        // each product with its own count (shops buying one product are not the shops buying the other)
+        products: p.products.map((x) => fill("fn_similar_product", { name: x.name, shops: x.shops, buyers: Math.max(p.buyers || 0, x.shops) })).join(", "),
+      });
+    }
     return fill(`fn_step_${step.kind}`, {
       group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
       brand: p.brand ? t(`competitor_${p.brand}`) : "",
