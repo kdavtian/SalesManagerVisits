@@ -144,3 +144,25 @@ test("Monday picks: shadow stores the steps without tasks; once a week; live als
     await pool.query("DELETE FROM sales_step_picks WHERE customer_id = ANY($1::int[])", [made]);
   }
 });
+
+test("the competitor comes from the last visit that recorded competitors, not from a later visit that only recorded our brands", async () => {
+  const { computeNextSteps } = await import("../../src/team/vaghinak/nextSteps.js");
+  const c = await customer("bronze", { erp: "cmp", expected: 1000 });
+  await line("cmp", 1, 2, "4L");
+  await line("cmp", 2, 2, "1L");
+  const visit = (brand, daysAgo) =>
+    pool.query(
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, brand_status, "timestamp")
+       VALUES ($1, $2, 40.18, 44.51, 10, true, ARRAY['no_order'], $3::jsonb, now() - $4::int * interval '1 day')`,
+      [c.id, rep.id, JSON.stringify(brand), daysAgo]
+    );
+  await visit({ competitors: ["mobil"] }, 10);
+  await visit({ castrol: ["available"] }, 2);
+  try {
+    const step = (await computeNextSteps()).find((s) => s.customer.id === c.id);
+    assert.equal(step?.kind, "raise_share_competitor");
+    assert.equal(step.params.brand, "mobil");
+  } finally {
+    await pool.query("DELETE FROM checkins WHERE customer_id = $1", [c.id]);
+  }
+});

@@ -69,10 +69,12 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
        GROUP BY 1, 2, 3`,
       [ids, cfg.windowDays]
     ),
-    // the competitor brands seen on the shelf at the customer's last visit that recorded them
+    // the competitor brands at the customer's last visit that recorded competitors (a visit sends only the groups it filled,
+    // so a missing group is "not checked", not "gone"; same rule as the customer card's brand summary)
     db.query(
       `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'competitors' AS brands
-       FROM checkins WHERE customer_id = ANY($1::int[]) AND brand_status IS NOT NULL AND brand_status <> '{}'::jsonb
+       FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'competitors') = 'array'
+         AND jsonb_array_length(brand_status -> 'competitors') > 0
        ORDER BY customer_id, timestamp DESC`,
       [ids]
     ),
