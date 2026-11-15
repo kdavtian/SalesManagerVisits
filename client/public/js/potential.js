@@ -278,7 +278,32 @@ export async function openPotentialHistory(customerId) {
 }
 
 // ---- the card on the customer page ------------------------------------------------------------------------------------------------------
-export function renderPotentialCard(slot, customer, { reload } = {}) {
+// Vaghinak - Sales Expert (owner, 2026-11-15, improvement #10): at a visit, a potential level that was never set or is older than this many
+// days is asked again ("still the same?"), so the funnel's stage 1 and the weekly steps work on fresh levels.
+export const POTENTIAL_FRESH_DAYS = 60;
+export function potentialAge(customer, now = Date.now()) {
+  const at = customer.potential_updated_at ? new Date(customer.potential_updated_at).getTime() : NaN;
+  return Number.isFinite(at) ? Math.max(0, Math.floor((now - at) / 86400000)) : null;
+}
+function freshPromptHtml(customer) {
+  const level = Number(customer.potential_level) || 0;
+  const age = potentialAge(customer);
+  if (level && age !== null && age < POTENTIAL_FRESH_DAYS) return "";
+  // "the same" re-saves the level with its reasons; without reasons (older records) the sheet opens instead
+  const canConfirm = level > 0 && customer.potential_reasons?.length > 0;
+  const text = !level
+    ? t("pl_fresh_never")
+    : (age === null ? t("pl_fresh_undated") : t("pl_fresh_old").replace("{n}", age)).replace("{level}", t(`pl_level_${level}`));
+  return `<div class="pl-fresh" role="status">
+      <p class="pl-fresh-text">${escapeHtml(text)}</p>
+      <div class="pl-fresh-actions">
+        ${canConfirm ? `<button type="button" class="btn btn-primary" data-pl-same>${escapeHtml(t("pl_fresh_same"))}</button>` : ""}
+        <button type="button" class="btn ${canConfirm ? "" : "btn-primary"}" data-pl-fresh-edit>${escapeHtml(t(level ? "pl_change" : "pl_fresh_assess"))}</button>
+      </div>
+    </div>`;
+}
+
+export function renderPotentialCard(slot, customer, { reload, askFresh = false } = {}) {
   const isPotential = customer.customer_tier === "potential";
   const flagged = Boolean(customer.counterfeit_flag);
   if (!slot || (!isPotential && !flagged)) {
@@ -296,6 +321,7 @@ export function renderPotentialCard(slot, customer, { reload } = {}) {
         isPotential
           ? `<div class="pl-card-head"><span class="progress-label">${escapeHtml(t("pl_title"))}</span>${potentialChipHtml(customer.potential_level)}
               ${canEdit ? `<button type="button" class="icon-btn pl-edit-btn" data-pl-edit aria-label="${escapeHtml(t("pl_change"))}" title="${escapeHtml(t("pl_change"))}">${icons.pencil}</button>` : ""}</div>
+            ${askFresh && canEdit ? freshPromptHtml(customer) : ""}
             ${lines.map((l) => `<div class="pl-line">${l}</div>`).join("")}
             <button type="button" class="pl-link" data-pl-history>${escapeHtml(t("pl_history"))}</button>`
           : ""
@@ -310,6 +336,23 @@ export function renderPotentialCard(slot, customer, { reload } = {}) {
       }
     </div>`;
   slot.querySelector("[data-pl-edit]")?.addEventListener("click", () => openPotentialSheet(customer, reload));
+  slot.querySelector("[data-pl-fresh-edit]")?.addEventListener("click", () => openPotentialSheet(customer, reload));
+  slot.querySelector("[data-pl-same]")?.addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api.setCustomerPotential(customer.id, {
+        level: customer.potential_level,
+        reasons: customer.potential_reasons,
+        reason_other: customer.potential_reason_other || "",
+      });
+      showToast(t("pl_fresh_saved"));
+      await reload?.();
+    } catch (err) {
+      showToast(err.message);
+      btn.disabled = false;
+    }
+  });
   slot.querySelector("[data-pl-history]")?.addEventListener("click", () => openPotentialHistory(customer.id));
   slot.querySelector("[data-pl-resolve]")?.addEventListener("click", () => openResolveSheet(customer, reload));
 }

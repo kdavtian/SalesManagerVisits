@@ -315,4 +315,10 @@ export const enCustomers = {
     cd_funnel_stage_4: "Our share",
     cd_funnel_days: "{n} d",
     cd_funnel_open: "Open the sales funnel",
+    pl_fresh_never: "Potential not assessed yet: assess it at this visit",
+    pl_fresh_old: "Potential checked {n} days ago. Still \"{level}\"?",
+    pl_fresh_undated: "Potential has no check date yet. Still \"{level}\"?",
+    pl_fresh_same: "Yes, still the same",
+    pl_fresh_assess: "Assess now",
+    pl_fresh_saved: "Potential confirmed",
 };

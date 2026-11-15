@@ -3503,3 +3503,8 @@ a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px
 .cd-funnel-chip.is-stuck { color: var(--danger, #c62828); }
 a.cd-funnel-chip { position: relative; }
 a.cd-funnel-chip::after { content: ""; position: absolute; inset: -10px -4px; } /* 44 px tap area around the small chip */
+/* "Still the same?" prompt in the potential card at a visit (potential.js freshPromptHtml) */
+.pl-fresh { margin: 8px 0 4px; padding: 10px 12px; border: 1px dashed var(--warning, #b54708); border-radius: 12px; }
+.pl-fresh-text { margin: 0 0 8px; font-size: 0.9rem; color: var(--warning, #b54708); overflow-wrap: anywhere; }
+.pl-fresh-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl-fresh-actions .btn { min-height: 44px; flex: 1 1 140px; }

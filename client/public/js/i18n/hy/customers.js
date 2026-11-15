@@ -315,4 +315,10 @@ export const hyCustomers = {
     cd_funnel_stage_4: "Մեր բաժինը",
     cd_funnel_days: "{n} օր",
     cd_funnel_open: "Բացել վաճառքի ձագարը",
+    pl_fresh_never: "Հեռանկարը դեռ գնահատված չէ․ գնահատիր այս այցի ժամանակ",
+    pl_fresh_old: "Հեռանկարը ստուգվել է {n} օր առաջ։ Դեռ «{level}» է՞",
+    pl_fresh_undated: "Հեռանկարի ստուգման ամսաթիվը նշված չէ։ Դեռ «{level}» է՞",
+    pl_fresh_same: "Այո, նույնն է",
+    pl_fresh_assess: "Գնահատել հիմա",
+    pl_fresh_saved: "Հեռանկարը հաստատված է",
 };

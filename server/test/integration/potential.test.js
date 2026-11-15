@@ -189,3 +189,16 @@ test("the visit reasons 'gave_price_list' and 'introduced_products' are accepted
   assert.equal(r.status, 200, JSON.stringify(r.data));
   assert.equal((await put("rep", mine.id, { level: 3, reasons: ["made_up_reason"] })).status, 400);
 });
+
+test("confirming the same level at a visit ('still the same') renews its date without a history line", async () => {
+  const c = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
+  assert.equal((await put("rep", c.id, { level: 3, reasons: ["active_interest"] })).status, 200);
+  await pool.query("UPDATE customers SET potential_updated_at = now() - interval '90 days' WHERE id = $1", [c.id]);
+  const before = (await pool.query("SELECT COUNT(*)::int AS n FROM customer_potential_history WHERE customer_id = $1", [c.id])).rows[0].n;
+  const same = await put("rep", c.id, { level: 3, reasons: ["active_interest"], reason_other: "" });
+  assert.equal(same.status, 200);
+  assert.equal(same.data.changed, false);
+  const { rows: [r] } = await pool.query("SELECT potential_level, floor(extract(epoch FROM now() - potential_updated_at) / 86400)::int AS days FROM customers WHERE id = $1", [c.id]);
+  assert.deepEqual([r.potential_level, r.days], [3, 0]);
+  assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM customer_potential_history WHERE customer_id = $1", [c.id])).rows[0].n, before);
+});
