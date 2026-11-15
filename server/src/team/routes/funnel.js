@@ -9,6 +9,7 @@ import { computeFunnel } from "../vaghinak/funnel.js";
 import { computeNextSteps, runWeeklyPicks } from "../vaghinak/nextSteps.js";
 import { getVaghinakSettings } from "../vaghinak/settings.js";
 import { mondayOf } from "../vaghinak/digest.js";
+import { latestStrategy, generateStrategy, claimStrategyRun, isStrategistConfigured } from "../vaghinak/strategist.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 
 export const funnelRouter = Router();
@@ -80,4 +81,27 @@ funnelRouter.put("/customers/:id/expected-volume", express.json(), async (req, r
 funnelRouter.post("/picks/run", async (req, res) => {
   if (!editsVaghinakSettings(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   res.json(await runWeeklyPicks(new Date(), pool, { force: true }));
+});
+
+// The weekly AI market strategy (strategist.js): management reads it; the people who edit Vaghinak's settings can generate it now. The run is
+// claimed here (409 while one runs, 429 within an hour of the last one, 409 when switched off) and written in the background: it can take a
+// minute or two, longer than the proxy waits, so the screen polls GET until the run is done.
+funnelRouter.get("/strategy", async (_req, res) => {
+  const settings = await getVaghinakSettings();
+  const { report, run } = await latestStrategy();
+  res.json({ configured: isStrategistConfigured(), mode: settings.mode === "off" ? "off" : settings.strategistMode, report, run });
+});
+funnelRouter.post("/strategy/run", async (req, res) => {
+  if (!editsVaghinakSettings(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  if (!isStrategistConfigured()) return res.status(503).json({ error: "The OpenAI key is not set on the server", code: "not_configured" });
+  const settings = await getVaghinakSettings();
+  if (settings.mode === "off" || settings.strategistMode === "off") return res.status(409).json({ error: "The weekly strategy is switched off", code: "off" });
+  let runId;
+  try {
+    runId = await claimStrategyRun({ userId: req.user.id, manual: true });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({ error: err.message, code: err.code });
+  }
+  generateStrategy({ userId: req.user.id, runId }).catch((err) => console.error("Sales strategy failed:", err.message));
+  res.status(202).json({ run: { id: runId, status: "running" } });
 });
