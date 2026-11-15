@@ -584,8 +584,9 @@ export function sendsRequests(role) {
 // not at all; the server refuses it); management can CANCEL one with a reason. Plain tasks and call tasks are not in this list.
 export const SELF_CLOSING_TASK_KINDS = ["visit_customer", "check_products", "collect_debt", "make_order"];
 export function taskClosesItself(task) {
-  // the "orders not in the Excel" list (orders/notInExcel.js) closes only when the list is empty: ticking every line must not close it
-  return SELF_CLOSING_TASK_KINDS.includes(task?.task_kind) || ["debt_collection", "reorder_followup", "order_not_in_excel"].includes(task?.auto_kind);
+  // the "orders not in the Excel" list (orders/notInExcel.js) closes only when the list is empty: ticking every line must not close it;
+  // the "put back a cancelled packed order" task (orders/orderReturns.js) only when the warehouse confirms the goods are back
+  return SELF_CLOSING_TASK_KINDS.includes(task?.task_kind) || ["debt_collection", "reorder_followup", "order_not_in_excel", "cancel_putback"].includes(task?.auto_kind);
 }
 // Who may cancel a self-closing task (with a written reason): the task givers above the sales manager.
 export function canCancelSelfClosingTask(role) {

@@ -607,9 +607,18 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
             onChanged?.();
             renderEditMode(await api.getOrder(orderId));
           } catch (err) {
-            errorEl.textContent = err.message;
-            errorEl.hidden = false;
-            actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = false));
+            // draw the order as it really is now (it may already be back to submitted), then say what went wrong
+            try {
+              renderView(await api.getOrder(orderId));
+            } catch {
+              /* keep the current view */
+            }
+            const el = overlay.querySelector("#order-detail-error");
+            if (el) {
+              el.textContent = err.message;
+              el.hidden = false;
+            }
+            overlay.querySelectorAll("#order-detail-actions button").forEach((b) => (b.disabled = false));
           }
           return;
         }
@@ -693,7 +702,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           else if (btn.dataset.action === "reject-credit") await api.rejectOrderCredit(orderId);
           else if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
           else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
-          else if (btn.dataset.action === "unconfirm-order") await api.unconfirmOrder(orderId);
           else if (btn.dataset.action === "mark-delivered") {
             await api.markOrderDeliveredWithoutRoute(orderId);
             window.dispatchEvent(new Event("delivery-changed"));

@@ -94,7 +94,8 @@ export async function openReturnSheet(orderId, onDone) {
     errorEl.hidden = !problem;
     errorEl.textContent = problem;
     if (problem) return;
-    e.currentTarget.disabled = true;
+    const sendBtn = e.currentTarget; // (null after the await below)
+    sendBtn.disabled = true;
     try {
       const made = await api.requestReturn({ order_id: orderId, reason, note, ...(isReturn ? { items: lines } : {}) });
       overlay.remove();
@@ -105,7 +106,7 @@ export async function openReturnSheet(orderId, onDone) {
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.hidden = false;
-      e.currentTarget.disabled = false;
+      sendBtn.disabled = false;
     }
   });
 }

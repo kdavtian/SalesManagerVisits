@@ -109,6 +109,11 @@ test("cancelling an order that is not delivered: approval cancels it; a packed o
   assert.deepEqual([o.status, Boolean(o.cancelled_at)], ["draft", true]);
   assert.equal((await call("rep", "/", "POST", { order_id: submitted, reason: "changed_mind" })).status, 409, "already cancelled");
 
+  // an order management confirmed once and a director reopened to change it: approved before, so it still needs management
+  const reopened = await newOrder("submitted");
+  await pool.query("INSERT INTO order_status_history (order_id, old_status, new_status, changed_by) VALUES ($1, 'submitted', 'confirmed', $2), ($1, 'confirmed', 'submitted', $2)", [reopened, director.id]);
+  assert.equal((await call("rep", "/", "POST", { order_id: reopened, reason: "changed_mind" })).data.status, "requested");
+
   // a confirmed one still needs management
   const confirmed = await newOrder("confirmed");
   const mc = await call("rep", "/", "POST", { order_id: confirmed, reason: "changed_mind" });
@@ -122,7 +127,7 @@ test("cancelling an order that is not delivered: approval cancels it; a packed o
   const m2 = await call("rep", "/", "POST", { order_id: packed, reason: "changed_mind" });
   assert.equal((await call("director", `/${m2.data.id}/approve`, "POST", {})).status, 200);
   assert.equal((await pool.query("SELECT status FROM orders WHERE id = $1", [packed])).rows[0].status, "packed_stock_out", "still packed until the goods are back");
-  const taskOf = async () => (await pool.query("SELECT id, status FROM tasks WHERE auto_kind = 'cancel_putback' AND assignee_id = $1 AND customer_id = $2 ORDER BY id DESC LIMIT 1", [warehouse.id, customer.id])).rows[0];
+  const taskOf = async () => (await pool.query("SELECT id, status FROM tasks WHERE auto_kind = 'cancel_putback' AND customer_id = $1 ORDER BY id DESC LIMIT 1", [customer.id])).rows[0];
   await waitFor(async () => (await taskOf())?.status === "open");
   assert.equal((await call("warehouse", `/${m2.data.id}/receive`, "POST", {})).status, 200);
   const o2 = (await pool.query("SELECT status, cancelled_at FROM orders WHERE id = $1", [packed])).rows[0];

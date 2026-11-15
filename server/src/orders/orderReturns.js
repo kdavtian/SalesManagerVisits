@@ -54,10 +54,11 @@ export async function requestReturn(user, body) {
   // the decision fails (the order moved on meanwhile) the request simply waits like anyone's, with the approvers told.
   // A rep's own order that management has not confirmed yet (owner, 2026-11-14): nothing has happened to it, so the rep cancels it alone too;
   // management, who were told about the order when it came in, are told it is gone.
-  const ownUnconfirmed = made.kind === "cancel" && made.orderStatus === "submitted" && made.orderUserId === user.id;
+  // (never confirmed before: an order a director reopened to change it was already approved once, so it still needs management)
+  const ownUnconfirmed = made.kind === "cancel" && made.orderStatus === "submitted" && made.orderUserId === user.id && !made.wasConfirmed;
   if (canApproveReturns(user.role) || ownUnconfirmed) {
     try {
-      const { status } = await decideReturn(user, made.id, { approve: true, note: null });
+      const { status } = await decideReturn(user, made.id, { approve: true, note: null, expectStatus: canApproveReturns(user.role) ? null : "submitted" });
       // the order's own rep hears that management cancelled / took back their order
       if (made.orderUserId && made.orderUserId !== user.id) {
         notifyUser(made.orderUserId, "order_status_changed", {
@@ -138,7 +139,8 @@ async function saveReturnRequest(user, body) {
       );
     }
     await client.query("COMMIT");
-    return { id: ret.id, kind, orderUserId: order.user_id, orderStatus: order.status, customerName: order.customer_name };
+    const { rowCount: wasConfirmed } = await client.query("SELECT 1 FROM order_status_history WHERE order_id = $1 AND new_status = 'confirmed' LIMIT 1", [orderId]);
+    return { id: ret.id, kind, orderUserId: order.user_id, orderStatus: order.status, customerName: order.customer_name, wasConfirmed: wasConfirmed > 0 };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -171,15 +173,24 @@ async function putBackTask(order, returnId) {
   try {
     const { rows: [c] } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
     const { rows: items } = await pool.query("SELECT product_name, quantity FROM order_return_items WHERE return_id = $1 ORDER BY id", [returnId]);
-    for (const id of await usersWithRole("warehouse_manager")) {
-      await createOpsTask({
-        kind: "cancel_putback",
-        title: `Հետ դիր չեղարկված պատվերի ապրանքը՝ ${c?.name ?? ""} ${order.order_code ?? ""}`.trim().slice(0, 200),
-        assigneeId: id,
-        customerId: order.customer_id,
-        items: [...items.map((i) => `${i.product_name} × ${Number(i.quantity)}`), "Վերադարձներ էջում նշիր «Ապրանքը պահեստում է»"],
-      });
+    const code = order.order_code ?? `#${order.id}`;
+    const lines = items.map((i) => `${code}: ${i.product_name} × ${Number(i.quantity)}`);
+    // one open task per customer (a database rule): a second cancelled packed order of the same customer adds its lines to the open one
+    const { rows: [open] } = await pool.query("SELECT id FROM tasks WHERE auto_kind = 'cancel_putback' AND customer_id = $1 AND status = 'open' LIMIT 1", [order.customer_id]);
+    if (open) {
+      const { rows: [{ n }] } = await pool.query("SELECT COALESCE(MAX(sort_order), 0)::int AS n FROM task_items WHERE task_id = $1", [open.id]);
+      for (const [i, text] of lines.entries()) await pool.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [open.id, text.slice(0, 300), n + 1 + i]);
+      return;
     }
+    const [assigneeId] = await usersWithRole("warehouse_manager");
+    if (!assigneeId) return; // no warehouse manager: the push above still went to the admin
+    await createOpsTask({
+      kind: "cancel_putback",
+      title: `Հետ դիր չեղարկված պատվերի ապրանքը՝ ${c?.name ?? ""}`.trim().slice(0, 200),
+      assigneeId,
+      customerId: order.customer_id,
+      items: ["Վերադարձներ էջում նշիր «Ապրանքը պահեստում է»", ...lines],
+    });
   } catch (err) {
     console.error(`Put-back task for return #${returnId} failed:`, err.message);
   }
@@ -187,7 +198,11 @@ async function putBackTask(order, returnId) {
 
 async function closePutBackTask(customerId) {
   // still another cancelled packed order of this customer waiting: its task stays
-  const { rowCount } = await pool.query("SELECT 1 FROM order_returns WHERE customer_id = $1 AND kind = 'cancel' AND status = 'approved'", [customerId]);
+  // (one whose order moved on, e.g. delivered, can never be received: it does not keep the task open)
+  const { rowCount } = await pool.query(
+    "SELECT 1 FROM order_returns r JOIN orders o ON o.id = r.order_id WHERE r.customer_id = $1 AND r.kind = 'cancel' AND r.status = 'approved' AND o.status = 'packed_stock_out' AND o.cancelled_at IS NULL",
+    [customerId]
+  );
   if (rowCount) return;
   const { rows } = await pool.query(
     `UPDATE tasks SET status = 'done', completed_at = now(), completion_note = 'Ապրանքը պահեստում է', updated_at = now()
@@ -204,7 +219,7 @@ async function loadForUpdate(client, id) {
   return { ret, order };
 }
 
-export async function decideReturn(user, id, { approve, note }) {
+export async function decideReturn(user, id, { approve, note, expectStatus = null }) {
   const text = typeof note === "string" ? note.trim().slice(0, 500) || null : null;
   if (!approve && !text) throw new ReturnError("Write why it is rejected");
   const client = await pool.connect();
@@ -213,6 +228,8 @@ export async function decideReturn(user, id, { approve, note }) {
     await client.query("BEGIN");
     const { ret, order } = await loadForUpdate(client, id);
     if (ret.status !== "requested") throw new ReturnError("Already decided", 409);
+    // a rep's own cancel decided alone: only while the order is still the unconfirmed one it was when asked (a director may have confirmed it since)
+    if (expectStatus && order.status !== expectStatus) throw new ReturnError("The order has changed since the request", 409);
     if (!approve) {
       await client.query("UPDATE order_returns SET status = 'rejected', decided_by = $2, decided_at = now(), decision_note = $3, updated_at = now() WHERE id = $1", [id, user.id, text]);
       outcome = "rejected";
@@ -233,8 +250,10 @@ export async function decideReturn(user, id, { approve, note }) {
     await client.query("COMMIT");
     notifyDecisionOf("return", id, { deciderId: user.id, approved: outcome !== "rejected", reason: text, type: "order_status_changed" });
     if (outcome === "approved_waiting_warehouse") {
-      if (ret.kind === "cancel") putBackTask(order, id); // not awaited: this transaction's connection is still held here
-      else notifyRoles(["warehouse_manager", "admin"], user.id, { title: "Վերադարձ՝ ապրանքը ստանալու համար", body: "", url: "/#/returns" });
+      // every warehouse manager and the admin get the push as before; a cancelled packed order also gets a task (not awaited: this
+      // transaction's connection is still held here)
+      notifyRoles(["warehouse_manager", "admin"], user.id, { title: "Վերադարձ՝ ապրանքը ստանալու համար", body: "", url: "/#/returns" });
+      if (ret.kind === "cancel") putBackTask(order, id);
     }
     return { status: outcome === "rejected" ? "rejected" : outcome === "done" ? "done" : "approved" };
   } catch (err) {
