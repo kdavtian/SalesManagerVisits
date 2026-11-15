@@ -79,7 +79,7 @@ const BRAND_CARDS = [
 // was never written or is older than 3 months; a potential customer gives it in its potential sheet, a competitor is never asked.
 const MONTHLY_NEED_EVERY_DAYS = 90;
 function asksMonthlyNeed(customer) {
-  if (!customer || ["potential", "competitor"].includes(customer.customer_tier)) return false;
+  if (!customer || customer.checkin_for_all || ["potential", "competitor"].includes(customer.customer_tier)) return false;
   if (customer.expected_volume_l == null || !customer.expected_volume_at) return true;
   return Date.now() - new Date(customer.expected_volume_at).getTime() > MONTHLY_NEED_EVERY_DAYS * 86400000;
 }
@@ -191,8 +191,8 @@ export async function renderCheckin(root, navigate, customerId) {
         asksMonthlyNeed(customer)
           ? `<label class="checkin-monthly-need" id="monthly-need-field">
               <span>${t("monthly_need_label")}</span>
-              <input type="number" name="expected_volume_l" inputmode="numeric" min="0" max="1000000" step="1" value="${customer.expected_volume_l ?? ""}" placeholder="${t("monthly_need_placeholder")}" />
-              <small class="muted">${t(customer.expected_volume_l == null ? "monthly_need_hint_new" : "monthly_need_hint_check")}</small>
+              <input type="number" name="expected_volume_l" inputmode="decimal" step="any" placeholder="${customer.expected_volume_l == null ? t("monthly_need_placeholder") : String(Number(customer.expected_volume_l))}" />
+              <small class="muted">${customer.expected_volume_l == null ? t("monthly_need_hint_new") : t("monthly_need_hint_check").replace("{l}", String(Number(customer.expected_volume_l)))}</small>
             </label>`
           : ""
       }
@@ -1013,7 +1013,7 @@ export async function renderCheckin(root, navigate, customerId) {
     if (note) formData.set("note", note);
     // the shop's monthly oil need (Sales Expert funnel, stage 4): sent only when the rep wrote or confirmed a number
     const monthlyNeed = String(data.get("expected_volume_l") ?? "").trim();
-    if (monthlyNeed !== "" && Number(monthlyNeed) >= 0) formData.set("expected_volume_l", monthlyNeed);
+    if (monthlyNeed !== "" && Number(monthlyNeed) > 0) formData.set("expected_volume_l", monthlyNeed);
     formData.set("outcomes", JSON.stringify(outcomes));
     // why there was no order: the SERVER closes the order tasks with the visit (order tasks cannot be closed by hand)
     if (skippedOrderTasks) formData.set("no_order_reason", skippedOrderTasks.reason);
@@ -1063,6 +1063,7 @@ export async function renderCheckin(root, navigate, customerId) {
           amountCollected,
           deliveredOrderIds,
           availableProducts: availableProductsPayload,
+          expectedVolumeL: monthlyNeed !== "" && Number(monthlyNeed) > 0 ? monthlyNeed : undefined,
           photos: photos.map((photo) => photo.blob),
           // kept as plain bytes, not a Blob: Safari refuses a Blob in IndexedDB in some states (offlineQueue.js, payments do the same)
           voiceNote: voiceNote ? { bytes: await fileBytes(voiceNote.blob), mime: voiceNote.mime, durationS: voiceNote.durationS } : null,

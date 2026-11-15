@@ -229,6 +229,8 @@ async function submitCheckin(entry) {
   if (entry.noOrderReason) form.set("no_order_reason", entry.noOrderReason);
   if (entry.amountCollected != null) form.set("amount_collected_amd", entry.amountCollected);
   if (entry.availableProducts?.length) form.set("available_products", JSON.stringify(entry.availableProducts));
+  // the shop's monthly oil need written at the visit (Sales Expert funnel)
+  if (entry.expectedVolumeL != null && entry.expectedVolumeL !== "") form.set("expected_volume_l", entry.expectedVolumeL);
   if (entry.deliveredOrderIds?.length) form.set("delivered_order_ids", JSON.stringify(entry.deliveredOrderIds));
   // Entries queued since this change carry real Blobs (IndexedDB stores
   // them natively -- no base64 round trip needed); an entry migrated in

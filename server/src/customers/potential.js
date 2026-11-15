@@ -33,7 +33,7 @@ export function cleanPotentialInput(b = {}) {
   let volume = null;
   if (b.expected_volume_l !== undefined && b.expected_volume_l !== null && b.expected_volume_l !== "") {
     volume = Number(b.expected_volume_l);
-    if (!(volume >= 0) || volume > 1e7) throw new PotentialError("Bad expected volume");
+    if (!(volume >= 0) || volume > 1e6) throw new PotentialError("Bad expected volume");
   }
   return { level, reasons, other: reasons.includes("other") ? other : null, note, date, volume, hasDate: b.next_followup_date !== undefined, hasVolume: b.expected_volume_l !== undefined };
 }

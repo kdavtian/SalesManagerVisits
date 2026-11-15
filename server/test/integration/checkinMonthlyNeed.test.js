@@ -44,4 +44,14 @@ test("the visit saves the monthly need with when and by whom; nonsense is skippe
   await visit({ expected_volume_l: "abc" });
   await visit({});
   assert.equal(Number((await row()).expected_volume_l), 320, "no number changes nothing");
+  await visit({ expected_volume_l: "0" });
+  assert.equal(Number((await row()).expected_volume_l), 320, "0 says nothing: not saved");
+});
+
+test("an offline visit that syncs late never writes over a number written after it", async () => {
+  await visit({ expected_volume_l: "500" }); // written now
+  const old = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+  await visit({ expected_volume_l: "300", captured_at: old }); // the queued visit of two hours ago arrives
+  const r = await row();
+  assert.equal(Number(r.expected_volume_l), 500);
 });
