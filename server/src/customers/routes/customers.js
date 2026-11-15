@@ -802,6 +802,8 @@ customersRouter.get("/:id", async (req, res) => {
        erp.recent_orders AS erp_recent_orders,
        erp.synced_at AS erp_synced_at,
        EXISTS (SELECT 1 FROM place_reviews pr WHERE pr.customer_id = c.id AND pr.status = 'pending') AS place_review_pending,
+       -- the Sales Expert funnel stage (team/vaghinak/funnel.js, recorded every 3 hours) and since when: the card's stage chip
+       (SELECT json_build_object('stage', s.stage, 'since', s.since) FROM customer_funnel_stage s WHERE s.customer_id = c.id) AS funnel_stage,
        (SELECT COALESCE(SUM(ch.amount_collected_amd), 0)
           FROM checkins ch
           WHERE ch.customer_id = c.id

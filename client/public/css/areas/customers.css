@@ -3493,3 +3493,13 @@ a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px
 .close-customer-form { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
 .close-customer-form label { margin-bottom: 0; }
 .close-customer-form .btn { min-height: 44px; }
+/* Sales Expert funnel stage chip in the card header (views/customerDetail.js funnelChipHtml) */
+.cd-funnel-chip { text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.cd-funnel-chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--fn-stage-color, var(--border)); flex: none; }
+.cd-funnel-chip-1 { --fn-stage-color: #9aa3ad; }
+.cd-funnel-chip-2 { --fn-stage-color: var(--accent); }
+.cd-funnel-chip-3 { --fn-stage-color: #c58b10; }
+.cd-funnel-chip-4 { --fn-stage-color: var(--success, #12805c); }
+.cd-funnel-chip.is-stuck { color: var(--danger, #c62828); }
+a.cd-funnel-chip { position: relative; }
+a.cd-funnel-chip::after { content: ""; position: absolute; inset: -10px -4px; } /* 44 px tap area around the small chip */
