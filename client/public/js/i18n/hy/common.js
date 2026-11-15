@@ -1,6 +1,8 @@
 // Part of the `hy` object of ../../i18n-hy.js (docs/architecture-roadmap.md, step 8): joined back there with ...hyCommon.
 
 export const hyCommon = {
+    customer_closed_error: "Այս հաճախորդը փակված է։ Ադմինը կարող է վերաբացել այն քարտից։",
+    customer_closed_tag: "փակված",
     nav_dashboard: "Գլխավոր",
     nav_map: "Քարտեզ",
     nav_customers: "Հաճախորդներ",

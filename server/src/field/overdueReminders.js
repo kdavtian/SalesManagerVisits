@@ -34,7 +34,8 @@ export async function checkOverdueReminders() {
       `SELECT id FROM customers
        WHERE id = ANY($1)
          AND COALESCE(customer_tier, 'potential') <> 'competitor'
-         AND NOT ${noVisitSql("sales_channel")}`,
+         AND NOT ${noVisitSql("sales_channel")}
+         AND closed_at IS NULL`,
       [plan.customer_ids]
     );
     const eligibleIds = eligibleRows.map((row) => row.id);

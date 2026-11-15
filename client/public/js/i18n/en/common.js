@@ -1,6 +1,8 @@
 // Part of the `en` object of ../../i18n-en.js (docs/architecture-roadmap.md, step 8): joined back there with ...enCommon.
 
 export const enCommon = {
+    customer_closed_error: "This customer is closed. The admin can reopen it on its card.",
+    customer_closed_tag: "closed",
     nav_dashboard: "Home",
     nav_map: "Map",
     nav_customers: "Customers",

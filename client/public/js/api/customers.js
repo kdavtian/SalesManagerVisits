@@ -45,6 +45,17 @@ export const customersApi = {
     await patchCachedCustomer(id, updated && typeof updated === "object" && !Array.isArray(updated) ? updated : data);
     return normalizeCustomer(updated);
   },
+  // Close / reopen (customerLifecycle.js): a closed customer leaves the lists and the map, so the cached lists drop it / reload.
+  closeCustomer: async (id, reason) => {
+    const result = await json(`/customers/${id}/close`, "POST", { reason });
+    await removeCachedCustomer(id);
+    return result;
+  },
+  reopenCustomer: async (id) => {
+    const result = await json(`/customers/${id}/reopen`, "POST", {});
+    await dropCachedCustomerLists();
+    return result;
+  },
   deleteCustomer: async (id) => {
     const result = await request(`/customers/${id}`, { method: "DELETE" });
     await removeCachedCustomer(id);

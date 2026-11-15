@@ -31,7 +31,7 @@ export async function dataChase({ db, day, settings, pick }) {
             COALESCE((SELECT MAX(l.order_date) FROM erp_order_lines l WHERE l.erp_customer_id = c.erp_customer_id), DATE '2000-01-01') AS last_order
      FROM customers c
      JOIN users u ON u.id = c.assigned_manager_id AND u.role = 'sales_manager' AND u.status = 'active' AND u.vaghinak_muted_day IS DISTINCT FROM $1::date
-     WHERE c.erp_customer_id IS NOT NULL AND c.erp_customer_id <> '10000' AND NOT COALESCE(c.checkin_for_all, false)
+     WHERE c.erp_customer_id IS NOT NULL AND c.erp_customer_id <> '10000' AND NOT COALESCE(c.checkin_for_all, false) AND c.closed_at IS NULL
        AND (COALESCE(c.phone, '') = '' OR COALESCE(c.region, '') = '')
        AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.customer_id = c.id AND t.auto_kind = 'data_missing' AND (t.status = 'open' OR t.created_at > now() - ($2 || ' days')::interval))`,
     [day, COOLDOWN_DAYS]
@@ -60,7 +60,7 @@ export async function dataChase({ db, day, settings, pick }) {
   // customers nobody owns -> the sales director
   const { rows: unowned } = await db.query(
     `SELECT id, name FROM customers
-     WHERE erp_customer_id IS NOT NULL AND erp_customer_id <> '10000' AND NOT COALESCE(checkin_for_all, false)
+     WHERE erp_customer_id IS NOT NULL AND erp_customer_id <> '10000' AND NOT COALESCE(checkin_for_all, false) AND closed_at IS NULL
        AND (assigned_manager_id IS NULL OR COALESCE(sales_channel, '') = '') ORDER BY id DESC`
   );
   if (unowned.length) {

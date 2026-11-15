@@ -149,7 +149,7 @@ function wireSearch(root) {
     items = items.slice(0, (html.match(/data-result=/g) || []).length);
     const extra =
       group(t("nav_customers"), customers.slice(0, MAX_PER_GROUP), (c) => {
-        const hint = [c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · ");
+        const hint = [c.closed_at ? t("customer_closed_tag") : "", c.erp_customer_id ? `ID ${c.erp_customer_id}` : "", c.assigned_manager_name || ""].filter(Boolean).join(" · ");
         return itemHtml(escapeHtml(c.name), escapeHtml(hint), "", go(rec(`#/customers/${c.id}`, c.name, hint)));
       }) +
       group(t("nav_orders"), orders.slice(0, MAX_PER_GROUP), (o) => {

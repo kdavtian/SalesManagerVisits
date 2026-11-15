@@ -27,7 +27,7 @@ export async function creditLimitSuggestions(db) {
      LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id
      LEFT JOIN users u ON u.id = c.assigned_manager_id
      WHERE c.credit_limit_amd IS NULL AND c.erp_customer_id IS NOT NULL AND c.erp_customer_id <> '10000'
-       AND NOT COALESCE(c.checkin_for_all, false)
+       AND NOT COALESCE(c.checkin_for_all, false) AND c.closed_at IS NULL -- a closed customer takes no orders: no limit to set
      ORDER BY COALESCE(erp.debt_amd, 0) DESC, c.name`
   );
   // the current debt is the LIVE one (release 5): what the order check compares the limit with (orders/creditLimit.js)

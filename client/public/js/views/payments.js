@@ -1198,7 +1198,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         resultsEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
         let results;
         try {
-          results = await api.listCustomers(query ? { search: query, limit: 30 } : { limit: 30 });
+          results = await api.listCustomers(query ? { search: query, limit: 30, closed: 1 } : { limit: 30 }); // a closed customer may still pay its debt (found by name)
         } catch (err) {
           if (mySeq === seq) resultsEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
           return;
@@ -1213,7 +1213,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
           .map(
             (c) => `
           <button type="button" class="card" style="text-align:left; width:100%;" data-customer-id="${c.id}">
-            <strong>${escapeHtml(c.name)}</strong>
+            <strong>${escapeHtml(c.name)}</strong>${c.closed_at ? ` <span class="badge">${t("customer_closed_tag")}</span>` : ""}
             ${c.erp_customer_id ? `<div class="muted">${t("customer_id_label")}${labelColon()}${escapeHtml(c.erp_customer_id)}</div>` : ""}
           </button>`
           )

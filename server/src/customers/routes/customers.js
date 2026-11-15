@@ -7,7 +7,7 @@ import { placeNewCustomer } from "../../field/autoRoutePlan.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
@@ -25,7 +25,7 @@ import { computeVisitDue, ruleWeekdaysFor } from "../../utils/visitDue.js";
 import { repVisitSql } from "../../field/visitCount.js";
 import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
-import { customerDeleteBlockers } from "../customerLifecycle.js";
+import { customerDeleteBlockers, removeFromPlans, closeCustomer, reopenCustomer } from "../customerLifecycle.js";
 import { pendingCreditFor } from "../../orders/orderReturns.js";
 import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory, getReasonMemory } from "../potential.js";
 import { normalizeIncomingPlaces, recordPlaceReviews, placeNotice } from "../placeReviews.js";
@@ -62,7 +62,8 @@ async function isKnownChannel(code) {
   return rows.length > 0;
 }
 
-export const NOT_NO_VISIT_CHANNEL_SQL = `(NOT ${noVisitSql("c.sales_channel")} AND NOT COALESCE(c.checkin_for_all, false))`;
+// A closed customer (customerLifecycle.js) needs no visit either: it leaves every plan, overdue list and coverage count that reads this.
+export const NOT_NO_VISIT_CHANNEL_SQL = `(NOT ${noVisitSql("c.sales_channel")} AND NOT COALESCE(c.checkin_for_all, false) AND c.closed_at IS NULL)`;
 
 // Derived visit status — no assignment/planning data exists yet, so
 // "overdue" is approximated from each customer's own visit_frequency_days
@@ -190,6 +191,10 @@ customersRouter.get("/", async (req, res) => {
   // "Only our customers" (owner, 2026-11-03): the ones that exist in the Excel -- bronze / silver / gold, which all have an ERP customer ID
   // the offices (Settings -> Offices, owner 2026-11-07)
   if (req.query.offices) conditions.push(`c.checkin_for_all`);
+  // Closed customers (customerLifecycle.js) are left out of every list, picker and the map; closed=only lists just them (Customers ->
+  // Closed), closed=1 adds them (a payment can still be recorded on a closed customer that owes money).
+  if (req.query.closed === "only") conditions.push(`c.closed_at IS NOT NULL`);
+  else if (!["1", "true"].includes(String(req.query.closed ?? ""))) conditions.push(`c.closed_at IS NULL`);
   if (only_erp) conditions.push(`NULLIF(btrim(c.erp_customer_id), '') IS NOT NULL`);
   if (visited === "visited") {
     conditions.push(`v.visited_this_week`);
@@ -605,7 +610,7 @@ customersRouter.get("/map-facts", async (req, res) => {
   const [ctx, { rows }] = await Promise.all([
     loadScheduleContext(req),
     pool.query(
-      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.assigned_manager_id, c.erp_customer_id, c.credit_term_days, erp.debt_amd, ${REORDER_COLUMNS},
+      `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.closed_at, c.assigned_manager_id, c.erp_customer_id, c.credit_term_days, erp.debt_amd, ${REORDER_COLUMNS},
               (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at,
               (SELECT max(eol.order_date)::text FROM erp_order_lines eol WHERE eol.erp_customer_id = c.erp_customer_id) AS last_order_date
        FROM customers c LEFT JOIN erp_customer_data erp ON erp.erp_customer_id = c.erp_customer_id ${REORDER_JOIN}
@@ -786,7 +791,7 @@ customersRouter.get("/:id/documents", async (req, res) => {
 
 customersRouter.get("/:id", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT c.*, ${STATUS_COLUMNS},
+    `SELECT c.*, ${STATUS_COLUMNS}, (SELECT u.name FROM users u WHERE u.id = c.closed_by) AS closed_by_name,
        am.name AS assigned_manager_name,
        erp.assigned_sales_rep AS erp_assigned_sales_rep,
        erp.debt_amd AS erp_debt_amd,
@@ -1123,6 +1128,31 @@ customersRouter.patch("/:id", async (req, res) => {
   res.json({ ...rows[0], place_notice: placeNotice(placeOutcome) });
 });
 
+// Close / reopen (owner, 2026-11-15): the place stopped working with us, but its payments and history stay (it cannot be deleted).
+customersRouter.post("/:id/close", async (req, res) => {
+  if (!canCloseCustomers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(404).json({ error: "Customer not found" });
+  const reason = String(req.body?.reason ?? "").trim().slice(0, 500);
+  if (!reason) return res.status(400).json({ error: "Write why the customer is closed", code: "close_reason_required" });
+  const row = await closeCustomer(pool, customerId, req.user.id, reason);
+  if (!row) return res.status(404).json({ error: "Customer not found" });
+  if (row.already) return res.status(409).json({ error: "This customer is already closed", code: "customer_already_closed" });
+  res.json(row);
+});
+
+customersRouter.post("/:id/reopen", async (req, res) => {
+  if (!canCloseCustomers(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(404).json({ error: "Customer not found" });
+  const row = await reopenCustomer(pool, customerId);
+  if (!row) return res.status(404).json({ error: "Customer not found" });
+  if (row.notClosed) return res.status(409).json({ error: "This customer is not closed", code: "customer_not_closed" });
+  // back on a rep's route plan the way a new customer is placed (the plans it left on closing are not restored by hand)
+  const route_plan = await placeNewCustomer(customerId, req.user.id);
+  res.json({ id: customerId, route_plan });
+});
+
 customersRouter.delete("/:id", requireAdmin, async (req, res) => {
   const customerId = Number(req.params.id);
   if (!Number.isInteger(customerId)) return res.status(404).json({ error: "Customer not found" });
@@ -1137,19 +1167,7 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // visit_plans/visit_plan_rules reference customers via a plain integer
-    // array (customer_ids), which Postgres can't foreign-key -- without this,
-    // a deleted customer's id lingers forever as an unnamed ghost stop on
-    // whichever rep's plan/rule it was on.
-    await client.query(
-      "UPDATE visit_plans SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)",
-      [customerId]
-    );
-    await client.query(
-      "UPDATE visit_plan_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)",
-      [customerId]
-    );
-    await client.query("UPDATE route_plan_set_rules SET customer_ids = array_remove(customer_ids, $1) WHERE $1 = ANY(customer_ids)", [customerId]);
+    await removeFromPlans(client, customerId);
     const { rowCount } = await client.query("DELETE FROM customers WHERE id = $1", [customerId]);
     if (!rowCount) {
       await client.query("ROLLBACK");
@@ -1540,8 +1558,8 @@ function scheduleForCustomer(customer, ctx) {
   const { today, ruleRows, planRows, allRules, planByUserDate } = ctx;
   const customerId = customer.id;
   // KF/CAS/CVO/PCO/OEM are never visited in the field: no due date, no overdue days, no planned visits
-  // (not even from a Route Plans area rule that happens to cover their region).
-  if (isNoVisitChannel(customer.sales_channel) || customer.checkin_for_all) {
+  // (not even from a Route Plans area rule that happens to cover their region). A closed customer neither (customerLifecycle.js).
+  if (isNoVisitChannel(customer.sales_channel) || customer.checkin_for_all || customer.closed_at) {
     return {
       today,
       no_visit: true,
@@ -1604,7 +1622,7 @@ function scheduleForCustomer(customer, ctx) {
 
 async function buildVisitSchedule(req, customerId) {
   const { rows: custRows } = await pool.query(
-    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days,
+    `SELECT c.id, c.region, c.subregion, c.sales_channel, c.checkin_for_all, c.visit_frequency_days, c.closed_at,
             (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${repVisitSql("ch")}) AS last_visit_at
      FROM customers c WHERE c.id = $1`,
     [customerId]

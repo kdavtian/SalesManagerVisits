@@ -1,10 +1,10 @@
 // Customer card > edit sheet (moved out of customerDetail.js with the refactor tool, docs/architecture-roadmap.md step 6).
 import { api } from "../../api.js";
 import { dockSheet } from "../../dockSheet.js";
-import { activateCategorySelector, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, formatPhoneDisplay, normalizePhone, tierSelectorHtml } from "../../util.js";
+import { activateCategorySelector, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, formatPhoneDisplay, normalizePhone, showToast, tierSelectorHtml } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
-import { canEditDirectly, isAdmin } from "../../state.js";
+import { canCloseCustomers, canEditDirectly, isAdmin } from "../../state.js";
 import { collectSocialPayload, fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml } from "./social.js";
 
 export const EDIT_FIELDS = [
@@ -60,6 +60,15 @@ export async function openEditSheet(customer, navigate, onDone) {
       <div class="edit-sheet-danger-zone">
         <button type="button" class="btn-link" id="change-location-btn">${icons.pin}${t("change_location")}</button>
         ${
+          canCloseCustomers() && !customer.closed_at
+            ? `<button type="button" class="btn-link" id="close-customer-btn">${icons.door}${t("customer_close")}</button>
+               <form class="close-customer-form" id="close-customer-form" hidden>
+                 <label>${t("customer_close_reason")}<input type="text" id="close-customer-reason" maxlength="500" autocomplete="off" enterkeyhint="done" placeholder="${escapeHtml(t("customer_close_reason_hint"))}" /></label>
+                 <button type="submit" class="btn btn-primary" id="close-customer-confirm" disabled>${t("customer_close")}</button>
+               </form>`
+            : ""
+        }
+        ${
           isAdmin()
             ? `<button type="button" class="btn-link btn-link-danger btn-has-icon" id="delete-customer-btn">${icons.trash}${t("delete_customer")}</button>`
             : ""
@@ -95,6 +104,33 @@ export async function openEditSheet(customer, navigate, onDone) {
     close();
     navigate(`#/map?relocate=${customer.id}`);
   });
+  // Close (customerLifecycle.js): one tap opens the reason field, a second confirms; it can be undone from the card, so no confirm().
+  const closeForm = overlay.querySelector("#close-customer-form");
+  const closeReason = overlay.querySelector("#close-customer-reason");
+  const closeConfirm = overlay.querySelector("#close-customer-confirm");
+  overlay.querySelector("#close-customer-btn")?.addEventListener("click", () => {
+    closeForm.hidden = false;
+    closeReason.focus();
+    closeConfirm.scrollIntoView({ block: "center" });
+  });
+  closeReason?.addEventListener("input", () => (closeConfirm.disabled = !closeReason.value.trim()));
+  closeForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!closeReason.value.trim() || closeConfirm.disabled) return;
+    closeConfirm.disabled = true;
+    try {
+      await api.closeCustomer(customer.id, closeReason.value.trim());
+      close();
+      showToast(t("customer_closed_done"));
+      onDone?.();
+    } catch (err) {
+      closeConfirm.disabled = false;
+      errorEl.textContent = err.message;
+      errorEl.classList.remove("form-error-lines");
+      errorEl.hidden = false;
+      errorEl.scrollIntoView({ block: "nearest" });
+    }
+  });
   overlay.querySelector("#delete-customer-btn")?.addEventListener("click", async () => {
     if (!confirm(t("confirm_delete_customer"))) return;
     try {
@@ -102,7 +138,7 @@ export async function openEditSheet(customer, navigate, onDone) {
       close();
       navigate("#/customers");
     } catch (err) {
-      errorEl.textContent = err.body?.code === "customer_has_records" ? deleteBlockedText(err.body) : err.message;
+      errorEl.textContent = err.body?.code === "customer_has_records" ? deleteBlockedText(err.body, { closed: Boolean(customer.closed_at) }) : err.message;
       errorEl.classList.toggle("form-error-lines", err.body?.code === "customer_has_records");
       errorEl.hidden = false;
       errorEl.scrollIntoView({ block: "nearest" });
@@ -200,9 +236,10 @@ export async function openEditSheet(customer, navigate, onDone) {
 }
 
 // Why the delete was refused, one bullet line per reason (server: customers/customerLifecycle.js customerDeleteBlockers).
-export function deleteBlockedText(body) {
+export function deleteBlockedText(body, { closed = false } = {}) {
   const lines = [t("customer_delete_blocked")];
   if (body.payments) lines.push(`• ${t("customer_delete_blocked_payments").replace("{n}", body.payments).replace("{amount}", formatAmd(body.payments_amd ?? 0))}`);
   if (body.kad_os_accounts?.length) lines.push(`• ${t("customer_delete_blocked_kad_os").replace("{names}", body.kad_os_accounts.join(", "))}`);
+  if (body.payments && canCloseCustomers() && !closed) lines.push(t("customer_delete_blocked_close_hint"));
   return lines.join("\n");
 }

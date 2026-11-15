@@ -58,14 +58,14 @@ function pickCustomer(title, { suggested = null } = {}) {
     const paint = (rows) => {
       shown = rows;
       list.innerHTML = rows.length
-        ? rows.map((c) => `<button type="button" class="bd-cust" data-id="${c.id}"><strong>${escapeHtml(c.name)}</strong>${c.erp_customer_id ? `<span class="muted">${escapeHtml(c.erp_customer_id)}</span>` : ""}</button>`).join("")
+        ? rows.map((c) => `<button type="button" class="bd-cust" data-id="${c.id}"><strong>${escapeHtml(c.name)}</strong>${c.closed_at ? ` <span class="badge">${escapeHtml(t("customer_closed_tag"))}</span>` : ""}${c.erp_customer_id ? `<span class="muted">${escapeHtml(c.erp_customer_id)}</span>` : ""}</button>`).join("")
         : `<p class="empty-state">${escapeHtml(t("no_customers_found"))}</p>`;
     };
     async function search() {
       const mine = ++seq;
       const text = q.value.trim();
       try {
-        const rows = await api.listCustomers(text ? { search: text, limit: 30 } : { limit: 30 });
+        const rows = await api.listCustomers(text ? { search: text, limit: 30, closed: 1 } : { limit: 30 }); // a closed customer may still pay its debt
         if (mine !== seq) return;
         paint(!text && suggested ? [suggested, ...rows.filter((c) => c.id !== suggested.id)] : rows);
       } catch (err) {

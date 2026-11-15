@@ -18,6 +18,7 @@ import { paymentsSource, allOrdersSource, orderDetailSource } from "../customerC
 import { socialLinksHtml, bindSocialLinks } from "./customer/social.js";
 import { openAccountSettingsSheet } from "./customer/accountSettings.js";
 import { openEditSheet } from "./customer/editSheet.js";
+import { closedBannerHtml, bindClosedBanner } from "./customer/closedBanner.js";
 import { openCustomerFiles } from "./customer/files.js";
 import { renderErpCard } from "./customer/erpCard.js";
 import { paintCustomerSignDocs } from "./customer/signDocs.js";
@@ -164,6 +165,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
       </div>
     </div>
 
+    ${closedBannerHtml(customer)}
     ${attentionStripHtml(customer)}
 
     <!-- Two wrapper columns: invisible on a phone (display: contents), side by side on a desktop window (desktop.css). -->
@@ -217,14 +219,18 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
 
     <!-- Owner, 2026-10-27: Check in, New task, New order, Navigate, Files. No "Orders" button: the Sales tile above opens the same list.
          No "Call" button either: the phone number in the facts card is already a tel: link. -->
-    <div class="detail-actions-grid" style="--action-cols:${canCreateTasks() ? 5 : 4}">
+    <div class="detail-actions-grid" style="--action-cols:${(canCreateTasks() ? 5 : 4) - (customer.closed_at ? 1 : 0)}">
       <button class="action-btn action-btn-primary" id="checkin-btn">
         <span>${icons.mapPinCheck}</span>${t("check_in")}
       </button>
       ${canCreateTasks() ? `<button type="button" class="action-btn" id="new-task-btn"><span>${icons.tasks}</span>${t(sendsRequests() ? "request_new" : "task_new")}</button>` : ""}
-      <button type="button" class="action-btn" id="new-order-btn">
+      ${
+        customer.closed_at
+          ? "" /* a closed customer takes no new orders (reopen it first) */
+          : `<button type="button" class="action-btn" id="new-order-btn">
         <span>${icons.cart}</span>${t("new_order")}
-      </button>
+      </button>`
+      }
       <button type="button" class="action-btn" id="navigate-btn">
         <span>${icons.compass}</span>${t("navigate")}
       </button>
@@ -351,8 +357,9 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
       });
     });
   }
+  bindClosedBanner(container, customer, reload);
   // A tap starts a new order at once; a long press opens the menu (new / usual / repeat last / repeat an order).
-  bindStepperButton(container.querySelector("#new-order-btn"), {
+  if (container.querySelector("#new-order-btn")) bindStepperButton(container.querySelector("#new-order-btn"), {
     onTap: () => navigate(`#/orders/new/${customerId}`),
     onHold: () => {
       try {

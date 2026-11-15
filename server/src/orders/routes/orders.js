@@ -31,6 +31,7 @@ import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_AP
 import { bullets } from "../../utils/bullets.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
+import { CUSTOMER_CLOSED_ERROR } from "../../customers/customerLifecycle.js";
 import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
 export const ordersRouter = Router();
@@ -264,9 +265,12 @@ export async function createOrderHandler(req, res) {
   // priority if a caller somehow sent both.
   if (discountAmd > 0) discountPct = 0;
 
-  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, assigned_manager_id FROM customers WHERE id = $1", [customerId]);
+  const { rows: customerRows } = await pool.query("SELECT id, name, erp_customer_id, customer_tier, assigned_manager_id, closed_at FROM customers WHERE id = $1", [customerId]);
   const customer = customerRows[0];
   if (!customer) return res.status(404).json({ error: "Customer not found" });
+  // A closed customer takes no new orders (customerLifecycle.js); reopening it is one tap for the admin. After the client_ref check above,
+  // so an offline resend of an order saved before the close still gets that order back.
+  if (customer.closed_at) return res.status(409).json(CUSTOMER_CLOSED_ERROR);
 
   // An order can never be approved without its customer being linked to an
   // ERP record (see the confirm-transition guard below), so there is no
@@ -823,7 +827,7 @@ ordersRouter.get("/:id", async (req, res) => {
 // the dedicated "assign ERP ID" sheet on the customer page.
 ordersRouter.post("/:id/submit", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT o.*, c.erp_customer_id, c.created_by AS customer_created_by, c.name AS customer_name
+    `SELECT o.*, c.erp_customer_id, c.created_by AS customer_created_by, c.name AS customer_name, c.closed_at AS customer_closed_at
      FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1`,
     [req.params.id]
   );
@@ -836,6 +840,7 @@ ordersRouter.post("/:id/submit", async (req, res) => {
     return res.status(409).json({ error: `Cannot submit an order that is already "${order.status}"` });
   }
   if (order.cancelled_at) return res.status(409).json({ error: "The customer cancelled this order in KAD OS -- it cannot be submitted", code: "cancelled_by_customer" });
+  if (order.customer_closed_at) return res.status(409).json(CUSTOMER_CLOSED_ERROR); // a draft from before the customer was closed
   // A draft can wait for days: what it holds must still be on the shelf when it goes into the queue.
   const { rows: draftLines } = await pool.query("SELECT product_id, quantity FROM order_items WHERE order_id = $1", [order.id]);
   const outOfStock = await outOfStockProducts(draftLines, { excludeOrderId: order.id });

@@ -191,7 +191,11 @@ export async function activateSet(id, actorId, previousName) {
     await client.query("DELETE FROM visit_plan_rules WHERE user_id IN (SELECT DISTINCT user_id FROM route_plan_set_rules WHERE set_id = $1)", [id]);
     await client.query(
       `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, customer_ids, created_by, active)
-       SELECT user_id, day_of_week, '[]'::jsonb, customer_ids, $2, true FROM route_plan_set_rules WHERE set_id = $1 AND cardinality(customer_ids) > 0`,
+       SELECT r.user_id, r.day_of_week, '[]'::jsonb, live.ids, $2, true
+       FROM route_plan_set_rules r
+       -- a customer closed since the set was saved (customerLifecycle.js) is skipped, in the saved order
+       CROSS JOIN LATERAL (SELECT ARRAY(SELECT x.id FROM unnest(r.customer_ids) WITH ORDINALITY AS x(id, n) JOIN customers c ON c.id = x.id AND c.closed_at IS NULL ORDER BY x.n) AS ids) live
+       WHERE r.set_id = $1 AND cardinality(live.ids) > 0`,
       [id, actorId]
     );
     await client.query(
