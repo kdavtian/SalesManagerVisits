@@ -30,9 +30,11 @@ export const DEFAULTS = {
   funnelWindowDays: 90,
   // the weekly next steps (nextSteps.js): "shadow" = only management sees them, "live" = each rep also gets them as tasks
   salesStepsMode: "shadow",
+  // the weekly AI market strategy (strategist.js): "shadow" = written for management only, "off" = not written (no AI cost)
+  strategistMode: "shadow",
 };
 
-const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode" && k !== "salesStepsMode");
+const NUMERIC = Object.keys(DEFAULTS).filter((k) => !["mode", "salesStepsMode", "strategistMode"].includes(k));
 // the funnel's numbers have their own ranges (7 product groups exist; a share is a percent; the window is a week to a year)
 const FUNNEL_RANGES = {
   funnelGroupsBronze: [1, 7, "Bronze product groups"],
@@ -56,6 +58,9 @@ export async function saveVaghinakSettings(patch, db = pool) {
     if (key === "mode") {
       if (!["off", "shadow", "live"].includes(value)) throw new Error("mode must be off, shadow or live");
       clean.mode = value;
+    } else if (key === "strategistMode") {
+      if (!["off", "shadow"].includes(value)) throw new Error("strategistMode must be off or shadow");
+      clean.strategistMode = value;
     } else if (key === "salesStepsMode") {
       if (!["shadow", "live"].includes(value)) throw new Error("salesStepsMode must be shadow or live");
       clean.salesStepsMode = value;

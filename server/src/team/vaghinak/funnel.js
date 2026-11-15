@@ -73,7 +73,7 @@ export async function computeFunnel({ db = pool, settings } = {}) {
        WHERE l.order_date > (now() AT TIME ZONE 'Asia/Yerevan')::date - $1::int
        GROUP BY l.erp_customer_id
      )
-     SELECT c.id, c.name, c.customer_tier AS tier, c.potential_level, c.expected_volume_l, c.region, c.subregion,
+     SELECT c.id, c.name, c.erp_customer_id, c.customer_tier AS tier, c.potential_level, c.expected_volume_l, c.region, c.subregion,
             c.assigned_manager_id AS rep_id, u.name AS rep_name,
             COALESCE(s.groups, 0)::int AS groups, COALESCE(s.litres, 0)::float8 AS litres
      FROM customers c

@@ -429,3 +429,14 @@
 .fn-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
 .fn-chips .fn-missing { margin: 0; width: auto; flex: 1 1 220px; }
 .fn-days-stuck { color: var(--danger, #c62828); font-weight: 600; }
+.fn-strategy { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--bg-card); }
+.fn-strategy > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-weight: 600; list-style: none; }
+.fn-strategy > summary::-webkit-details-marker { display: none; }
+.fn-st-week { font-weight: 400; font-size: 0.82rem; }
+.fn-st-headline { margin: 4px 0 8px; font-weight: 600; overflow-wrap: anywhere; }
+.fn-st-h { margin: 10px 0 4px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-dim); }
+.fn-st-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.9rem; overflow-wrap: anywhere; }
+.fn-st-meta { font-size: 0.78rem; margin-top: 10px; }
+.fn-st-points { margin: 4px 0 2px; padding-left: 16px; font-size: 0.82rem; color: var(--text-dim); list-style: disc; overflow-wrap: anywhere; }
+.fn-strategy > summary::after { content: "›"; margin-left: auto; font-size: 1.3rem; line-height: 1; color: var(--text-dim); transform: rotate(90deg); transition: transform 0.15s; }
+.fn-strategy:not([open]) > summary::after { transform: rotate(0deg); }

@@ -17,6 +17,9 @@ export async function renderFunnel(root, navigate) {
   let region = "";
   let onlyMissing = false;
   let onlyStuck = false; // stages 1-3, on the same stage for STUCK_DAYS or more
+  let strategy = null; // the weekly AI strategy (server team/vaghinak/strategist.js); null until loaded or when it fails
+  let strategyOpen = window.matchMedia?.("(min-width: 900px)").matches ?? true; // folded on a phone (long text above the funnel)
+  let strategyBusy = false;
   root.innerHTML = `
     <div class="st-view fn-view">
       <div class="st-head"><button type="button" class="btn st-back" id="fn-back" aria-label="${escapeHtml(t("back"))}">‹</button><h1>${escapeHtml(t("fn_title"))}</h1>
@@ -28,11 +31,40 @@ export async function renderFunnel(root, navigate) {
   const body = root.querySelector("#fn-body");
 
   try {
-    data = await api.getFunnel();
+    [data, strategy] = await Promise.all([api.getFunnel(), api.getFunnelStrategy().catch(() => null)]);
   } catch (err) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     return;
   }
+
+  // Vaghinak's weekly market strategy (AI, test mode: management only). Lists in plain bullets; nothing here is a number the app computed.
+  function strategyHtml() {
+    if (!strategy) return "";
+    const r = strategy.report?.report;
+    const canEdit = editsVaghinakSettings(state.user.role);
+    const list = (key, items) =>
+      items?.length ? `<h3 class="fn-st-h">${escapeHtml(t(key))}</h3><ul class="fn-st-list">${items.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+    const fresh = r && strategy.report.week_start === data.week;
+    const button = canEdit && strategy.configured && strategy.mode !== "off"
+      ? `<button type="button" class="btn ${fresh ? "" : "btn-primary"}" id="fn-st-run" ${strategyBusy ? "disabled" : ""}>${escapeHtml(t(strategyBusy ? "fn_st_running" : fresh ? "fn_st_rerun" : "fn_st_run"))}</button>`
+      : "";
+    const note = r ? "" : !strategy.configured ? t("fn_st_no_key") : strategy.mode === "off" ? t("fn_st_off") : t("fn_st_none");
+    return `<details class="fn-strategy" id="fn-strategy" ${strategyOpen ? "open" : ""}>
+        <summary><span class="fn-st-title">${escapeHtml(t("fn_st_title"))}</span>${r ? `<span class="muted fn-st-week">${escapeHtml(strategy.report.week_start)}</span>` : ""}
+          <span class="badge badge-warning">${escapeHtml(t("fn_steps_shadow"))}</span></summary>
+        ${r?.headline ? `<p class="fn-st-headline">${escapeHtml(r.headline)}</p>` : ""}
+        ${r ? list("fn_st_situation", r.situation) + list("fn_st_push", r.where_to_push) + list("fn_st_competitors", r.competitors) + list("fn_st_risks", r.risks) : ""}
+        ${
+          r?.actions?.length
+            ? `<h3 class="fn-st-h">${escapeHtml(t("fn_st_actions"))}</h3><ul class="fn-st-list">${r.actions.map((a) => `<li>${a.who ? `<strong>${escapeHtml(a.who)}</strong>: ` : ""}${escapeHtml(a.what)}</li>`).join("")}</ul>`
+            : ""
+        }
+        ${note ? `<p class="muted">${escapeHtml(note)}</p>` : ""}
+        ${r ? `<p class="muted fn-st-meta">${escapeHtml(fill("fn_st_meta", { model: strategy.report.model, cost: (Number(strategy.report.cost_usd) || 0).toFixed(3), masked: strategy.report.masked_names }))}</p>` : ""}
+        ${button ? `<div class="fn-picks-actions">${button}</div>` : ""}
+      </details>`;
+  }
+  const talkingPointsOf = (customerId) => strategy?.report?.report?.talking_points?.find((tp) => tp.customer_id === customerId)?.points ?? [];
 
   const inScope = () => data.customers.filter((c) => (!rep || String(c.rep_id ?? "") === rep) && (!region || (c.region ?? "") === region));
 
@@ -87,6 +119,7 @@ export async function renderFunnel(root, navigate) {
     const byRep = reps.map(([id, name]) => [name, STAGES.map((s) => rows.filter((c) => String(c.rep_id) === id && c.stage === s).length)]).filter(([, n]) => n.some(Boolean));
 
     body.innerHTML = `
+      ${strategyHtml()}
       <div class="fn-filters">
         <select id="fn-rep" aria-label="${escapeHtml(t("fn_rep"))}"><option value="">${escapeHtml(t("fn_all_reps"))}</option>${reps.map(([id, name]) => `<option value="${id}" ${id === rep ? "selected" : ""}>${escapeHtml(name ?? "")}</option>`).join("")}</select>
         <select id="fn-region" aria-label="${escapeHtml(t("fn_region"))}"><option value="">${escapeHtml(t("fn_all_regions"))}</option>${regions.map((r) => `<option ${r === region ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}</select>
@@ -129,6 +162,20 @@ export async function renderFunnel(root, navigate) {
     body.querySelector("#fn-region").addEventListener("change", (e) => ((region = e.target.value), paint()));
     body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), (onlyStuck = false), paint())));
     body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), (onlyStuck = false), paint()));
+    body.querySelector("#fn-strategy")?.addEventListener("toggle", (e) => (strategyOpen = e.currentTarget.open));
+    body.querySelector("#fn-st-run")?.addEventListener("click", async () => {
+      strategyBusy = true;
+      paint();
+      try {
+        await api.runFunnelStrategy();
+        strategy = await api.getFunnelStrategy();
+        showToast(t("fn_st_done"));
+      } catch (ex) {
+        showToast(ex.message);
+      }
+      strategyBusy = false;
+      paint();
+    });
     body.querySelector("#fn-stuck")?.addEventListener("click", () => ((onlyStuck = !onlyStuck), (onlyMissing = false), paint()));
     body.querySelector("#fn-picks-run")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
@@ -236,7 +283,10 @@ export async function renderFunnel(root, navigate) {
                 .map((p) => {
                   const c = nameOf.get(p.customer_id);
                   const done = p.task_status === "done";
-                  return `<li class="${done ? "fn-pick-done" : ""}">${escapeHtml(c?.name ?? "")} — ${escapeHtml(stepText(p))}${done ? ` <span class="badge badge-success">${escapeHtml(t("fn_pick_done"))}</span>` : ""}</li>`;
+                  const points = talkingPointsOf(p.customer_id);
+                  return `<li class="${done ? "fn-pick-done" : ""}">${escapeHtml(c?.name ?? "")} — ${escapeHtml(stepText(p))}${done ? ` <span class="badge badge-success">${escapeHtml(t("fn_pick_done"))}</span>` : ""}${
+                    points.length ? `<ul class="fn-st-points" aria-label="${escapeHtml(t("fn_st_points"))}">${points.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : ""
+                  }</li>`;
                 })
                 .join("")}</ol></div>`)
               .join("")
