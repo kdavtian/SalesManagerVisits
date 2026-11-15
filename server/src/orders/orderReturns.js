@@ -176,21 +176,25 @@ async function putBackTask(order, returnId) {
     const code = order.order_code ?? `#${order.id}`;
     const lines = items.map((i) => `${code}: ${i.product_name} × ${Number(i.quantity)}`);
     // one open task per customer (a database rule): a second cancelled packed order of the same customer adds its lines to the open one
-    const { rows: [open] } = await pool.query("SELECT id FROM tasks WHERE auto_kind = 'cancel_putback' AND customer_id = $1 AND status = 'open' LIMIT 1", [order.customer_id]);
-    if (open) {
+    const appendToOpen = async () => {
+      const { rows: [open] } = await pool.query("SELECT id FROM tasks WHERE auto_kind = 'cancel_putback' AND customer_id = $1 AND status = 'open' LIMIT 1", [order.customer_id]);
+      if (!open) return false;
       const { rows: [{ n }] } = await pool.query("SELECT COALESCE(MAX(sort_order), 0)::int AS n FROM task_items WHERE task_id = $1", [open.id]);
       for (const [i, text] of lines.entries()) await pool.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [open.id, text.slice(0, 300), n + 1 + i]);
-      return;
-    }
+      return true;
+    };
+    if (await appendToOpen()) return;
     const [assigneeId] = await usersWithRole("warehouse_manager");
     if (!assigneeId) return; // no warehouse manager: the push above still went to the admin
-    await createOpsTask({
+    const created = await createOpsTask({
       kind: "cancel_putback",
       title: `Հետ դիր չեղարկված պատվերի ապրանքը՝ ${c?.name ?? ""}`.trim().slice(0, 200),
       assigneeId,
       customerId: order.customer_id,
       items: ["Վերադարձներ էջում նշիր «Ապրանքը պահեստում է»", ...lines],
     });
+    // two cancellations of this customer approved at the same moment: the other one made the task first, so this order's lines go onto it
+    if (!created) await appendToOpen();
   } catch (err) {
     console.error(`Put-back task for return #${returnId} failed:`, err.message);
   }
