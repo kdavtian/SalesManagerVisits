@@ -155,7 +155,8 @@ export function taskTitleOf(step) {
 // tasks (one push per rep, not five). All in one transaction under a lock: the button and the job never pick twice, a failure picks nothing.
 const ROTATE_WEEKS = 2;
 const checkedEmpty = new Set(); // weeks already found to have nothing to pick (no hourly recompute)
-export async function runWeeklyPicks(now = new Date(), db = pool, { force = false } = {}) {
+// onlyRepIds: limit the run to these sales managers (tests share one database with other test files)
+export async function runWeeklyPicks(now = new Date(), db = pool, { force = false, onlyRepIds = null } = {}) {
   const settings = await getVaghinakSettings(db);
   const day = yerevanToday(now);
   const week = mondayOf(day);
@@ -174,7 +175,7 @@ export async function runWeeklyPicks(now = new Date(), db = pool, { force = fals
     }
     const steps = await computeNextSteps({ db: client, now });
     const { rows: reps } = await client.query("SELECT id FROM users WHERE role = 'sales_manager' AND status = 'active'");
-    const repIds = new Set(reps.map((r) => r.id));
+    const repIds = new Set(reps.map((r) => r.id).filter((id) => !onlyRepIds || onlyRepIds.includes(id)));
     const { rows: busy } = await client.query(
       `SELECT customer_id FROM tasks WHERE auto_kind = 'sales_step' AND status = 'open'
        UNION SELECT customer_id FROM sales_step_picks WHERE week_start >= $1::date - 7 * $2::int`,
