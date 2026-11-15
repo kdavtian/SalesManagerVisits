@@ -110,3 +110,59 @@ test("the numbers have their own ranges; a rule change is not logged as customer
     await recordFunnelMoves();
   }
 });
+
+test("Monday picks: shadow stores the steps without tasks; once a week; live also gives tasks; management only", async () => {
+  const { runWeeklyPicks } = await import("../../src/team/vaghinak/nextSteps.js");
+  const hi = await customer("potential", { level: 4 });
+  await pool.query("DELETE FROM sales_step_picks WHERE week_start >= current_date - 7");
+  const r = await apiRequest("/api/funnel/picks/run", { method: "POST", cookie: adminCookie });
+  assert.equal(r.status, 200);
+  const pick = (await pool.query("SELECT kind, task_id FROM sales_step_picks WHERE customer_id = $1", [hi.id])).rows[0];
+  assert.deepEqual([pick?.kind, pick?.task_id], ["first_order", null], "shadow: a pick, no task");
+  assert.equal((await runWeeklyPicks(new Date(), pool, { force: true, onlyRepIds: [rep.id] })).picked, 0, "once a week");
+  const view = (await apiRequest("/api/funnel", { cookie: adminCookie })).data;
+  assert.equal(view.customers.find((c) => c.id === hi.id).step.kind, "first_order");
+  assert.ok(view.picks.some((p) => p.customer_id === hi.id));
+  assert.equal(view.steps_mode, "shadow");
+  assert.equal((await apiRequest("/api/funnel/picks/run", { method: "POST", cookie: repCookie })).status, 403);
+
+  // live: the same picks become the rep's tasks
+  await pool.query("DELETE FROM sales_step_picks WHERE week_start >= current_date - 7");
+  await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: adminCookie, body: { salesStepsMode: "live" } });
+  try {
+    await runWeeklyPicks(new Date(), pool, { force: true, onlyRepIds: [rep.id] });
+    const live = (await pool.query("SELECT p.task_id, t.assignee_id, t.auto_kind FROM sales_step_picks p JOIN tasks t ON t.id = p.task_id WHERE p.customer_id = $1", [hi.id])).rows[0];
+    assert.deepEqual([live?.assignee_id, live?.auto_kind], [rep.id, "sales_step"]);
+    // next week: a customer whose step task is still open is not picked again (fresh customers for the rep)
+    await pool.query("UPDATE sales_step_picks SET week_start = week_start - 21 WHERE customer_id = $1", [hi.id]);
+    await pool.query("DELETE FROM sales_step_picks WHERE week_start >= current_date - 7");
+    await runWeeklyPicks(new Date(), pool, { force: true, onlyRepIds: [rep.id] });
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM sales_step_picks WHERE customer_id = $1 AND week_start >= current_date - 7", [hi.id])).rows[0].n, 0);
+  } finally {
+    await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: adminCookie, body: { salesStepsMode: "shadow" } });
+    await pool.query("DELETE FROM tasks WHERE auto_kind = 'sales_step' AND assignee_id = $1", [rep.id]);
+    await pool.query("DELETE FROM sales_step_picks WHERE customer_id = ANY($1::int[])", [made]);
+  }
+});
+
+test("the competitor comes from the last visit that recorded competitors, not from a later visit that only recorded our brands", async () => {
+  const { computeNextSteps } = await import("../../src/team/vaghinak/nextSteps.js");
+  const c = await customer("bronze", { erp: "cmp", expected: 1000 });
+  await line("cmp", 1, 2, "4L");
+  await line("cmp", 2, 2, "1L");
+  const visit = (brand, daysAgo) =>
+    pool.query(
+      `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, brand_status, "timestamp")
+       VALUES ($1, $2, 40.18, 44.51, 10, true, ARRAY['no_order'], $3::jsonb, now() - $4::int * interval '1 day')`,
+      [c.id, rep.id, JSON.stringify(brand), daysAgo]
+    );
+  await visit({ competitors: ["mobil"] }, 10);
+  await visit({ castrol: ["available"] }, 2);
+  try {
+    const step = (await computeNextSteps()).find((s) => s.customer.id === c.id);
+    assert.equal(step?.kind, "raise_share_competitor");
+    assert.equal(step.params.brand, "mobil");
+  } finally {
+    await pool.query("DELETE FROM checkins WHERE customer_id = $1", [c.id]);
+  }
+});

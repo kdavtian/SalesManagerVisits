@@ -41,6 +41,18 @@ export async function renderFunnel(root, navigate) {
     if (c.next === "expected_volume_missing") return t("fn_no_expected");
     return fill("fn_share_line", { l: nf(c.litres_month), of: nf(c.expected_volume_l), pct: c.share ?? 0 });
   }
+  // the next step that moves the customer one stage up (server team/vaghinak/nextSteps.js)
+  function stepText(step) {
+    if (!step) return "";
+    const p = step.params ?? {};
+    return fill(`fn_step_${step.kind}`, {
+      group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
+      brand: p.brand ? t(`competitor_${p.brand}`) : "",
+      share: p.share ?? 0,
+      before: p.before ?? 0,
+      now: p.now ?? 0,
+    });
+  }
   const days = (since) => (since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86400000)) : null);
 
   function paint() {
@@ -83,7 +95,7 @@ export async function renderFunnel(root, navigate) {
           ? list
               .map(
                 (c) => `<button type="button" class="fn-row" data-customer="${c.id}">
-                  <span class="fn-row-main"><strong>${escapeHtml(c.name)}</strong><span class="muted">${escapeHtml([c.rep_name, c.region].filter(Boolean).join(" · "))}</span></span>
+                  <span class="fn-row-main"><strong>${escapeHtml(c.name)}</strong><span class="muted">${escapeHtml([c.rep_name, c.region].filter(Boolean).join(" · "))}</span>${c.step ? `<span class="fn-step">→ ${escapeHtml(stepText(c.step))}</span>` : ""}</span>
                   <span class="fn-row-side"><span class="fn-detail">${escapeHtml(detail(c))}</span>
                     ${c.progress === null ? "" : `<span class="fn-bar" role="img" aria-label="${c.progress}%"><span style="width:${c.progress}%"></span></span>`}
                     ${days(c.since) !== null ? `<span class="muted fn-days">${escapeHtml(fill("fn_days", { n: days(c.since) }))}</span>` : ""}</span>
@@ -92,6 +104,7 @@ export async function renderFunnel(root, navigate) {
               .join("")
           : `<p class="empty-state">${escapeHtml(t("fn_empty"))}</p>`
       }</div>
+      ${picksHtml(rows)}
       ${
         byRep.length > 1 && !rep
           ? `<h2 class="list-group-heading">${escapeHtml(t("fn_by_rep"))}</h2>
@@ -103,6 +116,43 @@ export async function renderFunnel(root, navigate) {
     body.querySelector("#fn-region").addEventListener("change", (e) => ((region = e.target.value), paint()));
     body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), paint())));
     body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), paint()));
+    body.querySelector("#fn-picks-run")?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const r = await api.runFunnelPicks();
+        data = await api.getFunnel();
+        showToast(fill("fn_picks_made", { n: r.picked ?? 0 }));
+        paint();
+      } catch (ex) {
+        showToast(ex.message);
+        paint();
+      }
+    });
+    body.querySelector("#fn-steps-mode")?.addEventListener("click", async (e) => {
+      const next = data.steps_mode === "live" ? "shadow" : "live";
+      const btn = e.currentTarget;
+      // going live gives tasks to every sales manager: two taps, no browser pop-up (the first shows what will happen)
+      if (next === "live" && btn.dataset.armed !== "1") {
+        btn.dataset.armed = "1";
+        btn.textContent = t("fn_steps_live_confirm");
+        setTimeout(() => {
+          if (btn.isConnected && btn.dataset.armed === "1") {
+            btn.dataset.armed = "";
+            btn.textContent = t("fn_steps_to_live");
+          }
+        }, 6000);
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await api.vaghinakSaveSettings({ salesStepsMode: next });
+        data = await api.getFunnel();
+        paint();
+      } catch (ex) {
+        showToast(ex.message);
+        paint();
+      }
+    });
     // a customer on stage 2+ gets its monthly need written right here (stage 4 measures our share of it); a potential one opens its card
     body.querySelectorAll("[data-customer]").forEach((b) =>
       b.addEventListener("click", () => {
@@ -148,6 +198,37 @@ export async function renderFunnel(root, navigate) {
         btn.disabled = false;
       }
     });
+  }
+
+  // This week's 5 best steps per sales manager (shadow: only management sees them; live: they are the reps' tasks too)
+  function picksHtml(rows) {
+    const ids = new Set(rows.map((c) => c.id));
+    const nameOf = new Map(data.customers.map((c) => [c.id, c]));
+    const picks = data.picks.filter((p) => ids.has(p.customer_id));
+    const canEdit = editsVaghinakSettings(state.user.role);
+    const live = data.steps_mode === "live";
+    const byRepPicks = new Map();
+    for (const p of picks) byRepPicks.set(p.rep_id, [...(byRepPicks.get(p.rep_id) ?? []), p]);
+    const repName = (id) => data.customers.find((c) => c.rep_id === id)?.rep_name ?? "—";
+    return `<h2 class="list-group-heading">${escapeHtml(t("fn_picks_title"))}${picks[0] ? ` · ${escapeHtml(picks[0].week_start)}` : ""}</h2>
+      <div class="fn-picks-head">
+        <span class="badge ${live ? "badge-success" : "badge-warning"}">${escapeHtml(t(live ? "fn_steps_live" : "fn_steps_shadow"))}</span>
+        <span class="muted">${escapeHtml(t(live ? "fn_steps_live_hint" : "fn_steps_shadow_hint"))}</span>
+      </div>
+      ${
+        picks.length
+          ? [...byRepPicks.entries()]
+              .map(([repId, list]) => `<div class="fn-picks-rep"><strong>${escapeHtml(repName(repId))}</strong><ol>${list
+                .map((p) => {
+                  const c = nameOf.get(p.customer_id);
+                  const done = p.task_status === "done";
+                  return `<li class="${done ? "fn-pick-done" : ""}">${escapeHtml(c?.name ?? "")} — ${escapeHtml(stepText(p))}${done ? ` <span class="badge badge-success">${escapeHtml(t("fn_pick_done"))}</span>` : ""}</li>`;
+                })
+                .join("")}</ol></div>`)
+              .join("")
+          : `<p class="muted">${escapeHtml(t("fn_picks_none"))}</p>`
+      }
+      ${canEdit ? `<div class="fn-picks-actions">${picks.length && picks[0].week_start === data.week ? "" : `<button type="button" class="btn" id="fn-picks-run">${escapeHtml(t("fn_picks_run"))}</button>`}<button type="button" class="btn ${live ? "" : "btn-primary"}" id="fn-steps-mode">${escapeHtml(t(live ? "fn_steps_to_shadow" : "fn_steps_to_live"))}</button></div>` : ""}`;
   }
 
   // The four stages in plain words, with the numbers in force; management with the right edits the numbers here.

@@ -1138,6 +1138,7 @@ export const hyCommon = {
     job_bonus_challenges: "Բոնուսներ՝ մարտահրավերներ",
     job_anti_fraud: "Հակաախարդախության ստուգումներ",
     job_sales_funnel: "Վաճառքի ձագար՝ փուլեր և տեղաշարժեր",
+    job_sales_steps: "Վաճառքի փորձագետ՝ շաբաթվա քայլերը",
     job_expense_watch: "Ծախսերի հսկողություն",
     job_overdue_visit_reminders: "Հիշեցում՝ չայցելած պլանային կետեր",
     health_push: "Push ծանուցումներ",
