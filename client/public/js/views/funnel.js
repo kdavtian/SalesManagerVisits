@@ -23,7 +23,7 @@ export async function renderFunnel(root, navigate) {
       <div id="fn-body"><p class="loading-state" role="status">${escapeHtml(t("loading"))}</p></div>
     </div>`;
   root.querySelector("#fn-back").addEventListener("click", () => navigate.goBack("#/vaghinak"));
-  root.querySelector("#fn-info").addEventListener("click", () => openRules());
+  root.querySelector("#fn-info").addEventListener("click", () => data && openRules());
   const body = root.querySelector("#fn-body");
 
   try {
@@ -47,8 +47,11 @@ export async function renderFunnel(root, navigate) {
     const rows = inScope();
     const count = (s) => rows.filter((c) => c.stage === s).length;
     const total = rows.length || 1;
-    const movesIn = (s) => data.moves.filter((m) => m.to_stage === s && m.from_stage < s).reduce((n, m) => n + m.n, 0);
-    const movesDown = (s) => data.moves.filter((m) => m.from_stage === s && m.to_stage < s).reduce((n, m) => n + m.n, 0);
+    // this month's moves of the customers the filters show
+    const ids = new Set(rows.map((c) => c.id));
+    const moves = data.moves.filter((m) => ids.has(m.customer_id));
+    const movesIn = (s) => moves.filter((m) => m.to_stage === s && m.from_stage < s).length;
+    const movesDown = (s) => moves.filter((m) => m.from_stage === s && m.to_stage < s).length;
     const missing = rows.filter((c) => c.next === "expected_volume_missing").length;
     const reps = [...new Map(data.customers.filter((c) => c.rep_id).map((c) => [String(c.rep_id), c.rep_name])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
     const regions = [...new Set(data.customers.map((c) => c.region).filter(Boolean))].sort();
@@ -100,7 +103,51 @@ export async function renderFunnel(root, navigate) {
     body.querySelector("#fn-region").addEventListener("change", (e) => ((region = e.target.value), paint()));
     body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), paint())));
     body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), paint()));
-    body.querySelectorAll("[data-customer]").forEach((b) => b.addEventListener("click", () => navigate(`#/customers/${b.dataset.customer}`)));
+    // a customer on stage 2+ gets its monthly need written right here (stage 4 measures our share of it); a potential one opens its card
+    body.querySelectorAll("[data-customer]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const c = data.customers.find((x) => x.id === Number(b.dataset.customer));
+        if (c && c.stage >= 2) openVolume(c);
+        else navigate(`#/customers/${b.dataset.customer}`);
+      })
+    );
+  }
+
+  function openVolume(c) {
+    const overlay = document.createElement("div");
+    overlay.className = "sheet-overlay";
+    overlay.innerHTML = `<div class="sheet">
+      <h2>${escapeHtml(c.name)}</h2>
+      <p class="muted">${escapeHtml(detail(c))}</p>
+      <label class="fn-set">${escapeHtml(t("fn_expected_label"))}<input type="number" inputmode="numeric" min="0" step="1" id="fn-vol" value="${c.expected_volume_l ?? ""}" /></label>
+      <p class="muted">${escapeHtml(t("fn_expected_hint"))}</p>
+      <p class="form-error" id="fn-vol-error" hidden></p>
+      <div class="sheet-actions"><button type="button" class="btn" id="fn-open">${escapeHtml(t("fn_open_customer"))}</button><button type="button" class="btn btn-primary" id="fn-vol-save">${escapeHtml(t("save"))}</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    activateDialog(overlay);
+    overlay.addEventListener("click", (e) => e.target === overlay && overlay.remove());
+    overlay.querySelector("#fn-open").addEventListener("click", () => {
+      overlay.remove();
+      navigate(`#/customers/${c.id}`);
+    });
+    overlay.querySelector("#fn-vol-save").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const raw = overlay.querySelector("#fn-vol").value.trim();
+      btn.disabled = true;
+      try {
+        await api.setFunnelExpectedVolume(c.id, raw === "" ? null : Number(raw));
+        data = await api.getFunnel();
+        overlay.remove();
+        showToast(t("saved"));
+        paint();
+      } catch (ex) {
+        const err = overlay.querySelector("#fn-vol-error");
+        err.textContent = ex.message;
+        err.hidden = false;
+        btn.disabled = false;
+      }
+    });
   }
 
   // The four stages in plain words, with the numbers in force; management with the right edits the numbers here.
@@ -108,11 +155,12 @@ export async function renderFunnel(root, navigate) {
     const s = data.settings;
     const canEdit = editsVaghinakSettings(state.user.role);
     const field = (key, value, label) =>
-      `<label class="fn-set">${escapeHtml(label)}<input type="number" inputmode="numeric" min="1" max="${key === "funnelSharePct" ? 100 : 365}" name="${key}" value="${value}" ${canEdit ? "" : "disabled"} /></label>`;
+      `<label class="fn-set">${escapeHtml(label)}<input type="number" inputmode="numeric" min="${key === "funnelWindowDays" ? 7 : 1}" max="${key === "funnelSharePct" ? 100 : key === "funnelWindowDays" ? 365 : 7}" name="${key}" value="${value}" ${canEdit ? "" : "disabled"} /></label>`;
     const overlay = document.createElement("div");
     overlay.className = "sheet-overlay";
     overlay.innerHTML = `<div class="sheet">
       <h2>${escapeHtml(t("fn_how"))}</h2>
+      <p class="muted">${escapeHtml(t("fn_rules_change_note"))}</p>
       <ol class="fn-rules">${STAGES.map((n) => `<li><strong>${escapeHtml(t(`fn_stage_${n}`))}</strong> ${escapeHtml(t(`fn_rule_${n}`))}</li>`).join("")}</ol>
       <div class="fn-sets">
         ${field("funnelGroupsBronze", s.groupsTarget.bronze, t("fn_set_bronze"))}
@@ -130,7 +178,8 @@ export async function renderFunnel(root, navigate) {
     overlay.querySelector("#fn-set-save")?.addEventListener("click", async (e) => {
       const patch = Object.fromEntries([...overlay.querySelectorAll("input[name]")].map((i) => [i.name, Number(i.value)]));
       const err = overlay.querySelector("#fn-set-error");
-      if (Object.values(patch).some((v) => !Number.isInteger(v) || v < 1) || patch.funnelSharePct > 100) {
+      const bad = Object.entries(patch).some(([k, v]) => !Number.isInteger(v) || v < (k === "funnelWindowDays" ? 7 : 1) || v > (k === "funnelSharePct" ? 100 : k === "funnelWindowDays" ? 365 : 7));
+      if (bad) {
         err.textContent = t("fn_set_bad");
         err.hidden = false;
         return;

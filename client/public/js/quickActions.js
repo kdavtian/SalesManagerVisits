@@ -154,7 +154,7 @@ export function withMergedTiles(ids) {
 // A tile added AFTER an admin customized a role's tiles must not stay hidden for that role (owner, 2026-11-07: "I don't see the Purchases
 // module" -- the admin's saved list predates it). The saved settings carry `_known`, the tile ids that existed when they were saved (admin.js
 // sends it); older saves without it knew every tile except the ones listed here. A tile the admin did not know about follows the defaults.
-export const TILES_ADDED_AFTER_VISIBILITY = ["qa_purchases", "qa_requests"];
+export const TILES_ADDED_AFTER_VISIBILITY = ["qa_purchases", "qa_requests", "qa_funnel"];
 export function visibleQuickActionIds(role, visibility) {
   const override = visibility && Object.prototype.hasOwnProperty.call(visibility, role) ? visibility[role] : null;
   const known = Array.isArray(visibility?._known) ? visibility._known : QUICK_ACTION_IDS.filter((id) => !TILES_ADDED_AFTER_VISIBILITY.includes(id));

@@ -66,6 +66,47 @@ test("stages from real sales; the API is management only; moves are remembered",
   const { rows } = await pool.query("SELECT from_stage, to_stage FROM customer_funnel_moves WHERE customer_id = $1", [pot.id]);
   assert.deepEqual(rows, [{ from_stage: 1, to_stage: 2 }]);
   const after = (await apiRequest("/api/funnel", { cookie: adminCookie })).data;
-  assert.ok(after.moves.some((m) => m.from_stage === 1 && m.to_stage === 2 && m.n >= 1));
+  assert.ok(after.moves.some((m) => m.customer_id === pot.id && m.from_stage === 1 && m.to_stage === 2));
   assert.ok(after.customers.find((c) => c.id === pot.id).since);
+});
+
+test("a line of a product not in the catalog is no product group; litres still count", async () => {
+  const c = await customer("bronze", { erp: "d", expected: 1000 });
+  await line("d", 1, 1, "4L");
+  await pool.query(
+    "INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, product_name, size_l, qty) VALUES ($1, 'x', current_date - 1, 'NOT-IN-CATALOG', 'x', '4L', 2)",
+    [`${tag}-d`]
+  );
+  const row = (await apiRequest("/api/funnel", { cookie: adminCookie })).data.customers.find((x) => x.id === c.id);
+  assert.deepEqual([row.groups, row.stage], [1, 2]);
+  assert.equal(row.litres_month, 4, "12 L over 90 days = 4 L a month");
+});
+
+test("management writes a tiered customer's monthly need; bad values are refused; a rep is not allowed", async () => {
+  const c = await customer("bronze", { erp: "e" });
+  assert.equal((await apiRequest(`/api/funnel/customers/${c.id}/expected-volume`, { method: "PUT", cookie: adminCookie, body: { expected_volume_l: 250 } })).status, 200);
+  assert.equal(Number((await pool.query("SELECT expected_volume_l FROM customers WHERE id = $1", [c.id])).rows[0].expected_volume_l), 250);
+  assert.equal((await apiRequest(`/api/funnel/customers/${c.id}/expected-volume`, { method: "PUT", cookie: adminCookie, body: { expected_volume_l: -5 } })).status, 400);
+  assert.equal((await apiRequest(`/api/funnel/customers/${c.id}/expected-volume`, { method: "PUT", cookie: repCookie, body: { expected_volume_l: 10 } })).status, 403);
+});
+
+test("the numbers have their own ranges; a rule change is not logged as customers moving", async () => {
+  const put = (patch) => apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: adminCookie, body: patch });
+  assert.equal((await put({ funnelGroupsGold: 8 })).status, 400, "only 7 product groups exist");
+  assert.equal((await put({ funnelSharePct: 101 })).status, 400);
+  assert.equal((await put({ funnelWindowDays: 3 })).status, 400);
+  const gold = await customer("gold", { erp: "f" });
+  await line("f", 1, 1, "4L");
+  await line("f", 2, 1, "1L");
+  await recordFunnelMoves();
+  const before = (await pool.query("SELECT COUNT(*)::int AS n FROM customer_funnel_moves")).rows[0].n;
+  try {
+    assert.equal((await put({ funnelGroupsGold: 2 })).status, 200); // the gold customer now reaches stage 3 by the rule change alone
+    await recordFunnelMoves();
+    assert.equal((await pool.query("SELECT stage FROM customer_funnel_stage WHERE customer_id = $1", [gold.id])).rows[0].stage, 3);
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM customer_funnel_moves")).rows[0].n, before, "no moves logged for a rule change");
+  } finally {
+    await put({ funnelGroupsGold: 6 });
+    await recordFunnelMoves();
+  }
 });

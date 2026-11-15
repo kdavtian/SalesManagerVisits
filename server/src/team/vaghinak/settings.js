@@ -31,6 +31,14 @@ export const DEFAULTS = {
 };
 
 const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode");
+// the funnel's numbers have their own ranges (7 product groups exist; a share is a percent; the window is a week to a year)
+const FUNNEL_RANGES = {
+  funnelGroupsBronze: [1, 7, "Bronze product groups"],
+  funnelGroupsSilver: [1, 7, "Silver product groups"],
+  funnelGroupsGold: [1, 7, "Gold product groups"],
+  funnelSharePct: [1, 100, "Our share"],
+  funnelWindowDays: [7, 365, "The sales window (days)"],
+};
 
 export async function getVaghinakSettings(db = pool) {
   const { rows } = await db.query("SELECT key, value FROM vaghinak_settings");
@@ -46,6 +54,11 @@ export async function saveVaghinakSettings(patch, db = pool) {
     if (key === "mode") {
       if (!["off", "shadow", "live"].includes(value)) throw new Error("mode must be off, shadow or live");
       clean.mode = value;
+    } else if (key in FUNNEL_RANGES) {
+      const n = Number(value);
+      const [min, max, what] = FUNNEL_RANGES[key];
+      if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${what} must be a whole number from ${min} to ${max}`);
+      clean[key] = n;
     } else if (NUMERIC.includes(key)) {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 0 || n > 24 * 60) throw new Error(`${key} must be a whole number of minutes`);

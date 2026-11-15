@@ -13,3 +13,8 @@ CREATE TABLE IF NOT EXISTS customer_funnel_moves (
   moved_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS customer_funnel_moves_at_idx ON customer_funnel_moves (moved_at);
+-- the rules (numbers) the last run used: a run under changed rules re-records without logging moves
+CREATE TABLE IF NOT EXISTS customer_funnel_meta (
+  id    SMALLINT PRIMARY KEY CHECK (id = 1),
+  rules JSONB NOT NULL
+);

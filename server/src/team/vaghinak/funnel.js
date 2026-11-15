@@ -65,11 +65,12 @@ export async function computeFunnel({ db = pool, settings } = {}) {
   const { rows } = await db.query(
     `WITH sales AS (
        SELECT l.erp_customer_id,
-              COUNT(DISTINCT ${PRODUCT_GROUP_SQL("p.family")}) AS groups,
+              -- only lines of a catalog product, bought (not returned), say which group they are
+              COUNT(DISTINCT CASE WHEN p.id IS NOT NULL AND l.qty > 0 THEN ${PRODUCT_GROUP_SQL("p.family")} END) AS groups,
               COALESCE(SUM(l.qty * ${SIZE_SQL("l.size_l")}), 0) AS litres
        FROM erp_order_lines l
        LEFT JOIN products p ON p.erp_product_id = l.product_id
-       WHERE l.order_date > current_date - $1::int
+       WHERE l.order_date > (now() AT TIME ZONE 'Asia/Yerevan')::date - $1::int
        GROUP BY l.erp_customer_id
      )
      SELECT c.id, c.name, c.customer_tier AS tier, c.potential_level, c.expected_volume_l, c.region, c.subregion,
@@ -93,24 +94,49 @@ export async function computeFunnel({ db = pool, settings } = {}) {
 }
 
 // The job: remember the stage of every customer and log each move (up or down) so the screen can show this month's movement and how long a
-// customer has been stuck. The first run only records where everybody stands (no moves).
+// customer has been stuck. One transaction, set-based. The first run only records where everybody stands (no moves); a run right after the
+// rules themselves changed (management edited the numbers) re-records without logging moves, so a rule change never shows as customers
+// falling; a customer that left the funnel (closed, competitor) is forgotten.
 export async function recordFunnelMoves({ db = pool } = {}) {
-  const { customers } = await computeFunnel({ db });
-  const { rows: known } = await db.query("SELECT customer_id, stage FROM customer_funnel_stage");
-  const before = new Map(known.map((r) => [r.customer_id, r.stage]));
-  let moves = 0;
-  for (const c of customers) {
-    const prev = before.get(c.id);
-    if (prev === c.stage) continue;
-    await db.query(
-      `INSERT INTO customer_funnel_stage (customer_id, stage, since) VALUES ($1, $2, now())
-       ON CONFLICT (customer_id) DO UPDATE SET stage = EXCLUDED.stage, since = now()`,
-      [c.id, c.stage]
+  const { cfg, customers } = await computeFunnel({ db });
+  const ids = customers.map((c) => c.id);
+  const stages = customers.map((c) => c.stage);
+  const rules = JSON.stringify(cfg);
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    // compared as JSON by the database (jsonb stores its keys in its own order, so the text would never match)
+    const { rows: [meta] } = await client.query("SELECT rules = $1::jsonb AS same FROM customer_funnel_meta WHERE id = 1 FOR UPDATE", [rules]);
+    const rulesChanged = Boolean(meta) && !meta.same;
+    await client.query("DELETE FROM customer_funnel_stage WHERE customer_id <> ALL($1::int[])", [ids]);
+    const { rows: moved } = await client.query(
+      `WITH next AS (SELECT * FROM unnest($1::int[], $2::smallint[]) AS t(customer_id, stage)),
+            prev AS (SELECT s.customer_id, s.stage FROM customer_funnel_stage s JOIN next n USING (customer_id) WHERE s.stage <> n.stage),
+            up AS (
+              INSERT INTO customer_funnel_stage (customer_id, stage, since) SELECT customer_id, stage, now() FROM next
+              ON CONFLICT (customer_id) DO UPDATE SET stage = EXCLUDED.stage,
+                since = CASE WHEN $3::boolean THEN customer_funnel_stage.since ELSE now() END
+              WHERE customer_funnel_stage.stage <> EXCLUDED.stage
+              RETURNING customer_id, stage)
+       SELECT p.customer_id, p.stage AS from_stage, u.stage AS to_stage FROM up u JOIN prev p USING (customer_id)`,
+      [ids, stages, Boolean(rulesChanged)]
     );
-    if (prev !== undefined) {
-      await db.query("INSERT INTO customer_funnel_moves (customer_id, from_stage, to_stage) VALUES ($1, $2, $3)", [c.id, prev, c.stage]);
-      moves++;
+    if (!rulesChanged && moved.length) {
+      await client.query(
+        "INSERT INTO customer_funnel_moves (customer_id, from_stage, to_stage) SELECT * FROM unnest($1::int[], $2::smallint[], $3::smallint[])",
+        [moved.map((m) => m.customer_id), moved.map((m) => m.from_stage), moved.map((m) => m.to_stage)]
+      );
     }
+    await client.query(
+      `INSERT INTO customer_funnel_meta (id, rules) VALUES (1, $1::jsonb) ON CONFLICT (id) DO UPDATE SET rules = EXCLUDED.rules`,
+      [rules]
+    );
+    await client.query("COMMIT");
+    return { customers: customers.length, moves: rulesChanged ? 0 : moved.length };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-  return { customers: customers.length, moves };
 }
