@@ -29,7 +29,8 @@ export async function openReturnSheet(orderId, onDone) {
   }
   const isReturn = info.kind === "return";
   // someone who decides returns does it at once (owner, 2026-11-14: "Admin should be highest authority"); a rep sends a request
-  const decides = canApproveReturns(state.user?.role);
+  // ... and a rep cancels their own order alone while management has not confirmed it yet (owner, 2026-11-14)
+  const decides = canApproveReturns(state.user?.role) || (!isReturn && info.status === "submitted" && info.mine === true);
   const hint = !decides ? (isReturn ? "" : "rt_cancel_hint") : isReturn ? "rt_return_hint_now" : info.status === "packed_stock_out" ? "rt_cancel_hint_packed" : "rt_cancel_hint_now";
   const qty = new Map(info.items.map((i) => [i.id, 0]));
   let reason = "";

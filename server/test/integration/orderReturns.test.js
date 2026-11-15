@@ -25,6 +25,14 @@ test.after(async () => {
   await stopTestServer();
 });
 
+async function waitFor(check, ms = 3000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await check()) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.fail("condition not met in time");
+}
 const call = (who, path, method = "GET", body) => apiRequest(`/api/returns${path}`, { method, cookie: cookies[who], body });
 async function newOrder(status, discountPct = 0) {
   const res = await apiRequest("/api/orders", { method: "POST", cookie: cookies.rep, body: { customer_id: customer.id, payment_method: "invoice", items: [{ product_id: product.id, quantity: 10 }, { product_id: product2.id, quantity: 5 }] } });
@@ -91,23 +99,35 @@ test("the credit follows the discount the customer got", async () => {
 });
 
 test("cancelling an order that is not delivered: approval cancels it; a packed order waits for the warehouse; delivered orders are returns", async () => {
+  // the rep's own order management has not confirmed yet: the rep cancels it alone (owner, 2026-11-14)
   const submitted = await newOrder("submitted");
   const made = await call("rep", "/", "POST", { order_id: submitted, reason: "changed_mind" });
   assert.equal(made.status, 201);
   assert.equal(made.data.kind, "cancel");
-  assert.equal((await call("rep", "/", "POST", { order_id: submitted, reason: "changed_mind" })).status, 409, "one waiting cancellation per order");
-  assert.equal((await call("accountant", `/${made.data.id}/approve`, "POST", {})).status, 200);
+  assert.equal(made.data.status, "done");
   const o = (await pool.query("SELECT status, cancelled_at, cancel_reason FROM orders WHERE id = $1", [submitted])).rows[0];
   assert.deepEqual([o.status, Boolean(o.cancelled_at)], ["draft", true]);
   assert.equal((await call("rep", "/", "POST", { order_id: submitted, reason: "changed_mind" })).status, 409, "already cancelled");
 
+  // a confirmed one still needs management
+  const confirmed = await newOrder("confirmed");
+  const mc = await call("rep", "/", "POST", { order_id: confirmed, reason: "changed_mind" });
+  assert.equal(mc.data.status, "requested");
+  assert.equal((await call("rep", "/", "POST", { order_id: confirmed, reason: "changed_mind" })).status, 409, "one waiting cancellation per order");
+  assert.equal((await call("accountant", `/${mc.data.id}/approve`, "POST", {})).status, 200);
+  assert.ok((await pool.query("SELECT cancelled_at FROM orders WHERE id = $1", [confirmed])).rows[0].cancelled_at);
+
+  // a packed one: approval gives the warehouse manager a "put the goods back" task, which closes when the goods are back
   const packed = await newOrder("packed_stock_out");
   const m2 = await call("rep", "/", "POST", { order_id: packed, reason: "changed_mind" });
   assert.equal((await call("director", `/${m2.data.id}/approve`, "POST", {})).status, 200);
   assert.equal((await pool.query("SELECT status FROM orders WHERE id = $1", [packed])).rows[0].status, "packed_stock_out", "still packed until the goods are back");
+  const taskOf = async () => (await pool.query("SELECT id, status FROM tasks WHERE auto_kind = 'cancel_putback' AND assignee_id = $1 AND customer_id = $2 ORDER BY id DESC LIMIT 1", [warehouse.id, customer.id])).rows[0];
+  await waitFor(async () => (await taskOf())?.status === "open");
   assert.equal((await call("warehouse", `/${m2.data.id}/receive`, "POST", {})).status, 200);
   const o2 = (await pool.query("SELECT status, cancelled_at FROM orders WHERE id = $1", [packed])).rows[0];
   assert.deepEqual([o2.status, Boolean(o2.cancelled_at)], ["draft", true]);
+  await waitFor(async () => (await taskOf())?.status === "done");
 
   const draft = await newOrder("draft");
   assert.equal((await call("rep", "/", "POST", { order_id: draft, reason: "changed_mind" })).status, 400, "a draft is just deleted");
