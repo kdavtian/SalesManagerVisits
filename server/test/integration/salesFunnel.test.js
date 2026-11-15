@@ -166,3 +166,22 @@ test("the competitor comes from the last visit that recorded competitors, not fr
     await pool.query("DELETE FROM checkins WHERE customer_id = $1", [c.id]);
   }
 });
+
+test("first time seen: a potential customer counts its days on stage 1 from its creation, a buying one from now", async () => {
+  const pot = await customer("potential", { level: 3 });
+  const buyer = await customer("bronze", { erp: "since" });
+  await line("since", 1, 1, "4L");
+  await pool.query("UPDATE customers SET created_at = now() - interval '100 days' WHERE id = ANY($1::int[])", [[pot.id, buyer.id]]);
+  await pool.query("DELETE FROM customer_funnel_stage WHERE customer_id = ANY($1::int[])", [[pot.id, buyer.id]]);
+  await recordFunnelMoves();
+  const { rows } = await pool.query(
+    "SELECT customer_id, stage, floor(extract(epoch FROM now() - since) / 86400)::int AS days FROM customer_funnel_stage WHERE customer_id = ANY($1::int[])",
+    [[pot.id, buyer.id]]
+  );
+  const of = new Map(rows.map((r) => [r.customer_id, r]));
+  assert.deepEqual([of.get(pot.id)?.stage, of.get(pot.id)?.days], [1, 100]);
+  assert.deepEqual([of.get(buyer.id)?.stage, of.get(buyer.id)?.days], [2, 0]);
+  // later runs keep the date while the stage stays the same
+  await recordFunnelMoves();
+  assert.equal((await pool.query("SELECT floor(extract(epoch FROM now() - since) / 86400)::int AS d FROM customer_funnel_stage WHERE customer_id = $1", [pot.id])).rows[0].d, 100);
+});

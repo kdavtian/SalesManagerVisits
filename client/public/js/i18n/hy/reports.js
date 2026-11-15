@@ -412,6 +412,8 @@ export const hyReports = {
     fn_step_first_order: "Ստանալ առաջին պատվերը (փորձնական պատվեր, գներ, որոշում կայացնողը)",
     fn_step_reassess: "Վերագնահատել հեռանկարը",
     fn_step_add_group: "Առաջարկել {group}",
+    fn_stuck_chip: "Կանգնած {days}+ օր՝ {n}",
+    fn_stuck_title: "Նույն փուլում {days}+ օր (ամենաերկարը՝ վերևում)",
     fn_step_add_group_products: "Առաջարկել {group}՝ {products}",
     fn_similar_product: "{name} (նման {buyers} խանութից {shops}-ը գնում է)",
     fn_step_ask_need: "Ճշտել ամսական յուղի պահանջը",

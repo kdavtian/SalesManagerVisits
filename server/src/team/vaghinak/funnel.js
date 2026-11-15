@@ -113,7 +113,10 @@ export async function recordFunnelMoves({ db = pool } = {}) {
       `WITH next AS (SELECT * FROM unnest($1::int[], $2::smallint[]) AS t(customer_id, stage)),
             prev AS (SELECT s.customer_id, s.stage FROM customer_funnel_stage s JOIN next n USING (customer_id) WHERE s.stage <> n.stage),
             up AS (
-              INSERT INTO customer_funnel_stage (customer_id, stage, since) SELECT customer_id, stage, now() FROM next
+              -- first time seen: a potential customer has been one since it was created (so "stuck" works from day one); other stages from now
+              INSERT INTO customer_funnel_stage (customer_id, stage, since)
+              SELECT n.customer_id, n.stage, CASE WHEN n.stage = 1 THEN LEAST(COALESCE(c.created_at, now()), now()) ELSE now() END
+              FROM next n LEFT JOIN customers c ON c.id = n.customer_id
               ON CONFLICT (customer_id) DO UPDATE SET stage = EXCLUDED.stage,
                 since = CASE WHEN $3::boolean THEN customer_funnel_stage.since ELSE now() END
               WHERE customer_funnel_stage.stage <> EXCLUDED.stage

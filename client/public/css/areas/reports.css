@@ -426,3 +426,6 @@
 .fn-pick-done { color: var(--text-dim); text-decoration: line-through; }
 .fn-picks-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
 .fn-picks-actions .btn { min-height: 44px; }
+.fn-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.fn-chips .fn-missing { margin: 0; width: auto; flex: 1 1 220px; }
+.fn-days-stuck { color: var(--danger, #c62828); font-weight: 600; }
