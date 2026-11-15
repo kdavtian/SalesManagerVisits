@@ -31,7 +31,10 @@ returnsRouter.get("/order/:orderId/returnable", async (req, res) => {
   if (req.user.role === "sales_manager" && order.user_id !== req.user.id && order.assigned_manager_id !== req.user.id) return res.status(403).json({ error: "Not allowed" });
   const { rows: items } = await pool.query("SELECT id, product_name, brand, quantity::float8 AS quantity, unit_price_amd::float8 AS unit_price_amd FROM order_items WHERE order_id = $1 ORDER BY id", [orderId]);
   const already = await returnedQuantities(orderId);
-  res.json({ status: order.status, cancelled: Boolean(order.cancelled_at), kind: isDone(order.status) ? "return" : ["submitted", "confirmed", "packed_stock_out"].includes(order.status) && !order.cancelled_at ? "cancel" : null, items: items.map((i) => ({ ...i, returned: already.get(i.id) ?? 0, left: i.quantity - (already.get(i.id) ?? 0) })) });
+  // the same rule requestReturn uses for a rep cancelling alone: their own order, still submitted, never confirmed before
+  const { rowCount: wasConfirmed } = await pool.query("SELECT 1 FROM order_status_history WHERE order_id = $1 AND new_status = 'confirmed' LIMIT 1", [orderId]);
+  const selfCancel = order.status === "submitted" && !order.cancelled_at && order.user_id === req.user.id && !wasConfirmed;
+  res.json({ status: order.status, mine: order.user_id === req.user.id, self_cancel: selfCancel, cancelled: Boolean(order.cancelled_at), kind: isDone(order.status) ? "return" : ["submitted", "confirmed", "packed_stock_out"].includes(order.status) && !order.cancelled_at ? "cancel" : null, items: items.map((i) => ({ ...i, returned: already.get(i.id) ?? 0, left: i.quantity - (already.get(i.id) ?? 0) })) });
 });
 
 returnsRouter.post("/", async (req, res) => {

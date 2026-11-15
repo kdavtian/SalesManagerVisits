@@ -370,11 +370,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     if (canReviewSubmitted) {
       buttons.push({ label: t("reject_order"), action: "reject-order", cls: "btn btn-danger" });
     }
-    // Back to submitted (owner, 2026-10-28): directors reopen a confirmed order to change it, then confirm it again. Not once the warehouse
-    // packed it, and not while accounting works on its documents (server: POST /orders/:id/unconfirm).
-    if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
-      buttons.push({ label: t("order_unconfirm"), action: "unconfirm-order", cls: "btn" });
-    }
     if (canConfirmSubmittedOrders(state.user.role) && ["waybill_created", "partially_created", "exported_unsigned"].includes(order.accounting_status)) {
       buttons.push({ label: t("acc_mark_signed"), action: "accounting-signed", cls: "btn" });
     }
@@ -399,12 +394,18 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: t("reorder_btn"), action: "reorder-order", cls: buttons.some((b) => b.cls.includes("btn-primary")) ? "btn" : "btn btn-primary" });
     }
     // Print-ready delivery-acceptance act: the printer icon next to the close button (any order the viewer can open).
+    // ONE Edit button (owner, 2026-11-14: "Reopen to edit" and "Correct" merged), whatever the stage:
+    //   draft / submitted -> edit it directly;
+    //   confirmed and later -> admin, CEO and the accountant correct it with a reason that is kept (it stays where it is);
+    //   confirmed, for a director who does not correct -> it goes back to submitted and the editor opens at once (then confirm again). Not once
+    //   the warehouse packed it, and not while accounting works on its documents (server: POST /orders/:id/unconfirm).
+    const editLabel = `${icons.pencil}${t("order_edit_btn")}`;
     if (canEditThisOrder) {
-      buttons.push({ label: `${icons.pencil}${t("edit_order")}`, action: "edit-order", cls: "btn btn-has-icon" });
-    }
-    // After review (confirmed, packed, delivered) admin, CEO and the accountant can still correct a mistake, with a reason that is kept.
-    if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status) && canCorrectOrders(state.user.role)) {
-      buttons.push({ label: `${icons.pencil}${t("ocr_btn")}`, action: "correct-order", cls: "btn btn-has-icon" });
+      buttons.push({ label: editLabel, action: "edit-order", cls: "btn btn-has-icon" });
+    } else if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status) && canCorrectOrders(state.user.role)) {
+      buttons.push({ label: editLabel, action: "correct-order", cls: "btn btn-has-icon" });
+    } else if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+      buttons.push({ label: editLabel, action: "unconfirm-edit", cls: "btn btn-has-icon" });
     }
     // Permanent delete (distinct from a director's reject, which keeps
     // the order as a record back at draft) -- admin only, for a
@@ -421,7 +422,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, reject or delete the order
     // (owner, 2026-10-26). Returns stay open: they are a request, decided by management.
     if (isSignedLocked(order)) {
-      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order", "unconfirm-order"].includes(buttons[i].action)) buttons.splice(i, 1);
+      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order", "unconfirm-order", "unconfirm-edit"].includes(buttons[i].action)) buttons.splice(i, 1);
     }
 
     actionsEl.innerHTML = buttons
@@ -597,6 +598,30 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           renderEditMode(order, { correct: true });
           return;
         }
+        if (btn.dataset.action === "unconfirm-edit") {
+          // back to submitted, then straight into the editor (one tap instead of two); Confirm again afterwards
+          actionsEl.querySelectorAll("button").forEach((b) => (b.disabled = true));
+          try {
+            await api.unconfirmOrder(orderId);
+            notifyOrdersChanged();
+            onChanged?.();
+            renderEditMode(await api.getOrder(orderId));
+          } catch (err) {
+            // draw the order as it really is now (it may already be back to submitted), then say what went wrong
+            try {
+              renderView(await api.getOrder(orderId));
+            } catch {
+              /* keep the current view */
+            }
+            const el = overlay.querySelector("#order-detail-error");
+            if (el) {
+              el.textContent = err.message;
+              el.hidden = false;
+            }
+            overlay.querySelectorAll("#order-detail-actions button").forEach((b) => (b.disabled = false));
+          }
+          return;
+        }
         if (btn.dataset.action === "order-return") {
           openReturnSheet(orderId, async () => {
             renderView(await api.getOrder(orderId));
@@ -677,7 +702,6 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
           else if (btn.dataset.action === "reject-credit") await api.rejectOrderCredit(orderId);
           else if (btn.dataset.action === "approve-discount") await api.approveOrderDiscount(orderId);
           else if (btn.dataset.action === "submit-order") await api.submitOrder(orderId);
-          else if (btn.dataset.action === "unconfirm-order") await api.unconfirmOrder(orderId);
           else if (btn.dataset.action === "mark-delivered") {
             await api.markOrderDeliveredWithoutRoute(orderId);
             window.dispatchEvent(new Event("delivery-changed"));
