@@ -28,9 +28,11 @@ export const DEFAULTS = {
   funnelGroupsGold: 6,
   funnelSharePct: 60,
   funnelWindowDays: 90,
+  // the weekly next steps (nextSteps.js): "shadow" = only management sees them, "live" = each rep also gets them as tasks
+  salesStepsMode: "shadow",
 };
 
-const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode");
+const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode" && k !== "salesStepsMode");
 // the funnel's numbers have their own ranges (7 product groups exist; a share is a percent; the window is a week to a year)
 const FUNNEL_RANGES = {
   funnelGroupsBronze: [1, 7, "Bronze product groups"],
@@ -54,6 +56,9 @@ export async function saveVaghinakSettings(patch, db = pool) {
     if (key === "mode") {
       if (!["off", "shadow", "live"].includes(value)) throw new Error("mode must be off, shadow or live");
       clean.mode = value;
+    } else if (key === "salesStepsMode") {
+      if (!["shadow", "live"].includes(value)) throw new Error("salesStepsMode must be shadow or live");
+      clean.salesStepsMode = value;
     } else if (key in FUNNEL_RANGES) {
       const n = Number(value);
       const [min, max, what] = FUNNEL_RANGES[key];

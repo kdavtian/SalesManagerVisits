@@ -1138,6 +1138,7 @@ export const enCommon = {
     job_bonus_challenges: "Bonuses: challenges",
     job_anti_fraud: "Anti-fraud checks",
     job_sales_funnel: "Sales funnel: stages and moves",
+    job_sales_steps: "Sales Expert: this week's steps",
     job_expense_watch: "Expense watch",
     job_overdue_visit_reminders: "Reminder: planned stops not visited",
     health_push: "Push notifications",

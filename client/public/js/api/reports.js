@@ -103,6 +103,7 @@ export const reportsApi = {
   },
   listGeneratedReports: () => request(`/reports/documents`),
   getFunnel: () => request("/funnel"),
+  runFunnelPicks: () => json("/funnel/picks/run", "POST", {}),
   setFunnelExpectedVolume: (customerId, litres) => json(`/funnel/customers/${customerId}/expected-volume`, "PUT", { expected_volume_l: litres }),
   getPerfChannels: () => request("/team-performance/channels"),
   // the sales directions and their rules (admin panel, owner 2026-11-12)
