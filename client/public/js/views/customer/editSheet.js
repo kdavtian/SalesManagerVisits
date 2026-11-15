@@ -1,7 +1,7 @@
 // Customer card > edit sheet (moved out of customerDetail.js with the refactor tool, docs/architecture-roadmap.md step 6).
 import { api } from "../../api.js";
 import { dockSheet } from "../../dockSheet.js";
-import { activateCategorySelector, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatPhoneDisplay, normalizePhone, tierSelectorHtml } from "../../util.js";
+import { activateCategorySelector, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, formatPhoneDisplay, normalizePhone, tierSelectorHtml } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { canEditDirectly, isAdmin } from "../../state.js";
@@ -102,8 +102,10 @@ export async function openEditSheet(customer, navigate, onDone) {
       close();
       navigate("#/customers");
     } catch (err) {
-      errorEl.textContent = err.message;
+      errorEl.textContent = err.body?.code === "customer_has_records" ? deleteBlockedText(err.body) : err.message;
+      errorEl.classList.toggle("form-error-lines", err.body?.code === "customer_has_records");
       errorEl.hidden = false;
+      errorEl.scrollIntoView({ block: "nearest" });
     }
   });
 
@@ -195,4 +197,12 @@ export async function openEditSheet(customer, navigate, onDone) {
       submitBtn.disabled = false;
     }
   });
+}
+
+// Why the delete was refused, one bullet line per reason (server: customers/customerLifecycle.js customerDeleteBlockers).
+export function deleteBlockedText(body) {
+  const lines = [t("customer_delete_blocked")];
+  if (body.payments) lines.push(`• ${t("customer_delete_blocked_payments").replace("{n}", body.payments).replace("{amount}", formatAmd(body.payments_amd ?? 0))}`);
+  if (body.kad_os_accounts?.length) lines.push(`• ${t("customer_delete_blocked_kad_os").replace("{names}", body.kad_os_accounts.join(", "))}`);
+  return lines.join("\n");
 }

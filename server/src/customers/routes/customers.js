@@ -25,6 +25,7 @@ import { computeVisitDue, ruleWeekdaysFor } from "../../utils/visitDue.js";
 import { repVisitSql } from "../../field/visitCount.js";
 import { skippedForRecentVisit, getPlanSkipRecentVisitDays } from "../../utils/planSkipRecent.js";
 import { nextNameNumber } from "../customerNameSuggest.js";
+import { customerDeleteBlockers } from "../customerLifecycle.js";
 import { pendingCreditFor } from "../../orders/orderReturns.js";
 import { PotentialError, cleanPotentialInput, setPotential, resolveCounterfeit, potentialHistory, getReasonMemory } from "../potential.js";
 import { normalizeIncomingPlaces, recordPlaceReviews, placeNotice } from "../placeReviews.js";
@@ -1124,6 +1125,15 @@ customersRouter.patch("/:id", async (req, res) => {
 
 customersRouter.delete("/:id", requireAdmin, async (req, res) => {
   const customerId = Number(req.params.id);
+  if (!Number.isInteger(customerId)) return res.status(404).json({ error: "Customer not found" });
+  const blockers = await customerDeleteBlockers(pool, customerId);
+  if (blockers.payments || blockers.kad_os_accounts.length) {
+    const reasons = [
+      blockers.payments ? `${blockers.payments} recorded payment(s), which must be kept for the audit trail` : null,
+      blockers.kad_os_accounts.length ? `a linked KAD OS account (${blockers.kad_os_accounts.join(", ")}); remove its access in KAD OS admin first` : null,
+    ].filter(Boolean);
+    return res.status(409).json({ error: `Can't delete this customer: it has ${reasons.join(" and ")}.`, code: "customer_has_records", ...blockers });
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -1149,14 +1159,10 @@ customersRouter.delete("/:id", requireAdmin, async (req, res) => {
     res.status(204).end();
   } catch (err) {
     await client.query("ROLLBACK");
-    // payments.customer_id is ON DELETE RESTRICT (payment records must
-    // survive a customer being removed) -- any customer with recorded
-    // payments hits this every time, so give a message that actually says
-    // why instead of bubbling a raw FK-violation 500.
+    // A record added between the check above and the delete (or a future RESTRICT link): still a clean 409 that says what was found.
     if (err.code === "23503") {
-      return res.status(409).json({
-        error: "Can't delete this customer: it has recorded payments, which must be kept for the audit trail.",
-      });
+      const blockers = await customerDeleteBlockers(pool, customerId);
+      return res.status(409).json({ error: "Can't delete this customer: other records still point to it.", code: "customer_has_records", ...blockers });
     }
     throw err;
   } finally {

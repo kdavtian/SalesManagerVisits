@@ -3480,3 +3480,6 @@ a.detail-review-chip::after { content: ""; position: absolute; inset: -10px -4px
   .orders-sheet-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "date amount" "code amount" "chips chips"; row-gap: 2px; }
   .orders-sheet-row > :nth-child(2) { font-size: 0.82rem; color: var(--text-dim); white-space: normal; overflow-wrap: anywhere; }
 }
+
+/* The refused-delete reasons: one bullet per line (editSheet.js deleteBlockedText). */
+.form-error.form-error-lines { white-space: pre-line; }

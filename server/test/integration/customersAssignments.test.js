@@ -297,6 +297,31 @@ test("DELETE /api/customers/:id: a customer with recorded payments can't be dele
 
   const res = await apiRequest(`/api/customers/${customer.id}`, { method: "DELETE", cookie: cookies.admin });
   assert.equal(res.status, 409);
+  // names the blocker with numbers, so the admin knows what to clear (the app shows it in hy / en from the code)
+  assert.equal(res.data.code, "customer_has_records");
+  assert.equal(res.data.payments, 1);
+  assert.equal(res.data.payments_amd, 1000);
+  assert.deepEqual(res.data.kad_os_accounts, []);
+});
+
+test("DELETE /api/customers/:id: a customer linked to a KAD OS account is refused with the account named, not as 'payments'", async () => {
+  const customer = await createCustomer({ created_by: users.admin.id });
+  const account = await createUser("sales_manager", { name: "KAD OS test account" });
+  await pool.query("INSERT INTO partner_links (user_id, customer_id) VALUES ($1, $2)", [account.id, customer.id]);
+  try {
+    const res = await apiRequest(`/api/customers/${customer.id}`, { method: "DELETE", cookie: cookies.admin });
+    assert.equal(res.status, 409);
+    assert.equal(res.data.code, "customer_has_records");
+    assert.equal(res.data.payments, 0);
+    assert.deepEqual(res.data.kad_os_accounts, ["KAD OS test account"]);
+    assert.match(res.data.error, /KAD OS/);
+    assert.doesNotMatch(res.data.error, /payment/);
+  } finally {
+    await pool.query("DELETE FROM partner_links WHERE user_id = $1", [account.id]);
+  }
+  // with the link gone the delete goes through
+  const res = await apiRequest(`/api/customers/${customer.id}`, { method: "DELETE", cookie: cookies.admin });
+  assert.equal(res.status, 204);
 });
 
 test("DELETE /api/customers/:id: a nonexistent id is a 404", async () => {
