@@ -185,3 +185,12 @@ test("first time seen: a potential customer counts its days on stage 1 from its 
   await recordFunnelMoves();
   assert.equal((await pool.query("SELECT floor(extract(epoch FROM now() - since) / 86400)::int AS d FROM customer_funnel_stage WHERE customer_id = $1", [pot.id])).rows[0].d, 100);
 });
+
+test("the customer card carries the funnel stage and since when (the card's stage chip)", async () => {
+  const pot = await customer("potential", { level: 2 });
+  await recordFunnelMoves();
+  const r = await apiRequest(`/api/customers/${pot.id}`, { cookie: adminCookie });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.funnel_stage?.stage, 1);
+  assert.ok(r.data.funnel_stage?.since);
+});

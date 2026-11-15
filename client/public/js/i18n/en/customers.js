@@ -309,4 +309,10 @@ export const enCustomers = {
   desk_col_last_payment_amount: "Last payment amount",
   customers_show_all: "Show all customers",
   customers_only_ours: "Only our customers (with an ERP ID)",
+    cd_funnel_stage_1: "Potential",
+    cd_funnel_stage_2: "Customer",
+    cd_funnel_stage_3: "Assortment",
+    cd_funnel_stage_4: "Our share",
+    cd_funnel_days: "{n} d",
+    cd_funnel_open: "Open the sales funnel",
 };

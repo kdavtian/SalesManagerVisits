@@ -309,4 +309,10 @@ export const hyCustomers = {
   desk_col_last_payment_amount: "Վերջին վճարման գումար",
   customers_show_all: "Ցույց տալ բոլոր հաճախորդներին",
   customers_only_ours: "Միայն մեր հաճախորդները (ERP կոդով)",
+    cd_funnel_stage_1: "Հավանական",
+    cd_funnel_stage_2: "Հաճախորդ",
+    cd_funnel_stage_3: "Տեսականի",
+    cd_funnel_stage_4: "Մեր բաժինը",
+    cd_funnel_days: "{n} օր",
+    cd_funnel_open: "Բացել վաճառքի ձագարը",
 };

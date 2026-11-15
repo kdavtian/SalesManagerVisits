@@ -6,7 +6,7 @@ import { nextVisitRowHtml } from "../visitSchedule.js";
 import { t } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state, isAdmin, canCreateTasks, sendsRequests, canReassignCustomers, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports } from "../state.js";
-import { reviewsPlaces } from "../shared/roles.js";
+import { reviewsPlaces, seesAllPerformance } from "../shared/roles.js";
 import { openVisitDetailSheet, checkinOutcomeLabels } from "../visitDetail.js";
 import { visitStatusBadge } from "./customers.js";
 import { renderPotentialCard, potentialBadgeHtml } from "../potential.js";
@@ -28,6 +28,20 @@ export { openOrderDetailSheet } from "./customer/sheets.js";
 
 // A potential customer shows how likely the sale is (Likely, Very likely, ...); every other tier shows its own name.
 const headerTierBadge = (c) => (c.customer_tier === "potential" && potentialBadgeHtml(c.potential_level)) || tierBadgeHtml(c.customer_tier);
+// The Sales Expert funnel stage (1 Potential .. 4 Our share) and how long the customer has been on it; red from 60 days on stages 1-3 (the
+// Funnel screen's "stuck"). Management opens the Funnel screen from it; everyone else just sees it.
+const FUNNEL_STUCK_DAYS = 60;
+function funnelChipHtml(c) {
+  const stage = Number(c.funnel_stage?.stage);
+  if (!(stage >= 1 && stage <= 4)) return "";
+  const days = c.funnel_stage.since ? Math.max(0, Math.floor((Date.now() - new Date(c.funnel_stage.since).getTime()) / 86400000)) : null;
+  const stuck = stage < 4 && days !== null && days >= FUNNEL_STUCK_DAYS;
+  const text = `${stage}. ${t(`cd_funnel_stage_${stage}`)}${days !== null ? ` · ${t("cd_funnel_days").replace("{n}", days)}` : ""}`;
+  const cls = `badge cd-funnel-chip cd-funnel-chip-${stage}${stuck ? " is-stuck" : ""}`;
+  return seesAllPerformance(state.user?.role)
+    ? `<a class="${cls}" href="#/funnel" aria-label="${escapeHtml(`${t("cd_funnel_open")}: ${text}`)}">${escapeHtml(text)}</a>`
+    : `<span class="${cls}">${escapeHtml(text)}</span>`;
+}
 
 // The card: a saved copy from the last visit draws at once while a fresh copy is fetched (and replaces it only when something changed); a
 // first-ever visit shows the loading line. A finger landing on the customer's row already started this same fetch (prefetch.js), so it is
@@ -159,6 +173,7 @@ function paintCustomerCard(root, navigate, customerId, container, data, reload) 
           <div class="detail-header-status-row">
             ${idCategoryLine ? `<span class="muted detail-header-subtitle">${idCategoryLine}</span>` : ""}
             <span id="cd-tier-slot" class="cd-tier-slot">${headerTierBadge(customer)}</span>
+            ${funnelChipHtml(customer)}
             ${statusBadge ? `<span class="badge ${statusBadge.cls}">${t(statusBadge.labelKey)}</span>` : ""}
           </div>
         </div>
