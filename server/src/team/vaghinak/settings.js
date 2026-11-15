@@ -21,6 +21,13 @@ export const DEFAULTS = {
   slaConfirmH: 4, // submitted -> confirmed
   slaPackH: 24, // confirmed -> packed
   slaDeliverH: 48, // packed -> delivered
+  // Sales Expert funnel (sales/funnel.js): product groups a customer must buy for stage 3, per tier; our share of its monthly need for
+  // stage 4 (%); the sales window in days
+  funnelGroupsBronze: 2,
+  funnelGroupsSilver: 4,
+  funnelGroupsGold: 6,
+  funnelSharePct: 60,
+  funnelWindowDays: 90,
 };
 
 const NUMERIC = Object.keys(DEFAULTS).filter((k) => k !== "mode");

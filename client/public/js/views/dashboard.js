@@ -47,6 +47,7 @@ const QUICK_ACTION_ICON = {
   qa_recorded: () =>
     `<span class="quick-action-icon quick-action-icon-recorded">${icons.clock}<span class="nav-badge count-badge" id="unrecorded-badge" hidden></span></span>`,
   qa_team_performance: () => `<span class="quick-action-icon quick-action-icon-team">${icons.target}</span>`,
+  qa_funnel: () => `<span class="quick-action-icon quick-action-icon-team">${icons.funnel}</span>`,
   qa_reports: () => `<span class="quick-action-icon quick-action-icon-reports">${icons.chart}</span>`,
   qa_debt_balances: () => `<span class="quick-action-icon quick-action-icon-debt">${icons.wallet}</span>`,
   qa_company_dashboard: () => `<span class="quick-action-icon quick-action-icon-company">${icons.dashboard}</span>`,

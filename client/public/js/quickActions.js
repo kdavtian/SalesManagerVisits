@@ -46,6 +46,8 @@ export const QUICK_ACTIONS = [
     id: "qa_debt_balances",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
   },
+  // Vaghinak - Sales Expert: the sales funnel (owner, 2026-11-15), management
+  { id: "qa_funnel", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   { id: "qa_company_dashboard", defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant"] },
   {
     id: "qa_team_performance",
@@ -126,6 +128,7 @@ export const QUICK_ACTION_ROUTE = {
   qa_tasks: "#/tasks",
   qa_requests: "#/requests",
   qa_vaghinak: "#/vaghinak",
+  qa_funnel: "#/funnel",
   qa_ask_kad: "#/ask-kad",
   qa_bonuses: "#/bonuses",
 };

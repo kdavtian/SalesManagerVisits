@@ -36,6 +36,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/ops-control": ["team"],
   "#/ask-kad": ["team"],
   "#/vaghinak": ["team"],
+  "#/funnel": ["reports"],
   "#/team-progress": ["reports"],
   "#/team-performance": ["reports"],
   "#/company-dashboard": [],
