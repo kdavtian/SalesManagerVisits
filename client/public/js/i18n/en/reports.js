@@ -412,6 +412,8 @@ export const enReports = {
     fn_step_first_order: "Get the first order (trial order, prices, the decision maker)",
     fn_step_reassess: "Reassess the potential",
     fn_step_add_group: "Offer {group}",
+    fn_stuck_chip: "Stuck {days}+ days: {n}",
+    fn_stuck_title: "On the same stage for {days}+ days (longest first)",
     fn_step_add_group_products: "Offer {group}: {products}",
     fn_similar_product: "{name} ({shops} of {buyers} similar shops buy it)",
     fn_step_ask_need: "Ask the monthly oil need",

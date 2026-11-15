@@ -16,6 +16,7 @@ export async function renderFunnel(root, navigate) {
   let rep = "";
   let region = "";
   let onlyMissing = false;
+  let onlyStuck = false; // stages 1-3, on the same stage for STUCK_DAYS or more
   root.innerHTML = `
     <div class="st-view fn-view">
       <div class="st-head"><button type="button" class="btn st-back" id="fn-back" aria-label="${escapeHtml(t("back"))}">‹</button><h1>${escapeHtml(t("fn_title"))}</h1>
@@ -61,6 +62,8 @@ export async function renderFunnel(root, navigate) {
     });
   }
   const days = (since) => (since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86400000)) : null);
+  const STUCK_DAYS = 60;
+  const isStuck = (c) => c.stage < 4 && (days(c.since) ?? 0) >= STUCK_DAYS;
 
   function paint() {
     const rows = inScope();
@@ -72,12 +75,15 @@ export async function renderFunnel(root, navigate) {
     const movesIn = (s) => moves.filter((m) => m.to_stage === s && m.from_stage < s).length;
     const movesDown = (s) => moves.filter((m) => m.from_stage === s && m.to_stage < s).length;
     const missing = rows.filter((c) => c.next === "expected_volume_missing").length;
+    const stuck = rows.filter(isStuck).length;
     const reps = [...new Map(data.customers.filter((c) => c.rep_id).map((c) => [String(c.rep_id), c.rep_name])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1])));
     const regions = [...new Set(data.customers.map((c) => c.region).filter(Boolean))].sort();
     const levels = [0, 1, 2, 3, 4].map((l) => [l, rows.filter((c) => c.stage === 1 && (c.potential_level ?? 0) === l).length]);
     let list = rows.filter((c) => c.stage === stage);
     if (onlyMissing) list = rows.filter((c) => c.next === "expected_volume_missing");
+    if (onlyStuck) list = rows.filter(isStuck);
     list.sort((a, b) => (b.progress ?? -1) - (a.progress ?? -1) || String(a.name).localeCompare(String(b.name)));
+    if (onlyStuck) list.sort((a, b) => (days(b.since) ?? 0) - (days(a.since) ?? 0)); // longest stuck first
     const byRep = reps.map(([id, name]) => [name, STAGES.map((s) => rows.filter((c) => String(c.rep_id) === id && c.stage === s).length)]).filter(([, n]) => n.some(Boolean));
 
     body.innerHTML = `
@@ -86,7 +92,7 @@ export async function renderFunnel(root, navigate) {
         <select id="fn-region" aria-label="${escapeHtml(t("fn_region"))}"><option value="">${escapeHtml(t("fn_all_regions"))}</option>${regions.map((r) => `<option ${r === region ? "selected" : ""}>${escapeHtml(r)}</option>`).join("")}</select>
       </div>
       <div class="fn-stages" role="tablist">
-        ${STAGES.map((s) => `<button type="button" role="tab" class="fn-stage fn-stage-${s}" data-stage="${s}" aria-selected="${!onlyMissing && s === stage}">
+        ${STAGES.map((s) => `<button type="button" role="tab" class="fn-stage fn-stage-${s}" data-stage="${s}" aria-selected="${!onlyMissing && !onlyStuck && s === stage}">
             <span class="fn-stage-name">${s}. ${escapeHtml(t(`fn_stage_${s}`))}</span>
             <strong class="fn-stage-count">${nf(count(s))}</strong>
             <span class="fn-stage-pct muted">${Math.round((count(s) / total) * 100)}%</span>
@@ -94,18 +100,18 @@ export async function renderFunnel(root, navigate) {
           </button>`).join("")}
       </div>
       <p class="muted fn-month">${escapeHtml(t("fn_moves_month"))}</p>
-      ${stage === 1 && !onlyMissing ? `<div class="fn-levels">${levels.map(([l, n]) => `<span class="badge">${escapeHtml(t(`fn_lvl_${l}`))} · ${n}</span>`).join("")}</div>` : ""}
-      ${missing ? `<button type="button" class="fn-missing ${onlyMissing ? "is-on" : ""}" id="fn-missing">${escapeHtml(fill("fn_missing_expected", { n: missing }))}</button>` : ""}
-      <h2 class="list-group-heading">${escapeHtml(onlyMissing ? t("fn_no_expected") : `${stage}. ${t(`fn_stage_${stage}`)} · ${t(`fn_next_${stage}`)}`)}</h2>
+      ${stage === 1 && !onlyMissing && !onlyStuck ? `<div class="fn-levels">${levels.map(([l, n]) => `<span class="badge">${escapeHtml(t(`fn_lvl_${l}`))} · ${n}</span>`).join("")}</div>` : ""}
+      ${missing || stuck ? `<div class="fn-chips">${missing ? `<button type="button" class="fn-missing ${onlyMissing ? "is-on" : ""}" id="fn-missing" aria-pressed="${onlyMissing}">${escapeHtml(fill("fn_missing_expected", { n: missing }))}</button>` : ""}${stuck ? `<button type="button" class="fn-missing fn-stuck-chip ${onlyStuck ? "is-on" : ""}" id="fn-stuck" aria-pressed="${onlyStuck}">${escapeHtml(fill("fn_stuck_chip", { n: stuck, days: STUCK_DAYS }))}</button>` : ""}</div>` : ""}
+      <h2 class="list-group-heading">${escapeHtml(onlyStuck ? fill("fn_stuck_title", { days: STUCK_DAYS }) : onlyMissing ? t("fn_no_expected") : `${stage}. ${t(`fn_stage_${stage}`)} · ${t(`fn_next_${stage}`)}`)}</h2>
       <div class="fn-list">${
         list.length
           ? list
               .map(
                 (c) => `<button type="button" class="fn-row" data-customer="${c.id}">
-                  <span class="fn-row-main"><strong>${escapeHtml(c.name)}</strong><span class="muted">${escapeHtml([c.rep_name, c.region].filter(Boolean).join(" · "))}</span>${c.step ? `<span class="fn-step">→ ${escapeHtml(stepText(c.step))}</span>` : ""}</span>
+                  <span class="fn-row-main"><strong>${escapeHtml(c.name)}</strong><span class="muted">${escapeHtml([onlyStuck ? `${c.stage}. ${t(`fn_stage_${c.stage}`)}` : "", c.rep_name, c.region].filter(Boolean).join(" · "))}</span>${c.step ? `<span class="fn-step">→ ${escapeHtml(stepText(c.step))}</span>` : ""}</span>
                   <span class="fn-row-side"><span class="fn-detail">${escapeHtml(detail(c))}</span>
                     ${c.progress === null ? "" : `<span class="fn-bar" role="img" aria-label="${c.progress}%"><span style="width:${c.progress}%"></span></span>`}
-                    ${days(c.since) !== null ? `<span class="muted fn-days">${escapeHtml(fill("fn_days", { n: days(c.since) }))}</span>` : ""}</span>
+                    ${days(c.since) !== null ? `<span class="fn-days ${isStuck(c) ? "fn-days-stuck" : "muted"}">${escapeHtml(fill("fn_days", { n: days(c.since) }))}</span>` : ""}</span>
                 </button>`
               )
               .join("")
@@ -121,8 +127,9 @@ export async function renderFunnel(root, navigate) {
       }`;
     body.querySelector("#fn-rep").addEventListener("change", (e) => ((rep = e.target.value), paint()));
     body.querySelector("#fn-region").addEventListener("change", (e) => ((region = e.target.value), paint()));
-    body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), paint())));
-    body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), paint()));
+    body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), (onlyStuck = false), paint())));
+    body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), (onlyStuck = false), paint()));
+    body.querySelector("#fn-stuck")?.addEventListener("click", () => ((onlyStuck = !onlyStuck), (onlyMissing = false), paint()));
     body.querySelector("#fn-picks-run")?.addEventListener("click", async (e) => {
       e.currentTarget.disabled = true;
       try {
