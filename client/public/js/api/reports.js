@@ -102,6 +102,8 @@ export const reportsApi = {
     return request(`/reports/daily-management${qs ? `?${qs}` : ""}`);
   },
   listGeneratedReports: () => request(`/reports/documents`),
+  getFunnel: () => request("/funnel"),
+  setFunnelExpectedVolume: (customerId, litres) => json(`/funnel/customers/${customerId}/expected-volume`, "PUT", { expected_volume_l: litres }),
   getPerfChannels: () => request("/team-performance/channels"),
   // the sales directions and their rules (admin panel, owner 2026-11-12)
   listSalesChannels: ({ counts = false } = {}) => request(`/sales-channels${counts ? "?counts=1" : ""}`),

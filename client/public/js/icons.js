@@ -75,6 +75,7 @@ export const icons = {
   note: uiSvg(`<path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/>`),
   shield: uiSvg(`<path d="M12 3l7 2.8v5.4c0 4.4-2.9 8-7 9.8-4.1-1.8-7-5.4-7-9.8V5.8L12 3z"/><path d="M9.2 12.2l2 2 3.6-4"/>`),
   clipboardCheck: uiSvg(`<rect x="5.5" y="4.5" width="13" height="16.5" rx="2"/><path d="M9 4.5V3.7a1.7 1.7 0 0 1 1.7-1.7h2.6A1.7 1.7 0 0 1 15 3.7v.8"/><path d="M8.8 12.2l2.1 2.1 4.3-4.8"/>`),
+  funnel: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg>`,
   filter: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M3 5h18M6 12h12M10 19h4"/></svg>`,
   checkCircle: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m8 12.25 2.65 2.65 5.6-5.8"/></svg>`,
   send: `<svg class="map-chip-svg" viewBox="0 0 24 24" ${stroke} aria-hidden="true" focusable="false"><path d="M21 3 3.5 10.1a.8.8 0 0 0 .1 1.52l6.8 1.98 2 6.8a.8.8 0 0 0 1.5.1L21 3Z"/><path d="m10.4 13.6 4.3-4.3"/></svg>`,

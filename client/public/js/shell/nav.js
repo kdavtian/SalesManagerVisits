@@ -42,6 +42,7 @@ export const SIDEBAR_ITEM_ICON = {
   qa_tasks: { icon: icons.tasks, colorClass: "quick-action-icon-tasks" },
   qa_requests: { icon: icons.checkCircle, colorClass: "quick-action-icon-requests" },
   qa_vaghinak: { icon: icons.vaghinak, colorClass: "quick-action-icon-vaghinak" },
+  qa_funnel: { icon: icons.funnel, colorClass: "quick-action-icon-team" },
   qa_ask_kad: { icon: icons.sparkles, colorClass: "quick-action-icon-askkad" },
   qa_bonuses: { icon: icons.gift, colorClass: "quick-action-icon-bonuses" },
 };
@@ -63,7 +64,7 @@ export const SIDEBAR_ONLY_ITEMS = [
 // The sidebar's MORE list in groups (docs/desktop-roadmap.md, step 5). A tile not named here lands in a last "More" group,
 // so a new Home tile is never lost from the sidebar. A group folds; the folded groups are remembered on this device.
 export const SIDEBAR_GROUPS = [
-  { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
+  { key: "sales", label: "sidebar_group_sales", ids: ["qa_vaghinak", "qa_funnel", "qa_team_performance", "qa_sales", "qa_reports", "qa_plan_route", "qa_bonuses"] },
   { key: "money", label: "sidebar_group_money", ids: ["qa_money", "qa_bank_desk", "qa_debt_balances", "qa_cashflow", "qa_accounting", "qa_recorded"] },
   { key: "operations", label: "sidebar_group_operations", ids: ["qa_delivery", "qa_warehouse", "qa_purchases", "qa_returns", "qa_documents", "qa_pricelist"] },
   { key: "admin", label: "sidebar_group_admin", ids: ["qa_staff", "qa_ask_kad", "qa_company_dashboard"] },

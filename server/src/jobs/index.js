@@ -17,6 +17,7 @@ import { recordBankLines } from "../money/payments2/bankPayments.js";
 import { sendWeeklyScorecards } from "../reports/scorecard.js";
 import { sendWeeklyDebtDigest } from "../money/debtDigest.js";
 import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
+import { recordFunnelMoves } from "../team/vaghinak/funnel.js";
 import { tick as vaghinakTick, wrapUp as vaghinakWrapUp } from "../team/vaghinak/engine.js";
 import { weeklyDigest as vaghinakWeeklyDigest } from "../team/vaghinak/digest.js";
 import { fullDigest as vaghinakFullDigest } from "../team/vaghinak/fullDigest.js";
@@ -57,6 +58,7 @@ export const JOBS = [
   { name: "bonus-reconciliation", everyMs: HOUR, run: () => runReconciliationSweep() },
   { name: "bonus-challenges", everyMs: HOUR, run: () => runChallengeEngineTick() },
   { name: "anti-fraud", everyMs: HOUR, run: () => runAntiFraud() },
+  { name: "sales-funnel", everyMs: 3 * HOUR, run: () => recordFunnelMoves() },
   { name: "expense-watch", everyMs: HOUR, run: () => runExpenseWatch() },
   // documents for signature past their deadline: the rep gets a task, then a reminder once a day (orders/partnerDocuments.js)
   { name: "partner-document-reminders", everyMs: HOUR, run: (now) => remindOverdueDocuments(now) },

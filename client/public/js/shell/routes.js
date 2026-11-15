@@ -402,6 +402,8 @@ export async function renderRoute(ctx) {
     (await fresh(import("../views/opsControl.js"))).renderOpsControl(ctx.app, ctx.navigate, query.get("tab"));
   } else if (path === "#/ask-kad") {
     (await fresh(import("../views/askKad.js"))).renderAskKad(ctx.app, ctx.navigate);
+  } else if (path === "#/funnel") {
+    (await fresh(import("../views/funnel.js"))).renderFunnel(ctx.app, ctx.navigate);
   } else if (path === "#/vaghinak") {
     (await fresh(import("../views/vaghinak.js"))).renderVaghinak(ctx.app, ctx.navigate, query);
   } else if (path === "#/team-progress") {

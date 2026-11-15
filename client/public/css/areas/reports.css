@@ -365,3 +365,57 @@
 .pv-table tbody td:first-child, .pv-table tfoot td:first-child { position: sticky; left: 0; z-index: 1; background: var(--bg-card); box-shadow: 1px 0 0 var(--border); }
 .pv-table tfoot td:first-child { background: var(--bg-subtle, var(--bg-card)); z-index: 2; }
 .pv-table thead th:first-child { left: 0; z-index: 3; box-shadow: 1px 0 0 var(--border); }
+
+/* ---- Sales funnel (Vaghinak - Sales Expert, step 1; views/funnel.js) ---- */
+.fn-view .st-head { display: flex; align-items: center; gap: 8px; }
+.fn-view .st-head h1 { flex: 1; min-width: 0; }
+.fn-info { font-weight: 800; }
+.fn-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }
+.fn-filters select { min-width: 0; min-height: 44px; }
+.fn-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 599px) {
+  .fn-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.fn-stage {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: 88px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+  border-left-width: 4px;
+}
+.fn-stage-1 { border-left-color: #9aa3ad; }
+.fn-stage-2 { border-left-color: var(--accent); }
+.fn-stage-3 { border-left-color: #c58b10; }
+.fn-stage-4 { border-left-color: var(--success, #12805c); }
+.fn-stage[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: -1px; }
+.fn-stage-name { font-size: 0.82rem; font-weight: 700; overflow-wrap: anywhere; }
+.fn-stage-count { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fn-stage-pct { font-size: 0.78rem; }
+.fn-stage-moves { display: flex; gap: 8px; font-size: 0.78rem; font-weight: 700; }
+.fn-up { color: var(--success, #12805c); }
+.fn-down { color: var(--danger, #d92d20); }
+.fn-month { font-size: 0.78rem; margin: 6px 0 8px; }
+.fn-levels { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.fn-missing {
+  display: block; width: 100%; min-height: 44px; margin: 4px 0 8px; padding: 8px 12px; border: 1px dashed var(--warning, #b54708); border-radius: 12px;
+  background: transparent; color: var(--warning, #b54708); font: inherit; font-size: 0.88rem; text-align: left; cursor: pointer;
+}
+.fn-missing.is-on { background: var(--bg-card); border-style: solid; }
+.fn-list { display: grid; gap: 6px; }
+.fn-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.fn-row-main { display: flex; flex-direction: column; min-width: 0; }
+.fn-row-main strong { overflow-wrap: anywhere; }
+.fn-row-main .muted { font-size: 0.8rem; }
+.fn-row-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: 0 0 auto; max-width: 48%; text-align: right; }
+.fn-detail { font-size: 0.82rem; font-weight: 600; }
+.fn-bar { display: block; width: 96px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.fn-bar span { display: block; height: 100%; background: var(--accent); }
+.fn-days { font-size: 0.75rem; }
+.fn-table { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 0.9rem; }
+.fn-table th, .fn-table td { padding: 8px 6px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; }
+.fn-table th[scope="row"], .fn-table thead th:first-child { text-align: left; font-weight: 600; }
+.fn-rules { padding-left: 20px; display: grid; gap: 6px; }
+.fn-sets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.fn-set { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; }
+.fn-set input { min-height: 44px; }
