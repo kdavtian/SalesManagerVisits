@@ -1,11 +1,11 @@
-// The Sales funnel screen (Vaghinak - Sales Expert, step 1): every open customer with its stage (sales/funnel.js), how long it has stood
+// The Sales funnel screen (Vaghinak - Sales Expert, step 1): every open customer with its stage (team/vaghinak/funnel.js), how long it has stood
 // there, and this month's moves between stages. Management only for now (the people who see all performance); the reps get their own
 // customers' next steps in step 2.
 import { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesAllPerformance } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
-import { computeFunnel } from "../funnel.js";
+import { computeFunnel } from "../vaghinak/funnel.js";
 
 export const funnelRouter = Router();
 funnelRouter.use(requireAuth);

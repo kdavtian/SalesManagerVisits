@@ -1,7 +1,7 @@
-// Vaghinak - Sales Expert, step 1: the stage rule of the sales funnel (sales/funnel.js), without a database.
+// Vaghinak - Sales Expert, step 1: the stage rule of the sales funnel (team/vaghinak/funnel.js), without a database.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stageOf, funnelSettingsOf } from "../src/sales/funnel.js";
+import { stageOf, funnelSettingsOf } from "../src/team/vaghinak/funnel.js";
 
 const cfg = funnelSettingsOf({});
 

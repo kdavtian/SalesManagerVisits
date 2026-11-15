@@ -17,7 +17,7 @@ import { recordBankLines } from "../money/payments2/bankPayments.js";
 import { sendWeeklyScorecards } from "../reports/scorecard.js";
 import { sendWeeklyDebtDigest } from "../money/debtDigest.js";
 import { checkStalePackedOrders } from "../orders/stalePackedReminder.js";
-import { recordFunnelMoves } from "../sales/funnel.js";
+import { recordFunnelMoves } from "../team/vaghinak/funnel.js";
 import { tick as vaghinakTick, wrapUp as vaghinakWrapUp } from "../team/vaghinak/engine.js";
 import { weeklyDigest as vaghinakWeeklyDigest } from "../team/vaghinak/digest.js";
 import { fullDigest as vaghinakFullDigest } from "../team/vaghinak/fullDigest.js";

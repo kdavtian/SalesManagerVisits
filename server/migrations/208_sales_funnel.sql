@@ -1,4 +1,4 @@
--- Vaghinak - Sales Expert, step 1 (owner, 2026-11-15): the sales funnel (server/src/sales/funnel.js). Where each customer stands now
+-- Vaghinak - Sales Expert, step 1 (owner, 2026-11-15): the sales funnel (server/src/team/vaghinak/funnel.js). Where each customer stands now
 -- (one row per customer, since when) and every move between stages, so the Funnel screen shows this month's movement and who is stuck.
 CREATE TABLE IF NOT EXISTS customer_funnel_stage (
   customer_id INTEGER PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,

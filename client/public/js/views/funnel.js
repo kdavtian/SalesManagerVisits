@@ -1,5 +1,5 @@
 // Vaghinak - Sales Expert, step 1 (owner, 2026-11-15): the sales funnel. Four stages, how many customers stand on each, this month's moves,
-// per rep and per region, and the list of a stage's customers closest to the next stage first. Rules and numbers: server/src/sales/funnel.js.
+// per rep and per region, and the list of a stage's customers closest to the next stage first. Rules and numbers: server/src/team/vaghinak/funnel.js.
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";

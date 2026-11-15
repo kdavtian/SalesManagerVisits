@@ -90,7 +90,7 @@ import { tasksRouter } from "./team/routes/tasks.js";
 import { wishesRouter } from "./orders/routes/wishes.js";
 import { cashSheetsRouter } from "./money/routes/cashSheets.js";
 import { vaghinakRouter } from "./team/routes/vaghinak.js";
-import { funnelRouter } from "./sales/routes/funnel.js";
+import { funnelRouter } from "./team/routes/funnel.js";
 import { antiFraudRouter } from "./money/routes/antiFraud.js";
 import { expensesRouter } from "./money/routes/expenses.js";
 import { placesRouter } from "./customers/routes/places.js";

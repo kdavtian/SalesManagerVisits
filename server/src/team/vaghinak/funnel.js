@@ -7,8 +7,8 @@
 //                   volume" the rep writes on the customer (setting, 60 % by default). No expected volume = stage 4 cannot be measured yet.
 // Sales come from the Excel order lines (the trusted truth). Competitors and closed customers are not on the funnel.
 // Each customer also gets its progress towards the NEXT stage (0-100 %), and the funnel remembers every move up or down (funnel job).
-import { pool } from "../db/pool.js";
-import { getVaghinakSettings, DEFAULTS as VAGHINAK_DEFAULTS } from "../team/vaghinak/settings.js";
+import { pool } from "../../db/pool.js";
+import { getVaghinakSettings, DEFAULTS as VAGHINAK_DEFAULTS } from "./settings.js";
 
 // Product group of a catalog product, from its workbook family -- the same rule as the app's catalog (client productBrowse.js productCategory):
 // the named non-engine families are their own group, Castrol ON is EV fluids, "Transmission oils" is Transmission, every other family is engine oil.
