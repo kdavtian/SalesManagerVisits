@@ -45,6 +45,14 @@ export async function renderFunnel(root, navigate) {
   function stepText(step) {
     if (!step) return "";
     const p = step.params ?? {};
+    if (step.kind === "add_group" && p.products?.length) {
+      return fill("fn_step_add_group_products", {
+        group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
+        products: p.products.map((x) => x.name).join(", "),
+        shops: p.products[0].shops,
+        buyers: p.buyers || p.products[0].shops,
+      });
+    }
     return fill(`fn_step_${step.kind}`, {
       group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
       brand: p.brand ? t(`competitor_${p.brand}`) : "",

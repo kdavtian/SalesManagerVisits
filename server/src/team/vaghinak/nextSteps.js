@@ -6,7 +6,8 @@
 //   stage 1 potential  - not assessed               -> assess_potential
 //                      - Real / High potential       -> first_order (a trial order, the decision maker, prices)
 //                      - No / Low, assessed > 60 days -> reassess
-//   stage 2 customer   - a product group most shops of the same tier buy and this one does not -> add_group {group}
+//   stage 2 customer   - a product group most shops of the same tier buy and this one does not -> add_group {group}, with the
+//                        2 products of that group most of those shops buy (active, not out of stock): "similar shops buy this"
 //   stage 3 assortment - no monthly need written     -> ask_need
 //                      - a competitor on the shelf   -> raise_share_competitor {brand}
 //                      - otherwise                   -> raise_share
@@ -40,7 +41,12 @@ export function stepOf(c, extra = {}, now = Date.now()) {
     const since = extra.potentialUpdatedAt ? (now - new Date(extra.potentialUpdatedAt).getTime()) / 86400000 : Infinity;
     return since > REASSESS_DAYS ? { kind: "reassess", params: { level }, value: value(0.3) } : null;
   }
-  if (c.stage === 2) return extra.missingGroup ? { kind: "add_group", params: { group: extra.missingGroup }, value: value(1.2) } : null;
+  if (c.stage === 2) {
+    if (!extra.missingGroup) return null;
+    const params = { group: extra.missingGroup };
+    if (extra.similar?.products?.length) Object.assign(params, extra.similar); // { products: [{ id, name, shops }], buyers }
+    return { kind: "add_group", params, value: value(1.2) };
+  }
   if (c.stage === 3) {
     if (c.next === "expected_volume_missing") return { kind: "ask_need", params: {}, value: value(0.9) };
     if (extra.competitor) return { kind: "raise_share_competitor", params: { brand: extra.competitor, share: c.share ?? 0 }, value: value(1.3) };
@@ -53,12 +59,31 @@ export function stepOf(c, extra = {}, now = Date.now()) {
   return null;
 }
 
+// "Similar shops buy this" (pure, unit-tested): the 2 products of a group most shops of the same tier buy (all tiers when no shop of the
+// tier buys the group yet), with how many shops buy each and out of how many buying shops. rows: { tier, grp, id, name, shops };
+// tierBuyers: tier -> Set(customer). null when nobody buys the group.
+export const SIMILAR_PRODUCTS = 2;
+export function similarProducts(rows, tier, grp, tierBuyers) {
+  const sameTier = rows.some((r) => r.tier === tier && r.grp === grp);
+  const byProduct = new Map();
+  for (const r of rows) {
+    if (r.grp !== grp || (sameTier && r.tier !== tier)) continue;
+    const cur = byProduct.get(r.id) ?? { id: r.id, name: r.name, shops: 0 };
+    cur.shops += r.shops;
+    byProduct.set(r.id, cur);
+  }
+  const products = [...byProduct.values()].sort((a, b) => b.shops - a.shops || a.name.localeCompare(b.name)).slice(0, SIMILAR_PRODUCTS);
+  if (!products.length) return null;
+  const buyers = sameTier ? (tierBuyers.get(tier)?.size ?? 0) : [...tierBuyers.values()].reduce((n, set) => n + set.size, 0);
+  return { products, buyers: Math.max(buyers, products[0].shops) };
+}
+
 // Every open customer's step (with the funnel row), worth most first.
 export async function computeNextSteps({ db = pool, now = new Date(), funnel = null } = {}) {
   const { cfg, customers } = funnel ?? (await computeFunnel({ db, settings: await getVaghinakSettings(db) }));
   const ids = customers.map((c) => c.id);
   if (!ids.length) return [];
-  const [{ rows: facts }, { rows: groupsBought }, { rows: shelves }, { rows: before }] = await Promise.all([
+  const [{ rows: facts }, { rows: groupsBought }, { rows: shelves }, { rows: before }, { rows: productBuyers }] = await Promise.all([
     db.query("SELECT id, counterfeit_flag, potential_updated_at FROM customers WHERE id = ANY($1::int[])", [ids]),
     // which product groups each customer bought in the window (to find the group its tier usually buys and it does not)
     db.query(
@@ -88,6 +113,16 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
        GROUP BY 1`,
       [ids, cfg.windowDays]
     ),
+    // "similar shops buy this": per tier and group, how many shops bought each product in the window (only products we can still sell)
+    db.query(
+      `SELECT c.customer_tier AS tier, ${PRODUCT_GROUP_SQL("p.family")} AS grp, p.id, p.name, COUNT(DISTINCT c.id)::int AS shops
+       FROM customers c JOIN erp_order_lines l ON l.erp_customer_id = c.erp_customer_id
+       JOIN products p ON p.erp_product_id = l.product_id
+       WHERE c.id = ANY($1::int[]) AND l.qty > 0 AND l.order_date > (now() AT TIME ZONE 'Asia/Yerevan')::date - $2::int
+         AND p.active AND COALESCE(p.stock_qty, 1) > 0
+       GROUP BY 1, 2, 3, 4`,
+      [ids, cfg.windowDays]
+    ),
   ]);
   const factOf = new Map(facts.map((f) => [f.id, f]));
   const shelfOf = new Map(shelves.map((s) => [s.customer_id, s.brands]));
@@ -115,16 +150,19 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
       .sort((a, b) => b[1] - a[1]);
     return candidates[0]?.[0] ?? null;
   };
+  const similarFor = (tier, grp) => similarProducts(productBuyers, tier, grp, tierBuyers);
   const steps = [];
   for (const c of customers) {
     const f = factOf.get(c.id) ?? {};
     const brands = shelfOf.get(c.id);
+    const missingGroup = c.stage === 2 ? missingGroupFor(c) : null;
     const step = stepOf(
       c,
       {
         counterfeit: f.counterfeit_flag,
         potentialUpdatedAt: f.potential_updated_at,
-        missingGroup: c.stage === 2 ? missingGroupFor(c) : null,
+        missingGroup,
+        similar: missingGroup ? similarFor(c.tier, missingGroup) : null,
         competitor: Array.isArray(brands) && brands.length ? String(brands[0]) : null,
         litresBefore: beforeOf.get(c.id),
       },
@@ -143,7 +181,10 @@ export function taskTitleOf(step) {
     case "assess_potential": return `Գնահատիր հեռանկարը՝ ${name}`;
     case "first_order": return `Առաջին պատվեր՝ ${name} (փորձնական պատվեր, գներ, որոշում կայացնողը)`;
     case "reassess": return `Վերագնահատիր հեռանկարը՝ ${name}`;
-    case "add_group": return `Առաջարկիր ${GROUP_HY[step.params.group] ?? step.params.group}՝ ${name}`;
+    case "add_group": {
+      const products = (step.params.products ?? []).map((x) => x.name).join(", ");
+      return `Առաջարկիր ${GROUP_HY[step.params.group] ?? step.params.group}՝ ${name}${products ? ` (նման խանութները գնում են՝ ${products})` : ""}`;
+    }
     case "ask_need": return `Ճշտիր ամսական յուղի պահանջը՝ ${name}`;
     case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand})`;
     case "raise_share": return `Մեծացրու մեր բաժինը՝ ${name}`;
