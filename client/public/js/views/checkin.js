@@ -230,6 +230,7 @@ export async function renderCheckin(root, navigate, customerId) {
   const potentialSlot = container.querySelector("#checkin-potential");
   const paintPotential = () =>
     renderPotentialCard(potentialSlot, customer, {
+      askFresh: true, // at the visit: a level never set or older than 60 days is asked again
       reload: async () => {
         customer = await api.getCustomer(customerId);
         paintPotential();
