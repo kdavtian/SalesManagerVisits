@@ -425,6 +425,7 @@ export const enReports = {
     fn_st_rerun: "Write it again",
     fn_st_running: "Writing… (up to a minute)",
     fn_st_done: "The strategy is ready",
+    fn_st_failed: "The last try to write the strategy failed. It is tried again automatically, or press the button in an hour.",
     fn_st_none: "No strategy yet. It is written every Monday morning after the steps are picked.",
     fn_st_no_key: "The AI key (OpenAI) is not set on the server, so the strategy is not written.",
     fn_st_off: "The weekly strategy is switched off.",

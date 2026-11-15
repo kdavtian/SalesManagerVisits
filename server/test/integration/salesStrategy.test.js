@@ -5,40 +5,46 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { generateStrategy, runWeeklyStrategy, cleanFreeText, normalizeReport } from "../../src/team/vaghinak/strategist.js";
-import { loadNameBook, customerCode } from "../../src/team/askKad/anonymize.js";
+import { generateStrategy, runWeeklyStrategy, cleanFreeText, normalizeReport, strategyNameBook, claimStrategyRun } from "../../src/team/vaghinak/strategist.js";
+import { customerCode } from "../../src/team/askKad/anonymize.js";
 
 const tag = `ST${Date.now()}`;
 const SHOP = `Strategy Shop ${tag}`;
+const FIRST = `Vardanush${tag.replace(/\d/g, (d) => "abcdefghij"[d])}`; // a staff first name (letters only, like a real one)
 let admin, director, rep, shop, cookies = {};
 test.before(async () => {
   await startTestServer();
   admin = await createUser("admin");
   director = await createUser("sales_director");
-  rep = await createUser("sales_manager");
+  rep = await createUser("sales_manager", { name: `${FIRST} Petrosyan` });
   for (const [k, u] of Object.entries({ admin, director, rep })) cookies[k] = await loginAs(u.email);
   shop = await createCustomer({ name: SHOP, created_by: admin.id, assigned_manager_id: rep.id, erp_customer_id: `${tag}1` });
   await pool.query("UPDATE customers SET customer_tier = 'potential', potential_level = 4 WHERE id = $1", [shop.id]);
   await pool.query(
     `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, note, brand_status, "timestamp")
      VALUES ($1, $2, 40.18, 44.51, 10, true, ARRAY['no_order'], $3, '{"competitors":["mobil"]}'::jsonb, now() - interval '1 day')`,
-    [shop.id, rep.id, `Owner of ${SHOP} wants a better price than Mobil, call him on +374 91 234 567`]
+    [shop.id, rep.id, `Owner of ${SHOP} wants a better price than Mobil, call him on +374 91 234 567 or 093.12.34.56, shop@example.am, @shopgram, www.shop.am. ${FIRST}ը will come back`]
   );
 });
 test.after(async () => {
   await pool.query("DELETE FROM sales_strategy_reports");
+  await pool.query("DELETE FROM sales_strategy_runs");
   await pool.query("DELETE FROM checkins WHERE customer_id = $1", [shop.id]);
   await cleanupAll();
   await stopTestServer();
 });
 
 test("free text loses names and long numbers before it is sent", async () => {
-  const book = await loadNameBook(pool);
+  const book = await strategyNameBook(pool);
   const out = cleanFreeText(`${SHOP} paid, phone 091-23-45-67, TIN 02612345, 4 L x 12`, book);
   assert.ok(!out.text.includes(SHOP), out.text);
   assert.ok(out.text.includes(customerCode(`${tag}1`, shop.id)));
   assert.ok(!out.text.includes("02612345") && !out.text.includes("091-23-45-67"), out.text);
   assert.ok(out.text.includes("4 L x 12"), "short numbers stay");
+  // a staff member written by first name with an Armenian ending, emails, links, handles, phones with dots
+  const more = cleanFreeText(`${FIRST}ը said: mail a@b.am, see www.x.am or https://x.am/p, @insta_shop, 093.12.34.56`, book);
+  assert.ok(!more.text.includes(FIRST) && more.text.includes(`REP-${rep.id}`), more.text);
+  for (const leak of ["a@b.am", "www.x.am", "https://x.am", "@insta_shop", "093.12.34.56"]) assert.ok(!more.text.includes(leak), `${leak}: ${more.text}`);
 });
 
 test("a malformed answer becomes a safe, bounded report", () => {
@@ -65,8 +71,13 @@ test("one run: nothing identifying is sent, the stored report has the names back
   assert.ok(!sent.includes(SHOP), "the shop name is never sent");
   assert.ok(!sent.includes("234 567") && !sent.includes("+374"), "the phone is never sent");
   assert.ok(sent.includes(code), "the shop goes as its code");
+  for (const leak of ["093.12.34.56", "shop@example.am", "@shopgram", "www.shop.am", FIRST]) assert.ok(!sent.includes(leak), leak);
+  assert.ok(JSON.parse(sent).max_completion_tokens > 0, "the answer length is capped");
   assert.ok(row.report.headline.includes(SHOP), "the code is turned back into the name");
-  assert.equal(row.report.talking_points[0].customer_id, shop.id);
+  assert.deepEqual(row.report.talking_points[0].customer_ids, [shop.id]);
+  const run = (await pool.query("SELECT status, input_tokens, cost_usd::float8 AS cost FROM sales_strategy_runs ORDER BY id DESC LIMIT 1")).rows[0];
+  assert.deepEqual([run.status, run.input_tokens], ["done", 1000]);
+  assert.ok(run.cost > 0);
   assert.ok(row.cost_usd > 0 && row.input_tokens === 1000);
 
   // the screen reads it; a rep may not; only the owner's circle may run it, and never twice within an hour
@@ -81,17 +92,35 @@ test("one run: nothing identifying is sent, the stored report has the names back
     assert.equal((await apiRequest("/api/funnel/strategy/run", { method: "POST", cookie: cookies.admin })).status, 503, "no key, no run");
     assert.deepEqual(await runWeeklyStrategy(new Date(), pool), { skipped: "not_configured" });
     process.env.OPENAI_API_KEY = "test-key-never-used";
-    // a report was just made: refused before any call to the service
+    // a run was just made: refused before any call to the service
     assert.equal((await apiRequest("/api/funnel/strategy/run", { method: "POST", cookie: cookies.admin })).status, 429);
+    // switched off: refused on the server too (not only a hidden button)
+    await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: cookies.admin, body: { strategistMode: "off" } });
+    try {
+      assert.equal((await apiRequest("/api/funnel/strategy/run", { method: "POST", cookie: cookies.admin })).status, 409);
+    } finally {
+      await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: cookies.admin, body: { strategistMode: "shadow" } });
+    }
   } finally {
     if (before === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = before;
   }
 });
 
-test("a service error stores nothing", async () => {
+test("a failed run stores no report but is counted (with what it cost); never two runs at once", async () => {
   await pool.query("DELETE FROM sales_strategy_reports");
+  await pool.query("DELETE FROM sales_strategy_runs");
   await assert.rejects(generateStrategy({ db: pool, apiKey: "test", fetchImpl: async () => new Response("no", { status: 500 }) }));
-  await assert.rejects(generateStrategy({ db: pool, apiKey: "test", fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: "not json" } }] }), { status: 200 }) }));
+  await assert.rejects(
+    generateStrategy({ db: pool, apiKey: "test", fetchImpl: async () => new Response(JSON.stringify({ usage: { prompt_tokens: 500, completion_tokens: 8000 }, choices: [{ message: { content: "not json" } }] }), { status: 200 }) })
+  );
   assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM sales_strategy_reports")).rows[0].n, 0);
+  const runs = (await pool.query("SELECT status, output_tokens, cost_usd::float8 AS cost FROM sales_strategy_runs ORDER BY id")).rows;
+  assert.deepEqual(runs.map((r) => r.status), ["failed", "failed"]);
+  assert.ok(runs[1].output_tokens === 8000 && runs[1].cost > 0, "a paid answer that could not be read still shows its cost");
+  // one run is going: a second one is refused before any call
+  const id = await claimStrategyRun({ db: pool });
+  await assert.rejects(claimStrategyRun({ db: pool }), (err) => err.status === 409);
+  await assert.rejects(generateStrategy({ db: pool, apiKey: "test", fetchImpl: async () => assert.fail("must not be called") }), (err) => err.status === 409);
+  await pool.query("UPDATE sales_strategy_runs SET status = 'failed' WHERE id = $1", [id]);
 });

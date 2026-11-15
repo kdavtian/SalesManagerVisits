@@ -4,8 +4,8 @@
 //
 // Privacy, the same one-way gates as Ask KAD (askKad/anonymize.js): the facts sent are counts and codes (CUST-.. / REP-..); the free text
 // (visit notes, voice-note transcripts) is masked name by name and every long digit run (phones, TINs, card numbers) is removed before it
-// leaves the server; the codes in the answer are turned back into names here. Cost: one run a week (+ "generate now", once an hour at most),
-// tokens and the estimated price of every run are stored with the report.
+// leaves the server; the codes in the answer are turned back into names here. Cost: one run a week (+ "generate now", once an hour at most,
+// never two at once), a capped answer length, and every paid run kept in sales_strategy_runs (failed ones too) with its tokens and price.
 import { pool } from "../../db/pool.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { computeFunnel } from "./funnel.js";
@@ -21,7 +21,8 @@ export const isStrategistConfigured = () => Boolean(process.env.OPENAI_API_KEY);
 const MAX_NOTES = 80;
 const NOTE_CHARS = 400;
 const RUN_FROM_MINUTE = 10 * 60; // after the 09:00 picks
-const MIN_GAP_MS = 60 * 60 * 1000; // "generate now" once an hour at most
+const MAX_WEEKLY_FAILURES = 3;
+const MAX_ANSWER_TOKENS = 8000; // reasoning + the JSON answer; caps the price of one run
 
 // USD per million tokens (OpenAI price list); an unknown model is priced like the dearest one so the shown cost errs on the safe side.
 const PRICES = { "gpt-5": { input: 1.25, output: 10 }, "gpt-5-mini": { input: 0.25, output: 2 }, "gpt-4.1": { input: 2, output: 8 } };
@@ -32,17 +33,42 @@ export const estimateCostUsd = (model, usage = {}) => {
 
 // Free text -> safe to send: known names become codes, every run of 6+ digits (phones, TINs, cards; spaces / dashes inside allowed) goes.
 export function cleanFreeText(text, book) {
-  const masked = maskText(String(text ?? "").replace(/\s+/g, " ").trim().slice(0, NOTE_CHARS), book);
+  // masked whole first, cut after: a name crossing the cut is never sent half
+  const masked = maskText(String(text ?? "").replace(/\s+/g, " ").trim(), book);
   // a CUST-/REP- code is kept whole (its digits are an id, not a phone)
-  const scrubbed = masked.text.replace(/\b(?:CUST|REP)-[A-Za-z0-9]+\b|\+?\d[\d\s-]{4,}\d/g, (m) =>
-    /^(?:CUST|REP)-/.test(m) || m.replace(/\D/g, "").length < 6 ? m : "[number]"
-  );
-  return { text: scrubbed, count: masked.count };
+  const scrubbed = masked.text
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email]")
+    .replace(/\b(?:https?:\/\/|www\.)\S+/gi, "[link]")
+    .replace(/(^|\s)@[\w.]{2,}/g, "$1[handle]")
+    // phones, TINs, cards: 6+ digits with spaces, dashes, dots, slashes or brackets between them (a CUST-/REP- code is an id, kept)
+    .replace(/\b(?:CUST|REP)-[A-Za-z0-9]+\b|\+?\(?\d[\d\s\-./()]{4,}\d/g, (m) => (/^(?:CUST|REP)-/.test(m) || m.replace(/\D/g, "").length < 6 ? m : "[number]"));
+  return { text: scrubbed.slice(0, NOTE_CHARS), count: masked.count };
+}
+
+// Notes name people the way people talk: "Արտակը", not "Artak Petrosyan". Every part (4+ letters) of each staff name, Latin and Armenian, is
+// masked as that person too (Armenian endings are covered: the match is on the start of the word).
+export async function strategyNameBook(db = pool) {
+  const book = await loadNameBook(db);
+  const known = new Set(book.needles.map(([n]) => n));
+  const { rows: users } = await db.query("SELECT id, name, name_hy FROM users");
+  const { rows: brands } = await db.query("SELECT DISTINCT lower(brand) AS b FROM products WHERE brand IS NOT NULL");
+  const protectedWords = new Set(brands.map((r) => r.b));
+  for (const u of users) {
+    for (const part of `${u.name ?? ""} ${u.name_hy ?? ""}`.split(/[\s.,-]+/)) {
+      const n = part.trim().toLowerCase();
+      if (n.length >= 4 && !/\d/.test(n) && !known.has(n) && !protectedWords.has(n)) {
+        known.add(n);
+        book.needles.push([n, repCode(u.id)]);
+      }
+    }
+  }
+  book.needles.sort((a, b) => b[0].length - a[0].length);
+  return book;
 }
 
 // What the model reads: only codes, counts and masked text. Pure on its inputs (unit-tested through buildStrategyInput's shape).
 export async function buildStrategyInput({ db = pool, now = new Date(), book } = {}) {
-  book ??= await loadNameBook(db);
+  book ??= await strategyNameBook(db);
   const settings = await getVaghinakSettings(db);
   const funnel = await computeFunnel({ db, settings });
   const { cfg, customers } = funnel;
@@ -79,6 +105,12 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
     computeNextSteps({ db, now, funnel }),
   ]);
   const stepOf = new Map(steps.map((s) => [s.customer.id, s]));
+  // customers met in the notes / picks that are not in the funnel (closed, competitor) still get their real code
+  const outside = [...new Set([...notes.map((n) => n.customer_id), ...picks.map((p) => p.customer_id)])].filter((id) => !byId.has(id));
+  const erpOf = new Map(
+    outside.length ? (await db.query("SELECT id, erp_customer_id FROM customers WHERE id = ANY($1::int[])", [outside])).rows.map((r) => [r.id, r.erp_customer_id]) : []
+  );
+  const codeOfId = (id) => (byId.has(id) ? custCode(byId.get(id)) : customerCode(erpOf.get(id), id));
   const sinceOf = new Map(since.map((r) => [r.customer_id, r.since]));
   let masked = 0;
   const stages = [1, 2, 3, 4].map((s) => ({
@@ -100,7 +132,7 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
     const voice = cleanFreeText(n.voice, book);
     masked += note.count + voice.count;
     return {
-      customer: c ? custCode(c) : customerCode(null, n.customer_id),
+      customer: codeOfId(n.customer_id),
       rep: repCode(n.user_id),
       stage: c?.stage ?? null,
       outcomes: n.outcomes ?? [],
@@ -108,7 +140,9 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
       voice: voice.text || undefined,
     };
   });
-  const codeToId = new Map(customers.map((c) => [custCode(c), c.id]));
+  // a code -> every customer it stands for (two customers can share one ERP id)
+  const codeToId = new Map();
+  for (const id of [...customers.map((c) => c.id), ...outside]) codeToId.set(codeOfId(id), [...(codeToId.get(codeOfId(id)) ?? []), id]);
   return {
     masked,
     codeToId,
@@ -126,7 +160,7 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
       this_week_picks: picks.map((p) => {
         const c = byId.get(p.customer_id);
         const s = stepOf.get(p.customer_id);
-        return { rep: repCode(p.rep_id), customer: c ? custCode(c) : customerCode(null, p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: s?.params ?? {}, region: c?.region ?? null, tier: c?.tier ?? null };
+        return { rep: repCode(p.rep_id), customer: codeOfId(p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: s?.params ?? {}, region: c?.region ?? null, tier: c?.tier ?? null };
       }),
       field_notes_7_days: fieldNotes,
     },
@@ -153,47 +187,98 @@ Answer with ONE JSON object, nothing else:
  "talking_points": [{"rep": "REP-..", "customer": "CUST-..", "points": ["1-3 short things to say or offer at this visit"]}]}
 talking_points: one entry per item of this_week_picks (same rep and customer).`;
 
-// One run: build the input, call the model, unmask, store (replacing this week's report). `fetchImpl` / `apiKey` are injectable (tests).
-export async function generateStrategy({ db = pool, now = new Date(), userId = null, fetchImpl = globalThis.fetch, apiKey = process.env.OPENAI_API_KEY, model = STRATEGY_MODEL } = {}) {
-  if (!apiKey) throw Object.assign(new Error("The OpenAI key is not set on the server"), { status: 503, code: "not_configured" });
-  const book = await loadNameBook(db);
-  const { input, masked, codeToId } = await buildStrategyInput({ db, now, book });
-  const res = await fetchImpl(API_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: JSON.stringify(input) },
-      ],
-    }),
-    signal: AbortSignal.timeout(180_000),
-  });
-  if (!res.ok) throw Object.assign(new Error(`The AI service answered ${res.status}`), { status: 502 });
-  const data = await res.json();
-  let parsed;
-  try {
-    parsed = JSON.parse(data?.choices?.[0]?.message?.content ?? "");
-  } catch {
-    throw Object.assign(new Error("The AI answer could not be read"), { status: 502 });
+class StrategyError extends Error {
+  constructor(message, status, code) {
+    super(message);
+    this.status = status;
+    this.code = code;
   }
-  const report = unmaskDeep(normalizeReport(parsed), book);
-  // the screen puts each talking point under its pick by the customer id (a code the model wrote that matches no customer is dropped there)
-  for (const tp of report.talking_points) tp.customer_id = codeToId.get(tp.customer) ?? null;
-  const usage = data?.usage ?? {};
-  const { rows: [row] } = await db.query(
-    `INSERT INTO sales_strategy_reports (week_start, created_by, model, input_tokens, output_tokens, cost_usd, masked_names, report)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-     ON CONFLICT (week_start) DO UPDATE SET created_at = now(), created_by = EXCLUDED.created_by, model = EXCLUDED.model,
-       input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens, cost_usd = EXCLUDED.cost_usd,
-       masked_names = EXCLUDED.masked_names, report = EXCLUDED.report
-     RETURNING id, week_start::text AS week_start, created_at, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, masked_names, report`,
-    [input.week_start, userId, data?.model || model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, estimateCostUsd(model, usage), masked, JSON.stringify(report)]
-  );
-  return row;
 }
+
+// Claims a run before any paid call, under a lock: never two at once (a run older than 10 minutes counts as stopped), and for "generate now"
+// not within an hour of the last one. Returns the run id.
+export async function claimStrategyRun({ db = pool, now = new Date(), userId = null, manual = false } = {}) {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('sales_strategy_run'))");
+    await client.query("UPDATE sales_strategy_runs SET status = 'failed', finished_at = now(), error = 'stopped' WHERE status = 'running' AND started_at < now() - interval '10 minutes'");
+    const { rows: [last] } = await client.query("SELECT status, started_at FROM sales_strategy_runs ORDER BY started_at DESC LIMIT 1");
+    if (last?.status === "running") throw new StrategyError("A strategy is being written right now", 409, "running");
+    if (manual && last && now - new Date(last.started_at) < 60 * 60 * 1000) throw new StrategyError("A strategy was made less than an hour ago", 429, "too_soon");
+    const { rows: [run] } = await client.query(
+      "INSERT INTO sales_strategy_runs (week_start, created_by, model) VALUES ($1, $2, $3) RETURNING id",
+      [mondayOf(yerevanToday(now)), userId, STRATEGY_MODEL]
+    );
+    await client.query("COMMIT");
+    return run.id;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// One run: build the input, call the model, unmask, store (replacing this week's report). The run row records the outcome, the tokens and the
+// price whatever happens. `fetchImpl` / `apiKey` are injectable (tests).
+export async function generateStrategy({ db = pool, now = new Date(), userId = null, fetchImpl = globalThis.fetch, apiKey = process.env.OPENAI_API_KEY, model = STRATEGY_MODEL, runId = null } = {}) {
+  if (!apiKey) throw new StrategyError("The OpenAI key is not set on the server", 503, "not_configured");
+  runId ??= await claimStrategyRun({ db, now, userId });
+  let usage = {};
+  try {
+    const book = await strategyNameBook(db);
+    const { input, masked, codeToId } = await buildStrategyInput({ db, now, book });
+    const res = await fetchImpl(API_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        response_format: { type: "json_object" },
+        max_completion_tokens: MAX_ANSWER_TOKENS,
+        // reasoning models: a short think is enough for a weekly summary (and keeps the price down)
+        ...(/^(gpt-5|o\d)/.test(model) ? { reasoning_effort: "low" } : {}),
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: JSON.stringify(input) },
+        ],
+      }),
+      signal: AbortSignal.timeout(170_000),
+    });
+    if (!res.ok) throw new StrategyError(`The AI service answered ${res.status}`, 502);
+    const data = await res.json();
+    usage = data?.usage ?? {};
+    let parsed;
+    try {
+      parsed = JSON.parse(data?.choices?.[0]?.message?.content ?? "");
+    } catch {
+      throw new StrategyError("The AI answer could not be read", 502);
+    }
+    const report = unmaskDeep(normalizeReport(parsed), book);
+    // the screen puts each talking point under its pick by customer id (a code the model wrote that matches no customer shows nowhere)
+    for (const tp of report.talking_points) tp.customer_ids = codeToId.get(tp.customer) ?? [];
+    const cost = estimateCostUsd(model, usage);
+    const { rows: [row] } = await db.query(
+      `INSERT INTO sales_strategy_reports (week_start, created_by, model, input_tokens, output_tokens, cost_usd, masked_names, report)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+       ON CONFLICT (week_start) DO UPDATE SET created_at = now(), created_by = EXCLUDED.created_by, model = EXCLUDED.model,
+         input_tokens = EXCLUDED.input_tokens, output_tokens = EXCLUDED.output_tokens, cost_usd = EXCLUDED.cost_usd,
+         masked_names = EXCLUDED.masked_names, report = EXCLUDED.report
+       RETURNING id, week_start::text AS week_start, created_at, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, masked_names, report`,
+      [input.week_start, userId, data?.model || model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, cost, masked, JSON.stringify(report)]
+    );
+    await finishRun(db, runId, "done", model, usage, null);
+    return row;
+  } catch (err) {
+    await finishRun(db, runId, "failed", model, usage, err.message).catch(() => {});
+    throw err;
+  }
+}
+const finishRun = (db, runId, status, model, usage, error) =>
+  db.query(
+    "UPDATE sales_strategy_runs SET status = $2, finished_at = now(), model = $3, input_tokens = $4, output_tokens = $5, cost_usd = $6, error = $7 WHERE id = $1",
+    [runId, status, model, usage.prompt_tokens ?? 0, usage.completion_tokens ?? 0, estimateCostUsd(model, usage), error ? String(error).slice(0, 300) : null]
+  );
 
 // The model's object -> the fields the screen shows, strings only, bounded (a malformed answer never breaks the screen).
 const str = (v, max = 600) => (typeof v === "string" ? v.trim().slice(0, max) : "");
@@ -228,21 +313,18 @@ function unmaskDeep(report, book) {
 }
 
 export async function latestStrategy(db = pool) {
-  const { rows } = await db.query(
-    `SELECT id, week_start::text AS week_start, created_at, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, masked_names, report
-     FROM sales_strategy_reports ORDER BY week_start DESC LIMIT 1`
-  );
-  return rows[0] ?? null;
-}
-
-// "Generate now" (management): at most once an hour, so a double tap or an impatient retry never pays twice.
-export async function canGenerateNow(db = pool) {
-  const { rows: [r] } = await db.query("SELECT MAX(created_at) AS at FROM sales_strategy_reports");
-  return !r?.at || Date.now() - new Date(r.at).getTime() >= MIN_GAP_MS;
+  const [{ rows: [report] }, { rows: [run] }] = await Promise.all([
+    db.query(
+      `SELECT id, week_start::text AS week_start, created_at, model, input_tokens, output_tokens, cost_usd::float8 AS cost_usd, masked_names, report
+       FROM sales_strategy_reports ORDER BY week_start DESC LIMIT 1`
+    ),
+    db.query("SELECT id, status, started_at, finished_at, error FROM sales_strategy_runs ORDER BY started_at DESC LIMIT 1"),
+  ]);
+  return { report: report ?? null, run: run ?? null };
 }
 
 // The weekly run (jobs/index.js, hourly): the first working day of the week after 10:00 Yerevan, once, when the key is set and the
-// strategist is not off. A failure is logged and tried again the next hour (never more than once a week once it succeeded).
+// strategist is not off; after 3 failed runs in a week it waits for next week (the runs are counted in the database).
 export async function runWeeklyStrategy(now = new Date(), db = pool) {
   if (!isStrategistConfigured()) return { skipped: "not_configured" };
   const settings = await getVaghinakSettings(db);
@@ -252,16 +334,8 @@ export async function runWeeklyStrategy(now = new Date(), db = pool) {
   const week = mondayOf(day);
   const { rowCount } = await db.query("SELECT 1 FROM sales_strategy_reports WHERE week_start = $1", [week]);
   if (rowCount) return { skipped: "done" };
-  // at most 3 tries a week: an answer that cannot be read is still paid for, so a broken answer must not repeat every hour
-  const tries = failedTries.get(week) ?? 0;
-  if (tries >= MAX_WEEKLY_TRIES) return { skipped: "gave_up" };
-  try {
-    const row = await generateStrategy({ db, now });
-    return { generated: row.id };
-  } catch (err) {
-    failedTries.set(week, tries + 1);
-    throw err;
-  }
+  const { rows: [f] } = await db.query("SELECT COUNT(*)::int AS n FROM sales_strategy_runs WHERE week_start = $1 AND status = 'failed'", [week]);
+  if (f.n >= MAX_WEEKLY_FAILURES) return { skipped: "gave_up" };
+  const row = await generateStrategy({ db, now });
+  return { generated: row.id };
 }
-const MAX_WEEKLY_TRIES = 3;
-const failedTries = new Map(); // week -> failed tries (this process)

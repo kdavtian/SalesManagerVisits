@@ -48,7 +48,8 @@ export async function renderFunnel(root, navigate) {
     const button = canEdit && strategy.configured && strategy.mode !== "off"
       ? `<button type="button" class="btn ${fresh ? "" : "btn-primary"}" id="fn-st-run" ${strategyBusy ? "disabled" : ""}>${escapeHtml(t(strategyBusy ? "fn_st_running" : fresh ? "fn_st_rerun" : "fn_st_run"))}</button>`
       : "";
-    const note = r ? "" : !strategy.configured ? t("fn_st_no_key") : strategy.mode === "off" ? t("fn_st_off") : t("fn_st_none");
+    const lastFailed = strategy.run?.status === "failed" && (!strategy.report || new Date(strategy.run.started_at) > new Date(strategy.report.created_at));
+    const note = lastFailed ? t("fn_st_failed") : r ? "" : !strategy.configured ? t("fn_st_no_key") : strategy.mode === "off" ? t("fn_st_off") : t("fn_st_none");
     return `<details class="fn-strategy" id="fn-strategy" ${strategyOpen ? "open" : ""}>
         <summary><span class="fn-st-title">${escapeHtml(t("fn_st_title"))}</span>${r ? `<span class="muted fn-st-week">${escapeHtml(strategy.report.week_start)}</span>` : ""}
           <span class="badge badge-warning">${escapeHtml(t("fn_steps_shadow"))}</span></summary>
@@ -64,7 +65,27 @@ export async function renderFunnel(root, navigate) {
         ${button ? `<div class="fn-picks-actions">${button}</div>` : ""}
       </details>`;
   }
-  const talkingPointsOf = (customerId) => strategy?.report?.report?.talking_points?.find((tp) => tp.customer_id === customerId)?.points ?? [];
+  const talkingPointsOf = (customerId) => strategy?.report?.report?.talking_points?.find((tp) => tp.customer_ids?.includes(customerId))?.points ?? [];
+  // A run takes a minute or two and is written on the server in the background: check every few seconds (4 minutes at most).
+  async function waitForRun() {
+    strategyBusy = true;
+    paint();
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 4000));
+      if (!body.isConnected) return; // the screen was left
+      try {
+        strategy = await api.getFunnelStrategy();
+      } catch {
+        continue;
+      }
+      if (strategy?.run?.status !== "running") break;
+    }
+    strategyBusy = false;
+    showToast(t(strategy?.run?.status === "done" ? "fn_st_done" : "fn_st_failed"));
+    paint();
+  }
+
+  if (strategy?.run?.status === "running") setTimeout(() => waitForRun(), 0);
 
   const inScope = () => data.customers.filter((c) => (!rep || String(c.rep_id ?? "") === rep) && (!region || (c.region ?? "") === region));
 
@@ -163,18 +184,16 @@ export async function renderFunnel(root, navigate) {
     body.querySelectorAll("[data-stage]").forEach((b) => b.addEventListener("click", () => ((stage = Number(b.dataset.stage)), (onlyMissing = false), (onlyStuck = false), paint())));
     body.querySelector("#fn-missing")?.addEventListener("click", () => ((onlyMissing = !onlyMissing), (onlyStuck = false), paint()));
     body.querySelector("#fn-strategy")?.addEventListener("toggle", (e) => (strategyOpen = e.currentTarget.open));
-    body.querySelector("#fn-st-run")?.addEventListener("click", async () => {
-      strategyBusy = true;
-      paint();
+    body.querySelector("#fn-st-run")?.addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
       try {
         await api.runFunnelStrategy();
-        strategy = await api.getFunnelStrategy();
-        showToast(t("fn_st_done"));
       } catch (ex) {
         showToast(ex.message);
+        paint();
+        return;
       }
-      strategyBusy = false;
-      paint();
+      waitForRun();
     });
     body.querySelector("#fn-stuck")?.addEventListener("click", () => ((onlyStuck = !onlyStuck), (onlyMissing = false), paint()));
     body.querySelector("#fn-picks-run")?.addEventListener("click", async (e) => {
