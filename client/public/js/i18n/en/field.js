@@ -275,4 +275,6 @@ export const enField = {
     monthly_need_placeholder: "e.g. 300",
     monthly_need_hint_new: "Ask the owner: how many litres of oil a month do you sell or use, from every brand? We measure our share of it.",
     monthly_need_hint_check: "Last written over 3 months ago: {l} L. Ask again and write today's number (the same one if nothing changed).",
+    ci_points_title: "Vaghinak: what to say here",
+    ci_points_note: "Suggestions from this week's sales strategy.",
 };

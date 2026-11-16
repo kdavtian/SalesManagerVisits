@@ -105,6 +105,7 @@ export async function renderCheckin(root, navigate, customerId) {
       <button type="button" class="icon-btn" id="checkin-close-btn" aria-label="${t("close")}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div id="checkin-tasks"></div>
+    <div id="checkin-points"></div>
     <div id="checkin-potential"></div>
     <div class="gps-status" id="gps-status">${t("getting_location")}</div>
     <div class="verify-banner" id="verify-banner" hidden></div>
@@ -244,6 +245,18 @@ export async function renderCheckin(root, navigate, customerId) {
   let openOrderTasks = [];
   let orderTaskAnswered = false;
   let skippedOrderTasks = null;
+
+  // Vaghinak's talking points for this customer this week (the weekly AI strategy), when management switched them on. Online only: a visit
+  // without network simply shows none.
+  api
+    .getSalesPoints(customerId)
+    .then(({ points }) => {
+      const slot = container.querySelector("#checkin-points");
+      if (!slot || !points?.length) return;
+      slot.innerHTML = `<div class="card ci-points"><h2 class="section-title section-title-tight">${escapeHtml(t("ci_points_title"))}</h2>
+        <ul>${points.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul><p class="muted ci-points-note">${escapeHtml(t("ci_points_note"))}</p></div>`;
+    })
+    .catch(() => {});
 
   // What management asked for at this customer (open tasks): shown above the
   // form so the visit covers them; tap one to tick its checklist off.
