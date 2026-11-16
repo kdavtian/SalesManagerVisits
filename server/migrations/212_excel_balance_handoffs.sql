@@ -6,6 +6,8 @@
 -- Test mode first: in "shadow" it only writes down what it would do.
 ALTER TABLE cash_handoffs ADD COLUMN IF NOT EXISTS from_excel BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS excel_balance_mode TEXT NOT NULL DEFAULT 'shadow';
+-- the day it was switched to live: only pairs from then on are acted on (the weeks before went through the normal chain)
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS excel_balance_live_since DATE;
 ALTER TABLE app_settings DROP CONSTRAINT IF EXISTS app_settings_excel_balance_mode_check;
 ALTER TABLE app_settings ADD CONSTRAINT app_settings_excel_balance_mode_check CHECK (excel_balance_mode IN ('off', 'shadow', 'live'));
 
@@ -20,7 +22,7 @@ CREATE TABLE IF NOT EXISTS excel_balance_links (
   from_account TEXT NOT NULL,
   to_account   TEXT NOT NULL,
   rep_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  outcome      TEXT NOT NULL CHECK (outcome IN ('confirmed_existing', 'created', 'task')),
+  outcome      TEXT NOT NULL CHECK (outcome IN ('confirmed_existing', 'created', 'already', 'task')),
   handoff_id   INTEGER REFERENCES cash_handoffs(id) ON DELETE SET NULL,
   detail       TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),

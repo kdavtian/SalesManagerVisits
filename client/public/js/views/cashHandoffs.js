@@ -309,7 +309,20 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
     section.hidden = false;
     const test = data.mode !== "live";
     const outcome = (l) => t(`xb_${l.outcome}${test ? "_would" : ""}`);
-    const cls = { created: "badge-success", confirmed_existing: "badge-success", task: "badge-warning" };
+    const cls = { created: "badge-success", confirmed_existing: "badge-success", already: "badge-info", task: "badge-warning" };
+    // the server keeps the details as numbers ({ payments } / { in_hand, at_director } / { twin })
+    const detailText = (raw) => {
+      let d;
+      try {
+        d = JSON.parse(raw);
+      } catch {
+        return "";
+      }
+      if (d?.twin) return t("xb_d_twin");
+      if (d?.payments != null) return t("xb_d_payments").replace("{n}", d.payments);
+      if (d?.in_hand != null) return `${t("xb_d_in_hand").replace("{amount}", formatAmd(d.in_hand))}${d.at_director ? ` · ${t("xb_d_at_director")}` : ""}`;
+      return "";
+    };
     el.innerHTML = `
       <p class="muted xb-hint">${escapeHtml(t(`xb_hint_${data.mode}`))}</p>
       ${
@@ -327,7 +340,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
                 .map(
                   (l) => `<div class="card xb-row">
                     <div class="list-row-top"><strong>${escapeHtml(l.rep_name ?? "—")}</strong><span class="list-row-trailing-text text-amount">${formatAmd(l.amount_amd)}</span></div>
-                    <div class="muted list-row-meta">${escapeHtml(formatDateDMY(l.entry_date))} · ${escapeHtml(l.from_account)} → ${escapeHtml(l.to_account)}${l.detail ? ` · ${escapeHtml(l.detail)}` : ""}</div>
+                    <div class="muted list-row-meta">${escapeHtml(formatDateDMY(l.entry_date))} · ${escapeHtml(l.from_account)} → ${escapeHtml(l.to_account)}${l.detail && detailText(l.detail) ? ` · ${escapeHtml(detailText(l.detail))}` : ""}</div>
                     <div class="list-row-bottom"><span class="badge ${cls[l.outcome] ?? ""}">${escapeHtml(outcome(l))}</span>${
                       l.handoff_id && !test ? ` <button type="button" class="link-btn" data-open-handoff="${l.handoff_id}">${t("xb_open")}</button>` : ""
                     }</div>

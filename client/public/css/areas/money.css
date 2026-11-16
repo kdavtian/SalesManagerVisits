@@ -1858,6 +1858,7 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .xb-modes .map-filter-chip { min-height: 44px; }
 .xb-row .list-row-meta { overflow-wrap: anywhere; }
 .xb-row .link-btn { min-height: 44px; }
+.xb-row .badge { white-space: normal; text-align: left; line-height: 1.3; }
 /* Payments header: back, title, Select, + -- on a 320 px phone the title gives way (the + button went off the screen) */
 #payments-select-btn { flex: none; }
 .list-header-row:has(#payments-select-btn) h1 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

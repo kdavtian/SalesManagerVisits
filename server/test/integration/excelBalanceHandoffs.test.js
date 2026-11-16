@@ -83,6 +83,8 @@ test("test mode writes down what would happen and changes nothing; live does it 
   assert.equal((await apiRequest("/api/cash-handoffs/excel-balance/mode", { method: "PUT", cookie: cookies.accountant, body: { mode: "live" } })).status, 403);
   assert.equal((await apiRequest("/api/cash-handoffs/excel-balance", { cookie: cookies.director })).status, 403);
   assert.equal((await apiRequest("/api/cash-handoffs/excel-balance/mode", { method: "PUT", cookie: cookies.admin, body: { mode: "live" } })).status, 200);
+  // switched on today, so a pair of 2 days ago would wait: this test switched it on "a week ago"
+  await pool.query("UPDATE app_settings SET excel_balance_live_since = $1 WHERE id = 1", [day(-7)]);
   const live = await syncExcelBalance();
   assert.deepEqual([live.created, live.task], [1, 1]);
   const { rows: [h] } = await pool.query("SELECT * FROM cash_handoffs WHERE from_user_id = $1 AND from_excel", [rep.id]);
@@ -110,6 +112,46 @@ test("live: the rep's own hand-over of exactly that amount, waiting for the acco
   const { rows: [h] } = await pool.query("SELECT status, from_excel, confirmed_by FROM cash_handoffs WHERE id = $1", [created.data.id]);
   assert.deepEqual([h.status, h.from_excel, h.confirmed_by], ["confirmed", true, accountant.id]);
   assert.equal((await pool.query("SELECT status FROM payments WHERE id = $1", [p])).rows[0].status, "approved");
+});
+
+test("live acts only from the day it was switched on; the rep's chain through a director is 'already handed over'; a near-twin pair is a task, never a second action", async () => {
+  const rep3 = await createUser("sales_manager");
+  const box3 = (await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'cash') RETURNING id", [`Cash R3 ${tag}`])).rows[0].id;
+  await pool.query("INSERT INTO cash_desk_holders (account_id, user_id) VALUES ($1, $2)", [box3, rep3.id]);
+  try {
+    // switched to live today: an old pair (before) is not touched, not even as a task
+    await pool.query("UPDATE app_settings SET excel_balance_mode = 'shadow' WHERE id = 1");
+    assert.equal((await apiRequest("/api/cash-handoffs/excel-balance/mode", { method: "PUT", cookie: cookies.admin, body: { mode: "live" } })).status, 200);
+    await pay(rep3.id, 7000, 9);
+    await pairRow(box3, 7000, day(-5));
+    let r = await syncExcelBalance();
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM excel_balance_links WHERE mode = 'live' AND from_account = $1", [`Cash R3 ${tag}`])).rows[0].n, 0, "before the switch: untouched");
+    assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM cash_handoffs WHERE from_user_id = $1", [rep3.id])).rows[0].n, 0);
+    // the usual chain: the rep handed 15,000 to the director (confirmed) -> the Excel pair of 15,000 today is "already"
+    const p = await pay(rep3.id, 15000, 0);
+    const toDirector = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: await loginAs(rep3.email), body: { to_user_id: director.id, payment_ids: [p] } });
+    assert.equal(toDirector.status, 201, JSON.stringify(toDirector.data));
+    assert.equal((await apiRequest(`/api/cash-handoffs/${toDirector.data.id}/confirm`, { method: "POST", cookie: cookies.director, body: {} })).status, 200);
+    await pairRow(box3, 15000, day(0));
+    r = await syncExcelBalance();
+    assert.equal(r.already, 1);
+    // the same amount for the same rep again the next day (a corrected date / a re-typed row): a task line, never a second action
+    await pairRow(box3, 15000, day(1));
+    r = await syncExcelBalance();
+    assert.deepEqual([r.task, r.created, r.confirmed_existing], [1, 0, 0]);
+  } finally {
+    await pool.query("UPDATE app_settings SET excel_balance_mode = 'shadow', excel_balance_live_since = NULL WHERE id = 1");
+    await pool.query("DELETE FROM excel_balance_links WHERE from_account = $1", [`Cash R3 ${tag}`]);
+    await pool.query("DELETE FROM cash_entries WHERE account_id = $1", [box3]);
+    await pool.query("DELETE FROM cash_sheets WHERE rep_id = $1", [rep3.id]);
+    await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE sales_manager_id = $1)", [rep3.id]);
+    await pool.query("UPDATE payments SET pending_handoff_id = NULL WHERE sales_manager_id = $1", [rep3.id]);
+    await pool.query("DELETE FROM cash_handoff_items WHERE handoff_id IN (SELECT id FROM cash_handoffs WHERE from_user_id = $1)", [rep3.id]);
+    await pool.query("DELETE FROM cash_handoffs WHERE from_user_id = $1", [rep3.id]);
+    await pool.query("DELETE FROM payments WHERE sales_manager_id = $1", [rep3.id]);
+    await pool.query("DELETE FROM cash_desk_holders WHERE account_id = $1", [box3]);
+    await pool.query("DELETE FROM cash_accounts WHERE id = $1", [box3]);
+  }
 });
 
 test("off: nothing is read", async () => {
