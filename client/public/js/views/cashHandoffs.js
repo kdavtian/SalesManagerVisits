@@ -13,7 +13,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDateDMY, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, bindAmdInput, downloadFromUrl, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { validHandoffRecipientRoles, offersHandoffOnBehalf } from "../shared/roles.js";
+import { validHandoffRecipientRoles, offersHandoffOnBehalf, seesExcelBalance, setsExcelBalanceMode } from "../shared/roles.js";
 import { deskSelectChip } from "../deskTable.js";
 import { openHandoverSheet, channelBreakdownHtml, groupByDay, sumAmd } from "../handoverSheet.js";
 
@@ -58,6 +58,11 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
       <section id="cash-sheets-section" hidden>
         <h2 class="list-group-heading">${t("cash_sheets_title")}</h2>
         <div class="card-list" id="cash-sheets"></div>
+      </section>
+
+      <section id="excel-balance-section" hidden>
+        <h2 class="list-group-heading">${t("xb_title")}</h2>
+        <div id="excel-balance"></div>
       </section>
 
       <section id="handoff-available-section" hidden>
@@ -283,9 +288,80 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
           <span class="list-row-trailing-text text-amount">${formatAmd(Number(h.amount_amd))}</span>
         </div>
         <div class="muted list-row-meta">${t("handoff_items_n").replace("{n}", h.item_count)} · ${formatDateTime(h.submitted_at)}</div>
-        <div class="list-row-bottom"><span class="badge ${meta.cls}">${t(meta.key)}</span></div>
+        <div class="list-row-bottom"><span class="badge ${meta.cls}">${t(meta.key)}</span>${h.from_excel ? ` <span class="badge badge-info">${t("xb_badge")}</span>` : ""}</div>
       </button>
     `;
+  }
+
+  // Excel "Balance" rows -> hand-overs (server money/excelBalanceHandoffs.js): the accountant, admin and CEO see what was done (or, in test mode,
+  // what would be done) with each pair; admin and CEO switch it Off / Test / Live.
+  async function loadExcelBalance() {
+    if (!seesExcelBalance(role)) return;
+    const section = container.querySelector("#excel-balance-section");
+    const el = container.querySelector("#excel-balance");
+    let data;
+    try {
+      data = await api.getExcelBalance();
+    } catch {
+      return;
+    }
+    if (!root.isConnected) return;
+    section.hidden = false;
+    const test = data.mode !== "live";
+    const outcome = (l) => t(`xb_${l.outcome}${test ? "_would" : ""}`);
+    const cls = { created: "badge-success", confirmed_existing: "badge-success", already: "badge-info", task: "badge-warning" };
+    // the server keeps the details as numbers ({ payments } / { in_hand, at_director } / { twin })
+    const detailText = (raw) => {
+      let d;
+      try {
+        d = JSON.parse(raw);
+      } catch {
+        return "";
+      }
+      if (d?.twin) return t("xb_d_twin");
+      if (d?.payments != null) return t("xb_d_payments").replace("{n}", d.payments);
+      if (d?.in_hand != null) return `${t("xb_d_in_hand").replace("{amount}", formatAmd(d.in_hand))}${d.at_director ? ` · ${t("xb_d_at_director")}` : ""}`;
+      return "";
+    };
+    el.innerHTML = `
+      <p class="muted xb-hint">${escapeHtml(t(`xb_hint_${data.mode}`))}</p>
+      ${
+        setsExcelBalanceMode(role)
+          ? `<div class="xb-modes" role="radiogroup" aria-label="${escapeHtml(t("xb_title"))}">${["off", "shadow", "live"]
+              .map((m) => `<button type="button" class="map-filter-chip${data.mode === m ? " chip-active" : ""}" data-xb-mode="${m}" role="radio" aria-checked="${data.mode === m}">${t(`xb_mode_${m}`)}</button>`)
+              .join("")}</div>`
+          : ""
+      }
+      ${
+        data.mode === "off"
+          ? ""
+          : data.links.length
+            ? `<div class="card-list">${data.links
+                .map(
+                  (l) => `<div class="card xb-row">
+                    <div class="list-row-top"><strong>${escapeHtml(l.rep_name ?? "—")}</strong><span class="list-row-trailing-text text-amount">${formatAmd(l.amount_amd)}</span></div>
+                    <div class="muted list-row-meta">${escapeHtml(formatDateDMY(l.entry_date))} · ${escapeHtml(l.from_account)} → ${escapeHtml(l.to_account)}${l.detail && detailText(l.detail) ? ` · ${escapeHtml(detailText(l.detail))}` : ""}</div>
+                    <div class="list-row-bottom"><span class="badge ${cls[l.outcome] ?? ""}">${escapeHtml(outcome(l))}</span>${
+                      l.handoff_id && !test ? ` <button type="button" class="link-btn" data-open-handoff="${l.handoff_id}">${t("xb_open")}</button>` : ""
+                    }</div>
+                  </div>`
+                )
+                .join("")}</div>`
+            : `<p class="empty-state">${t("xb_none")}</p>`
+      }`;
+    el.querySelectorAll("[data-xb-mode]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        if (b.dataset.xbMode === data.mode) return;
+        try {
+          await api.setExcelBalanceMode(b.dataset.xbMode);
+          showToast(t("xb_saved"));
+          loadExcelBalance();
+        } catch (err) {
+          showToast(err.message);
+        }
+      })
+    );
+    el.querySelectorAll("[data-open-handoff]").forEach((b) => b.addEventListener("click", () => openHandoffSheet(Number(b.dataset.openHandoff))));
   }
 
   function paintHistory() {
@@ -639,6 +715,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
   await loadAvailable();
   loadSheets();
   loadShortfalls();
+  loadExcelBalance();
   if (focusHandoffId) openHandoffSheet(Number(focusHandoffId));
   // From the Home card "Hand over today's cash": straight to the one confirm step when there is cash and one place to give it.
   else if (handover) availableEl.querySelector("#handoff-submit-all:not([disabled])")?.click();

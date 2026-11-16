@@ -1,3 +1,4 @@
+import { syncExcelBalance } from "../../money/excelBalanceHandoffs.js";
 import { refuseWhilePaused, getSyncPause, setSyncPause } from "../erpSyncPause.js";
 import { applyExcelPurchases } from "../../products/purchases.js";
 import { canPauseErpSync } from "../../shared/roles.js";
@@ -591,6 +592,7 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, refuseWhi
     if (process.env.NODE_ENV !== "test") {
       runExpenseWatch().catch((err) => console.error("Expense watch failed:", err.message));
       runAntiFraud().catch((err) => console.error("Anti-fraud run failed:", err.message));
+      syncExcelBalance().catch((err) => console.error("Excel Balance sync failed:", err.message));
     }
     res.json(applied);
   } catch (err) {

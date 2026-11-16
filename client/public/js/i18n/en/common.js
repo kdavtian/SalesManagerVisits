@@ -1140,6 +1140,7 @@ export const enCommon = {
     job_sales_funnel: "Sales funnel: stages and moves",
     job_sales_steps: "Sales Expert: this week's steps",
     job_sales_strategy: "Sales Expert: weekly AI strategy",
+    job_excel_balance: "Excel Balance → cash handovers",
     job_expense_watch: "Expense watch",
     job_overdue_visit_reminders: "Reminder: planned stops not visited",
     health_push: "Push notifications",

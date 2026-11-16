@@ -32,3 +32,4 @@ test/integration/cashCategoryTree.test.js
 test/integration/purchasesPlus.test.js
 test/integration/opsApi.test.js
 test/integration/salesStrategy.test.js
+test/integration/excelBalanceHandoffs.test.js

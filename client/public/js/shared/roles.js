@@ -427,6 +427,14 @@ export function canManageWarehouse(role) {
 export function canVoidCountedPayment(role) {
   return approves("countedPaymentVoid", role);
 }
+// Excel "Balance" rows -> cash handovers (money/excelBalanceHandoffs.js): the accountant, admin and CEO read what it did (or would do in test mode);
+// only admin and CEO switch it (off / test / live).
+export function seesExcelBalance(role) {
+  return role === "admin" || role === "ceo" || role === "accountant";
+}
+export function setsExcelBalanceMode(role) {
+  return role === "admin" || role === "ceo";
+}
 export function seesPaymentBooks(role) {
   return role === "admin" || role === "ceo" || role === "accountant";
 }

@@ -1,5 +1,6 @@
 // Cashflow module (owner, 2026-10-23): read the ledger (accounts, categories, entries, summary) and refresh it from an Excel workbook.
 // The bot's own push is POST /api/erp-sync/cashflow-ledger (routes/erpSync.js); both land in ../cashflow.js applyCashLedger.
+import { syncExcelBalance } from "../excelBalanceHandoffs.js";
 import { Router } from "express";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
@@ -156,6 +157,8 @@ cashflowRouter.post("/import", (req, res, next) => {
   }
   try {
     res.json(await applyCashLedger(rows, { via: "upload", userId: req.user.id, fileName: req.file.originalname }));
+    // the Balance rows of the new sheet are the cash handovers the Excel recorded (excelBalanceHandoffs.js)
+    if (process.env.NODE_ENV !== "test") syncExcelBalance().catch((e) => console.error("Excel Balance sync failed:", e.message));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
