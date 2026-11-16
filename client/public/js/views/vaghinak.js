@@ -506,6 +506,12 @@ export async function renderVaghinak(root, navigate, query) {
     );
   }
 
+  // The Sales Expert's switches (team/vaghinak/settings.js): the weekly steps, the weekly AI strategy, its talking points for the reps.
+  const SALES_SWITCHES = [
+    ["salesStepsMode", "vg_sw_steps", [["shadow", "vg_sw_test"], ["live", "vg_sw_live"]]],
+    ["strategistMode", "vg_sw_strategy", [["off", "vg_sw_off"], ["shadow", "vg_sw_test"]]],
+    ["strategyRepPoints", "vg_sw_points", [["off", "vg_sw_off"], ["on", "vg_sw_on"]]],
+  ];
   // ---- settings (admin / CEO / operations director) ----
   async function paintSettings(mine) {
     const { settings, people } = await api.vaghinakSettings();
@@ -515,6 +521,11 @@ export async function renderVaghinak(root, navigate, query) {
       <h2 class="section-title">${t("vg_mode")}</h2>
       <div class="vg-modes" role="radiogroup">${modes.map(([k, label]) => `<button type="button" class="map-filter-chip${settings.mode === k ? " chip-active" : ""}" data-mode="${k}" role="radio" aria-checked="${settings.mode === k}">${t(label)}</button>`).join("")}</div>
       <p class="muted vg-hint">${t(`vg_mode_hint_${settings.mode}`)}</p>
+      <h2 class="section-title">${t("vg_sales_expert")}</h2>
+      <div class="card vg-switches">${SALES_SWITCHES.map(([key, label, options]) => `<div class="vg-switch"><span>${t(label)}</span>
+        <div class="vg-modes" role="radiogroup" aria-label="${escapeHtml(t(label))}">${options
+          .map(([value, optLabel]) => `<button type="button" class="map-filter-chip${settings[key] === value ? " chip-active" : ""}" data-switch="${key}" data-value="${value}" role="radio" aria-checked="${settings[key] === value}">${t(optLabel)}</button>`)
+          .join("")}</div></div>`).join("")}</div>
       <h2 class="section-title">${t("vg_set_thresholds")}</h2>
       <div class="card vg-fields">${SETTING_FIELDS.map(([key, label, kind]) =>
         `<label class="vg-field"><span>${t(label)}${kind === "min" ? ` <b class="vg-dur" data-dur="${key}">${formatDuration(settings[key])}</b>` : ""}</span><input data-setting="${key}" data-kind="${kind}" ${kind === "time" ? `type="time" value="${clock(settings[key])}"` : `type="number" inputmode="numeric" min="0" max="1440" value="${settings[key]}"`} /></label>`
@@ -524,6 +535,17 @@ export async function renderVaghinak(root, navigate, query) {
       <div class="card vg-fields">${people
         .map((p) => `<label class="vg-field"><span>${escapeHtml(p.name_hy || p.name)}</span><input type="text" maxlength="60" data-address="${p.id}" value="${escapeHtml(p.vaghinak_address ?? "")}" placeholder="${t("vg_auto")}" /></label>`)
         .join("")}</div>`;
+    body.querySelectorAll("[data-switch]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        try {
+          await api.vaghinakSaveSettings({ [btn.dataset.switch]: btn.dataset.value });
+          showToast(t("vg_saved"));
+          load();
+        } catch (err) {
+          showToast(err.message);
+        }
+      })
+    );
     body.querySelectorAll("[data-mode]").forEach((btn) =>
       btn.addEventListener("click", async () => {
         try {

@@ -18,6 +18,7 @@ export const teamApi = {
   vaghinakAutoTasks: () => request("/vaghinak/auto-tasks", { fresh: true }),
   vaghinakSettings: () => request("/vaghinak/settings"),
   vaghinakSaveSettings: (patch) => json("/vaghinak/settings", "PUT", patch),
+  getSalesPoints: (customerId) => request(`/sales-points/${customerId}`),
   vaghinakSetAddress: (id, address) => json(`/vaghinak/people/${id}/address`, "PUT", { address }),
   vaghinakMute: (id, muted) => json(`/vaghinak/people/${id}/mute`, "PUT", { muted }),
   vaghinakRunNow: () => json("/vaghinak/run-now", "POST", {}),

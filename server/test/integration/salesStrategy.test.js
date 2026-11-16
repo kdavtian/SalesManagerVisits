@@ -136,3 +136,24 @@ test("a failed run stores no report but is counted (with what it cost); never tw
   await assert.rejects(generateStrategy({ db: pool, apiKey: "test", fetchImpl: async () => assert.fail("must not be called") }), (err) => err.status === 409);
   await pool.query("UPDATE sales_strategy_runs SET status = 'failed' WHERE id = $1", [id]);
 });
+
+test("talking points at the check-in: the shop's own rep only once switched on, never another rep's shop; management always", async () => {
+  const other = await createUser("sales_manager");
+  const otherCookie = await loginAs(other.email);
+  await pool.query("DELETE FROM sales_strategy_reports");
+  await pool.query(
+    `INSERT INTO sales_strategy_reports (week_start, model, report) VALUES ($1, 'gpt-5', $2::jsonb)`,
+    [mondayOf(yerevanToday()), JSON.stringify({ talking_points: [{ rep: `REP-${rep.id}`, customer: "CUST-x", customer_ids: [shop.id], points: ["bring the price list"] }] })]
+  );
+  const get = (who) => apiRequest(`/api/sales-points/${shop.id}`, { cookie: who });
+  try {
+    assert.deepEqual((await get(cookies.rep)).data.points, [], "off by default");
+    assert.deepEqual((await get(cookies.director)).data.points, ["bring the price list"], "management reads them");
+    await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: cookies.admin, body: { strategyRepPoints: "on" } });
+    assert.deepEqual((await get(cookies.rep)).data.points, ["bring the price list"], "on: the shop's own rep reads them");
+    assert.equal((await get(otherCookie)).status, 404, "another rep's shop reads like no shop");
+    assert.equal((await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: cookies.director, body: { strategyRepPoints: "off" } })).status, 403, "a director cannot switch it");
+  } finally {
+    await apiRequest("/api/vaghinak/settings", { method: "PUT", cookie: cookies.admin, body: { strategyRepPoints: "off" } });
+  }
+});

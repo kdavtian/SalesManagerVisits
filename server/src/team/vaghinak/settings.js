@@ -32,9 +32,12 @@ export const DEFAULTS = {
   salesStepsMode: "shadow",
   // the weekly AI market strategy (strategist.js): "shadow" = written for management only, "off" = not written (no AI cost)
   strategistMode: "shadow",
+  // the strategy's talking points shown to each sales manager at the check-in of a picked customer (owner, 2026-11-16: "off" until the
+  // owner switches it on, after a week of reading them)
+  strategyRepPoints: "off",
 };
 
-const NUMERIC = Object.keys(DEFAULTS).filter((k) => !["mode", "salesStepsMode", "strategistMode"].includes(k));
+const NUMERIC = Object.keys(DEFAULTS).filter((k) => !["mode", "salesStepsMode", "strategistMode", "strategyRepPoints"].includes(k));
 // the funnel's numbers have their own ranges (7 product groups exist; a share is a percent; the window is a week to a year)
 const FUNNEL_RANGES = {
   funnelGroupsBronze: [1, 7, "Bronze product groups"],
@@ -58,6 +61,9 @@ export async function saveVaghinakSettings(patch, db = pool) {
     if (key === "mode") {
       if (!["off", "shadow", "live"].includes(value)) throw new Error("mode must be off, shadow or live");
       clean.mode = value;
+    } else if (key === "strategyRepPoints") {
+      if (!["off", "on"].includes(value)) throw new Error("strategyRepPoints must be off or on");
+      clean.strategyRepPoints = value;
     } else if (key === "strategistMode") {
       if (!["off", "shadow"].includes(value)) throw new Error("strategistMode must be off or shadow");
       clean.strategistMode = value;

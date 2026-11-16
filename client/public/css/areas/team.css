@@ -199,3 +199,7 @@
 /* The warehouse manager's and the driver's structure view (owner, 2026-11-03): their boss on top, their own row marked */
 .st-boss { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
 .st-node-me { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+/* Vaghinak settings: the Sales Expert switches (views/vaghinak.js SALES_SWITCHES) */
+.vg-switches { display: grid; gap: 12px; padding: 12px 14px; }
+.vg-switch { display: grid; gap: 6px; font-size: 0.9rem; }
+.vg-switch .map-filter-chip { min-height: 44px; }
