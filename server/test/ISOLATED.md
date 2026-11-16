@@ -10,6 +10,7 @@
   creator, which can be another file's temporary user; `tasks.creator_id` is ON DELETE CASCADE, so that file's clean-up deleted the task
   and the test found none; local CI 2026-10-29). `debtCollectionTasks.test.js` the same way: its tasks go to "the sales director" of the
   whole database, which can be another file's temporary user deleted mid-run (`tasks_creator_id_fkey` errors, CI on PR #519).
+- `excelBalanceHandoffs.test.js`: switches the one `app_settings.excel_balance_mode` and moves `payments_cutover`, which every payments test reads.
 - `salesStrategy.test.js`: writes this week's Sales Expert pick, the strategy reports and runs (one per week for the whole database), which the
   weekly-picks test of `salesFunnel.test.js` counts as "already picked this week".
 - `speedBudget.test.js` (step 12): fills its database with 4,000 customers and 60,000 order lines to time the busiest endpoints; the

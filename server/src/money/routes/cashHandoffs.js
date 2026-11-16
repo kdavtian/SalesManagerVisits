@@ -18,13 +18,16 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import {
   validHandoffRecipientRoles,
-  isTerminalHandoffRole,
   canSubmitHandoffForOthers,
   canVoidCountedPayment,
   closesCashShortfall,
+  seesExcelBalance,
+  setsExcelBalanceMode,
 } from "../../shared/roles.js";
+import { excelBalanceOverview, setExcelBalanceMode } from "../excelBalanceHandoffs.js";
 import { notifyUser } from "../../shared/notifications.js";
-import { createCashSheet, reportDiscrepancy } from "../cashSheets.js";
+import { confirmHandoffInTx } from "../handoffConfirm.js";
+import { reportDiscrepancy } from "../cashSheets.js";
 import { CASH_IN_HAND_SQL } from "../cashCustody.js";
 
 export const cashHandoffsRouter = Router();
@@ -98,6 +101,21 @@ export function checkOnBehalf(actor, sender, recipient) {
 
 // GET /available -- what the caller (or, with ?as_user_id=, the manager
 // they are declaring for) currently holds and could hand off next.
+// Excel "Balance" rows -> handovers (money/excelBalanceHandoffs.js): the mode and the last pairs with what was (or would be) done.
+cashHandoffsRouter.get("/excel-balance", async (req, res) => {
+  if (!seesExcelBalance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await excelBalanceOverview());
+});
+cashHandoffsRouter.put("/excel-balance/mode", async (req, res) => {
+  if (!setsExcelBalanceMode(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  try {
+    await setExcelBalanceMode(req.body?.mode);
+  } catch (err) {
+    return res.status(err.status ?? 500).json({ error: err.message });
+  }
+  res.json(await excelBalanceOverview());
+});
+
 cashHandoffsRouter.get("/available", async (req, res) => {
   let holderId = req.user.id;
   if (req.query.as_user_id && Number(req.query.as_user_id) !== req.user.id) {
@@ -368,58 +386,7 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
       return res.status(400).json({ error: "The counted amount differs: write what happened", code: "discrepancy_note_required" });
     }
 
-    const recipient = await getUser(handoff.to_user_id, client);
-    const sender = await getUser(handoff.from_user_id, client);
-    await client.query(
-      `UPDATE cash_handoffs SET status = 'confirmed', confirmed_by = $1, confirmed_at = now(), counted_amd = $3, discrepancy_note = $4 WHERE id = $2`,
-      [req.user.id, handoff.id, counted ?? expected, discrepancy ? discrepancyNote : null]
-    );
-    // A rep's cash (the first hop) makes the daily cash sheet that replaces the director's paper list; the bot posts it to the accountant.
-    if (sender?.role === "sales_manager") {
-      await createCashSheet(client, handoff, { directorId: req.user.id, countedAmd: counted ?? expected });
-    }
-
-    // Custody moves; the in-flight lock clears either way.
-    await client.query(
-      `UPDATE payments SET current_holder_id = $1, pending_handoff_id = NULL
-       WHERE id IN (SELECT payment_id FROM cash_handoff_items WHERE handoff_id = $2)`,
-      [handoff.to_user_id, handoff.id]
-    );
-
-    if (isTerminalHandoffRole(recipient.role)) {
-      // The accountant is always the last stage, so their confirmation is
-      // the moment the money's journey is complete -- which is exactly what
-      // payments.status = 'approved' has always meant. Reports, exports and
-      // Team Performance therefore keep working unchanged.
-      const { rows: terminal } = await client.query(
-        `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
-                rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL
-         WHERE id IN (SELECT payment_id FROM cash_handoff_items WHERE handoff_id = $2)
-           AND status = 'pending'
-         RETURNING id`,
-        [req.user.id, handoff.id]
-      );
-      for (const row of terminal) {
-        await client.query(
-          `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
-           VALUES ($1, 'pending', 'approved', $2, $3)`,
-          [row.id, `Cash handoff #${handoff.id} confirmed`, req.user.id]
-        );
-      }
-      // Already approved from the Excel, but the notes only reach the accountant now: the person who received them is recorded.
-      await client.query(
-        `UPDATE payments SET approved_by = $1, approved_at = COALESCE(approved_at, now())
-         WHERE id IN (SELECT payment_id FROM cash_handoff_items WHERE handoff_id = $2) AND status = 'approved' AND approved_from_erp AND approved_by IS NULL`,
-        [req.user.id, handoff.id]
-      );
-    }
-
-    // Owner's answer 6 (2026-11-02): counted LESS than the payments -> the difference stays on the sender's line until it is paid in or
-    // written off (cash_shortfalls). More than expected is only the note, as before.
-    const shortBy = counted !== null ? expected - Math.round(counted) : 0;
-    if (shortBy > 0) {
-      await client.query("INSERT INTO cash_shortfalls (handoff_id, user_id, amount_amd, note) VALUES ($1, $2, $3, $4)", [handoff.id, handoff.from_user_id, shortBy, discrepancyNote]);
-    }
+    const { recipient, sender, shortBy } = await confirmHandoffInTx(client, handoff, { confirmerId: req.user.id, counted, discrepancyNote });
 
     await client.query("COMMIT");
 
