@@ -100,7 +100,8 @@ export function getCsrfToken() {
 // (no network, or no answer within GET_TIMEOUT_MS) answers with its last saved copy, at most 3 days old, and the app says so
 // ("fv:offline-copy" -> a note with the time of the copy, app.js). Never for a change (POST/PATCH/...), never for an answer the server
 // refused (4xx/5xx), never for the live addresses below (who is where now, sign-in, counters, the sync's own state).
-const NO_OFFLINE_COPY = /^\/(auth|me\b|csrf|lockdown|push|locations|team-locations|notifications|badges|client-errors|health|system-health|erp-sync\/status|version|tasks\/rewards)/;
+// sales-points: the talking points are this week's and can be switched off -- an old copy must never show them (online only)
+const NO_OFFLINE_COPY = /^\/(auth|me\b|csrf|lockdown|push|locations|team-locations|notifications|badges|client-errors|health|system-health|erp-sync\/status|version|tasks\/rewards|sales-points)/;
 const OFFLINE_SAVE_EVERY_MS = 60000;
 const offlineSavedAt = new Map();
 function keepOfflineCopy(path, body) {
