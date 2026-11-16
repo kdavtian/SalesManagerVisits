@@ -21,6 +21,8 @@ import { notifyUser } from "../shared/notifications.js";
 
 const LOOKBACK_DAYS = 30;
 const amd = (n) => Math.round(Number(n)).toLocaleString("en-US");
+// money compared in luma (1/100 AMD) as whole numbers: payments may carry fractions, and "exactly equal" must mean exactly
+export const toLuma = (n) => Math.round(Number(n) * 100);
 const dayOf = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
 const addDays = (day, n) => {
   const d = new Date(`${day}T00:00:00Z`);
@@ -35,20 +37,34 @@ const addDays = (day, n) => {
 export function pairBalanceRows(rows, { prefer = () => false } = {}) {
   const sorted = [...rows].sort((a, b) => dayOf(a.entry_date).localeCompare(dayOf(b.entry_date)) || a.id - b.id);
   const ins = sorted.filter((r) => Number(r.amount_amd) > 0);
+  const outs = sorted.filter((r) => Number(r.amount_amd) < 0);
   const used = new Set();
+  const matched = new Map(); // outflow id -> inflow
+  const fits = (out, r) =>
+    !used.has(r.id) && toLuma(r.amount_amd) === -toLuma(out.amount_amd) && r.account_id !== out.account_id &&
+    dayOf(r.entry_date) >= dayOf(out.entry_date) && dayOf(r.entry_date) <= addDays(dayOf(out.entry_date), 1);
+  // two passes: every preferred pair (a rep's box -> the office box) over all rows first, then the rest -- an unrelated row earlier in the
+  // day can never take the office inflow a rep's hand-over needs
+  for (const pass of [true, false]) {
+    for (const out of outs) {
+      if (matched.has(out.id)) continue;
+      const inflow = ins.find((r) => fits(out, r) && (!pass || prefer(out, r)));
+      if (!inflow) continue;
+      used.add(inflow.id);
+      matched.set(out.id, inflow);
+    }
+  }
   const seen = new Map();
   const pairs = [];
-  for (const out of sorted.filter((r) => Number(r.amount_amd) < 0)) {
-    const amount = Math.round(-Number(out.amount_amd));
-    const day = dayOf(out.entry_date);
-    const fits = (r) => !used.has(r.id) && Math.round(Number(r.amount_amd)) === amount && r.account_id !== out.account_id && dayOf(r.entry_date) >= day && dayOf(r.entry_date) <= addDays(day, 1);
-    const inflow = ins.find((r) => fits(r) && prefer(out, r)) ?? ins.find(fits);
+  for (const out of outs) {
+    const inflow = matched.get(out.id);
     if (!inflow) continue;
-    used.add(inflow.id);
-    const base = `${day}|${amount}|${out.account_id}|${inflow.account_id}`;
+    const day = dayOf(out.entry_date);
+    const luma = -toLuma(out.amount_amd);
+    const base = `${day}|${luma}|${out.account_id}|${inflow.account_id}`;
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
-    pairs.push({ key: `${base}|${n}`, day, amount, from: out, to: inflow });
+    pairs.push({ key: `${base}|${n}`, day, luma, amount: luma / 100, from: out, to: inflow });
   }
   return pairs;
 }
@@ -87,9 +103,9 @@ async function decide(client, pair, repId, accountantId, { lock, mode }) {
   // a pair of the same rep and amount already acted on a day around (an Excel date corrected, a row re-typed): never act twice -- the
   // accountant looks
   const { rows: [twin] } = await client.query(
-    `SELECT 1 FROM excel_balance_links WHERE mode = $1 AND pair_key <> $2 AND rep_id = $3 AND round(amount_amd) = $4
+    `SELECT 1 FROM excel_balance_links WHERE mode = $1 AND pair_key <> $2 AND rep_id = $3 AND round(amount_amd * 100) = $4
        AND entry_date BETWEEN $5::date - 1 AND $5::date + 1 AND outcome IN ('confirmed_existing', 'created', 'already') LIMIT 1`,
-    [mode, pair.key, repId, pair.amount, pair.day]
+    [mode, pair.key, repId, pair.luma, pair.day]
   );
   if (twin) return { outcome: "task", inHand: null, twin: true };
   const forUpdate = lock ? "FOR UPDATE OF h" : "";
@@ -97,19 +113,19 @@ async function decide(client, pair, repId, accountantId, { lock, mode }) {
   const notUsed = "NOT EXISTS (SELECT 1 FROM excel_balance_links l WHERE l.handoff_id = h.id AND l.mode = 'live')";
   const { rows: [waiting] } = await client.query(
     `SELECT h.* FROM cash_handoffs h JOIN users u ON u.id = h.to_user_id
-     WHERE h.from_user_id = $1 AND h.status = 'pending' AND u.role = 'accountant' AND round(h.amount_amd) = $2
+     WHERE h.from_user_id = $1 AND h.status = 'pending' AND u.role = 'accountant' AND round(h.amount_amd * 100) = $2
        AND (h.submitted_at AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $3::date - 7 AND $3::date + 1 AND ${notUsed}
      ORDER BY h.submitted_at LIMIT 1 ${forUpdate}`,
-    [repId, pair.amount, pair.day]
+    [repId, pair.luma, pair.day]
   );
   if (waiting) return { outcome: "confirmed_existing", handoff: waiting };
   // the usual chain: the rep already handed exactly this amount on (to a director, confirmed) -- the Excel only records it; nothing to do
   const { rows: [handled] } = await client.query(
     `SELECT h.id FROM cash_handoffs h
-     WHERE h.from_user_id = $1 AND h.status = 'confirmed' AND round(h.amount_amd) = $2
+     WHERE h.from_user_id = $1 AND h.status = 'confirmed' AND round(h.amount_amd * 100) = $2
        AND (h.submitted_at AT TIME ZONE 'Asia/Yerevan')::date BETWEEN $3::date - 7 AND $3::date + 1 AND ${notUsed}
      ORDER BY h.submitted_at LIMIT 1`,
-    [repId, pair.amount, pair.day]
+    [repId, pair.luma, pair.day]
   );
   if (handled) return { outcome: "already", handoff: handled };
   const { rows: cash } = await client.query(
@@ -118,19 +134,19 @@ async function decide(client, pair, repId, accountantId, { lock, mode }) {
      ORDER BY p.payment_date, p.id ${lock ? "FOR UPDATE OF p" : ""}`,
     [repId, pair.day]
   );
-  // the oldest payments that add up to exactly the Excel amount (all of them is the usual case)
+  // the oldest payments that add up to exactly the Excel amount (all of them is the usual case), in luma: never rounded per payment
   let sum = 0;
   const take = [];
   for (const p of cash) {
-    sum += Math.round(Number(p.amount_amd));
+    sum += toLuma(p.amount_amd);
     take.push(p.id);
-    if (sum === pair.amount) return { outcome: "created", paymentIds: take };
-    if (sum > pair.amount) break;
+    if (sum === pair.luma) return { outcome: "created", paymentIds: take };
+    if (sum > pair.luma) break;
   }
-  const inHand = cash.reduce((s, p) => s + Math.round(Number(p.amount_amd)), 0);
+  const inHand = cash.reduce((s, p) => s + toLuma(p.amount_amd), 0) / 100;
   const { rows: [atDirector] } = await client.query(
-    "SELECT 1 FROM cash_handoffs WHERE from_user_id = $1 AND status = 'pending' AND round(amount_amd) = $2 LIMIT 1",
-    [repId, pair.amount]
+    "SELECT 1 FROM cash_handoffs WHERE from_user_id = $1 AND status = 'pending' AND round(amount_amd * 100) = $2 LIMIT 1",
+    [repId, pair.luma]
   );
   return { outcome: "task", inHand, atDirector: Boolean(atDirector) };
 }
@@ -198,8 +214,9 @@ async function runSync(db, mode, cutover, liveSince, now) {
       } else if (d.outcome === "created" && live) {
         const { rows: [h] } = await client.query(
           `INSERT INTO cash_handoffs (from_user_id, to_user_id, amount_amd, status, submitted_by, note, from_excel)
-           VALUES ($1, $2, $3, 'pending', $2, $4, true) RETURNING *`,
-          [repId, accountantId, pair.amount, `Excel Balance ${pair.day}: ${pair.from.account_name} → ${pair.to.account_name}`]
+           VALUES ($1, $2, (SELECT SUM(amount_amd) FROM payments WHERE id = ANY($3::int[])), 'pending', $2, $4, true) RETURNING *`,
+          // the hand-over is exactly what its payments add up to (equal to the Excel amount, compared in luma)
+          [repId, accountantId, d.paymentIds, `Excel Balance ${pair.day}: ${pair.from.account_name} → ${pair.to.account_name}`]
         );
         await client.query("INSERT INTO cash_handoff_items (handoff_id, payment_id) SELECT $1, unnest($2::int[])", [h.id, d.paymentIds]);
         await confirmHandoffInTx(client, h, { confirmerId: accountantId, fromExcel: true });

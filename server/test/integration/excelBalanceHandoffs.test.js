@@ -154,6 +154,36 @@ test("live acts only from the day it was switched on; the rep's chain through a 
   }
 });
 
+test("payments with fractions: a hand-over is created only when they add up exactly, and its amount is theirs", async () => {
+  const rep4 = await createUser("sales_manager");
+  const box4 = (await pool.query("INSERT INTO cash_accounts (name, kind) VALUES ($1, 'cash') RETURNING id", [`Cash R4 ${tag}`])).rows[0].id;
+  await pool.query("INSERT INTO cash_desk_holders (account_id, user_id) VALUES ($1, $2)", [box4, rep4.id]);
+  await pool.query("UPDATE app_settings SET excel_balance_mode = 'live', excel_balance_live_since = $1 WHERE id = 1", [day(-7)]);
+  try {
+    await pay(rep4.id, 100.49, 3);
+    await pay(rep4.id, 100.49, 2);
+    await pairRow(box4, 200, day(-1)); // 200.98 in hand: not exactly 200 -> a task, nothing created
+    let r = await syncExcelBalance();
+    assert.deepEqual([r.created, r.task], [0, 1]);
+    await pairRow(box4, 200.98, day(0)); // exactly what they add up to
+    r = await syncExcelBalance();
+    assert.equal(r.created, 1);
+    const { rows: [h] } = await pool.query("SELECT amount_amd::text AS amount FROM cash_handoffs WHERE from_user_id = $1 AND from_excel", [rep4.id]);
+    assert.equal(Number(h.amount), 200.98);
+  } finally {
+    await pool.query("UPDATE app_settings SET excel_balance_mode = 'shadow', excel_balance_live_since = NULL WHERE id = 1");
+    await pool.query("DELETE FROM excel_balance_links WHERE from_account = $1", [`Cash R4 ${tag}`]);
+    await pool.query("DELETE FROM cash_entries WHERE account_id = $1", [box4]);
+    await pool.query("DELETE FROM cash_sheets WHERE rep_id = $1", [rep4.id]);
+    await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE sales_manager_id = $1)", [rep4.id]);
+    await pool.query("DELETE FROM cash_handoff_items WHERE handoff_id IN (SELECT id FROM cash_handoffs WHERE from_user_id = $1)", [rep4.id]);
+    await pool.query("DELETE FROM cash_handoffs WHERE from_user_id = $1", [rep4.id]);
+    await pool.query("DELETE FROM payments WHERE sales_manager_id = $1", [rep4.id]);
+    await pool.query("DELETE FROM cash_desk_holders WHERE account_id = $1", [box4]);
+    await pool.query("DELETE FROM cash_accounts WHERE id = $1", [box4]);
+  }
+});
+
 test("off: nothing is read", async () => {
   await pool.query("UPDATE app_settings SET excel_balance_mode = 'off' WHERE id = 1");
   assert.deepEqual(await syncExcelBalance(), { mode: "off", pairs: 0 });
