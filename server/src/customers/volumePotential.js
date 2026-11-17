@@ -143,7 +143,7 @@ export async function loadVolumePotential(customerId, db = pool) {
   // one at a time: inside a save `db` is the transaction's single client, which must not run two queries at once
   const queries = [
     () => db.query(
-      `SELECT p.cars_per_month, p.bays, p.vehicle_mix, p.brands, p.brands_other, p.services, p.source, p.confidence, p.updated_at,
+      `SELECT p.cars_per_month, p.bays, p.vehicle_mix, p.brands, p.brands_other, p.services, p.source, p.confidence, p.updated_at, COALESCE(p.captured_at, p.updated_at) AS captured_at,
               COALESCE(u.name_hy, u.name) AS updated_by_name
        FROM volume_potential_profiles p LEFT JOIN users u ON u.id = p.updated_by WHERE p.customer_id = $1`,
       [customerId]
@@ -189,7 +189,7 @@ export async function saveVolumePotential(customerId, userId, body, db = pool) {
     const before = await loadVolumePotential(customerId, client);
     // an offline save pressed before the stored record was last changed (by someone else, or by a later save that arrived first) changes
     // nothing: the newer profile, lines and total stay; the history keeps the row, marked superseded (Codex review, 2026-11-17)
-    if (v.captured_at && before.profile?.updated_at && new Date(before.profile.updated_at) > new Date(v.captured_at)) {
+    if (v.captured_at && before.profile?.captured_at && new Date(before.profile.captured_at) > new Date(v.captured_at)) {
       await client.query("INSERT INTO volume_potential_history (customer_id, changed_by, before, after, client_ref) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)", [
         customerId,
         userId,
@@ -201,12 +201,12 @@ export async function saveVolumePotential(customerId, userId, body, db = pool) {
       return { ...before, superseded: true };
     }
     await client.query(
-      `INSERT INTO volume_potential_profiles (customer_id, cars_per_month, bays, vehicle_mix, brands, brands_other, services, source, confidence, updated_by, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, now())
+      `INSERT INTO volume_potential_profiles (customer_id, cars_per_month, bays, vehicle_mix, brands, brands_other, services, source, confidence, updated_by, updated_at, captured_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, now(), COALESCE($11::timestamptz, now()))
        ON CONFLICT (customer_id) DO UPDATE SET cars_per_month = EXCLUDED.cars_per_month, bays = EXCLUDED.bays, vehicle_mix = EXCLUDED.vehicle_mix,
          brands = EXCLUDED.brands, brands_other = EXCLUDED.brands_other, services = EXCLUDED.services, source = EXCLUDED.source,
-         confidence = EXCLUDED.confidence, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-      [customerId, v.cars_per_month, v.bays, v.vehicle_mix, v.brands, v.brands_other, JSON.stringify(v.services), v.source, v.confidence, userId]
+         confidence = EXCLUDED.confidence, updated_by = EXCLUDED.updated_by, updated_at = now(), captured_at = EXCLUDED.captured_at`,
+      [customerId, v.cars_per_month, v.bays, v.vehicle_mix, v.brands, v.brands_other, JSON.stringify(v.services), v.source, v.confidence, userId, v.captured_at]
     );
     // the sheet shows the lines in use only: a switched-off line's amount is kept unless the save sends that line (review, 2026-11-17)
     await client.query(

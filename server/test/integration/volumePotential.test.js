@@ -158,6 +158,12 @@ test("review fixes: a switched-off line keeps its amount; a blank total keeps th
   assert.equal(old.data.lines.find((l) => l.line_id === line("atf").id).amount, 40);
   const top = (await apiRequest(`/api/volume-potential/customers/${c.id}/history`, { cookie: cookies.rep })).data[0];
   assert.equal(top.after.superseded, true);
+  // two offline saves synced in order: the second (made later on the phone) is applied, whatever time the first reached the server
+  const t0 = Date.now();
+  await save("rep", c, { cars_per_month: 11, captured_at: new Date(t0 + 60 * 1000).toISOString(), client_ref: `vp-a-${t0}` });
+  const b = await save("rep", c, { cars_per_month: 22, captured_at: new Date(t0 + 2 * 60 * 1000).toISOString(), client_ref: `vp-b-${t0}` });
+  assert.equal(b.data.superseded, undefined);
+  assert.equal(b.data.profile.cars_per_month, 22);
   // a huge order number is clamped, not a server error
   const added = await apiRequest("/api/volume-potential/lines", { method: "POST", cookie: cookies.director, body: { name_en: "Big", name_hy: "Մեծ", sort_order: 1e12, active: false } });
   assert.equal(added.status, 201);

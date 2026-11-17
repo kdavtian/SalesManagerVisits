@@ -11,3 +11,7 @@ CREATE TABLE IF NOT EXISTS volume_potential_sku_map (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (litres_per_unit IS NULL OR litres_per_unit > 0)
 );
+
+-- When the saved potential was really made on the phone (an offline save arrives later): which of two offline saves is the newer is
+-- decided by this, not by when the server received it (Codex review, 2026-11-17). NULL on older rows = updated_at.
+ALTER TABLE volume_potential_profiles ADD COLUMN IF NOT EXISTS captured_at TIMESTAMPTZ;

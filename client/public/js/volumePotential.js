@@ -185,7 +185,8 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
   // (Codex review, 2026-11-17)
   const pending = getQueue().find((e) => e.type === "volume_potential" && e.customerId === customer.id);
   // ... unless someone saved a newer copy after it: then the server keeps that one (the queued save arrives as superseded)
-  const newerOnServer = pending && data.profile?.updated_at && pending.body.captured_at && new Date(data.profile.updated_at) > new Date(pending.body.captured_at);
+  const serverAt = data.profile?.captured_at ?? data.profile?.updated_at;
+  const newerOnServer = pending && serverAt && pending.body.captured_at && new Date(serverAt) > new Date(pending.body.captured_at);
   if (pending && !newerOnServer) data = fromQueued(data, pending.body);
   const p = data.profile ?? {};
   // copies, not the loaded objects: Cancel must leave the card's data as it was (Codex review, 2026-11-17)

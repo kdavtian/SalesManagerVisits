@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { actualsWindow, autoLineCode } from "../../src/customers/volumeActuals.js";
+import { actualsWindow, autoLineCode, walletOf } from "../../src/customers/volumeActuals.js";
 
 const tag = `vo${Date.now()}`;
 let rep, rep2, director, cookies = {}, lines, big, small, others;
@@ -66,6 +66,15 @@ test("the rules: exact products map, unclear ones wait for a person", () => {
   assert.equal(autoLineCode({ name: "Brake & parts cleaner spray", family: "Other" }).code, null);
   assert.equal(autoLineCode({ name: "Castrol Brake Fluid DOT 4", family: "Other" }).code, "brake");
   assert.equal(autoLineCode({ name: "Castrol ON EV Coolant", family: "ON" }).code, "ev_thermal");
+});
+
+test("grease (kg) never counts in litres: a grease-only customer has no litre potential unless kg lines alone are filtered", () => {
+  const g = line("grease").id;
+  const data = { lines: [{ line_id: g, amount: 100 }], total_l: null };
+  const act = { by_line: { [g]: 40 }, total: 0, unmapped: 0 };
+  assert.deepEqual([walletOf(data, act, { kgLines: new Set([g]) }).potential, walletOf(data, act, { kgLines: new Set([g]) }).gap], [0, 0]);
+  const onlyKg = walletOf(data, act, { kgLines: new Set([g]), lineIds: new Set([g]) });
+  assert.deepEqual([onlyKg.potential, onlyKg.actual, onlyKg.gap], [100, 40, 60]);
 });
 
 test("the card: actual litres a month per line from the last 3 whole months, share of wallet and gap", async () => {

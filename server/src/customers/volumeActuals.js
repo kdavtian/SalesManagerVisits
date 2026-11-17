@@ -204,8 +204,8 @@ export function walletOf({ lines = [], total_l = null }, actual = { by_line: {},
       const act = Number(actual.by_line?.[l.line_id] ?? 0);
       return { line_id: l.line_id, potential, actual: act, share_pct: Math.round((act / potential) * 100), gap: Math.max(0, Math.round((potential - act) * 10) / 10), kg: kgLines.has(l.line_id) };
     });
-  // litres only, unless the filter picked kg lines only (then all in kg)
-  const counted = rows.some((r) => !r.kg) ? rows.filter((r) => !r.kg) : rows;
+  // litres only; kg lines count only when a line filter picked kg lines alone (then everything is kg) (Codex review)
+  const counted = rows.some((r) => !r.kg) ? rows.filter((r) => !r.kg) : lineIds ? rows : [];
   const lineSum = (k) => counted.reduce((s, r) => s + r[k], 0);
   const byLines = rows.length > 0;
   const potential = lineIds ? lineSum("potential") : Number(total_l) > 0 ? Number(total_l) : lineSum("potential");
