@@ -184,7 +184,9 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
   // a save still waiting in the offline queue is the newest copy: the sheet starts from it, so a second edit does not drop the first
   // (Codex review, 2026-11-17)
   const pending = getQueue().find((e) => e.type === "volume_potential" && e.customerId === customer.id);
-  if (pending) data = fromQueued(data, pending.body);
+  // ... unless someone saved a newer copy after it: then the server keeps that one (the queued save arrives as superseded)
+  const newerOnServer = pending && data.profile?.updated_at && pending.body.captured_at && new Date(data.profile.updated_at) > new Date(pending.body.captured_at);
+  if (pending && !newerOnServer) data = fromQueued(data, pending.body);
   const p = data.profile ?? {};
   // copies, not the loaded objects: Cancel must leave the card's data as it was (Codex review, 2026-11-17)
   const services = Object.fromEntries(Object.entries(p.services ?? {}).map(([k, v]) => [k, { ...v }]));
@@ -378,9 +380,12 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
     btn.disabled = true;
     try {
       if (!navigator.onLine) throw new TypeError("offline");
-      await api.saveVolumePotential(customer.id, body);
+      // online: no captured_at -- the "older save never overwrites a newer one" rule is for saves sent later from the offline queue only
+      // (a phone clock a few minutes slow must not turn a quick correction into a lost one; review, 2026-11-17)
+      const { captured_at: _at, ...now } = body;
+      const r = await api.saveVolumePotential(customer.id, now);
       close();
-      showToast(t("vp_saved"));
+      showToast(t(r?.superseded ? "vp_superseded" : "vp_saved"));
       onSaved?.();
     } catch (err) {
       // no signal: the save waits on the phone and is sent when the signal is back (a newer save of the same customer replaces it)

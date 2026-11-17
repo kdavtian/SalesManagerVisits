@@ -3,7 +3,7 @@
 // Filters: places (the "region::subregion" keys of the shared region tree), product lines, reps, services the workshop does. Totals by
 // region and by rep.
 import { pool } from "../db/pool.js";
-import { customerActuals, skuMappings, walletOf, actualsWindow } from "./volumeActuals.js";
+import { customerActuals, skuMappings, walletOf, actualsWindow, kgLineIds } from "./volumeActuals.js";
 
 const NO_SUB = "__none__"; // the region tree's "no subregion" leaf
 const list = (v) => String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -43,10 +43,11 @@ export async function buildOpportunities({ query = {}, scopeUserId = null } = {}
   const mappings = await skuMappings(db);
   const actuals = picked.length ? await customerActuals(picked.map((c) => c.id), db, { mappings, window }) : new Map();
   const lineFilter = lineIds.length ? new Set(lineIds) : null;
+  const kgLines = await kgLineIds(db);
   const rows = [];
   for (const c of picked) {
     const act = actuals.get(c.id) ?? { by_line: {}, total: 0, unmapped: 0 };
-    const w = walletOf({ lines: c.lines, total_l: c.total_l }, act, { lineIds: lineFilter });
+    const w = walletOf({ lines: c.lines, total_l: c.total_l }, act, { lineIds: lineFilter, kgLines });
     if (!(w.potential > 0)) continue;
     rows.push({
       customer_id: c.id,

@@ -60,6 +60,12 @@ test("the rules: exact products map, unclear ones wait for a person", () => {
   assert.equal(autoLineCode({ name: "Castrol Transmax Universal", family: "Transmission" }).code, null);
   assert.equal(autoLineCode({ name: "Lotos 15W-40", family: "Engine Oil" }).code, null, "car or truck: unclear");
   assert.equal(autoLineCode({ name: "Hyspin AWS 46", family: "Hydraulic" }).reason, "family_not_a_line");
+  // never guessed (review): a 5W-40 of no known range, a motorcycle oil, a brake cleaner spray; an EV coolant is the EV line
+  assert.equal(autoLineCode({ name: "Royal 5W-40", family: "Engine Oil" }).code, null);
+  assert.equal(autoLineCode({ name: "Castrol POWER1 4T 5W-40", family: "Other" }).code, null);
+  assert.equal(autoLineCode({ name: "Brake & parts cleaner spray", family: "Other" }).code, null);
+  assert.equal(autoLineCode({ name: "Castrol Brake Fluid DOT 4", family: "Other" }).code, "brake");
+  assert.equal(autoLineCode({ name: "Castrol ON EV Coolant", family: "ON" }).code, "ev_thermal");
 });
 
 test("the card: actual litres a month per line from the last 3 whole months, share of wallet and gap", async () => {
@@ -69,9 +75,9 @@ test("the card: actual litres a month per line from the last 3 whole months, sha
   assert.equal(r.data.actuals.by_line[edge], 40, "30 x 4 L over 3 months; the 2020 sale is outside");
   assert.equal(r.data.actuals.unmapped, 10, "6 x 5 L of the unclear 15W-40 / 3");
   const w = r.data.wallet;
-  assert.deepEqual(w.lines.find((l) => l.line_id === edge), { line_id: edge, potential: 100, actual: 40, share_pct: 40, gap: 60 });
-  assert.equal(w.gap, 110, "60 on 5W-30 + 50 on 15W-40 (nothing placed there yet)");
-  assert.deepEqual([w.potential, w.actual, w.share_pct], [200, 40, 20], "share of wallet: all they buy from us against the whole potential");
+  assert.deepEqual(w.lines.find((l) => l.line_id === edge), { line_id: edge, potential: 100, actual: 40, share_pct: 40, gap: 60, kg: false });
+  assert.deepEqual([w.potential, w.actual, w.gap, w.share_pct], [200, 40, 160, 20], "bought + can still buy = the whole potential; share = bought / potential");
+  assert.equal(w.lines.find((l) => l.line_id === line("hdeo_15w40").id).gap, 50, "where: nothing placed on 15W-40 yet");
 });
 
 test("management places an unmapped product; it then counts; a rep cannot", async () => {
@@ -86,7 +92,7 @@ test("management places an unmapped product; it then counts; a rep cannot", asyn
   const r = await apiRequest(`/api/volume-potential/customers/${big.id}`, { cookie: cookies.rep });
   assert.equal(r.data.actuals.by_line[line("hdeo_15w40").id], 10);
   assert.equal(r.data.actuals.unmapped, 0);
-  assert.equal(r.data.wallet.gap, 100);
+  assert.equal(r.data.wallet.gap, 150);
 });
 
 test("Opportunities: ranked by the gap; a rep sees only their own; filters by line and rep; totals by region and rep", async () => {

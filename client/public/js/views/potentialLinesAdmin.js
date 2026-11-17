@@ -101,7 +101,7 @@ async function renderSkus(box, lines, all) {
       <div class="muted pla-sum-meta">${escapeHtml([s.family, s.size ? `${s.size} ${t("vp_l")}` : t("pla_sku_no_size"), `${Math.round(s.qty_12m)} ${t("pla_sku_units")}`, s.status === "unmapped" && REASONS.includes(s.reason) ? t(`pla_why_${s.reason}`) : t(`pla_st_${s.status}`)].filter(Boolean).join(" · "))}</div>
       <div class="pla-grid">
         <label>${escapeHtml(t("pla_sku_line"))}<select name="line">${options(s)}</select></label>
-        <label>${escapeHtml(t("pla_sku_litres"))}<input name="litres" type="number" inputmode="decimal" step="0.001" min="0" placeholder="${s.size ?? ""}" /></label>
+        <label>${escapeHtml(t("pla_sku_litres"))}<input name="litres" type="number" inputmode="decimal" step="0.001" min="0" value="${s.manual_litres ?? ""}" placeholder="${s.size ?? ""}" /></label>
       </div>
       <div class="pla-actions"><span></span><button type="submit" class="btn btn-primary">${escapeHtml(t("save"))}</button></div>
     </form>`

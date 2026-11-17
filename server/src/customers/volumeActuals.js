@@ -24,15 +24,16 @@ export function autoLineCode({ name, family, brand } = {}) {
   const fam = String(family ?? "").trim().toLowerCase();
   const isCastrol = String(brand ?? "").trim().toLowerCase() === "castrol";
   if (NOT_A_LINE_FAMILIES.has(fam)) return { code: null, reason: "family_not_a_line" };
-  if (/\bBRAKE\b|\bDOT\s*-?\s*[345]/.test(n)) return { code: "brake", reason: "rule" };
-  if (fam === "antifreeze" || /RADICOOL|ANTIFREEZE|COOLANT|ANTIFRIZ/.test(n)) return { code: "coolant", reason: "rule" };
-  if (fam === "grease" || /\bGREASE\b|SPHEEROL|\bLMX\b/.test(n)) return { code: "grease", reason: "rule" };
-  // Castrol ON (EV fluids)
+  if (/CLEANER|SPRAY/.test(n)) return { code: null, reason: "no_rule" }; // brake / parts cleaner sprays are no fluid line
+  // Castrol ON (EV fluids) first: an EV thermal fluid is not a coolant line
   if (fam === "on" || (isCastrol && /\bON\b/.test(n) && /THERMAL|E-?TRANSMISSION|E-?DRIVE|EV\b/.test(n))) {
-    if (/THERMAL/.test(n)) return { code: "ev_thermal", reason: "rule" };
+    if (/THERMAL|COOLANT/.test(n)) return { code: "ev_thermal", reason: "rule" };
     if (/TRANSMISSION|E-?DRIVE/.test(n)) return { code: "ev_transmission", reason: "rule" };
     return { code: null, reason: "ev_unclear" };
   }
+  if (/\bBRAKE\s+FLUID\b|\bDOT\s*-?\s*[345]/.test(n)) return { code: "brake", reason: "rule" };
+  if (fam === "antifreeze" || /RADICOOL|ANTIFREEZE|COOLANT|ANTIFRIZ/.test(n)) return { code: "coolant", reason: "rule" };
+  if (fam === "grease" || /\bGREASE\b|SPHEEROL|\bLMX\b/.test(n)) return { code: "grease", reason: "rule" };
   // transmission fluids: exactly one type word, or it waits for a person
   const kinds = [];
   if (/\bCVT\b/.test(n)) kinds.push("cvt");
@@ -49,8 +50,8 @@ export function autoLineCode({ name, family, brand } = {}) {
   let kind = null;
   if (PCMO_RANGES.test(n) || ["edge", "magnatec", "gtx"].includes(fam)) kind = "pcmo";
   else if (HDEO_RANGES.test(n) || ["crb", "vecton"].includes(fam)) kind = "hdeo";
-  else if (/^(0w|5w)/.test(grade)) kind = "pcmo"; // a 0W / 5W oil is a car oil whatever its brand
-  if (!kind) return { code: null, reason: "car_or_truck_unclear" };
+  // no known car or truck range: a person decides (a 5W-40 can be a car, truck or motorcycle oil -- never guessed; review, 2026-11-17)
+  if (!kind || /\b(4T|2T|POWER\s*1|MOTO)\b/.test(n)) return { code: null, reason: "car_or_truck_unclear" };
   return { code: `${kind}_${grade}`, reason: "rule" };
 }
 
@@ -66,7 +67,18 @@ const NOT_INTERNAL = "erp_customer_id <> '10000'"; // the company's own shop/off
 
 // Every product sold in the last 12 months with its line: { sku_key, name, brand, family, size, line_id, line_code, litres_per_unit,
 // status: manual | auto | not_a_line | unmapped, reason, qty_12m, last_sale }.
+// Read for every card and report: kept one minute, dropped at once when management changes a product or a line (clearSkuMappings).
+let cache = null;
+export function clearSkuMappings() {
+  cache = null;
+}
 export async function skuMappings(db = pool) {
+  if (db === pool && cache && Date.now() - cache.at < 60 * 1000) return cache.rows;
+  const rows = await readSkuMappings(db);
+  if (db === pool) cache = { at: Date.now(), rows };
+  return rows;
+}
+async function readSkuMappings(db) {
   const [{ rows: skus }, { rows: lines }, { rows: decided }] = await Promise.all([
     db.query(
       `SELECT k.sku_key, MAX(k.product_name) AS name, MAX(k.brand) AS brand, MAX(k.size_l) AS size_txt,
@@ -77,16 +89,21 @@ export async function skuMappings(db = pool) {
         GROUP BY k.sku_key`,
       [addMonths(yerevanToday(), -12)]
     ),
-    db.query("SELECT id, code FROM volume_potential_lines"),
+    db.query("SELECT id, code, unit FROM volume_potential_lines"),
     db.query("SELECT sku_key, line_id, not_a_line, litres_per_unit::float8 AS litres_per_unit FROM volume_potential_sku_map"),
   ]);
   const idOf = new Map(lines.map((l) => [l.code, l.id]));
   const codeOf = new Map(lines.map((l) => [l.id, l.code]));
+  const kgIds = new Set(lines.filter((l) => l.unit === "kg").map((l) => l.id));
   const manual = new Map(decided.map((d) => [d.sku_key, d]));
-  return skus.map((s) => {
-    const m = manual.get(s.sku_key);
+  return skus.map((s) => withUnit(s, manual.get(s.sku_key)));
+  function withUnit(s, m) {
+    const r = place(s, m);
+    return { ...r, kg: r.line_id != null && kgIds.has(r.line_id) };
+  }
+  function place(s, m) {
     const size = m?.litres_per_unit ?? sizeOf(s.size_txt) ?? (s.p_size > 0 ? s.p_size : null);
-    const base = { sku_key: s.sku_key, name: s.name, brand: s.brand, family: s.family, size, qty_12m: s.qty_12m, last_sale: s.last_sale, litres_per_unit: size };
+    const base = { sku_key: s.sku_key, name: s.name, brand: s.brand, family: s.family, size, qty_12m: s.qty_12m, last_sale: s.last_sale, litres_per_unit: size, manual_litres: m?.litres_per_unit ?? null };
     if (m?.not_a_line) return { ...base, line_id: null, line_code: null, status: "not_a_line", reason: "manual" };
     if (m?.line_id) return size ? { ...base, line_id: m.line_id, line_code: codeOf.get(m.line_id), status: "manual", reason: "manual" } : { ...base, line_id: m.line_id, line_code: codeOf.get(m.line_id), status: "unmapped", reason: "no_size" };
     const auto = autoLineCode(s);
@@ -95,7 +112,7 @@ export async function skuMappings(db = pool) {
     if (!lineId) return { ...base, line_id: null, line_code: null, status: "unmapped", reason: auto.code ? "no_catalogue_line" : auto.reason };
     if (!size) return { ...base, line_id: lineId, line_code: auto.code, status: "unmapped", reason: "no_size" };
     return { ...base, line_id: lineId, line_code: auto.code, status: "auto", reason: "rule" };
-  });
+  }
 }
 
 export async function saveSkuMapping(skuKey, userId, b, db = pool) {
@@ -160,8 +177,8 @@ export async function customerActuals(customerIds = null, db = pool, { mappings 
     if (m?.status === "auto" || m?.status === "manual") {
       const l = (r.qty * m.litres_per_unit) / window.months;
       a.by_line[m.line_id] = (a.by_line[m.line_id] ?? 0) + l;
-      a.total += l;
-    } else if (!m || m.status === "unmapped") {
+      if (!m.kg) a.total += l; // the total is litres: grease (kg) is shown on its own line only
+    } else if ((!m || m.status === "unmapped") && !m?.kg) {
       a.unmapped += (r.qty * (m?.litres_per_unit ?? 0)) / window.months;
     }
   }
@@ -173,24 +190,27 @@ export async function customerActuals(customerIds = null, db = pool, { mappings 
   return out;
 }
 
-// Share of wallet and gap for one customer: per line with a potential, and over the total.
-//   line: { line_id, potential, actual, share_pct, gap }   share = actual / potential; gap = potential - actual, never below 0
-export function walletOf({ lines = [], total_l = null }, actual = { by_line: {}, total: 0, unmapped: 0 }, { lineIds = null } = {}) {
+// Share of wallet and gap for one customer (review, 2026-11-17: one meaning everywhere, bought + can still buy = potential):
+//   potential = the total monthly need (else the lines' sum), litres only (grease kg lines are shown, never added to litres)
+//   bought    = every placed product they buy from us, litres
+//   gap       = potential - bought, never below 0; with a line filter, the gaps of those lines
+//   per line  = { line_id, potential, actual, share_pct, gap, kg } -- where the gap is
+export function walletOf({ lines = [], total_l = null }, actual = { by_line: {}, total: 0, unmapped: 0 }, { lineIds = null, kgLines = new Set() } = {}) {
   const pick = lineIds ? lines.filter((l) => lineIds.has(l.line_id)) : lines;
   const rows = pick
     .filter((l) => Number(l.amount) > 0)
     .map((l) => {
       const potential = Number(l.amount);
       const act = Number(actual.by_line?.[l.line_id] ?? 0);
-      return { line_id: l.line_id, potential, actual: act, share_pct: Math.round((act / potential) * 100), gap: Math.max(0, Math.round((potential - act) * 10) / 10) };
+      return { line_id: l.line_id, potential, actual: act, share_pct: Math.round((act / potential) * 100), gap: Math.max(0, Math.round((potential - act) * 10) / 10), kg: kgLines.has(l.line_id) };
     });
+  // litres only, unless the filter picked kg lines only (then all in kg)
+  const counted = rows.some((r) => !r.kg) ? rows.filter((r) => !r.kg) : rows;
+  const lineSum = (k) => counted.reduce((s, r) => s + r[k], 0);
   const byLines = rows.length > 0;
-  const lineSum = (k) => rows.reduce((s, r) => s + r[k], 0);
-  // share of wallet: everything they buy from us (every placed product) against the whole potential (the total, else the lines' sum);
-  // with a line filter, only those lines. The gap: the lines' own gaps (what is not bought where), else the total minus what is bought.
   const potential = lineIds ? lineSum("potential") : Number(total_l) > 0 ? Number(total_l) : lineSum("potential");
   const act = lineIds ? lineSum("actual") : Number(actual.total ?? 0);
-  const gap = byLines ? lineSum("gap") : Math.max(0, potential - act);
+  const gap = lineIds ? lineSum("gap") : Math.max(0, potential - act);
   return {
     lines: rows,
     potential: Math.round(potential * 10) / 10,
@@ -199,4 +219,8 @@ export function walletOf({ lines = [], total_l = null }, actual = { by_line: {},
     share_pct: potential > 0 ? Math.round((act / potential) * 100) : null,
     by_lines: byLines,
   };
+}
+
+export async function kgLineIds(db = pool) {
+  return new Set((await db.query("SELECT id FROM volume_potential_lines WHERE unit = 'kg'")).rows.map((r) => r.id));
 }
