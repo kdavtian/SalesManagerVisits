@@ -805,3 +805,9 @@ export function homeShowsCompanyData(role) {
 export function homeShowsCompanyDashboard(role) {
   return role === "admin" || role === "ceo" || role === "operations_director";
 }
+
+// The customer volume potential (customers/routes/volumePotential.js), like the prospect level on the same card: management any customer,
+// a sales manager only the customers assigned to them.
+export function canEditCustomerPotential(user, assignedManagerId) {
+  return canManagePotentialAll(user?.role) || (user?.role === "sales_manager" && assignedManagerId != null && assignedManagerId === user.id);
+}

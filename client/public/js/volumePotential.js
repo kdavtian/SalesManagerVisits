@@ -15,10 +15,18 @@ const CONFIDENCE = ["low", "med", "high"];
 const GROUP_ORDER = ["pcmo", "hdeo", "transmission", "ev", "coolant", "brake", "grease", "other"];
 const nf = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 1 });
 
-let catalogue = null; // { lines, services, vehicles, brands } for this session
+// { lines, services, vehicles, brands }: read again after 10 minutes, or at once after a change in Settings (clearVolumeCatalogue)
+let catalogue = null;
+let catalogueAt = 0;
 async function loadCatalogue() {
-  catalogue ??= await api.getPotentialLines();
+  if (!catalogue || Date.now() - catalogueAt > 10 * 60 * 1000) {
+    catalogue = await api.getPotentialLines();
+    catalogueAt = Date.now();
+  }
   return catalogue;
+}
+export function clearVolumeCatalogue() {
+  catalogue = null;
 }
 export const volumeAgeDays = (customer, now = Date.now()) => {
   const at = customer.volume_potential_at ? new Date(customer.volume_potential_at).getTime() : NaN;
@@ -302,6 +310,7 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
       source,
       confidence,
       client_ref: crypto.randomUUID(),
+      captured_at: new Date().toISOString(),
     };
     const bad = body.lines.find((l) => l.our_share_pct != null && (l.our_share_pct < 0 || l.our_share_pct > 100));
     if (bad || (body.cars_per_month != null && !(body.cars_per_month >= 0)) || (body.bays != null && !(body.bays >= 0))) {

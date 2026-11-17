@@ -4,6 +4,7 @@
 import { api } from "../api.js";
 import { getLang, t } from "../i18n.js";
 import { escapeHtml, showToast } from "../util.js";
+import { clearVolumeCatalogue } from "../volumePotential.js";
 
 export async function renderPotentialLinesSection(container) {
   container.innerHTML = `<p class="loading-state" role="status">${escapeHtml(t("loading"))}</p>`;
@@ -59,6 +60,7 @@ export async function renderPotentialLinesSection(container) {
     btn.disabled = true;
     try {
       await api.savePotentialLine(formEl.dataset.id ? Number(formEl.dataset.id) : null, body);
+      clearVolumeCatalogue();
       showToast(t("saved"));
       renderPotentialLinesSection(container);
     } catch (err) {

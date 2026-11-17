@@ -3,6 +3,7 @@
 // funnel (team/vaghinak/funnel.js) and the card always show the same value. Every save keeps a before/after row (volume_potential_history).
 // Phase 2 compares the lines with what the customer buys from us.
 import { pool } from "../db/pool.js";
+import { parseCapturedAt } from "../utils/capturedAt.js";
 
 // The services a workshop can do; `buys` = ask "do they buy it from us?", `machine` = ask "has the machine?". Keys are stored, labels are
 // the screen's (i18n vp_svc_<key>).
@@ -110,6 +111,8 @@ export function cleanVolumePotential(b = {}, lineIds = new Set()) {
     lines,
     total,
     client_ref: typeof b.client_ref === "string" && b.client_ref.length <= 80 ? b.client_ref : null,
+    // when the rep pressed Save (an offline save arrives later): an older save never overwrites a newer monthly need
+    captured_at: parseCapturedAt(b.captured_at),
   };
 }
 
@@ -192,13 +195,23 @@ export async function saveVolumePotential(customerId, userId, body, db = pool) {
          confidence = EXCLUDED.confidence, updated_by = EXCLUDED.updated_by, updated_at = now()`,
       [customerId, v.cars_per_month, v.bays, v.vehicle_mix, v.brands, v.brands_other, JSON.stringify(v.services), v.source, v.confidence, userId]
     );
-    await client.query("DELETE FROM volume_potential_amounts WHERE customer_id = $1", [customerId]);
+    // the sheet shows the lines in use only: a switched-off line's amount is kept unless the save sends that line (review, 2026-11-17)
+    await client.query(
+      `DELETE FROM volume_potential_amounts WHERE customer_id = $1
+         AND (line_id = ANY($2::int[]) OR line_id IN (SELECT id FROM volume_potential_lines WHERE active))`,
+      [customerId, v.lines.map((l) => l.line_id)]
+    );
     for (const l of v.lines) {
       await client.query("INSERT INTO volume_potential_amounts (customer_id, line_id, amount_month, our_share_pct) VALUES ($1, $2, $3, $4)", [customerId, l.line_id, l.amount, l.our_share_pct]);
     }
-    // the total is the customer's whole monthly need (the funnel's stage 4 reads it): written, and its date renewed, when sent
-    if (v.total !== undefined) {
-      await client.query("UPDATE customers SET expected_volume_l = $2, expected_volume_at = now(), expected_volume_by = $3 WHERE id = $1", [customerId, v.total, userId]);
+    // the total is the customer's whole monthly need (the funnel's stage 4 reads it): written, and dated, when a number is sent; a blank box
+    // leaves it as it is (never blanks the funnel's number); an offline save never overwrites a number written after the rep pressed Save
+    if (v.total !== undefined && v.total !== null) {
+      await client.query(
+        `UPDATE customers SET expected_volume_l = $2, expected_volume_at = COALESCE($4::timestamptz, now()), expected_volume_by = $3
+         WHERE id = $1 AND (expected_volume_at IS NULL OR expected_volume_at <= COALESCE($4::timestamptz, now()))`,
+        [customerId, v.total, userId, v.captured_at]
+      );
     }
     const after = await loadVolumePotential(customerId, client);
     await client.query("INSERT INTO volume_potential_history (customer_id, changed_by, before, after, client_ref) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)", [
@@ -235,7 +248,7 @@ export async function saveLine(id, b, db = pool) {
   if (!name_en || !name_hy) throw new VolumePotentialError("Both names are required");
   const unit = b?.unit === "kg" ? "kg" : "L";
   const hint = String(b?.castrol_hint ?? "").trim().slice(0, 80) || null;
-  const sort = Number.isInteger(Number(b?.sort_order)) ? Number(b.sort_order) : 0;
+  const sort = Number.isInteger(Number(b?.sort_order)) ? Math.max(-1e6, Math.min(1e6, Number(b.sort_order))) : 0; // INTEGER column
   const active = b?.active !== false;
   if (id) {
     const { rows: [r] } = await db.query(

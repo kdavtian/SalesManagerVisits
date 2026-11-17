@@ -4,7 +4,7 @@
 import express, { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
 import { pool } from "../../db/pool.js";
-import { canManagePotentialAll } from "../../shared/roles.js";
+import { canManagePotentialAll, canEditCustomerPotential } from "../../shared/roles.js";
 import { loadVolumePotential, saveVolumePotential, volumePotentialHistory, activeLines, saveLine, VolumePotentialError, SERVICES, VEHICLES, BRANDS } from "../volumePotential.js";
 
 export const volumePotentialRouter = Router();
@@ -15,7 +15,7 @@ async function access(req, res) {
   const id = Number(req.params.id);
   const { rows: [c] } = Number.isInteger(id) && id > 0 ? await pool.query("SELECT id, assigned_manager_id FROM customers WHERE id = $1", [id]) : { rows: [] };
   if (!c) return res.status(404).json({ error: "Customer not found" }), null;
-  if (canManagePotentialAll(req.user.role) || (req.user.role === "sales_manager" && c.assigned_manager_id === req.user.id)) return c;
+  if (canEditCustomerPotential(req.user, c.assigned_manager_id)) return c;
   return res.status(403).json({ error: "Not allowed" }), null;
 }
 const failed = (res, err) => (err instanceof VolumePotentialError ? res.status(err.status).json({ error: err.message }) : null);

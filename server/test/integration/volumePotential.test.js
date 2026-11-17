@@ -131,3 +131,26 @@ test("the catalogue: management changes and adds lines, a rep cannot; a switched
     await pool.query("DELETE FROM volume_potential_lines WHERE id = $1", [added.data.id]);
   }
 });
+
+test("review fixes: a switched-off line keeps its amount; a blank total keeps the need; an older offline save never overwrites a newer need", async () => {
+  const c = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id });
+  const dct = line("dct");
+  await save("rep", c, { lines: [{ line_id: dct.id, amount: 12 }, { line_id: line("atf").id, amount: 5 }], total_l: 80 });
+  await pool.query("UPDATE volume_potential_lines SET active = false WHERE id = $1", [dct.id]);
+  try {
+    // the sheet no longer shows DCT: a save without it keeps it, the active lines are replaced
+    const r = await save("rep", c, { lines: [{ line_id: line("atf").id, amount: 7 }], total_l: null });
+    assert.deepEqual(r.data.lines.map((l) => [l.line_id, l.amount]).sort((a, b) => a[0] - b[0]), [[line("atf").id, 7], [dct.id, 12]].sort((a, b) => a[0] - b[0]));
+    assert.equal(r.data.total_l, 80, "a blank total leaves the monthly need");
+  } finally {
+    await pool.query("UPDATE volume_potential_lines SET active = true WHERE id = $1", [dct.id]);
+  }
+  // the director sets 200 now; a rep's save pressed 10 minutes ago arrives later: the need stays 200
+  await save("director", c, { total_l: 200 });
+  await save("rep", c, { total_l: 90, captured_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), client_ref: `vp-old-${Date.now()}` });
+  assert.equal((await pool.query("SELECT expected_volume_l::float8 AS l FROM customers WHERE id = $1", [c.id])).rows[0].l, 200);
+  // a huge order number is clamped, not a server error
+  const added = await apiRequest("/api/volume-potential/lines", { method: "POST", cookie: cookies.director, body: { name_en: "Big", name_hy: "Մեծ", sort_order: 1e12, active: false } });
+  assert.equal(added.status, 201);
+  await pool.query("DELETE FROM volume_potential_lines WHERE id = $1", [added.data.id]);
+});
