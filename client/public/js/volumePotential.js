@@ -6,8 +6,8 @@
 import { api } from "./api.js";
 import { t, getLang } from "./i18n.js";
 import { icons } from "./icons.js";
-import { activateDialog, escapeHtml, formatDateTime, openInfoPopup, showToast, labelColon } from "./util.js";
-import { enqueueVolumePotential } from "./offlineQueue.js";
+import { activateDialog, escapeHtml, formatDateTime, formatDateDMY, openInfoPopup, showToast, labelColon } from "./util.js";
+import { enqueueVolumePotential, getQueue } from "./offlineQueue.js";
 
 export const VOLUME_STALE_DAYS = 90;
 const SOURCES = ["rep_estimate", "customer_stated", "invoice"];
@@ -71,7 +71,7 @@ export function wireVolumeSection(root, customer, { reload } = {}) {
     try {
       const [data, cat] = await Promise.all([api.getVolumePotential(customer.id), loadCatalogue()]);
       loaded = data;
-      body.innerHTML = summaryHtml(data, cat);
+      body.innerHTML = summaryHtml(data, cat, customer.id);
     } catch (err) {
       loaded = null;
       body.innerHTML = `<p class="${err instanceof TypeError ? "muted" : "form-error"}">${escapeHtml(err instanceof TypeError ? t("vp_offline_body") : err.message)}</p>`;
@@ -93,14 +93,29 @@ export function wireVolumeSection(root, customer, { reload } = {}) {
   box.querySelector("[data-vp-edit]")?.addEventListener("click", () => openVolumePotentialSheet(customer, { onSaved: reload }));
 }
 
-function summaryHtml(data, cat) {
+// Where "bought" comes from: the window, no Customer ID yet, litres of products not yet placed on a line
+function actualsNote(data) {
+  const a = data.actuals;
+  if (!a || !(data.wallet?.potential > 0)) return "";
+  if (!a.has_erp) return `<p class="vp-note muted">${escapeHtml(t("vp_no_erp"))}</p>`;
+  const span = `${formatDateDMY(a.window.from)} – ${formatDateDMY(a.window.to)}`;
+  return `<p class="vp-note muted">${escapeHtml(t("vp_actuals_window").replace("{span}", span))}${a.unmapped > 0 ? ` ${escapeHtml(t("vp_actuals_unmapped").replace("{l}", nf(a.unmapped)))}` : ""}</p>`;
+}
+
+function summaryHtml(data, cat, customerId) {
+  const waiting = getQueue().some((e) => e.type === "volume_potential" && e.customerId === customerId);
   const p = data.profile;
   const rows = [];
   const row = (label, value) => rows.push(`<div class="vp-row"><span>${escapeHtml(label)}</span><span class="vp-num">${escapeHtml(value)}</span></div>`);
-  row(t("vp_total"), data.total_l != null ? `${nf(data.total_l)} ${t("vp_l_month")}` : "—");
+  row(t("vp_total_short"), data.total_l != null ? `${nf(data.total_l)} ${t("vp_l_month")}` : "—");
   const byId = new Map(cat.lines.map((l) => [l.id, l]));
   const sum = data.lines.reduce((s, l) => s + (byId.get(l.line_id)?.unit === "kg" ? 0 : Number(l.amount)), 0);
   if (data.lines.length) row(t("vp_lines_sum"), `${nf(sum)} ${t("vp_l_month")}`);
+  const wal = data.wallet;
+  if (wal && wal.potential > 0 && data.actuals?.has_erp) {
+    row(t("vp_bought_month"), `${nf(wal.actual)} ${t("vp_l_month")}${wal.share_pct != null ? ` · ${wal.share_pct}%` : ""}`);
+    row(t("vp_gap_month"), `${nf(wal.gap)} ${t("vp_l_month")}`);
+  }
   if (p?.cars_per_month != null) row(t("vp_cars"), nf(p.cars_per_month));
   if (p?.bays != null) row(t("vp_bays"), nf(p.bays));
   const done = Object.entries(p?.services ?? {}).filter(([, v]) => v.does).map(([k]) => t(`vp_svc_${k}`));
@@ -108,11 +123,21 @@ function summaryHtml(data, cat) {
     .map((l) => ({ ...l, line: byId.get(l.line_id) }))
     .filter((l) => l.line)
     .sort((a, b) => a.line.sort_order - b.line.sort_order)
-    .map((l) => `<div class="vp-row"><span>${escapeHtml(lineName(l.line))}</span><span class="vp-num">${nf(l.amount)} ${escapeHtml(l.line.unit === "kg" ? t("vp_kg") : t("vp_l"))}${l.our_share_pct != null ? ` · ${l.our_share_pct}%` : ""}</span></div>`)
+    .map((l) => {
+      // phase 2: what they really buy from us on this line (ERP, last 3 whole months) -> share of wallet and the gap; the Castrol range hint
+      const w = data.wallet?.lines?.find((x) => x.line_id === l.line_id);
+      const unit = l.line.unit === "kg" ? t("vp_kg") : t("vp_l");
+      const bar = w ? `<span class="vp-bar" aria-hidden="true"><span style="width:${Math.min(100, w.share_pct)}%"></span></span>` : "";
+      const facts = w
+        ? `<div class="vp-line-facts muted">${escapeHtml(t("vp_bought"))} ${nf(w.actual)} ${escapeHtml(unit)} · ${w.share_pct}%${w.gap > 0 ? ` · ${escapeHtml(t("vp_gap"))} ${nf(w.gap)} ${escapeHtml(unit)}` : ""}${l.line.castrol_hint ? ` · ${escapeHtml(l.line.castrol_hint)}` : ""}</div>`
+        : "";
+      return `<div class="vp-wline"><div class="vp-row"><span>${escapeHtml(lineName(l.line))}</span><span class="vp-num">${nf(l.amount)} ${escapeHtml(unit)}${l.our_share_pct != null ? ` · ${l.our_share_pct}%` : ""}</span></div>${bar}${facts}</div>`;
+    })
     .join("");
   const brands = (p?.brands ?? []).map((b) => (b === "other" && p.brands_other ? p.brands_other : t(`vp_brand_${b}`))).join(", ");
-  return `<div class="vp-rows">${rows.join("")}</div>
+  return `${waiting ? `<p class="vp-note vp-waiting">${escapeHtml(t("vp_pending_card"))}</p>` : ""}<div class="vp-rows">${rows.join("")}</div>
     ${lines ? `<div class="vp-rows vp-lines">${lines}</div>` : ""}
+    ${actualsNote(data)}
     ${done.length ? `<div class="vp-line-text"><span class="muted">${escapeHtml(t("vp_services"))}${labelColon()}</span>${escapeHtml(done.join(", "))}</div>` : ""}
     ${brands ? `<div class="vp-line-text"><span class="muted">${escapeHtml(t("vp_brands"))}${labelColon()}</span>${escapeHtml(brands)}</div>` : ""}
     ${p ? `<div class="vp-meta muted">${escapeHtml([p.source ? t(`vp_src_${p.source}`) : "", p.confidence ? t(`vp_conf_${p.confidence}`) : "", p.updated_by_name ?? "", formatDateTime(p.updated_at)].filter(Boolean).join(" · "))}</div>` : `<p class="muted">${escapeHtml(t("vp_empty"))}</p>`}
@@ -120,6 +145,31 @@ function summaryHtml(data, cat) {
       <button type="button" class="btn btn-primary" data-vp-edit-open>${escapeHtml(t(p ? "vp_edit" : "vp_fill"))}</button>
       ${p ? `<button type="button" class="pl-link" data-vp-history>${escapeHtml(t("pl_history"))}</button>` : ""}
     </div>`;
+}
+
+// The sheet's data from a save waiting in the offline queue (its body, as sent to PUT /customers/:id).
+function fromQueued(data, b) {
+  return {
+    ...data,
+    pending: true,
+    profile: {
+      ...(data.profile ?? {}),
+      cars_per_month: b.cars_per_month ?? null,
+      bays: b.bays ?? null,
+      vehicle_mix: b.vehicle_mix ?? [],
+      brands: b.brands ?? [],
+      brands_other: b.brands_other ?? "",
+      services: b.services ?? {},
+      source: b.source ?? null,
+      confidence: b.confidence ?? null,
+    },
+    lines: [
+      ...(b.lines ?? []),
+      // a switched-off line is not in the sheet and stays on the server as it was
+      ...data.lines.filter((l) => !(b.lines ?? []).some((x) => x.line_id === l.line_id) && !catalogue?.lines.some((c) => c.id === l.line_id)),
+    ],
+    total_l: b.total_l ?? data.total_l,
+  };
 }
 
 // ---- the edit sheet --------------------------------------------------------------------------------------------------------------------
@@ -131,8 +181,13 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
     showToast(err.message);
     return;
   }
+  // a save still waiting in the offline queue is the newest copy: the sheet starts from it, so a second edit does not drop the first
+  // (Codex review, 2026-11-17)
+  const pending = getQueue().find((e) => e.type === "volume_potential" && e.customerId === customer.id);
+  if (pending) data = fromQueued(data, pending.body);
   const p = data.profile ?? {};
-  const services = { ...(p.services ?? {}) };
+  // copies, not the loaded objects: Cancel must leave the card's data as it was (Codex review, 2026-11-17)
+  const services = Object.fromEntries(Object.entries(p.services ?? {}).map(([k, v]) => [k, { ...v }]));
   const vehicles = new Set(p.vehicle_mix ?? []);
   const brands = new Set(data.profile ? p.brands ?? [] : data.brands_from_visits ?? []);
   const amounts = new Map(data.lines.map((l) => [l.line_id, l]));
@@ -203,6 +258,7 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
           <div class="pl-section-title vp-sub">${escapeHtml(t("vp_confidence"))}</div>
           ${radios("confidence", CONFIDENCE, confidence, "vp_conf_")}
         </section>
+        ${data.pending ? `<p class="vp-note muted">${escapeHtml(t("vp_pending_note"))}</p>` : ""}
         <p class="form-error" id="vp-error" hidden></p>
         <div class="sheet-actions">
           <button type="button" class="btn" id="vp-cancel">${escapeHtml(t("cancel"))}</button>
@@ -360,7 +416,9 @@ export async function openVolumeHistory(customerId) {
               const svc = (s) => Object.entries(s?.profile?.services ?? {}).filter(([, v]) => v.does).length;
               if (svc(h.before) !== svc(h.after)) changes.push(`${t("vp_services")}${labelColon()}${svc(h.before)} → ${svc(h.after)}`);
               return `<div class="pl-hist"><div class="pl-hist-date">${escapeHtml(formatDateTime(h.changed_at))}${h.changed_by_name ? ` · ${escapeHtml(h.changed_by_name)}` : ""}</div>${
-                changes.length ? changes.map((c) => `<div>${escapeHtml(c)}</div>`).join("") : `<div class="muted">${escapeHtml(t(h.before ? "vp_hist_details" : "vp_hist_first"))}</div>`
+                h.after?.superseded
+                  ? `<div class="muted">${escapeHtml(t("vp_hist_superseded"))}</div>`
+                  : changes.length ? changes.map((c) => `<div>${escapeHtml(c)}</div>`).join("") : `<div class="muted">${escapeHtml(t(h.before ? "vp_hist_details" : "vp_hist_first"))}</div>`
               }</div>`;
             })
             .join("")

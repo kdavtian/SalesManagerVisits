@@ -26,6 +26,9 @@ export const customersApi = {
   saveVolumePotential: (id, body) => json(`/volume-potential/customers/${id}`, "PUT", body),
   getVolumePotentialHistory: (id) => request(`/volume-potential/customers/${id}/history`, { fresh: true }),
   getPotentialLines: (all = false) => request(`/volume-potential/lines${all ? "?all=1" : ""}`, { fresh: true }),
+  getPotentialSkus: (all = false) => request(`/volume-potential/skus${all ? "?status=all" : ""}`, { fresh: true }),
+  savePotentialSku: (key, body) => json(`/volume-potential/skus/${encodeURIComponent(key)}`, "PUT", body),
+  getOpportunities: (query = "") => request(`/volume-potential/opportunities${query ? `?${query}` : ""}`, { fresh: true }),
   savePotentialLine: (id, body) => (id ? json(`/volume-potential/lines/${id}`, "PUT", body) : json("/volume-potential/lines", "POST", body)),
   resolveCounterfeit: (id, data) => json(`/customers/${id}/counterfeit-resolve`, "POST", data),
   createCustomer: async (data) => {

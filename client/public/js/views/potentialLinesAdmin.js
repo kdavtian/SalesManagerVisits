@@ -39,7 +39,10 @@ export async function renderPotentialLinesSection(container) {
   container.innerHTML = `<p class="muted pla-intro">${escapeHtml(t("pla_intro"))}</p>
     <div class="pla-list">${lines.map(row).join("")}</div>
     <h3 class="settings-subsection-title">${escapeHtml(t("pla_new"))}</h3>
-    ${row(null)}`;
+    ${row(null)}
+    <h3 class="settings-subsection-title" id="pla-skus-title">${escapeHtml(t("pla_skus_title"))}</h3>
+    <div id="pla-skus"></div>`;
+  renderSkus(container.querySelector("#pla-skus"), lines, false);
   if (container.dataset.plaWired) return;
   container.dataset.plaWired = "1"; // drawn again after a save: one listener
   container.addEventListener("submit", async (e) => {
@@ -68,4 +71,59 @@ export async function renderPotentialLinesSection(container) {
     }
     btn.disabled = false;
   });
+}
+
+// Products sold in the last 12 months that the rules could not place on a line (phase 2): management picks the line, "not a potential line",
+// or the litres of one unit. "Show all" lists the placed ones too, to correct one.
+const REASONS = ["car_or_truck_unclear", "transmission_unclear", "transmission_several", "no_catalogue_line", "no_size", "ev_unclear", "family_other", "no_rule"];
+async function renderSkus(box, lines, all) {
+  box.innerHTML = `<p class="loading-state" role="status">${escapeHtml(t("loading"))}</p>`;
+  let data;
+  try {
+    data = await api.getPotentialSkus(all);
+  } catch (err) {
+    box.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    return;
+  }
+  const name = (l) => (getLang() === "hy" ? l.name_hy : l.name_en);
+  const c = data.counts;
+  const options = (s) =>
+    `<option value="">${escapeHtml(t("pla_sku_pick"))}</option><option value="none"${s.status === "not_a_line" ? " selected" : ""}>${escapeHtml(t("pla_sku_none"))}</option>` +
+    lines.map((l) => `<option value="${l.id}"${s.line_id === l.id && s.status !== "not_a_line" ? " selected" : ""}>${escapeHtml(name(l))}</option>`).join("");
+  box.innerHTML = `
+    <p class="muted pla-intro">${escapeHtml(t("pla_skus_intro").replace("{n}", c.unmapped).replace("{auto}", c.auto + c.manual))}</p>
+    <label class="pla-active"><input type="checkbox" id="pla-skus-all"${all ? " checked" : ""} /> ${escapeHtml(t("pla_skus_all"))}</label>
+    ${data.skus.length ? "" : `<p class="muted">${escapeHtml(t("pla_skus_none_left"))}</p>`}
+    ${data.skus
+      .map(
+        (s) => `<form class="card pla-item pla-sku" data-key="${escapeHtml(s.sku_key)}">
+      <div class="pla-sum-name">${escapeHtml([s.brand, s.name].filter(Boolean).join(" "))}</div>
+      <div class="muted pla-sum-meta">${escapeHtml([s.family, s.size ? `${s.size} ${t("vp_l")}` : t("pla_sku_no_size"), `${Math.round(s.qty_12m)} ${t("pla_sku_units")}`, s.status === "unmapped" && REASONS.includes(s.reason) ? t(`pla_why_${s.reason}`) : t(`pla_st_${s.status}`)].filter(Boolean).join(" · "))}</div>
+      <div class="pla-grid">
+        <label>${escapeHtml(t("pla_sku_line"))}<select name="line">${options(s)}</select></label>
+        <label>${escapeHtml(t("pla_sku_litres"))}<input name="litres" type="number" inputmode="decimal" step="0.001" min="0" placeholder="${s.size ?? ""}" /></label>
+      </div>
+      <div class="pla-actions"><span></span><button type="submit" class="btn btn-primary">${escapeHtml(t("save"))}</button></div>
+    </form>`
+      )
+      .join("")}`;
+  box.querySelector("#pla-skus-all").addEventListener("change", (e) => renderSkus(box, lines, e.target.checked));
+  box.querySelectorAll(".pla-sku").forEach((form) =>
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const line = form.elements.line.value;
+      const litres = form.elements.litres.value;
+      const btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      try {
+        await api.savePotentialSku(form.dataset.key, { line_id: line && line !== "none" ? Number(line) : null, not_a_line: line === "none", litres_per_unit: litres === "" ? null : Number(litres) });
+        showToast(t("saved"));
+        renderSkus(box, lines, all);
+      } catch (err) {
+        showToast(err.message);
+        btn.disabled = false;
+      }
+    })
+  );
 }

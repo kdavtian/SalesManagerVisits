@@ -149,6 +149,15 @@ test("review fixes: a switched-off line keeps its amount; a blank total keeps th
   await save("director", c, { total_l: 200 });
   await save("rep", c, { total_l: 90, captured_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), client_ref: `vp-old-${Date.now()}` });
   assert.equal((await pool.query("SELECT expected_volume_l::float8 AS l FROM customers WHERE id = $1", [c.id])).rows[0].l, 200);
+  // ... and the older save leaves the newer profile and lines too (Codex review): the history marks it superseded
+  await save("director", c, { cars_per_month: 300, lines: [{ line_id: line("atf").id, amount: 40 }], total_l: 200 });
+  const old = await save("rep", c, { cars_per_month: 5, lines: [{ line_id: line("atf").id, amount: 1 }], captured_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(), client_ref: `vp-old2-${Date.now()}` });
+  assert.equal(old.status, 200);
+  assert.equal(old.data.superseded, true);
+  assert.equal(old.data.profile.cars_per_month, 300);
+  assert.equal(old.data.lines.find((l) => l.line_id === line("atf").id).amount, 40);
+  const top = (await apiRequest(`/api/volume-potential/customers/${c.id}/history`, { cookie: cookies.rep })).data[0];
+  assert.equal(top.after.superseded, true);
   // a huge order number is clamped, not a server error
   const added = await apiRequest("/api/volume-potential/lines", { method: "POST", cookie: cookies.director, body: { name_en: "Big", name_hy: "Մեծ", sort_order: 1e12, active: false } });
   assert.equal(added.status, 201);

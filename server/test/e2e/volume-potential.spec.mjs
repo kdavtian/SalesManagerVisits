@@ -1,7 +1,8 @@
 import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
 
 // Customer volume potential, phase 1 (owner, 2026-11-17): the rep opens the folded "Volume potential" part of the Potential card, fills
-// the editor sheet (total + two product lines), saves; then changes it with no signal: saved on the phone, sent when the signal is back.
+// the editor sheet (total + two product lines), saves; then changes it with no signal: saved on the phone, sent when the signal is back;
+// then the Opportunities report lists the customer.
 test("a rep fills the volume potential, then edits it offline and it syncs @smoke", async ({ page, context, fixtures }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => localStorage.setItem("fieldvisits_lang", "hy"));
@@ -38,8 +39,20 @@ test("a rep fills the volume potential, then edits it offline and it syncs @smok
   await form.locator('button[type="submit"]').click();
   await expect(form).toHaveCount(0, { timeout: 10000 });
   expect(await saved()).toBe(100);
+  // reopened while the change still waits: the sheet shows the waiting value, not the old one (Codex review), and Cancel keeps it
+  await page.locator("[data-vp-edit-open]").click();
+  await expect(form.locator('input[name="total_l"]')).toHaveValue("150");
+  await page.locator("#vp-cancel").click();
+  await expect(form).toHaveCount(0);
   await context.setOffline(false);
   await expect.poll(saved, { timeout: 20000 }).toBe(150);
   const hist = await pool.query("SELECT COUNT(*)::int AS n FROM volume_potential_history WHERE customer_id = $1", [c.id]);
   expect(hist.rows[0].n).toBe(2);
+
+  // the Opportunities report lists the customer (the rep's own), with its whole potential still open
+  await page.goto("/#/reports?r=volume_opportunities");
+  const row = page.locator(`.opp-row[data-cid="${c.id}"]`);
+  await expect(row).toBeVisible({ timeout: 15000 });
+  await expect(row).toContainText("150");
+  await page.screenshot({ path: test.info().outputPath("vp-opportunities-hy.png") });
 });

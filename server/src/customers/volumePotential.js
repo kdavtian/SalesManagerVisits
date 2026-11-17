@@ -187,6 +187,19 @@ export async function saveVolumePotential(customerId, userId, body, db = pool) {
       }
     }
     const before = await loadVolumePotential(customerId, client);
+    // an offline save pressed before the stored record was last changed (by someone else, or by a later save that arrived first) changes
+    // nothing: the newer profile, lines and total stay; the history keeps the row, marked superseded (Codex review, 2026-11-17)
+    if (v.captured_at && before.profile?.updated_at && new Date(before.profile.updated_at) > new Date(v.captured_at)) {
+      await client.query("INSERT INTO volume_potential_history (customer_id, changed_by, before, after, client_ref) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)", [
+        customerId,
+        userId,
+        JSON.stringify(snapshot(before)),
+        JSON.stringify({ ...snapshot(before), superseded: true }),
+        v.client_ref,
+      ]);
+      await client.query("COMMIT");
+      return { ...before, superseded: true };
+    }
     await client.query(
       `INSERT INTO volume_potential_profiles (customer_id, cars_per_month, bays, vehicle_mix, brands, brands_other, services, source, confidence, updated_by, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, now())

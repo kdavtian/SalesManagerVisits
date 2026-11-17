@@ -28,7 +28,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/cash-handoffs": ["money"],
   "#/money": [],
   "#/expenses": ["money"],
-  "#/reports": ["money", "reports"],
+  "#/reports": ["customers", "money", "reports"], // customers: the Opportunities report's line / service names (vp_*)
   "#/route-distribution": ["field"],
   "#/route-plans": ["field"],
   "#/route-plan-suggestions": ["field"],
