@@ -329,3 +329,12 @@ test("KAD OS link: campaigns for admin/ceo/sales_director, perks + account links
     assert.equal(canManageAppOrders(role), ["admin", "ceo"].includes(role), role);
   }
 });
+
+test("canEditCustomerPotential: management any customer, a sales manager only their own", async () => {
+  const { canEditCustomerPotential } = await import("../src/shared/roles.js");
+  assert.equal(canEditCustomerPotential({ id: 1, role: "sales_director" }, 9), true);
+  assert.equal(canEditCustomerPotential({ id: 9, role: "sales_manager" }, 9), true);
+  assert.equal(canEditCustomerPotential({ id: 8, role: "sales_manager" }, 9), false);
+  assert.equal(canEditCustomerPotential({ id: 9, role: "sales_manager" }, null), false);
+  assert.equal(canEditCustomerPotential({ id: 9, role: "accountant" }, 9), false);
+});

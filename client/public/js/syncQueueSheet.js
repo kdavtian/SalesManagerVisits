@@ -33,6 +33,7 @@ export function openSyncQueueSheet() {
     const stuck = Boolean(entry.needsAttention);
     const isCount = entry.type === "stock_count";
     const isPayment = entry.type === "payment";
+    const isPotential = entry.type === "volume_potential";
     const name = isCount ? entry.productName || `#${entry.productId}` : entry.customerName || `#${entry.customerId}`;
     const when = entry.createdAt ? formatDateTime(new Date(entry.createdAt).toISOString()) : "";
     const status = stuck
@@ -48,7 +49,7 @@ export function openSyncQueueSheet() {
         <span class="sync-queue-icon">${isOrder ? icons.cart : isCount ? icons.clipboardCheck : isPayment ? icons.payment : icons.pin}</span>
         <span class="sync-queue-main">
           <strong>${escapeHtml(name)}</strong>
-          <span class="muted">${t(isOrder ? "sync_item_order" : isCount ? "sync_item_stock_count" : isPayment ? "sync_item_payment" : "sync_item_checkin")} · ${escapeHtml(when)}${escapeHtml(amount)}</span>
+          <span class="muted">${t(isOrder ? "sync_item_order" : isCount ? "sync_item_stock_count" : isPayment ? "sync_item_payment" : isPotential ? "sync_item_potential" : "sync_item_checkin")} · ${escapeHtml(when)}${escapeHtml(amount)}</span>
           ${detail}
         </span>
         <span class="sync-queue-side">${status}${discard}</span>

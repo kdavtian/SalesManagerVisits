@@ -232,11 +232,13 @@ export function paintSettingsMarkup(ctx) {
           ${settingsRow({ icon: ICON.database, label: t("sales_directions_title"), id: "row-sales-channel-owners", color: "purple" })}
           ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
           ${ctx.canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
+          ${ctx.canManageLines ? settingsRow({ icon: ICON.database, label: t("pla_title"), id: "row-potential-lines", color: "orange" }) : ""}
         </div>`
-            : canReassignCustomers() || ctx.canManageArrival
+            : canReassignCustomers() || ctx.canManageArrival || ctx.canManageLines
               ? `<div class="card settings-list">
           ${canReassignCustomers() ? settingsRow({ icon: ICON.gps, label: t("pin_review_title"), id: "row-pin-review", color: "red" }) : ""}
           ${ctx.canManageArrival ? settingsRow({ icon: ICON.gps, label: t("arrival_section"), id: "row-delivery-arrival", color: "green" }) : ""}
+          ${ctx.canManageLines ? settingsRow({ icon: ICON.database, label: t("pla_title"), id: "row-potential-lines", color: "orange" }) : ""}
         </div>`
               : ""
         }

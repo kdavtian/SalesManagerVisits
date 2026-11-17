@@ -1,5 +1,6 @@
 import express, { Router } from "express";
 import fs from "node:fs";
+import { parseCapturedAt } from "../../utils/capturedAt.js";
 import path from "node:path";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
@@ -155,17 +156,8 @@ function parseBrandStatus(raw) {
 
 const MAX_PHOTOS_PER_CHECKIN = 5;
 
-// A check-in sent from the offline queue arrives minutes or hours after the
-// visit: its `timestamp` is the moment the rep pressed submit (captured_at),
-// not the moment the server heard about it (created_at keeps that). Accepted
-// only when plausible -- not in the future, not older than a week -- so a wrong
-// phone clock cannot rewrite history.
-export function parseCapturedAt(value, now = Date.now()) {
-  if (!value) return null;
-  const t = new Date(value).getTime();
-  if (!Number.isFinite(t) || t > now + 5 * 60 * 1000 || t < now - 7 * 24 * 60 * 60 * 1000) return null;
-  return new Date(t).toISOString();
-}
+// A check-in sent from the offline queue: its `timestamp` is the moment the rep pressed submit (captured_at); see utils/capturedAt.js.
+export { parseCapturedAt };
 
 const MAX_ORDER_BLANK_PHOTOS = 6;
 

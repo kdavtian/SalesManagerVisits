@@ -3508,3 +3508,70 @@ a.cd-funnel-chip::after { content: ""; position: absolute; inset: -10px -4px; } 
 .pl-fresh-text { margin: 0 0 8px; font-size: 0.9rem; color: var(--warning, #b54708); overflow-wrap: anywhere; }
 .pl-fresh-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pl-fresh-actions .btn { min-height: 44px; flex: 1 1 140px; }
+/* Volume potential: the folded part of the «Պոտենցիալ» card and its sheet (js/volumePotential.js) */
+.vp-section { border-top: 1px solid var(--border); margin-top: 2px; }
+.vp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; width: 100%; min-height: 44px; padding: 6px 0; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.vp-head-title { font-weight: 600; font-size: 0.92rem; flex: 1 1 auto; min-width: 0; }
+.vp-head-total { font-size: 0.88rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vp-stale { flex: none; }
+.vp-chev { flex: none; width: 8px; height: 8px; border-right: 2px solid var(--text-dim); border-bottom: 2px solid var(--text-dim); transform: rotate(45deg); margin: 0 4px 4px 2px; transition: transform 0.15s; }
+.vp-open .vp-chev { transform: rotate(-135deg); margin-bottom: 0; }
+.vp-update-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 2px 0 8px; }
+.vp-update-chip svg { width: 16px; height: 16px; }
+.vp-body { padding-bottom: 4px; }
+.vp-rows { display: grid; gap: 2px; margin-bottom: 6px; }
+.vp-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 0.9rem; }
+.vp-row > span:first-child { overflow-wrap: anywhere; }
+.vp-num { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.vp-lines { padding-top: 6px; border-top: 1px dashed var(--border); }
+.vp-line-text { font-size: 0.88rem; margin: 4px 0; overflow-wrap: anywhere; }
+.vp-meta { font-size: 0.8rem; margin: 6px 0; }
+.vp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.vp-actions .btn { min-height: 44px; }
+.vp-sheet-head { display: flex; align-items: center; gap: 8px; }
+.vp-sheet-head h2 { margin: 0; }
+.vp-info { margin-left: auto; }
+.vp-sheet-sub { margin: 2px 0 8px; }
+.vp-sec { padding: 10px 0; border-top: 1px solid var(--border); }
+.vp-sec:first-of-type { border-top: 0; }
+.vp-sub { margin-top: 10px; }
+.vp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vp-grid2 label, .vp-total { display: grid; gap: 4px; font-size: 0.86rem; }
+.vp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.vp-chips .map-filter-chip { min-height: 44px; }
+.vp-other { margin-top: 8px; width: 100%; }
+.vp-svcs { display: grid; gap: 4px; }
+.vp-svc-main { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-card); font: inherit; color: inherit; text-align: left; }
+.vp-svc-main span:last-child { overflow-wrap: anywhere; }
+.vp-svc-main.vp-on { background: color-mix(in srgb, var(--accent) 8%, var(--bg-card)); }
+.vp-on .pl-reason-box { background: var(--accent); border-color: var(--accent); }
+.vp-on .pl-reason-box::after { content: "\2713"; }
+.vp-svc-extra { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px 30px; }
+.vp-svc-extra .map-filter-chip { min-height: 44px; }
+.vp-total { margin-bottom: 8px; }
+.vp-group-name { font-size: 0.8rem; font-weight: 600; color: var(--text-dim); margin: 10px 0 4px; text-transform: uppercase; letter-spacing: 0.02em; }
+.vp-line { display: grid; grid-template-columns: minmax(0, 1fr) 84px 64px; gap: 8px; align-items: center; padding: 3px 0; }
+.vp-line-head { font-size: 0.76rem; padding-bottom: 0; }
+.vp-line-head span:not(:first-child) { text-align: right; }
+.vp-line-name { font-size: 0.88rem; overflow-wrap: anywhere; display: grid; }
+.vp-line-name small { font-size: 0.74rem; }
+.vp-line input { min-height: 44px; width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+.vp-sum { margin: 8px 0 0; font-size: 0.85rem; }
+.vp-sum.vp-warn { color: var(--warning, #b54708); }
+
+/* Settings > Sales > potential product lines (views/potentialLinesAdmin.js) */
+.pla-intro { margin: 0 0 10px; }
+.pla-item { padding: 0 12px; margin-bottom: 8px; }
+.pla-item > .pla-row { padding: 4px 0 12px; }
+div.pla-item { padding: 12px; }
+.pla-sum { display: flex; flex-direction: column; justify-content: center; min-height: 52px; padding: 6px 0; cursor: pointer; list-style: none; }
+.pla-sum::-webkit-details-marker { display: none; }
+.pla-sum-name { font-weight: 600; overflow-wrap: anywhere; }
+.pla-sum-meta { font-size: 13px; }
+.pla-off .pla-sum-name { color: var(--text-muted); text-decoration: line-through; }
+.pla-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; }
+.pla-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-muted); min-width: 0; }
+.pla-grid input, .pla-grid select { min-height: 44px; width: 100%; box-sizing: border-box; }
+.pla-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.pla-active { display: flex; align-items: center; gap: 8px; min-height: 44px; flex: 1 1 auto; }
+.pla-actions .btn { min-height: 44px; }

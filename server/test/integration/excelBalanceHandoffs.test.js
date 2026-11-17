@@ -6,10 +6,12 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 import { syncExcelBalance } from "../../src/money/excelBalanceHandoffs.js";
+import { yerevanDateOf } from "../../src/utils/yerevanDate.js";
 
 const tag = `EB${Date.now()}`;
 let rep, rep2, accountant, admin, director, customer, repBox, rep2Box, officeBox, balanceCat, cookies = {}, cutoverBefore;
-const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+// Yerevan days, like the Excel and the app (a UTC day here failed every evening after 20:00 UTC, 2026-11-17)
+const day = (n) => yerevanDateOf(new Date(Date.now() + n * 86400000));
 
 test.before(async () => {
   await startTestServer();

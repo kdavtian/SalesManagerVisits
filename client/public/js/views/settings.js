@@ -12,6 +12,8 @@ import { renderPinReviewSection } from "./pinReview.js";
 import { renderBonusChallengesSection, renderBonusRewardClaimsSection } from "./bonusChallengesAdmin.js";
 import { renderKadOsPerksSection, renderKadOsCampaignsSection } from "./kadOsAdmin.js";
 import { renderDeliveryArrivalSection } from "./deliveryArrivalAdmin.js";
+import { renderPotentialLinesSection } from "./potentialLinesAdmin.js";
+import { canManagePotentialAll } from "../shared/roles.js";
 import { openInfoPopup, escapeHtml, compressImage, activateDialog, formatPhoneDisplay, normalizePhone, downloadFromUrl, formatDateTime } from "../util.js";
 import { getQueue, onQueueChange, flushQueue, getLastSyncedAt } from "../offlineQueue.js";
 import { getPushSubscriptionState, enablePushNotifications, disablePushNotifications } from "../pushNotifications.js";
@@ -90,6 +92,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     get canReviewEdits() { return canReviewEdits; },
     get canExportFinancials() { return canExportFinancials; },
     get canManageArrival() { return canManageArrival; },
+    get canManageLines() { return canManageLines; },
     get canManageCampaigns() { return canManageCampaigns; },
     get canManageChallenges() { return canManageChallenges; },
     get canReviewBonusRewards() { return canReviewBonusRewards; },
@@ -128,6 +131,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   // into the admin-gated block below.
   const canManageChallenges = isPerfCeo();
   const canManageArrival = admin || state.user?.role === "ceo"; // the server lets only admin / CEO change driver arrival
+  const canManageLines = canManagePotentialAll(state.user?.role); // the volume potential's product lines (server: the same rule)
   // Mirrors canApproveBonusRewards (admin/ceo/accountant) OR
   // canRecordBonusPayouts (admin/accountant) -- the union of who needs to
   // see the reward-claims review list at all, a strictly larger set than
@@ -149,7 +153,7 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
     { id: "p-data", tab: "personal", title: t("sp_data"), icon: ICON.cloud, color: "teal", show: true },
     { id: "p-about", tab: "personal", title: t("sp_about"), icon: ICON.info, color: "gray", show: true },
     { id: "a-team", tab: "admin", title: t("admin_group_team_roles"), icon: ICON.team, color: "blue", show: admin },
-    { id: "a-sales", tab: "admin", title: t("sa_sales"), icon: ICON.gps, color: "green", show: admin || canApprovePlans || canReviewEdits || canReassignCustomers() || canManageArrival },
+    { id: "a-sales", tab: "admin", title: t("sa_sales"), icon: ICON.gps, color: "green", show: admin || canApprovePlans || canReviewEdits || canReassignCustomers() || canManageArrival || canManageLines },
     { id: "a-finance", tab: "admin", title: t("sa_finance"), icon: ICON.coins, color: "orange", show: admin || canManageProducts() || canExportFinancials },
     { id: "a-bonuses", tab: "admin", title: t("sa_bonuses"), icon: ICON.star, color: "purple", show: canManageChallenges || canReviewBonusRewards },
     { id: "a-integrations", tab: "admin", title: t("sa_integrations"), icon: ICON.link, color: "indigo", show: admin || canManageCampaigns },
@@ -681,6 +685,11 @@ export async function renderSettings(root, onLogout, onLanguageChange, section =
   if (canManageArrival) {
     root.querySelector("#row-delivery-arrival").addEventListener("click", (e) => {
       openAdminSection(root, e.currentTarget, t("arrival_section"), renderDeliveryArrivalSection);
+    });
+  }
+  if (canManageLines) {
+    root.querySelector("#row-potential-lines")?.addEventListener("click", (e) => {
+      openAdminSection(root, e.currentTarget, t("pla_title"), renderPotentialLinesSection);
     });
   }
   if (canManageCampaigns) {

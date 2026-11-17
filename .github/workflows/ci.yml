@@ -274,7 +274,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.pw.outputs.version }}
 
       - run: npx playwright install --with-deps chromium
 
@@ -340,10 +340,12 @@ jobs:
         id: pw
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
+      # the runner image (ImageOS) is in the key: a browser built for an older Ubuntu does not start on a newer one (2026-11-17,
+      # ubuntu-latest moved to 26.04 and the cached WebKit missed libicu74)
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-webkit-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-webkit-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.pw.outputs.version }}
 
       - run: npx playwright install --with-deps webkit
 
@@ -413,7 +415,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.pw.outputs.version }}
 
       - run: npx playwright install --with-deps chromium
 

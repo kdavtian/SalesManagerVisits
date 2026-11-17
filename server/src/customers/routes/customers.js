@@ -804,6 +804,8 @@ customersRouter.get("/:id", async (req, res) => {
        EXISTS (SELECT 1 FROM place_reviews pr WHERE pr.customer_id = c.id AND pr.status = 'pending') AS place_review_pending,
        -- the Sales Expert funnel stage (team/vaghinak/funnel.js, recorded every 3 hours) and since when: the card's stage chip
        (SELECT json_build_object('stage', s.stage, 'since', s.since) FROM customer_funnel_stage s WHERE s.customer_id = c.id) AS funnel_stage,
+       -- when the volume potential was last saved (the card's "update it" badge without loading the section)
+       (SELECT cp.updated_at FROM volume_potential_profiles cp WHERE cp.customer_id = c.id) AS volume_potential_at,
        (SELECT COALESCE(SUM(ch.amount_collected_amd), 0)
           FROM checkins ch
           WHERE ch.customer_id = c.id
