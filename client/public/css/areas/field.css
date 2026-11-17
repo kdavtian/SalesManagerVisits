@@ -571,7 +571,6 @@
 }
 
 /* The shop's monthly oil need at the visit (Sales Expert funnel, stage 4) */
-.checkin-monthly-need small { display: block; margin-top: 4px; line-height: 1.3; }
 /* Check-in: Vaghinak's talking points for this customer (views/checkin.js) */
 .ci-points { padding: 10px 14px; border-left: 4px solid var(--accent); }
 .ci-points ul { margin: 4px 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.92rem; overflow-wrap: anywhere; }

@@ -1,5 +1,6 @@
 // Potential Customer classification (owner, 2026-10-24): level 1-4 + reasons, the counterfeit-products restriction, history.
 // One form (levels, reasons, "Other" text, counterfeit warning) is shared by the editor sheet and the New customer form.
+import { volumeSectionHtml, wireVolumeSection } from "./volumePotential.js";
 import { api } from "./api.js";
 import { icons } from "./icons.js";
 import { t } from "./i18n.js";
@@ -303,29 +304,36 @@ function freshPromptHtml(customer) {
     </div>`;
 }
 
+// The combined «Պոտենցիալ» card (owner, 2026-11-17): a prospect's level (No / Low / Real / High) on top, the counterfeit flag, and for every
+// customer the person may read the folded "Volume potential" part (volumePotential.js: workshop, services, litres per product line).
+// `askFresh` = at a check-in: the level's "still the same?" prompt and the volume part's optional "Update potential" chip.
 export function renderPotentialCard(slot, customer, { reload, askFresh = false } = {}) {
   const isPotential = customer.customer_tier === "potential";
   const flagged = Boolean(customer.counterfeit_flag);
-  if (!slot || (!isPotential && !flagged)) {
+  const canEdit = canManagePotential(customer);
+  // the volume part is read and saved by the same people as the level (server: the same rule)
+  const showVolume = canEdit && customer.customer_tier !== "competitor";
+  if (!slot || (!isPotential && !flagged && !showVolume)) {
     if (slot) slot.innerHTML = "";
     return;
   }
-  const canEdit = canManagePotential(customer);
   const lines = [];
   if (customer.potential_reasons?.length) lines.push(`${escapeHtml(t("pl_reason_line"))}${labelColon()}${escapeHtml(reasonsText(customer))}`);
   if (customer.next_followup_date) lines.push(`${escapeHtml(t("pl_followup"))}${labelColon()}${escapeHtml(formatDateDMY(String(customer.next_followup_date).slice(0, 10)))}`);
-  if (customer.expected_volume_l) lines.push(`${escapeHtml(t("pl_volume"))}${labelColon()}${escapeHtml(Number(customer.expected_volume_l).toLocaleString("en-US"))}`);
+  // the monthly volume is shown by the volume part when it is there (one number, not twice)
+  if (customer.expected_volume_l && !showVolume) lines.push(`${escapeHtml(t("pl_volume"))}${labelColon()}${escapeHtml(Number(customer.expected_volume_l).toLocaleString("en-US"))}`);
   slot.innerHTML = `
     <div class="card pl-card">
+      <div class="pl-card-head"><span class="progress-label">${escapeHtml(t("pl_title"))}</span>${isPotential ? potentialChipHtml(customer.potential_level) : ""}
+        ${isPotential && canEdit ? `<button type="button" class="icon-btn pl-edit-btn" data-pl-edit aria-label="${escapeHtml(t("pl_change"))}" title="${escapeHtml(t("pl_change"))}">${icons.pencil}</button>` : ""}</div>
       ${
         isPotential
-          ? `<div class="pl-card-head"><span class="progress-label">${escapeHtml(t("pl_title"))}</span>${potentialChipHtml(customer.potential_level)}
-              ${canEdit ? `<button type="button" class="icon-btn pl-edit-btn" data-pl-edit aria-label="${escapeHtml(t("pl_change"))}" title="${escapeHtml(t("pl_change"))}">${icons.pencil}</button>` : ""}</div>
-            ${askFresh && canEdit ? freshPromptHtml(customer) : ""}
+          ? `${askFresh && canEdit ? freshPromptHtml(customer) : ""}
             ${lines.map((l) => `<div class="pl-line">${l}</div>`).join("")}
             <button type="button" class="pl-link" data-pl-history>${escapeHtml(t("pl_history"))}</button>`
           : ""
       }
+      ${showVolume ? volumeSectionHtml(customer, { checkin: askFresh }) : ""}
       ${
         flagged
           ? `<p class="pl-warn-banner" role="alert">${escapeHtml(t("pl_counterfeit_warning"))}</p>
@@ -336,6 +344,7 @@ export function renderPotentialCard(slot, customer, { reload, askFresh = false }
       }
     </div>`;
   slot.querySelector("[data-pl-edit]")?.addEventListener("click", () => openPotentialSheet(customer, reload));
+  if (showVolume) wireVolumeSection(slot, customer, { reload });
   slot.querySelector("[data-pl-fresh-edit]")?.addEventListener("click", () => openPotentialSheet(customer, reload));
   slot.querySelector("[data-pl-same]")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;

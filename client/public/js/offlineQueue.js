@@ -168,6 +168,18 @@ export async function enqueueStockCount(entry) {
   notify();
 }
 
+// A customer's volume potential saved without signal (owner, 2026-11-17): one waiting save per customer (a newer one replaces it); the
+// server keeps the save once even when it arrives twice (client_ref).
+export async function enqueueVolumePotential(entry) {
+  await ready;
+  const stale = memoryQueue.filter((e) => e.type === "volume_potential" && e.customerId === entry.customerId);
+  for (const e of stale) await removeEntry(e.id);
+  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "volume_potential", ...entry };
+  memoryQueue = [...memoryQueue.filter((e) => !stale.includes(e)), record];
+  await persistNewEntry(record);
+  notify();
+}
+
 // A payment typed in the Payments "+" sheet without signal (payments redesign, release 3b, owner 2026-11-02): it waits here with the
 // customer's proof (slip photos, signature) and is sent as soon as the phone is online again. client_ref makes a retry harmless.
 // The photos and signatures are kept as plain bytes, not Blobs: Safari refuses a Blob in IndexedDB in some states (a private window,
@@ -285,6 +297,7 @@ function submitOrder(entry) {
 // submitting correctly after a deploy.
 function submitEntry(entry) {
   if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day);
+  if (entry.type === "volume_potential") return api.saveVolumePotential(entry.customerId, entry.body);
   if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: true }));
   return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }

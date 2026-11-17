@@ -21,6 +21,12 @@ export const customersApi = {
   getPotentialSummary: () => request("/customers/potential-summary", { fresh: true }),
   setCustomerPotential: (id, data) => json(`/customers/${id}/potential`, "PUT", data),
   getPotentialHistory: (id) => request(`/customers/${id}/potential-history`, { fresh: true }),
+  // volume potential (server customers/volumePotential.js): the card's section, its save (also replayed by the offline queue), its history
+  getVolumePotential: (id) => request(`/volume-potential/customers/${id}`, { fresh: true }),
+  saveVolumePotential: (id, body) => json(`/volume-potential/customers/${id}`, "PUT", body),
+  getVolumePotentialHistory: (id) => request(`/volume-potential/customers/${id}/history`, { fresh: true }),
+  getPotentialLines: (all = false) => request(`/volume-potential/lines${all ? "?all=1" : ""}`, { fresh: true }),
+  savePotentialLine: (id, body) => (id ? json(`/volume-potential/lines/${id}`, "PUT", body) : json("/volume-potential/lines", "POST", body)),
   resolveCounterfeit: (id, data) => json(`/customers/${id}/counterfeit-resolve`, "POST", data),
   createCustomer: async (data) => {
     const created = await json("/customers", "POST", data);

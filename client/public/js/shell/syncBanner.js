@@ -54,13 +54,17 @@ export function renderSyncBanner() {
   const onlyCounts = queue.every((e) => e.type === "stock_count");
   // only payments typed in the Payments "+" sheet (release 3b): "payments", not "check-ins"
   const onlyPayments = queue.every((e) => e.type === "payment");
+  // only visits ("checkin", or an old entry with no type): "check-ins"; a mix, an order or a customer's potential: "items" (2026-11-17)
+  const onlyCheckins = queue.every((e) => !e.type || e.type === "checkin");
   const template = needsAttention
     ? t("sync_needs_attention_banner")
     : onlyCounts
       ? t(navigator.onLine ? "syncing_counts" : "offline_counts_waiting")
       : onlyPayments
         ? t(navigator.onLine ? "syncing_payments" : "offline_payments_waiting")
-        : t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting");
+        : onlyCheckins
+          ? t(navigator.onLine ? "syncing_checkins" : "offline_checkins_waiting")
+          : t(navigator.onLine ? "syncing_items" : "offline_items_waiting");
   const count = needsAttention || pending;
   // "{s}" is the English plural ending only; the Armenian texts have none.
   syncBanner.textContent = template.replace("{n}", count).replace("{s}", count > 1 && getLang() !== "hy" ? "s" : "");
