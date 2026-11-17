@@ -3575,3 +3575,12 @@ div.pla-item { padding: 12px; }
 .pla-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .pla-active { display: flex; align-items: center; gap: 8px; min-height: 44px; flex: 1 1 auto; }
 .pla-actions .btn { min-height: 44px; }
+
+/* volume potential, phase 2: bought / share / gap per line */
+.vp-wline { padding: 2px 0 6px; }
+.vp-wline + .vp-wline { border-top: 1px solid var(--border); padding-top: 6px; }
+.vp-bar { display: block; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin: 2px 0 3px; }
+.vp-bar > span { display: block; height: 100%; background: var(--accent); }
+.vp-line-facts { font-size: 0.8rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.vp-note { font-size: 0.8rem; margin: 6px 0 0; }
+.pla-active input[type="checkbox"] { width: 22px; height: 22px; flex: none; margin: 0; }

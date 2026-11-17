@@ -153,6 +153,14 @@ export const REPORTS = [
     descriptionKey: "report_product_liters_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "accountant", "sales_manager"],
   },
+  // Opportunities: customers ranked by the litres a month they could still buy from us (volume potential - real purchases, per product
+  // line) -- see customers/volumeOpportunities.js. A sales manager sees only their own customers.
+  {
+    key: "volume_opportunities",
+    nameKey: "report_volume_opportunities_name",
+    descriptionKey: "report_volume_opportunities_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director", "sales_manager"],
+  },
   {
     key: "brand_volume",
     nameKey: "report_brand_volume_name",
@@ -189,6 +197,7 @@ const REPORT_DISPLAY_ORDER = [
   "pivot",
   "daily_management",
   "product_liters",
+  "volume_opportunities",
   "customer_debt",
   "unpaid_invoices",
   "payments",

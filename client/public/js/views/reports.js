@@ -74,6 +74,7 @@ export async function renderReports(root, navigate, reportKey, { inPane = false 
   if (reportKey === "cash_reconciliation") return renderCashReconciliationReport(root, navigate);
   if (reportKey === "customer_debt") return renderCustomerDebtReport(root, navigate);
   if (reportKey === "sales_budget") return renderSalesBudgetReport(root, navigate);
+  if (reportKey === "volume_opportunities") return (await import("./opportunitiesReport.js")).renderOpportunitiesReport(root, navigate);
   if (reportKey === "product_liters") return (await import("./volumeReport.js")).renderVolumeReport(root, navigate);
   if (reportKey === "brand_volume") return renderBrandVolumeReport(root, navigate);
   if (reportKey === "daily_management") return renderDailyManagementReport(root, navigate);
@@ -194,7 +195,7 @@ async function renderReportsList(root, navigate) {
 // Grouped by the decision they support (owner: fewer rows, less scrolling);
 // the server already hides what a role may not see, empty groups vanish.
 const REPORT_GROUPS = [
-  { id: "management", keys: ["pivot", "daily_management", "weekly_scorecard", "sales_budget", "product_liters", "brand_volume"] },
+  { id: "management", keys: ["pivot", "daily_management", "weekly_scorecard", "sales_budget", "product_liters", "volume_opportunities", "brand_volume"] },
   { id: "money", keys: ["customer_debt", "unpaid_invoices", "payments", "cash_custody", "cash_reconciliation"] },
   { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability", "product_wishes"] },
   { id: "team", keys: ["checkins", "fuel_allowance"] },
@@ -240,6 +241,7 @@ const REPORT_ICONS = {
   unpaid_invoices: icons.clipboardCheck,
   sales_budget: icons.target,
   product_liters: icons.box,
+  volume_opportunities: icons.target,
   brand_volume: icons.box,
   daily_management: icons.dashboard,
   documents: icons.note,
