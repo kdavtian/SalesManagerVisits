@@ -6,7 +6,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { pool } from "../../db/pool.js";
 import { canManagePotentialAll, canEditCustomerPotential } from "../../shared/roles.js";
 import { canAccessReport } from "../../reports/reports.js";
-import { customerActuals, actualsWindow, walletOf, skuMappings, saveSkuMapping, clearSkuMappings, kgLineIds } from "../volumeActuals.js";
+import { customerActuals, actualsWindow, walletOf, skuMappings, saveSkuMapping, saveSkuMappingsBulk, clearSkuMappings, kgLineIds } from "../volumeActuals.js";
 import { buildOpportunities } from "../volumeOpportunities.js";
 import { loadVolumePotential, saveVolumePotential, volumePotentialHistory, activeLines, saveLine, VolumePotentialError, SERVICES, VEHICLES, BRANDS } from "../volumePotential.js";
 
@@ -85,6 +85,18 @@ volumePotentialRouter.get("/skus", async (req, res) => {
   const rows = req.query.status === "all" ? all : all.filter((m) => m.status === "unmapped");
   rows.sort((a, b) => b.qty_12m - a.qty_12m || String(a.name).localeCompare(String(b.name)));
   res.json({ counts, skus: rows });
+});
+// POST /skus/bulk { keys: [...], line_id | not_a_line: true } -- several products to one line (management)
+volumePotentialRouter.post("/skus/bulk", async (req, res) => {
+  if (!canManagePotentialAll(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  try {
+    const r = await saveSkuMappingsBulk(req.body?.keys, req.user.id, req.body ?? {});
+    clearSkuMappings();
+    res.json(r);
+  } catch (err) {
+    if (err.status === 400) return res.status(400).json({ error: err.message });
+    throw err;
+  }
 });
 // PUT /skus/:key { line_id | null, not_a_line, litres_per_unit | null } -- all empty = back to the rules
 volumePotentialRouter.put("/skus/:key", async (req, res) => {

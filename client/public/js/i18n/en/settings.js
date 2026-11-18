@@ -480,6 +480,10 @@ export const enSettings = {
     pla_st_manual: "placed by management",
     pla_st_not_a_line: "not a potential line",
     pla_st_unmapped: "not placed",
+    pla_bulk_all: "Tick all",
+    pla_bulk_pick: "Pick this product",
+    pla_bulk_place: "Place {n} on this line",
+    pla_bulk_done: "{n} products placed",
     pla_new: "New line",
     pla_add: "Add",
 };

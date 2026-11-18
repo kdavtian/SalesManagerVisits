@@ -11,6 +11,9 @@ import { yerevanToday } from "../utils/yerevanDate.js";
 // ---- the product -> line rules -----------------------------------------------------------------------------------------------------------
 const PCMO_RANGES = /\b(EDGE|MAGNATEC|GTX)\b/;
 const HDEO_RANGES = /\b(VECTON|CRB|TECTION|ELIXION|ENDURON)\b/;
+// a truck / diesel engine oil whatever its brand (Lotos Turdus, API CI-4 / CK-4, ACEA E-classes, Rimula, Delvac ...)
+const TRUCK_WORDS = /\b(TURDUS|DIESEL|TRUCK|HD|HDEO|SHPD|UHPD|TIR|RIMULA|DELVAC|C[HIJK]-?4|E[4-9])\b/;
+const MOTO_WORDS = /\b(4T|2T|POWER\s*1|MOTO|MOTORCYCLE|SCOOTER)\b/;
 const NOT_A_LINE_FAMILIES = new Set(["merch", "hydraulic"]);
 
 export function gradeOf(name) {
@@ -31,7 +34,7 @@ export function autoLineCode({ name, family, brand } = {}) {
     if (/TRANSMISSION|E-?DRIVE/.test(n)) return { code: "ev_transmission", reason: "rule" };
     return { code: null, reason: "ev_unclear" };
   }
-  if (/\bBRAKE\s+FLUID\b|\bDOT\s*-?\s*[345]/.test(n)) return { code: "brake", reason: "rule" };
+  if (fam === "brake fluid" || /\bBRAKE\s+FLUID\b|\bDOT\s*-?\s*[345]/.test(n)) return { code: "brake", reason: "rule" };
   if (fam === "antifreeze" || /RADICOOL|ANTIFREEZE|COOLANT|ANTIFRIZ/.test(n)) return { code: "coolant", reason: "rule" };
   if (fam === "grease" || /\bGREASE\b|SPHEEROL|\bLMX\b/.test(n)) return { code: "grease", reason: "rule" };
   // transmission fluids: exactly one type word, or it waits for a person
@@ -47,11 +50,10 @@ export function autoLineCode({ name, family, brand } = {}) {
   // engine oils: the grade, and car vs truck from the range
   const grade = gradeOf(n);
   if (!grade) return { code: null, reason: fam === "other" ? "family_other" : "no_rule" };
-  let kind = null;
-  if (PCMO_RANGES.test(n) || ["edge", "magnatec", "gtx"].includes(fam)) kind = "pcmo";
-  else if (HDEO_RANGES.test(n) || ["crb", "vecton"].includes(fam)) kind = "hdeo";
-  // no known car or truck range: a person decides (a 5W-40 can be a car, truck or motorcycle oil -- never guessed; review, 2026-11-17)
-  if (!kind || /\b(4T|2T|POWER\s*1|MOTO)\b/.test(n)) return { code: null, reason: "car_or_truck_unclear" };
+  // a motorcycle oil is no car or truck line: a person decides
+  if (MOTO_WORDS.test(n)) return { code: null, reason: "car_or_truck_unclear" };
+  // owner's rule (2026-11-18): an engine oil is a passenger-car oil unless its range or name says truck / diesel
+  const kind = HDEO_RANGES.test(n) || ["crb", "vecton"].includes(fam) || (!PCMO_RANGES.test(n) && !["edge", "magnatec", "gtx"].includes(fam) && TRUCK_WORDS.test(n)) ? "hdeo" : "pcmo";
   return { code: `${kind}_${grade}`, reason: "rule" };
 }
 
@@ -136,6 +138,23 @@ export async function saveSkuMapping(skuKey, userId, b, db = pool) {
     [key, lineId, notALine, litres, userId]
   );
   return r;
+}
+
+// Several products at once (Settings: tick several, pick one line or "not a potential line"). Litres set by hand on a product stay.
+export async function saveSkuMappingsBulk(keys, userId, b, db = pool) {
+  const list = [...new Set((Array.isArray(keys) ? keys : []).map((k) => String(k ?? "").trim().toLowerCase().slice(0, 300)).filter(Boolean))];
+  if (!list.length || list.length > 500) throw Object.assign(new Error("Pick 1 to 500 products"), { status: 400 });
+  const notALine = b?.not_a_line === true;
+  const lineId = notALine ? null : Number(b?.line_id);
+  if (!notALine && !(Number.isInteger(lineId) && lineId > 0)) throw Object.assign(new Error("Bad line"), { status: 400 });
+  if (lineId !== null && !(await db.query("SELECT 1 FROM volume_potential_lines WHERE id = $1", [lineId])).rowCount) throw Object.assign(new Error("Bad line"), { status: 400 });
+  const { rowCount } = await db.query(
+    `INSERT INTO volume_potential_sku_map (sku_key, line_id, not_a_line, updated_by, updated_at)
+     SELECT k, $2, $3, $4, now() FROM unnest($1::text[]) AS k
+     ON CONFLICT (sku_key) DO UPDATE SET line_id = EXCLUDED.line_id, not_a_line = EXCLUDED.not_a_line, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [list, lineId, notALine, userId]
+  );
+  return { saved: rowCount };
 }
 
 // ---- actuals ---------------------------------------------------------------------------------------------------------------------------
