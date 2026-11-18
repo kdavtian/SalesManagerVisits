@@ -4,6 +4,8 @@
 //
 // Usage (on the droplet, from /opt/field-visits):
 //   docker compose exec -T app node scripts/potential-sku-counts.mjs
+//   docker compose exec -T app node scripts/potential-sku-counts.mjs --list no_catalogue_line
+//     (--list <reason>: the unmapped products of that reason -- brand, name, family, size only; no customers, quantities or money)
 import { skuMappings } from "../src/customers/volumeActuals.js";
 import { pool } from "../src/db/pool.js";
 
@@ -19,5 +21,14 @@ for (const m of all) {
     why[m.reason] = (why[m.reason] ?? 0) + 1;
   }
 }
-console.log(JSON.stringify({ ...counts, unmapped_why: why }, null, 2));
+const at = process.argv.indexOf("--list");
+if (at > 0) {
+  const reason = process.argv[at + 1];
+  const rows = all.filter((m) => m.status === "unmapped" && (!reason || m.reason === reason));
+  rows.sort((a, b) => String(a.brand).localeCompare(String(b.brand)) || String(a.name).localeCompare(String(b.name)));
+  rows.forEach((m, i) => console.log(`${i + 1}. ${[m.brand, m.name].filter(Boolean).join(" ")} | ${m.family ?? "-"} | ${m.size ?? "-"} | ${m.reason}`));
+  console.log(`${rows.length} product(s)`);
+} else {
+  console.log(JSON.stringify({ ...counts, unmapped_why: why }, null, 2));
+}
 await pool.end();

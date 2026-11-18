@@ -34,7 +34,7 @@ test.before(async () => {
   // big: 30 x 4 L EDGE 5W-30 in the window = 40 L a month; a truck-or-car 15W-40 nobody placed yet; hydraulic oil (no line); one sale before
   // the window (not counted)
   await sell(big.erp_customer_id, sku("edge"), "EDGE 5W-30", "4", 30);
-  await sell(big.erp_customer_id, sku("1540"), "Turbo 15W-40", "5", 6);
+  await sell(big.erp_customer_id, sku("1540"), "Scooter 4T 15W-40", "5", 6);
   await sell(big.erp_customer_id, sku("hyd"), "Hyspin AWS 46", "20", 3);
   await sell(big.erp_customer_id, sku("edge"), "EDGE 5W-30", "4", 99, "2020-01-15");
   await pool.query(`INSERT INTO products (name, unit_price_amd, erp_product_id, family, brand) VALUES ('Hyspin AWS 46', 1, $1, 'Hydraulic', 'TestBrand')`, [sku("hyd")]);
@@ -58,10 +58,16 @@ test("the rules: exact products map, unclear ones wait for a person", () => {
   assert.equal(autoLineCode({ name: "Castrol VECTON 15W-40", family: "Vecton" }).code, "hdeo_15w40");
   assert.equal(autoLineCode({ name: "Castrol Transmax Manual EP 80W-90", family: "Transmission" }).code, "gear");
   assert.equal(autoLineCode({ name: "Castrol Transmax Universal", family: "Transmission" }).code, null);
-  assert.equal(autoLineCode({ name: "Lotos 15W-40", family: "Engine Oil" }).code, null, "car or truck: unclear");
+  // owner's rule (2026-11-18): an engine oil is a car oil unless a truck / diesel word; a motorcycle oil stays for a person
+  assert.equal(autoLineCode({ name: "Lotos 15W-40", family: "Engine Oil" }).code, "pcmo_15w40");
+  assert.equal(autoLineCode({ name: "Lotos Turdus 15W-40", family: "Engine Oil" }).code, "hdeo_15w40");
+  assert.equal(autoLineCode({ name: "Royal Diesel 10W-40 CI-4", family: "Engine Oil" }).code, "hdeo_10w40");
+  assert.equal(autoLineCode({ name: "Castrol MAGNATEC 10W-40", family: "Magnatec" }).code, "pcmo_10w40", "a car range stays a car oil");
+  assert.equal(autoLineCode({ name: "Some brake liquid", family: "Brake fluid" }).code, "brake");
+  for (const family of ["Tection", "Elixion", "Enduron", "CRB", "Vecton"]) assert.equal(autoLineCode({ name: "15W-40", family }).code, "hdeo_15w40", `${family} in the family only`);
   assert.equal(autoLineCode({ name: "Hyspin AWS 46", family: "Hydraulic" }).reason, "family_not_a_line");
   // never guessed (review): a 5W-40 of no known range, a motorcycle oil, a brake cleaner spray; an EV coolant is the EV line
-  assert.equal(autoLineCode({ name: "Royal 5W-40", family: "Engine Oil" }).code, null);
+  assert.equal(autoLineCode({ name: "Royal 5W-40", family: "Engine Oil" }).code, "pcmo_5w40");
   assert.equal(autoLineCode({ name: "Castrol POWER1 4T 5W-40", family: "Other" }).code, null);
   assert.equal(autoLineCode({ name: "Brake & parts cleaner spray", family: "Other" }).code, null);
   assert.equal(autoLineCode({ name: "Castrol Brake Fluid DOT 4", family: "Other" }).code, "brake");
@@ -119,3 +125,19 @@ test("Opportunities: ranked by the gap; a rep sees only their own; filters by li
   assert.deepEqual(byLine.rows.map((r) => [r.customer_id, r.gap]), [[big.id, 60]], "only the 5W-30 gap; a customer with no breakdown drops out");
   assert.equal((await apiRequest("/api/volume-potential/opportunities", { cookie: await loginAs((await createUser("accountant")).email) })).status, 403);
 });
+
+test("bulk: management places several products at once (litres set by hand stay); a rep cannot; bad input is refused", async () => {
+  const keys = [sku("bulk-a"), sku("bulk-b")];
+  await pool.query("INSERT INTO volume_potential_sku_map (sku_key, litres_per_unit) VALUES ($1, 3)", [keys[0]]);
+  const url = "/api/volume-potential/skus/bulk";
+  assert.equal((await apiRequest(url, { method: "POST", cookie: cookies.rep, body: { keys, line_id: line("atf").id } })).status, 403);
+  assert.equal((await apiRequest(url, { method: "POST", cookie: cookies.director, body: { keys: [], line_id: line("atf").id } })).status, 400);
+  assert.equal((await apiRequest(url, { method: "POST", cookie: cookies.director, body: { keys, line_id: 99999999 } })).status, 400);
+  const r = await apiRequest(url, { method: "POST", cookie: cookies.director, body: { keys, line_id: line("atf").id } });
+  assert.deepEqual([r.status, r.data.saved], [200, 2]);
+  const rows = (await pool.query("SELECT sku_key, line_id, not_a_line, litres_per_unit::float8 AS l FROM volume_potential_sku_map WHERE sku_key = ANY($1) ORDER BY sku_key", [keys])).rows;
+  assert.deepEqual(rows.map((x) => [x.line_id, x.not_a_line, x.l]), [[line("atf").id, false, 3], [line("atf").id, false, null]]);
+  assert.equal((await apiRequest(url, { method: "POST", cookie: cookies.director, body: { keys, not_a_line: true } })).data.saved, 2);
+  assert.equal((await pool.query("SELECT COUNT(*)::int AS n FROM volume_potential_sku_map WHERE sku_key = ANY($1) AND not_a_line AND line_id IS NULL", [keys])).rows[0].n, 2);
+});
+

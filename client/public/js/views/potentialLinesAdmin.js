@@ -93,11 +93,16 @@ async function renderSkus(box, lines, all) {
   box.innerHTML = `
     <p class="muted pla-intro">${escapeHtml(t("pla_skus_intro").replace("{n}", c.unmapped).replace("{auto}", c.auto + c.manual))}</p>
     <label class="pla-active"><input type="checkbox" id="pla-skus-all"${all ? " checked" : ""} /> ${escapeHtml(t("pla_skus_all"))}</label>
+    ${data.skus.length > 1 ? `<div class="card pla-bulk" id="pla-bulk">
+      <label class="pla-active"><input type="checkbox" id="pla-pick-all" /> ${escapeHtml(t("pla_bulk_all"))}</label>
+      <div class="pla-bulk-row"><select id="pla-bulk-line" aria-label="${escapeHtml(t("pla_sku_line"))}">${options({})}</select>
+      <button type="button" class="btn btn-primary" id="pla-bulk-go" disabled>${escapeHtml(t("pla_bulk_place").replace("{n}", "0"))}</button></div>
+    </div>` : ""}
     ${data.skus.length ? "" : `<p class="muted">${escapeHtml(t("pla_skus_none_left"))}</p>`}
     ${data.skus
       .map(
         (s) => `<form class="card pla-item pla-sku" data-key="${escapeHtml(s.sku_key)}">
-      <div class="pla-sum-name">${escapeHtml([s.brand, s.name].filter(Boolean).join(" "))}</div>
+      <label class="pla-pick"><input type="checkbox" class="pla-pick-one" aria-label="${escapeHtml(t("pla_bulk_pick"))}" /><span class="pla-sum-name">${escapeHtml([s.brand, s.name].filter(Boolean).join(" "))}</span></label>
       <div class="muted pla-sum-meta">${escapeHtml([s.family, s.size ? `${s.size} ${t("vp_l")}` : t("pla_sku_no_size"), `${Math.round(s.qty_12m)} ${t("pla_sku_units")}`, s.status === "unmapped" && REASONS.includes(s.reason) ? t(`pla_why_${s.reason}`) : t(`pla_st_${s.status}`)].filter(Boolean).join(" · "))}</div>
       <div class="pla-grid">
         <label>${escapeHtml(t("pla_sku_line"))}<select name="line">${options(s)}</select></label>
@@ -108,6 +113,34 @@ async function renderSkus(box, lines, all) {
       )
       .join("")}`;
   box.querySelector("#pla-skus-all").addEventListener("change", (e) => renderSkus(box, lines, e.target.checked));
+  // bulk (owner, 2026-11-18): tick several, pick one line or "not a potential line", place them all; litres set by hand stay
+  const picks = () => [...box.querySelectorAll(".pla-pick-one:checked")].map((c) => c.closest(".pla-sku").dataset.key);
+  const go = box.querySelector("#pla-bulk-go");
+  const sync = () => {
+    if (!go) return;
+    const n = picks().length;
+    go.textContent = t("pla_bulk_place").replace("{n}", n);
+    go.disabled = !n || !box.querySelector("#pla-bulk-line").value;
+  };
+  // a property, not addEventListener: the box is drawn again after every save, and one handler must stay
+  box.onchange = (e) => {
+    if (e.target.id === "pla-pick-all") box.querySelectorAll(".pla-pick-one").forEach((c) => (c.checked = e.target.checked));
+    if (e.target.matches(".pla-pick-one, #pla-pick-all, #pla-bulk-line")) sync();
+  };
+  go?.addEventListener("click", async () => {
+    const line = box.querySelector("#pla-bulk-line").value;
+    const keys = picks();
+    if (!keys.length || !line) return;
+    go.disabled = true;
+    try {
+      const r = await api.savePotentialSkusBulk({ keys, ...(line === "none" ? { not_a_line: true } : { line_id: Number(line) }) });
+      showToast(t("pla_bulk_done").replace("{n}", r.saved));
+      renderSkus(box, lines, all);
+    } catch (err) {
+      showToast(err.message);
+      sync();
+    }
+  });
   box.querySelectorAll(".pla-sku").forEach((form) =>
     form.addEventListener("submit", async (e) => {
       e.preventDefault();

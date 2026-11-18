@@ -480,6 +480,10 @@ export const hySettings = {
     pla_st_manual: "դրված է ղեկավարության կողմից",
     pla_st_not_a_line: "պոտենցիալի գիծ չէ",
     pla_st_unmapped: "դրված չէ",
+    pla_bulk_all: "Նշել բոլորը",
+    pla_bulk_pick: "Ընտրել այս ապրանքը",
+    pla_bulk_place: "Դնել {n}-ը այս գծի վրա",
+    pla_bulk_done: "{n} ապրանք դրվեց",
     pla_new: "Նոր գիծ",
     pla_add: "Ավելացնել",
 };

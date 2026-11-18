@@ -3584,3 +3584,11 @@ div.pla-item { padding: 12px; }
 .vp-line-facts { font-size: 0.8rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .vp-note { font-size: 0.8rem; margin: 6px 0 0; }
 .pla-active input[type="checkbox"] { width: 22px; height: 22px; flex: none; margin: 0; }
+
+/* unmapped products: tick several, place them on one line */
+.pla-bulk { position: sticky; top: 0; z-index: 2; padding: 10px 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.pla-bulk-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pla-bulk-row select { flex: 1 1 160px; min-height: 44px; min-width: 0; }
+.pla-bulk-row .btn { min-height: 44px; flex: 0 0 auto; }
+.pla-pick { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.pla-pick input[type="checkbox"] { width: 22px; height: 22px; flex: none; margin: 0; }
