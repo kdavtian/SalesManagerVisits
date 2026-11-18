@@ -53,7 +53,10 @@ export function autoLineCode({ name, family, brand } = {}) {
   // a motorcycle oil is no car or truck line: a person decides
   if (MOTO_WORDS.test(n)) return { code: null, reason: "car_or_truck_unclear" };
   // owner's rule (2026-11-18): an engine oil is a passenger-car oil unless its range or name says truck / diesel
-  const kind = HDEO_RANGES.test(n) || ["crb", "vecton"].includes(fam) || (!PCMO_RANGES.test(n) && !["edge", "magnatec", "gtx"].includes(fam) && TRUCK_WORDS.test(n)) ? "hdeo" : "pcmo";
+  // the range can sit in the name or only in the product family (Codex review): both are read
+  const both = `${n} ${String(family ?? "").toUpperCase()} `;
+  const carRange = PCMO_RANGES.test(both) || ["edge", "magnatec", "gtx"].includes(fam);
+  const kind = HDEO_RANGES.test(both) || (!carRange && TRUCK_WORDS.test(both)) ? "hdeo" : "pcmo";
   return { code: `${kind}_${grade}`, reason: "rule" };
 }
 

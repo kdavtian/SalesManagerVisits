@@ -64,6 +64,7 @@ test("the rules: exact products map, unclear ones wait for a person", () => {
   assert.equal(autoLineCode({ name: "Royal Diesel 10W-40 CI-4", family: "Engine Oil" }).code, "hdeo_10w40");
   assert.equal(autoLineCode({ name: "Castrol MAGNATEC 10W-40", family: "Magnatec" }).code, "pcmo_10w40", "a car range stays a car oil");
   assert.equal(autoLineCode({ name: "Some brake liquid", family: "Brake fluid" }).code, "brake");
+  for (const family of ["Tection", "Elixion", "Enduron", "CRB", "Vecton"]) assert.equal(autoLineCode({ name: "15W-40", family }).code, "hdeo_15w40", `${family} in the family only`);
   assert.equal(autoLineCode({ name: "Hyspin AWS 46", family: "Hydraulic" }).reason, "family_not_a_line");
   // never guessed (review): a 5W-40 of no known range, a motorcycle oil, a brake cleaner spray; an EV coolant is the EV line
   assert.equal(autoLineCode({ name: "Royal 5W-40", family: "Engine Oil" }).code, "pcmo_5w40");
