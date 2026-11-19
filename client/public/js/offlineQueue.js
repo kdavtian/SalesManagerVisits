@@ -237,6 +237,7 @@ async function submitCheckin(entry) {
   if (entry.createdAt) form.set("captured_at", new Date(entry.createdAt).toISOString());
   if (entry.note) form.set("note", entry.note);
   if (entry.brandStatus && Object.keys(entry.brandStatus).length) form.set("brand_status", JSON.stringify(entry.brandStatus));
+  if (entry.competitorPrices?.length) form.set("competitor_prices", JSON.stringify(entry.competitorPrices));
   if (entry.outcomes?.length) form.set("outcomes", JSON.stringify(entry.outcomes));
   if (entry.noOrderReason) form.set("no_order_reason", entry.noOrderReason);
   if (entry.amountCollected != null) form.set("amount_collected_amd", entry.amountCollected);

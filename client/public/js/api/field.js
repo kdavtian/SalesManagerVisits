@@ -6,6 +6,7 @@ export const fieldApi = {
   // competitor brands of the check-in shelf (owner, 2026-11-19): the list, a rep's new brand, admin / CEO decisions
   getCompetitorBrands: () => request("/competitor-brands"),
   addCompetitorBrand: (name) => json("/competitor-brands", "POST", { name }),
+  getCompetitorPrices: (key) => request(`/competitor-brands/${encodeURIComponent(key)}/prices`),
   approveCompetitorBrand: (id) => json(`/competitor-brands/${id}/approve`, "POST", {}),
   denyCompetitorBrand: (id, reason) => json(`/competitor-brands/${id}/deny`, "POST", { reason }),
   createCheckin: (formData) =>

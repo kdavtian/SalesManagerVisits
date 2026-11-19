@@ -312,6 +312,12 @@ export async function renderProductsSection(container) {
           <label>${t("product_name")}<input name="name" value="${product ? escapeHtml(product.name) : ""}" required /></label>
           <label>${t("brand")}<input name="brand" value="${product?.brand ? escapeHtml(product.brand) : ""}" /></label>
           <label>${t("unit")}<input name="unit" value="${product?.unit ? escapeHtml(product.unit) : ""}" placeholder="e.g. box, L, pcs" /></label>
+          ${
+            // viscosity (migration 216): filled from the name; typed here = kept; emptied = from the name again
+            product
+              ? `<label>${t("viscosity")}<input name="viscosity" maxlength="20" autocomplete="off" value="${product.viscosity_manual && product.viscosity ? escapeHtml(product.viscosity) : ""}" placeholder="${escapeHtml(product.viscosity ? `${product.viscosity} · ${t("viscosity_auto")}` : t("viscosity_none"))}" /></label>`
+              : ""
+          }
           <label>${t("price_standard")}<input name="unit_price_amd" class="amd-input" inputmode="numeric" value="${product ? groupDigits(product.unit_price_amd) : ""}" required /></label>
           <label>${t("price_retail")}<input name="retail_price_amd" class="amd-input" inputmode="numeric" value="${product && product.retail_price_amd !== null ? groupDigits(product.retail_price_amd) : ""}" placeholder="${t("price_retail_hint")}" /></label>
           <label>${t("net_cost")}<input name="net_cost_amd" class="amd-input" inputmode="numeric" value="${product && product.net_cost_amd !== null && product.net_cost_amd !== undefined ? groupDigits(product.net_cost_amd) : ""}" placeholder="${t("net_cost_hint")}" /></label>
@@ -402,7 +408,7 @@ export async function renderProductsSection(container) {
       };
       try {
         if (product) {
-          await api.updateProduct(product.id, { ...payload, active });
+          await api.updateProduct(product.id, { ...payload, active, viscosity: String(data.get("viscosity") ?? "").trim() || null });
         } else {
           await api.createProduct(payload);
         }
