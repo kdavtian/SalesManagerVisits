@@ -105,3 +105,20 @@ test("an invoice's Excel lines are that supplier's when two suppliers share the 
   const luk = (await apiRequest(`/api/purchases/excel-invoice?invoice_no=5%2F26&date=2026-10-05&supplier=Luk%20Oil`, { cookie: accCookie })).data;
   assert.deepEqual(luk.map((l) => l.supplier), ["Luk Oil"]);
 });
+
+test("a supplier filter does not pair an invoice with another supplier's Excel lines; a sheet never mixes two other suppliers", async () => {
+  await push([
+    { invoice_id: "8/26", date: "2026-10-08", supplier: "Y Ltd", product_id: "C1", size_l: 1, qty: 7, cost_usd: 2, excel_row: 1 },
+    { invoice_id: "9/26", date: "2026-10-09", supplier: "X LLC", product_id: "D1", size_l: 1, qty: 1, cost_usd: 1, excel_row: 2 },
+    { invoice_id: "9/26", date: "2026-10-09", supplier: "Z Co", product_id: "D2", size_l: 1, qty: 2, cost_usd: 1, excel_row: 3 },
+  ]);
+  const mk = (no, date, supplier) => apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: { invoice_no: no, invoice_date: date, supplier_name: supplier, usd_rate: 385, lines: [{ product_id: p1.id, qty: 1, cost_usd: 1 }] } });
+  const x8 = (await mk("8/26", "2026-10-08", "X Trade")).data;
+  await mk("8/26", "2026-10-08", "Y Trade");
+  const xId = x8.supplier_id;
+  const filtered = (await apiRequest(`/api/purchases?from=2026-10-08&to=2026-10-08&supplier_id=${xId}`, { cookie: accCookie })).data;
+  assert.equal(filtered.find((r) => r.id === x8.id).status, "app_only", "not paired with Y's Excel lines");
+  const x9 = (await mk("9/26", "2026-10-09", "X Trade")).data;
+  const full = (await apiRequest(`/api/purchases/${x9.id}`, { cookie: accCookie })).data;
+  assert.deepEqual(full.excel_lines, [], "two other suppliers' lines are not mixed into this invoice");
+});

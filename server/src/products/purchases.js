@@ -19,6 +19,8 @@ export class PurchaseError extends Error {
 }
 // The same invoice number the Excel copy is compared by: case and extra spaces ignored (SQL form of keyOf)
 const SQL_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
+// supplierKey in SQL: tabs, new lines and no-break spaces count as spaces too, the same as JavaScript's \s (review, 2026-11-20)
+const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
 
 function cleanLines(lines) {
   if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");
@@ -181,7 +183,7 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
               COALESCE(sum(qty * size_l), 0)::float8 AS liters, COALESCE(sum(qty * cost_usd) FILTER (WHERE size_l > 0), 0)::float8 AS liquid_usd
          FROM erp_purchase_lines
         WHERE ($1::date IS NULL OR invoice_date >= $1::date) AND ($2::date IS NULL OR invoice_date <= $2::date)
-        GROUP BY ${SQL_KEY("invoice_no")}, invoice_date, ${SQL_KEY("COALESCE(supplier, '')")}`,
+        GROUP BY ${SQL_KEY("invoice_no")}, invoice_date, ${SQL_SUPPLIER_KEY("supplier")}`,
       params
     ),
   ]);
@@ -198,6 +200,16 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
   let supplierName = null;
   if (supplierId) supplierName = app.find((a) => a.supplier_id === supplierId)?.supplier ?? (await db.query("SELECT name FROM suppliers WHERE id = $1", [supplierId])).rows[0]?.name ?? null;
   const rows = [...pairs];
+  // with a supplier filter, the other suppliers' invoices of the same number and date still count (a lone fallback pairing must be lone)
+  const appPerKey = new Map();
+  if (supplierId) {
+    const { rows: allApp } = await db.query(
+      `SELECT invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date FROM purchase_invoices
+        WHERE ($1::date IS NULL OR invoice_date >= $1::date) AND ($2::date IS NULL OR invoice_date <= $2::date)`,
+      params
+    );
+    for (const a of allApp) appPerKey.set(keyOf(a.invoice_no, a.invoice_date), (appPerKey.get(keyOf(a.invoice_no, a.invoice_date)) ?? 0) + 1);
+  }
   const excelPerKey = new Map();
   for (const e of excel) excelPerKey.set(keyOf(e.invoice_no, e.invoice_date), (excelPerKey.get(keyOf(e.invoice_no, e.invoice_date)) ?? 0) + 1);
   // the Excel invoices of the same supplier first, so a name match is never taken by a looser one
@@ -208,7 +220,8 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
     const all = byKey.get(k) ?? [];
     const candidates = all.filter((p) => !p.excel);
     // a supplier written differently on the two sides still pairs, but only when that number and date is one invoice on each side
-    const hit = candidates.find((p) => sameName(e, p.app)) ?? (all.length === 1 && candidates.length === 1 && (excelPerKey.get(k) ?? 0) === 1 ? candidates[0] : null);
+    const appCount = supplierId ? appPerKey.get(k) ?? 0 : all.length;
+    const hit = candidates.find((p) => sameName(e, p.app)) ?? (appCount === 1 && candidates.length === 1 && (excelPerKey.get(k) ?? 0) === 1 ? candidates[0] : null);
     if (hit) {
       hit.excel = e;
       continue;
@@ -357,7 +370,9 @@ export async function productHistory(ids, { excludeNo = null, excludeDate = null
 function ofSupplier(lines, supplier) {
   if (!supplier) return lines;
   const own = lines.filter((l) => supplierKey(l.supplier) === supplierKey(supplier));
-  return own.length ? own : lines;
+  if (own.length) return own;
+  // none written as this supplier: the lines only when they are one other spelling (the same lone pairing the list makes), else none
+  return new Set(lines.map((l) => supplierKey(l.supplier))).size === 1 ? lines : [];
 }
 
 export async function getExcelInvoice(invoiceNo, date, db = pool, supplier = null) {
