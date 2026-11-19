@@ -349,6 +349,17 @@ paymentsRouter.post("/", proofUpload, async (req, res) => {
     }
   }
 
+  // A payment the accountant or the admin records themselves needs nobody's approval (owner, 2026-11-20: yes, for those two only --
+  // the two roles that may accept any pending payment directly, custodyBlocksReview). It goes through the same approveOnePayment as
+  // the Approve button: approved in their name, the cash lands on their desk, history written. The CEO / operations director still
+  // wait for the cash chain, as their Approve button does. If it cannot be approved, the payment simply stays pending.
+  if (req.user.role === "admin" || req.user.role === "accountant") {
+    try {
+      await approveOnePayment(paymentId, req.user, { loadRow: false });
+    } catch (err) {
+      console.error("Own payment approval failed (stays pending):", err.message);
+    }
+  }
   const payment = await loadPaymentRow(paymentId);
   res.status(201).json(payment);
 
