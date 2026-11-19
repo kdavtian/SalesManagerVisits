@@ -392,8 +392,10 @@ const EDITABLE_FIELDS = [
   "approvals",
   "specs",
   "is_commercial",
+  // "5W-30" (migration 216): typed = kept as typed; empty = filled from the name again by the database
+  "viscosity",
 ];
-const DETAIL_FIELDS = new Set(["hc_code", "description", "approvals", "specs", "is_commercial"]);
+const DETAIL_FIELDS = new Set(["hc_code", "description", "approvals", "specs", "is_commercial", "viscosity"]);
 const NUMERIC_FIELDS = new Set([
   "unit_price_amd",
   "bronze_price_amd",
@@ -416,6 +418,8 @@ productsRouter.patch("/:id", async (req, res) => {
   if (!before) return res.status(404).json({ error: "Product not found" });
 
   const setClauses = updates.map(([key], i) => `${key} = $${i + 1}`);
+  const visc = updates.find(([key]) => key === "viscosity");
+  if (visc) setClauses.push(`viscosity_manual = ${visc[1] && String(visc[1]).trim() ? "true" : "false"}`);
   // approvals: short list of strings; specs: [{label, value}] -- both capped
   // and trimmed so a malformed client cannot store junk.
   for (const [key, value] of updates) {
@@ -428,10 +432,14 @@ productsRouter.patch("/:id", async (req, res) => {
     if (key === "description" && value !== null && (typeof value !== "string" || value.length > 4000)) {
       return res.status(400).json({ error: "description must be text up to 4000 characters" });
     }
+    if (key === "viscosity" && value !== null && (typeof value !== "string" || value.trim().length > 20)) {
+      return res.status(400).json({ error: "viscosity must be short text like 5W-30" });
+    }
   }
   const values = updates.map(([key, value]) => {
     if (key === "specs") return JSON.stringify(value.map((s) => ({ label: s.label.trim(), value: s.value.trim() })).filter((s) => s.label));
     if (key === "approvals") return value.map((a) => a.trim()).filter(Boolean);
+    if (key === "viscosity") return value && String(value).trim() ? String(value).trim().toUpperCase().replace(/\s*W\s*-?\s*/, "W-") : null;
     return NUMERIC_FIELDS.has(key) && value !== null ? Number(value) : value;
   });
   values.push(req.params.id);

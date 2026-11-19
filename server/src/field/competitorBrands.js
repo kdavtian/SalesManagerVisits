@@ -89,3 +89,53 @@ export async function decideBrand(id, user, approve, reason = "", db = pool) {
   if (!r) throw new BrandError("This brand was already decided", 409);
   return r;
 }
+
+// What a check-in may record: the brands (approved or waiting) and the product lines with their unit (L / kg).
+export async function shelfCatalogue(db = pool) {
+  const [keys, { rows: lines }] = await Promise.all([recordableKeys(db), db.query("SELECT code, unit FROM volume_potential_lines")]);
+  return { brandKeys: keys, lineUnits: new Map(lines.map((l) => [l.code, l.unit])) };
+}
+
+// The prices a visit wrote: [{ brand, line, volume, wholesale, retail }] -> clean rows (unknown brand / line, bad numbers dropped;
+// a row with neither price is dropped; at most 300).
+export function cleanCompetitorPrices(raw, { brandKeys, lineUnits }) {
+  let list;
+  try {
+    list = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  const amd = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Math.round(Number(String(v).replace(/[\s,]/g, "")));
+    return Number.isFinite(n) && n >= 0 && n <= 100000000 ? n : undefined;
+  };
+  const out = new Map();
+  for (const r of list.slice(0, 300)) {
+    if (!r || typeof r !== "object") continue;
+    const brand = String(r.brand ?? "");
+    const line = String(r.line ?? "");
+    const volume = Math.round(Number(r.volume) * 1000) / 1000;
+    if (!brandKeys.has(brand) || !lineUnits.has(line) || !(volume > 0 && volume <= 10000)) continue;
+    const wholesale = amd(r.wholesale);
+    const retail = amd(r.retail);
+    if (wholesale === undefined || retail === undefined || (wholesale === null && retail === null)) continue;
+    out.set(`${brand}|${line}|${volume}`, { brand, line, volume, unit: lineUnits.get(line), wholesale, retail });
+  }
+  return [...out.values()];
+}
+
+// The latest price recorded for each line and volume of a brand, by anyone (owner: everyone sees all prices).
+// -> { [line_code]: { [volume]: { wholesale, retail, at, by } } }
+export async function latestPrices(brandKey, db = pool) {
+  const { rows } = await db.query(
+    `SELECT DISTINCT ON (line_code, volume) line_code, volume::float8 AS volume, wholesale_amd, retail_amd, recorded_at, COALESCE(u.name_hy, u.name) AS by_name
+     FROM competitor_prices p LEFT JOIN users u ON u.id = p.user_id
+     WHERE brand_key = $1 ORDER BY line_code, volume, recorded_at DESC, p.id DESC`,
+    [brandKey]
+  );
+  const out = {};
+  for (const r of rows) (out[r.line_code] ??= {})[r.volume] = { wholesale: r.wholesale_amd, retail: r.retail_amd, at: r.recorded_at, by: r.by_name };
+  return out;
+}

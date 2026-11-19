@@ -1,6 +1,6 @@
 import express, { Router } from "express";
 import fs from "node:fs";
-import { recordableKeys } from "../competitorBrands.js";
+import { shelfCatalogue, cleanCompetitorPrices } from "../competitorBrands.js";
 import { parseCapturedAt } from "../../utils/capturedAt.js";
 import path from "node:path";
 import { pool } from "../../db/pool.js";
@@ -137,7 +137,7 @@ function parseAvailableProducts(raw) {
 const PACKS = new Set(["bottle", "drum", "none"]);
 
 // competitorKeys: the brands a visit may record (approved or waiting, field/competitorBrands.js); the code list when the table is not read.
-export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.competitors) {
+export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.competitors, lineCodes = null) {
   if (!raw) return null;
   let parsed;
   try {
@@ -175,6 +175,28 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
       result.competitors = [...present];
     }
   }
+  // per brand and product line (the Potential lines, 2026-11-19): { brand: { line_code: [bottle|drum] | [none] } }; a line with bottles /
+  // a drum makes its brand present too
+  const lp = parsed.competitor_line_packs;
+  if (lineCodes && lp && typeof lp === "object" && !Array.isArray(lp)) {
+    const out = Object.create(null);
+    for (const [brand, lines] of Object.entries(lp)) {
+      if (!competitorKeys.has(brand) || !lines || typeof lines !== "object" || Array.isArray(lines)) continue;
+      for (const [code, value] of Object.entries(lines)) {
+        if (!lineCodes.has(code) || !Array.isArray(value)) continue;
+        const v = [...new Set(value.filter((x) => PACKS.has(x)))];
+        if (!v.length) continue;
+        (out[brand] ??= Object.create(null))[code] = v.includes("none") ? ["none"] : v.sort();
+      }
+    }
+    const brands = Object.keys(out);
+    if (brands.length) {
+      result.competitor_line_packs = Object.fromEntries(brands.map((b) => [b, { ...out[b] }]));
+      const present = new Set(result.competitors ?? []);
+      for (const b of brands) if (Object.values(out[b]).some((v) => !v.includes("none"))) present.add(b);
+      result.competitors = [...present];
+    }
+  }
   return Object.keys(result).length ? result : null;
 }
 
@@ -198,7 +220,7 @@ checkinsRouter.post("/", (req, res, next) => {
     next();
   });
 }, async (req, res) => {
-  const { customer_id, lat, lng, note, brand_status, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s, expected_volume_l } = req.body ?? {};
+  const { customer_id, lat, lng, note, brand_status, competitor_prices, outcomes, amount_collected_amd, available_products, client_ref, captured_at, accuracy_m, delivered_order_ids, no_order_reason, voice_duration_s, expected_volume_l } = req.body ?? {};
   const customerId = Number(customer_id);
   const latNum = Number(lat);
   const lngNum = Number(lng);
@@ -342,7 +364,10 @@ checkinsRouter.post("/", (req, res, next) => {
       allowance_meters: radiusMeters,
     });
   }
-  const brandStatusValue = parseBrandStatus(brand_status, brand_status ? await recordableKeys() : undefined);
+  // the brands and product lines a visit may name (approved / waiting brands, the Potential lines), read once
+  const shelf = brand_status || competitor_prices ? await shelfCatalogue() : null;
+  const brandStatusValue = parseBrandStatus(brand_status, shelf?.brandKeys, shelf ? new Set(shelf.lineUnits.keys()) : null);
+  const competitorPriceRows = shelf && competitor_prices ? cleanCompetitorPrices(competitor_prices, shelf) : [];
   const availableProductsValue = parseAvailableProducts(available_products);
 
   // "Products delivered" (stored as customer_unavailable): the orders the rep picked move to Delivered together with the check-in.
@@ -366,6 +391,14 @@ checkinsRouter.post("/", (req, res, next) => {
       [customerId, req.user.id, latNum, lngNum, distance, withinRange, note ?? null, brandStatusValue, outcomeValues, amountCollected, availableProductsValue, client_ref || null, parseCapturedAt(captured_at), parseAccuracy(accuracy_m)]
     );
     checkin = rows[0];
+    // competitor prices written at this visit (market analysis, 2026-11-19): one row per brand, line and volume
+    for (const r of competitorPriceRows) {
+      await client.query(
+        `INSERT INTO competitor_prices (checkin_id, customer_id, user_id, brand_key, line_code, volume, unit, wholesale_amd, retail_amd, recorded_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [checkin.id, customerId, req.user.id, r.brand, r.line, r.volume, r.unit, r.wholesale, r.retail, checkin.timestamp]
+      );
+    }
     // The shop's whole monthly oil need, all brands (Sales Expert funnel, stage 4), when the rep wrote it at this visit. A number that makes no
     // sense is left out -- never the reason a (possibly offline-queued) visit is refused.
     // Only when the visit really is at the shop (the number is asked from its owner); a 0 says nothing, so it is not saved. Dated with the visit's

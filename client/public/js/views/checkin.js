@@ -305,6 +305,9 @@ export async function renderCheckin(root, navigate, customerId) {
   // per competitor brand: bottles / drum / not available (owner, 2026-11-19; competitorShelf.js). The brands with bottles or a drum also go
   // into brandStatus.competitors, which every other screen reads.
   const competitorPacks = Object.create(null); // any brand word can be a key
+  // per brand and product line (bottles / drum / not available) and the prices typed per volume (owner, 2026-11-19)
+  const competitorLinePacks = Object.create(null);
+  const competitorPrices = new Map();
   let competitorSheetOpening = false;
 
   // Which of this customer's own previously-ordered products the rep found
@@ -408,6 +411,8 @@ export async function renderCheckin(root, navigate, customerId) {
       openCompetitorSheet({
         title: t(card.labelKey),
         packs: competitorPacks,
+        linePacks: competitorLinePacks,
+        prices: competitorPrices,
         onApply: () => {
           brandStatus.competitors = Object.entries(competitorPacks).filter(([, v]) => !v.includes("none")).map(([k]) => k);
           paintBrandGroupButtons();
@@ -1015,6 +1020,8 @@ export async function renderCheckin(root, navigate, customerId) {
     const note = data.get("note");
     const brandStatusPayload = Object.fromEntries(Object.entries(brandStatus).filter(([, v]) => v.length));
     if (Object.keys(competitorPacks).length) brandStatusPayload.competitor_packs = { ...competitorPacks };
+    if (Object.keys(competitorLinePacks).length) brandStatusPayload.competitor_line_packs = { ...competitorLinePacks };
+    const competitorPricesPayload = [...competitorPrices.values()];
     const { latitude: lat, longitude: lng } = position.coords;
 
     // Generated once, before the first (online) attempt -- reused as-is if
@@ -1039,6 +1046,7 @@ export async function renderCheckin(root, navigate, customerId) {
     const deliveredOrderIds = outcomes.includes("customer_unavailable") ? data.getAll("delivered_orders").map(Number) : [];
     if (deliveredOrderIds.length) formData.set("delivered_order_ids", JSON.stringify(deliveredOrderIds));
     if (Object.keys(brandStatusPayload).length) formData.set("brand_status", JSON.stringify(brandStatusPayload));
+    if (competitorPricesPayload.length) formData.set("competitor_prices", JSON.stringify(competitorPricesPayload));
     const availableProductsPayload = [...selectedAvailableProducts];
     if (availableProductsPayload.length) formData.set("available_products", JSON.stringify(availableProductsPayload));
     photos.forEach((photo, i) => formData.append("photos", photo.blob, `checkin-${i}.jpg`));
@@ -1074,6 +1082,7 @@ export async function renderCheckin(root, navigate, customerId) {
           accuracy: Number.isFinite(position.coords.accuracy) ? Math.round(position.coords.accuracy) : undefined,
           note,
           brandStatus: brandStatusPayload,
+          competitorPrices: competitorPricesPayload,
           outcomes,
           noOrderReason: skippedOrderTasks?.reason,
           amountCollected,

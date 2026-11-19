@@ -5,7 +5,7 @@
 //   POST /:id/deny        { reason } admin / CEO
 import express, { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
-import { brandsFor, requestBrand, decideBrand, BrandError } from "../competitorBrands.js";
+import { brandsFor, requestBrand, decideBrand, latestPrices, BrandError } from "../competitorBrands.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 
 export const competitorBrandsRouter = Router();
@@ -16,6 +16,11 @@ const failed = (res, err) => (err instanceof BrandError ? res.status(err.status)
 
 competitorBrandsRouter.get("/", async (req, res) => {
   res.json({ brands: await brandsFor(req.user.id) });
+});
+
+// GET /:key/prices -- the latest wholesale / retail per product line and volume, by anyone (everyone sees all prices, owner 2026-11-19)
+competitorBrandsRouter.get("/:key/prices", async (req, res) => {
+  res.json({ prices: await latestPrices(String(req.params.key ?? "").slice(0, 60)) });
 });
 
 competitorBrandsRouter.post("/", async (req, res) => {

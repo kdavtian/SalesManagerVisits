@@ -120,3 +120,55 @@ test("review fixes: reserved and same-but-spaced names, two reps adding at once,
   const row = (Array.isArray(summary) ? summary : summary.rows ?? []).find((r) => r.customer_id === shop.id);
   assert.deepEqual(row.current.competitors.values, [], "Mobil is no longer 'current'");
 });
+
+test("per product line: bottles / drum / not available and the prices per volume; everyone reads the latest", async () => {
+  const shop = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  const form = new FormData();
+  form.set("customer_id", String(shop.id));
+  form.set("lat", "40.18");
+  form.set("lng", "44.51");
+  form.set("outcomes", JSON.stringify(["follow_up_required"]));
+  form.set("brand_status", JSON.stringify({ competitor_line_packs: { motul: { pcmo_5w30: ["bottle"], atf: ["none"], nope_line: ["drum"] }, nope_brand: { atf: ["drum"] } } }));
+  form.set(
+    "competitor_prices",
+    JSON.stringify([
+      { brand: "motul", line: "pcmo_5w30", volume: 4, wholesale: "12 500", retail: 15000 },
+      { brand: "motul", line: "pcmo_5w30", volume: 208, wholesale: 520000 },
+      { brand: "motul", line: "pcmo_5w30", volume: 20, retail: 60000 }, // a custom volume
+      { brand: "motul", line: "pcmo_5w30", volume: 1 }, // no price: dropped
+      { brand: "motul", line: "nope", volume: 1, retail: 5 }, // unknown line: dropped
+      { brand: "x_none", line: "atf", volume: 1, retail: 5 }, // unknown brand: dropped
+      { brand: "motul", line: "atf", volume: -1, retail: 5 }, // bad volume: dropped
+    ])
+  );
+  const r = await apiFormRequest("/api/checkins", { form, cookie: cookies.rep });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  trackCheckin(r.data.id);
+  assert.deepEqual(r.data.brand_status.competitor_line_packs, { motul: { pcmo_5w30: ["bottle"], atf: ["none"] } });
+  assert.deepEqual(r.data.brand_status.competitors, ["motul"], "a line with bottles makes its brand present");
+  const { rows } = await pool.query("SELECT line_code, volume::float8 AS v, wholesale_amd, retail_amd FROM competitor_prices WHERE checkin_id = $1 ORDER BY volume", [r.data.id]);
+  assert.deepEqual(rows.map((x) => [x.line_code, x.v, x.wholesale_amd, x.retail_amd]), [["pcmo_5w30", 4, 12500, 15000], ["pcmo_5w30", 20, null, 60000], ["pcmo_5w30", 208, 520000, null]]);
+  // another rep sees the latest
+  const latest = (await apiRequest("/api/competitor-brands/motul/prices", { cookie: cookies.rep2 })).data.prices;
+  assert.equal(latest.pcmo_5w30[4].retail, 15000);
+  assert.equal(latest.pcmo_5w30[208].wholesale, 520000);
+});
+
+test("viscosity: filled from the name by the database, typed by management stays, emptied comes back from the name", async () => {
+  const admin = await createUser("admin");
+  const cookie = await loginAs(admin.email);
+  const { rows: [p] } = await pool.query("INSERT INTO products (name, unit_price_amd, brand) VALUES ($1, 1, 'TestBrand') RETURNING id, viscosity", [`${tag} EDGE 5w30 LL`]);
+  try {
+    assert.equal(p.viscosity, "5W-30");
+    const typed = await apiRequest(`/api/products/${p.id}`, { method: "PATCH", cookie, body: { viscosity: "0w-20" } });
+    assert.deepEqual([typed.status, typed.data.viscosity, typed.data.viscosity_manual], [200, "0W-20", true]);
+    await pool.query("UPDATE products SET name = $2 WHERE id = $1", [p.id, `${tag} EDGE 10W-40`]);
+    assert.equal((await pool.query("SELECT viscosity FROM products WHERE id = $1", [p.id])).rows[0].viscosity, "0W-20", "typed: kept when the name changes");
+    const back = await apiRequest(`/api/products/${p.id}`, { method: "PATCH", cookie, body: { viscosity: "" } });
+    assert.deepEqual([back.data.viscosity, back.data.viscosity_manual], ["10W-40", false]);
+    const { rows: [n] } = await pool.query("INSERT INTO products (name, unit_price_amd) VALUES ($1, 1) RETURNING viscosity", [`${tag} Radicool NF`]);
+    assert.equal(n.viscosity, null);
+  } finally {
+    await pool.query("DELETE FROM products WHERE name LIKE $1", [`${tag}%`]);
+  }
+});

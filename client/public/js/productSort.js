@@ -73,6 +73,11 @@ function compareTier(list, a, b) {
 // normalizes it to the "0W-20" form VISCOSITY_PRIORITY uses. Returns null
 // for a name with no viscosity grade -- the signal used to route a
 // product into the non-oil block.
+// the product's stored viscosity (migration 216: from the name, or typed by management) wins over reading the name
+function viscosityOf(p) {
+  return p?.viscosity || parseViscosity(p?.name);
+}
+
 function parseViscosity(name) {
   if (!name) return null;
   const m = name.match(/(\d{1,2})\s*w\s*-?\s*(\d{1,3})/i);
@@ -103,8 +108,8 @@ export function parseLiters(unit) {
 }
 
 export function compareProducts(a, b) {
-  const va = parseViscosity(a.name);
-  const vb = parseViscosity(b.name);
+  const va = viscosityOf(a);
+  const vb = viscosityOf(b);
   if (!va && !vb) return (a.name || "").localeCompare(b.name || "");
   if (!va) return 1;
   if (!vb) return -1;
