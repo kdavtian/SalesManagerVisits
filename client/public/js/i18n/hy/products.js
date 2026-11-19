@@ -210,6 +210,7 @@ export const hyProducts = {
     pu_rate: "USD փոխարժեք",
     pu_lines: "Ապրանքներ",
     pu_add_line: "Ավելացնել ապրանք",
+    pu_lines_filter: "Գտնել ապրանքներում",
     pu_packs: "Քանակ",
     pu_cost_usd: "USD մեկ հատի",
     pu_total_usd: "Ընդամենը, USD",

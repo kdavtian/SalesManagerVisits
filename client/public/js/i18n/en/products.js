@@ -210,6 +210,7 @@ export const enProducts = {
     pu_rate: "USD rate",
     pu_lines: "Products",
     pu_add_line: "Add product",
+    pu_lines_filter: "Find in the lines",
     pu_packs: "Packs",
     pu_cost_usd: "USD per pack",
     pu_total_usd: "Total, USD",

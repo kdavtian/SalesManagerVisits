@@ -37,7 +37,8 @@ test("@smoke Purchases: an Excel-only invoice is entered in the app from its own
     const form = page.locator(".pu-form-sheet");
     await expect(form.locator('[name="invoice_no"]')).toHaveValue(invoiceNo);
     await expect(form.locator(".pu-fl")).toHaveCount(2);
-    await expect(form.locator(".pu-fl").nth(1)).toContainText("Castrol Stend");
+    // grouped by brand (P2): the unknown line sits under its brand, by its own name
+    await expect(form.locator(".pu-fl-group", { hasText: "Stend" }).locator(".pu-fl-brand")).toContainText("Castrol");
     await form.locator('[name="usd_rate"]').fill("385");
     await page.waitForTimeout(400); // the sheet has finished sliding in
     await page.screenshot({ path: "test-results/purchases-form.png" });
@@ -229,6 +230,80 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
     await pool.query("DELETE FROM erp_purchase_lines");
     await page.evaluate(() => localStorage.removeItem("fv_pu_draft")).catch(() => {});
     await page.close(); // nothing of the page may still be saving while the rows go
+    await pool.query("DELETE FROM purchase_invoices WHERE supplier_id = $1", [supplier]);
+    await pool.query("DELETE FROM suppliers WHERE id = $1", [supplier]);
+  }
+});
+
+// Owner plan P2 (2026-11-20): an invoice's lines by brand in the price-list order with each brand's packs, litres and dollars; one short
+// row per product; a filter over a long invoice; an edited invoice keeps its typing when the sheet closes.
+test("@smoke Purchases P2: lines grouped by brand and sorted, brand totals, filter, the edit draft", async ({ page, fixtures }) => {
+  const acc = await fixtures.createUser("accountant");
+  const mk = (name, brand, unit) => fixtures.createProduct({ name, brand, unit });
+  const products = [
+    await mk("P2 Royal 0w20", "Royal", "1L"),
+    await mk("P2 Magnatec 10w40", "Castrol", "4L"),
+    await mk("P2 Edge 5w30", "Castrol", "1L"),
+    await mk("P2 Lotos 5w30", "Lotos", "5L"),
+    await mk("P2 Edge 0w20", "Castrol", "4L"),
+    await mk("P2 Edge 0w20 1L", "Castrol", "1L"),
+    await mk("P2 GTX 10w40", "Castrol", "1L"),
+    await mk("P2 Royal 5w40", "Royal", "4L"),
+  ];
+  // the product line (family) as the real catalogue has it
+  for (const p of products) {
+    const family = ["Edge", "Magnatec", "GTX"].find((f) => p.name.includes(f)) ?? null;
+    if (family) await pool.query("UPDATE products SET family = $2 WHERE id = $1", [p.id, family]);
+  }
+  const supplier = (await pool.query("INSERT INTO suppliers (name) VALUES ('E2E P2 Supplier') ON CONFLICT (lower(name)) DO UPDATE SET active = true RETURNING id")).rows[0].id;
+  const inv = (await pool.query("INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, created_by) VALUES ('P2/26', current_date, $1, 386, $2) RETURNING id", [supplier, acc.id])).rows[0].id;
+  // typed in a mixed order
+  for (const [k, p] of products.entries()) {
+    await pool.query("INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd) VALUES ($1, $2, $3, $4, $5, $6, 10)", [inv, p.id, p.name, p.brand, parseFloat(p.unit), k + 1]);
+  }
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginViaUi(page, acc.email);
+    await page.goto("/#/purchases");
+    await page.locator(".pu-row", { hasText: "E2E P2 Supplier" }).click();
+    // the invoice: brands in the price-list order, Castrol's packs 2+3+5+6+7 = 23
+    const sheet = page.locator(".sheet").last();
+    const brands = (await sheet.locator(".pu-line-brand > span:first-child").allTextContents()).map((s) => s.trim().split(/\s/)[0]);
+    expect(brands).toEqual(["Castrol", "Lotos", "Royal"]);
+    await expect(sheet.locator(".pu-line-brand").first()).toContainText("23");
+    const sheetNames = (await sheet.locator(".pu-line:not(.pu-line-brand):not(.pu-line-total) .pu-line-name").allTextContents()).map((x) => x.split(" · ")[0].trim());
+    expect(sheetNames.slice(0, 5)).toEqual(["P2 Edge 0w20 1L", "P2 Edge 0w20", "P2 Edge 5w30", "P2 Magnatec 10w40", "P2 GTX 10w40"]);
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "test-results/purchases-p2-sheet.png" });
+    await sheet.locator("#pu-edit").click();
+    const form = page.locator(".pu-form-sheet");
+    await expect(form.locator(".pu-fl-group")).toHaveCount(3);
+    const castrol = (await form.locator(".pu-fl-group").first().locator(".pu-fl-name").allTextContents()).map((s) => s.split(" · ")[0]);
+    // the catalogue order: Edge before Magnatec before GTX; 0W-20 before 5W-30; 1 L before 4 L
+    expect(castrol).toEqual(["P2 Edge 0w20 1L", "P2 Edge 0w20", "P2 Edge 5w30", "P2 Magnatec 10w40", "P2 GTX 10w40"]);
+    await expect(form.locator(".pu-fl-brand").first()).toContainText("23");
+    // eight lines: the filter shows; it hides what does not match
+    const filter = form.locator("#pu-lines-filter");
+    await expect(filter).toBeVisible();
+    await filter.fill("royal");
+    await expect(form.locator(".pu-fl:visible")).toHaveCount(2);
+    await filter.fill("");
+    await page.waitForTimeout(400);
+    await form.locator(".pu-fl-group").first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "test-results/purchases-p2-form.png" });
+    // the brand's total follows the typing; the edit keeps its draft when the sheet closes
+    const qty = form.locator(".pu-fl", { hasText: "P2 Lotos 5w30" }).locator('[data-f="qty"]');
+    await qty.fill("40");
+    await expect(form.locator(".pu-fl-group", { hasText: "P2 Lotos 5w30" }).locator(".pu-fl-brand")).toContainText("40");
+    await page.waitForTimeout(600); // the draft is written after 400 ms
+    await form.locator("[data-close]").first().click();
+    await page.locator(".pu-row", { hasText: "E2E P2 Supplier" }).click();
+    await page.locator(".sheet").last().locator("#pu-edit").click();
+    await expect(page.locator("#pu-draft")).toBeVisible();
+    await expect(page.locator(".pu-fl", { hasText: "P2 Lotos 5w30" }).locator('[data-f="qty"]')).toHaveValue("40");
+  } finally {
+    await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("fv_pu_draft")).forEach((k) => localStorage.removeItem(k))).catch(() => {});
+    await page.close();
     await pool.query("DELETE FROM purchase_invoices WHERE supplier_id = $1", [supplier]);
     await pool.query("DELETE FROM suppliers WHERE id = $1", [supplier]);
   }
