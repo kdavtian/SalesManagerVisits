@@ -1257,7 +1257,8 @@ export function openInfoPopup(html) {
   return overlay;
 }
 
-export function activateDialog(overlay) {
+// onEscape: a sheet that saves on close (Done / X / tap beside it) does the same on Esc instead of being thrown away (2026-11-19)
+export function activateDialog(overlay, { onEscape = null } = {}) {
   const dialog = overlay.querySelector(".sheet") || overlay;
   const previousFocus = document.activeElement;
   dialog.setAttribute("role", "dialog");
@@ -1269,7 +1270,9 @@ export function activateDialog(overlay) {
   overlay.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      overlay.remove();
+      event.stopPropagation(); // a sheet over a sheet: only the top one closes
+      if (onEscape) onEscape();
+      else overlay.remove();
       return;
     }
     if (event.key !== "Tab") return;

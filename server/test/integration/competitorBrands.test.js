@@ -146,6 +146,10 @@ test("per product line: bottles / drum / not available and the prices per volume
   trackCheckin(r.data.id);
   assert.deepEqual(r.data.brand_status.competitor_line_packs, { motul: { pcmo_5w30: ["bottle"], atf: ["none"] } });
   assert.deepEqual(r.data.brand_status.competitors, ["motul"], "a line with bottles makes its brand present");
+  // a brand marked "not available" is never made present by its lines
+  const { parseBrandStatus } = await import("../../src/field/routes/checkins.js");
+  const both = parseBrandStatus(JSON.stringify({ competitor_packs: { motul: ["none"] }, competitor_line_packs: { motul: { pcmo_5w30: ["bottle"] } } }), new Set(["motul"]), new Set(["pcmo_5w30"]));
+  assert.deepEqual(both.competitors, []);
   const { rows } = await pool.query("SELECT line_code, volume::float8 AS v, wholesale_amd, retail_amd FROM competitor_prices WHERE checkin_id = $1 ORDER BY volume", [r.data.id]);
   assert.deepEqual(rows.map((x) => [x.line_code, x.v, x.wholesale_amd, x.retail_amd]), [["pcmo_5w30", 4, 12500, 15000], ["pcmo_5w30", 20, null, 60000], ["pcmo_5w30", 208, 520000, null]]);
   // another rep sees the latest
@@ -168,6 +172,9 @@ test("viscosity: filled from the name by the database, typed by management stays
     assert.deepEqual([back.data.viscosity, back.data.viscosity_manual], ["10W-40", false]);
     const { rows: [n] } = await pool.query("INSERT INTO products (name, unit_price_amd) VALUES ($1, 1) RETURNING viscosity", [`${tag} Radicool NF`]);
     assert.equal(n.viscosity, null);
+    const { rows: [z] } = await pool.query("INSERT INTO products (name, unit_price_amd) VALUES ($1, 1) RETURNING viscosity", [`${tag} Oil 05W-30`]);
+    assert.equal(z.viscosity, "5W-30", "a leading zero is dropped");
+    assert.equal((await apiRequest(`/api/products/${p.id}`, { method: "PATCH", cookie, body: { viscosity: "SAE 40" } })).status, 400, "only like 5W-30");
   } finally {
     await pool.query("DELETE FROM products WHERE name LIKE $1", [`${tag}%`]);
   }

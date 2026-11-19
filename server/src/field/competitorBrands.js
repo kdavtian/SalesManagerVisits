@@ -109,7 +109,7 @@ export function cleanCompetitorPrices(raw, { brandKeys, lineUnits }) {
   const amd = (v) => {
     if (v === null || v === undefined || v === "") return null;
     const n = Math.round(Number(String(v).replace(/[\s,]/g, "")));
-    return Number.isFinite(n) && n >= 0 && n <= 100000000 ? n : undefined;
+    return Number.isFinite(n) && n >= 0 && n <= 999999999 ? n : undefined; // the sheet's box takes 9 digits
   };
   const out = new Map();
   for (const r of list.slice(0, 300)) {

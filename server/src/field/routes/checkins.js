@@ -193,7 +193,8 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
     if (brands.length) {
       result.competitor_line_packs = Object.fromEntries(brands.map((b) => [b, { ...out[b] }]));
       const present = new Set(result.competitors ?? []);
-      for (const b of brands) if (Object.values(out[b]).some((v) => !v.includes("none"))) present.add(b);
+      const brandNone = (b) => Array.isArray(result.competitor_packs?.[b]) && result.competitor_packs[b].includes("none");
+      for (const b of brands) if (!brandNone(b) && Object.values(out[b]).some((v) => !v.includes("none"))) present.add(b);
       result.competitors = [...present];
     }
   }

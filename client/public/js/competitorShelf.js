@@ -90,7 +90,8 @@ export async function openCompetitorSheet({ title, packs, linePacks = Object.cre
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  activateDialog(overlay);
+  let onEsc = () => overlay.remove();
+  activateDialog(overlay, { onEscape: () => onEsc() });
   const list = overlay.querySelector(".cs-list");
 
   const paintRow = (key) => {
@@ -186,7 +187,9 @@ export async function openCompetitorSheet({ title, packs, linePacks = Object.cre
     for (const [k, set] of draft) if (set.size) packs[k] = [...set];
     for (const k of Object.keys(linePacks)) delete linePacks[k];
     for (const [k, lines] of draftLines) {
-      const marked = [...lines].filter(([, s]) => s.size);
+      const brandNone = draft.get(k)?.has("none");
+      // a brand marked "not available" keeps only its lines marked "not available" (never "not available" and present at once)
+      const marked = [...lines].filter(([, s]) => s.size && (!brandNone || s.has("none")));
       if (marked.length) linePacks[k] = Object.fromEntries(marked.map(([c, s]) => [c, [...s]]));
     }
     prices.clear();
@@ -194,6 +197,7 @@ export async function openCompetitorSheet({ title, packs, linePacks = Object.cre
     overlay.remove();
     onApply?.();
   };
+  onEsc = apply;
   overlay.addEventListener("click", (e) => e.target === overlay && apply());
   overlay.querySelector('[data-action="close-sheet"]').addEventListener("click", apply);
   overlay.querySelector("#cs-done").addEventListener("click", apply);
@@ -215,7 +219,8 @@ const shortLineName = (l) => {
 const lastCache = new Map(); // brand -> latest prices by anyone (GET /competitor-brands/:key/prices)
 async function loadLast(brand) {
   if (!lastCache.has(brand)) lastCache.set(brand, api.getCompetitorPrices(brand).then((r) => r.prices).catch(() => ({})));
-  return lastCache.get(brand);
+  // the sheet opens after at most 2 s (weak signal): the hints are a help, not a reason to wait
+  return Promise.race([lastCache.get(brand), new Promise((ok) => setTimeout(() => ok({}), 2000))]);
 }
 
 function openLinesSheet(brand, { draftLines, draftPrices }) {
@@ -254,15 +259,21 @@ function openLinesSheet(brand, { draftLines, draftPrices }) {
         <div class="sheet-actions"><button type="button" class="btn btn-primary btn-block" data-done>${t("done")}</button></div>
       </div>`;
     document.body.appendChild(overlay);
-    activateDialog(overlay);
+    activateDialog(overlay, { onEscape: () => close() });
     const list = overlay.querySelector(".cs-list");
+    let pricesOpening = false; // a second tap while the last prices load opens no second sheet
     list.addEventListener("click", (e) => {
       const row = e.target.closest(".cs-row");
       if (!row) return;
       const code = row.dataset.line;
       if (e.target.closest("[data-open-prices]")) {
+        if (pricesOpening) return;
+        pricesOpening = true;
         const l = lines.find((x) => x.code === code);
-        openPriceSheet(brand, l, draftPrices).then(() => (row.outerHTML = rowHtml(l)));
+        openPriceSheet(brand, l, draftPrices).then(() => {
+          pricesOpening = false;
+          row.outerHTML = rowHtml(l);
+        });
         return;
       }
       const btn = e.target.closest(".cs-btn");
@@ -337,7 +348,7 @@ function openPriceSheet(brand, line, draftPrices) {
         <div class="sheet-actions"><button type="button" class="btn btn-primary btn-block" data-done>${t("done")}</button></div>
       </div>`;
     document.body.appendChild(overlay);
-    activateDialog(overlay);
+    activateDialog(overlay, { onEscape: () => close() });
     const list = overlay.querySelector(".cs-prices");
     // whole AMD with thousands separators as typed
     list.addEventListener("input", (e) => {

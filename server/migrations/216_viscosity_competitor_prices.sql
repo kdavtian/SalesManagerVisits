@@ -9,7 +9,8 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS viscosity TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS viscosity_manual BOOLEAN NOT NULL DEFAULT false;
 
 CREATE OR REPLACE FUNCTION viscosity_of_name(name TEXT) RETURNS TEXT LANGUAGE sql IMMUTABLE AS $$
-  SELECT upper(regexp_replace(substring(name from '(?i)(\d{1,2}\s*w\s*-?\s*\d{1,3})'), '\s*[Ww]\s*-?\s*', 'W-'))
+  -- "05W-30" is 5W-30 (a leading zero dropped; "0W-20" keeps its zero)
+  SELECT regexp_replace(upper(regexp_replace(substring(name from '(?i)(\d{1,2}\s*w\s*-?\s*\d{1,3})'), '\s*[Ww]\s*-?\s*', 'W-')), '^0([0-9])W', '\1W')
 $$;
 
 CREATE OR REPLACE FUNCTION products_fill_viscosity() RETURNS trigger LANGUAGE plpgsql AS $$

@@ -432,14 +432,17 @@ productsRouter.patch("/:id", async (req, res) => {
     if (key === "description" && value !== null && (typeof value !== "string" || value.length > 4000)) {
       return res.status(400).json({ error: "description must be text up to 4000 characters" });
     }
-    if (key === "viscosity" && value !== null && (typeof value !== "string" || value.trim().length > 20)) {
-      return res.status(400).json({ error: "viscosity must be short text like 5W-30" });
+    if (key === "viscosity" && value !== null && String(value).trim() !== "" && !/^\d{1,2}\s*w\s*-?\s*\d{1,3}$/i.test(String(value).trim())) {
+      return res.status(400).json({ error: "viscosity must be like 5W-30" });
     }
   }
   const values = updates.map(([key, value]) => {
     if (key === "specs") return JSON.stringify(value.map((s) => ({ label: s.label.trim(), value: s.value.trim() })).filter((s) => s.label));
     if (key === "approvals") return value.map((a) => a.trim()).filter(Boolean);
-    if (key === "viscosity") return value && String(value).trim() ? String(value).trim().toUpperCase().replace(/\s*W\s*-?\s*/, "W-") : null;
+    if (key === "viscosity") {
+      const m = value && String(value).trim().match(/^(\d{1,2})\s*w\s*-?\s*(\d{1,3})$/i);
+      return m ? `${Number(m[1])}W-${Number(m[2])}` : null;
+    }
     return NUMERIC_FIELDS.has(key) && value !== null ? Number(value) : value;
   });
   values.push(req.params.id);
