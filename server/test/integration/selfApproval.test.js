@@ -116,3 +116,29 @@ test("a director saving the whole card (only the phone changed) does not overwri
   const none = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_director, body: { customer_id: shop.id, changes: { address: `${tag} old` } } });
   assert.equal(none.data.unchanged, true);
 });
+
+test("a payment: recorded by the accountant is approved at once and the cash is on their desk; by the CEO or a rep it waits", async () => {
+  const accountant = await createUser("accountant", { name: "Self accountant" });
+  const cookie = await loginAs(accountant.email);
+  const pay = (c, amount) => apiRequest("/api/payments", { method: "POST", cookie: c, body: { customer_id: customer.id, amount_amd: amount, sales_manager_id: people.sales_manager.id } });
+  const ids = [];
+  try {
+    const own = await pay(cookie, 11000);
+    assert.equal(own.status, 201, JSON.stringify(own.data).slice(0, 200));
+    ids.push(own.data.id);
+    assert.equal(own.data.status, "approved");
+    const { rows: [row] } = await pool.query("SELECT approved_by, current_holder_id FROM payments WHERE id = $1", [own.data.id]);
+    assert.deepEqual([row.approved_by, row.current_holder_id], [accountant.id, accountant.id]);
+    for (const [who, amount] of [["ceo", 12000], ["sales_manager", 13000]]) {
+      const r = await pay(cookies[who], amount);
+      assert.equal(r.status, 201, `${who}: ${JSON.stringify(r.data).slice(0, 200)}`);
+      ids.push(r.data.id);
+      assert.equal(r.data.status, "pending", who);
+    }
+  } finally {
+    if (ids.length) {
+      await pool.query("DELETE FROM payment_status_history WHERE payment_id = ANY($1)", [ids]);
+      await pool.query("DELETE FROM payments WHERE id = ANY($1)", [ids]);
+    }
+  }
+});
