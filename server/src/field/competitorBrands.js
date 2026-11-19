@@ -21,6 +21,9 @@ export function keyOfName(name) {
     .replace(/[^\p{L}\p{N}_]/gu, "")
     .slice(0, 40);
 }
+// names that are words of the JavaScript language itself: as a key they would clash with every object (review, 2026-11-19)
+const RESERVED = new Set(["constructor", "__proto__", "prototype", "tostring", "valueof", "hasownproperty", "isprototypeof", "propertyisenumerable", "tolocalestring", "__definegetter__", "__definesetter__", "__lookupgetter__", "__lookupsetter__"]);
+
 const cleanName = (name) => String(name ?? "").normalize("NFC").replace(/\s+/g, " ").trim().slice(0, 40);
 
 // What a user may pick: the approved brands, plus the ones they asked for that still wait. [{ key, name, status, mine }]
@@ -46,7 +49,11 @@ export async function requestBrand(name, userId, db = pool) {
   const clean = cleanName(name);
   const key = keyOfName(clean);
   if (clean.length < 2 || key.length < 2) throw new BrandError("Write the brand name (2 letters or more)");
-  const { rows: [same] } = await db.query("SELECT id, key, name, status, requested_by FROM competitor_brands WHERE key = $1 OR lower(name) = lower($2)", [key, clean]);
+  if (RESERVED.has(key.replace(/_/g, "")) || RESERVED.has(key)) throw new BrandError("This name cannot be used");
+  // the same brand whatever the spacing: "Liqui Moly" = liquimoly
+  const findSame = async () =>
+    (await db.query("SELECT id, key, name, status, requested_by FROM competitor_brands WHERE replace(key, '_', '') = replace($1, '_', '') OR lower(name) = lower($2) ORDER BY status = 'approved' DESC, id LIMIT 1", [key, clean])).rows[0];
+  const same = await findSame();
   if (same) {
     // a denied brand asked again goes back to the approvers
     if (same.status === "denied") {
@@ -59,11 +66,14 @@ export async function requestBrand(name, userId, db = pool) {
     }
     return { brand: { id: same.id, key: same.key, name: same.name, status: same.status }, created: false };
   }
+  // two reps adding it at the same moment: one row; the second gets the first one's brand
   const { rows: [r] } = await db.query(
-    "INSERT INTO competitor_brands (key, name, status, requested_by) VALUES ($1, $2, 'pending', $3) RETURNING id, key, name, status",
+    "INSERT INTO competitor_brands (key, name, status, requested_by) VALUES ($1, $2, 'pending', $3) ON CONFLICT (key) DO NOTHING RETURNING id, key, name, status",
     [key, clean, userId]
   );
-  return { brand: r, created: true };
+  if (r) return { brand: r, created: true };
+  const other = await findSame();
+  return { brand: { id: other.id, key: other.key, name: other.name, status: other.status }, created: false };
 }
 
 // Approve / deny (admin, CEO). Deny needs a reason (the Requests card asks for one).

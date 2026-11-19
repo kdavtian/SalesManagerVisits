@@ -412,7 +412,7 @@ const LOADERS = {
        FROM competitor_brands b LEFT JOIN users u ON u.id = b.requested_by LEFT JOIN users d ON d.id = b.decided_by WHERE b.id = $1`,
       [id]
     );
-    if (!b || !b.requested_by) return null; // the seeded brands were never asked for
+    if (!b) return null;
     const status = { pending: "pending", approved: "approved", denied: "rejected" }[b.status] ?? "closed";
     return {
       kind: "competitor_brand",

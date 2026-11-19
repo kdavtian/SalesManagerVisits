@@ -20,24 +20,34 @@ const BUTTONS = [
 const labelOf = (b) => (hasText(`competitor_${b.key}`) ? t(`competitor_${b.key}`) : b.name || brandNameOfKey(b.key));
 
 // the list: the server's (approved + this rep's waiting ones); without signal, the built-in list (and whatever was marked before)
+// Cache first (review, 2026-11-19): the sheet opens at once from the last list and reads it again in the background; the first time it
+// waits at most 3 s, then opens with the built-in list.
 let cached = null;
+const builtIn = () => COMPETITORS.map((key) => ({ key, name: "", status: "approved" }));
+function refresh() {
+  return api.getCompetitorBrands().then((r) => (cached = r.brands));
+}
 async function loadBrands() {
-  try {
-    cached = (await api.getCompetitorBrands()).brands;
-  } catch {
-    cached ??= COMPETITORS.map((key) => ({ key, name: "", status: "approved" }));
+  if (cached) {
+    refresh().catch(() => {});
+    return cached;
   }
-  return cached;
+  try {
+    return await Promise.race([refresh(), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 3000))]);
+  } catch {
+    return builtIn();
+  }
 }
 
 // packs: { [brandKey]: ["bottle"] | ["drum"] | ["bottle","drum"] | ["none"] } -- edited in place; onApply() after the sheet closes.
 export async function openCompetitorSheet({ title, packs, onApply }) {
   const brands = [...(await loadBrands())];
   for (const key of Object.keys(packs)) if (!brands.some((b) => b.key === key)) brands.push({ key, name: "", status: "approved" });
-  const draft = Object.fromEntries(Object.entries(packs).map(([k, v]) => [k, new Set(v)]));
+  // a Map: a brand key can be any word, and a plain object answers some words by itself (review, 2026-11-19)
+  const draft = new Map(Object.entries(packs).map(([k, v]) => [k, new Set(v)]));
 
   const rowHtml = (b) => {
-    const on = draft[b.key] ?? new Set();
+    const on = draft.get(b.key) ?? new Set();
     return `<div class="cs-row" data-key="${escapeHtml(b.key)}">
       <span class="cs-name">${escapeHtml(labelOf(b))}${b.status === "pending" ? `<small class="cs-pending">${escapeHtml(t("cs_pending"))}</small>` : ""}</span>
       <span class="cs-btns">${BUTTONS.map(
@@ -78,7 +88,8 @@ export async function openCompetitorSheet({ title, packs, onApply }) {
     const btn = e.target.closest(".cs-btn");
     if (!btn) return;
     const key = btn.closest(".cs-row").dataset.key;
-    const set = (draft[key] ??= new Set());
+    if (!draft.has(key)) draft.set(key, new Set());
+    const set = draft.get(key);
     const v = btn.dataset.v;
     if (set.has(v)) set.delete(v);
     else if (v === "none") {
@@ -88,9 +99,9 @@ export async function openCompetitorSheet({ title, packs, onApply }) {
       set.delete("none");
       set.add(v);
     }
-    if (!set.size) delete draft[key];
+    if (!set.size) draft.delete(key);
     btn.closest(".cs-row").querySelectorAll(".cs-btn").forEach((b) => {
-      const on = Boolean(draft[key]?.has(b.dataset.v));
+      const on = Boolean(draft.get(key)?.has(b.dataset.v));
       b.classList.toggle("is-on", on);
       b.setAttribute("aria-pressed", String(on));
     });
@@ -118,7 +129,7 @@ export async function openCompetitorSheet({ title, packs, onApply }) {
     send.disabled = true;
     try {
       const { brand, created } = await api.addCompetitorBrand(name);
-      cached = null; // the next sheet reads the list again
+      refresh().catch(() => {}); // the next sheet has it
       let row = list.querySelector(`.cs-row[data-key="${CSS.escape(brand.key)}"]`);
       if (!row) {
         brands.push(brand);
@@ -139,7 +150,7 @@ export async function openCompetitorSheet({ title, packs, onApply }) {
   // every way out keeps what was marked (as the other brand sheet)
   const apply = () => {
     for (const k of Object.keys(packs)) delete packs[k];
-    for (const [k, set] of Object.entries(draft)) if (set.size) packs[k] = [...set];
+    for (const [k, set] of draft) if (set.size) packs[k] = [...set];
     overlay.remove();
     onApply?.();
   };

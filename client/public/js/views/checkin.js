@@ -304,7 +304,8 @@ export async function renderCheckin(root, navigate, customerId) {
   const brandStatus = Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, []]));
   // per competitor brand: bottles / drum / not available (owner, 2026-11-19; competitorShelf.js). The brands with bottles or a drum also go
   // into brandStatus.competitors, which every other screen reads.
-  const competitorPacks = {};
+  const competitorPacks = Object.create(null); // any brand word can be a key
+  let competitorSheetOpening = false;
 
   // Which of this customer's own previously-ordered products the rep found
   // in stock right now -- distinct from brandStatus above (that's the
@@ -402,6 +403,8 @@ export async function renderCheckin(root, navigate, customerId) {
   // (owner, 2026-10-26); Competitors is one list.
   function openBrandSheet(card) {
     if (card.key === "competitors") {
+      if (competitorSheetOpening) return; // a second tap while the list loads opens no second sheet
+      competitorSheetOpening = true;
       openCompetitorSheet({
         title: t(card.labelKey),
         packs: competitorPacks,
@@ -409,7 +412,7 @@ export async function renderCheckin(root, navigate, customerId) {
           brandStatus.competitors = Object.entries(competitorPacks).filter(([, v]) => !v.includes("none")).map(([k]) => k);
           paintBrandGroupButtons();
         },
-      });
+      }).finally(() => (competitorSheetOpening = false));
       return;
     }
     const groups = card.groups.map((key) => BRAND_GROUPS.find((g) => g.key === key));

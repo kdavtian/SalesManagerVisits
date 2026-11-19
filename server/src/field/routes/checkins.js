@@ -160,7 +160,7 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
   // bottles / drum / not available per competitor: a brand with bottles or a drum is present (in `competitors`, which every other screen
   // reads); "not available" is never present and clears bottles / drum
   if (parsed.competitor_packs && typeof parsed.competitor_packs === "object" && !Array.isArray(parsed.competitor_packs)) {
-    const packs = {};
+    const packs = Object.create(null);
     for (const [key, value] of Object.entries(parsed.competitor_packs)) {
       if (!competitorKeys.has(key) || !Array.isArray(value)) continue;
       const v = [...new Set(value.filter((x) => PACKS.has(x)))];
@@ -168,7 +168,7 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
       packs[key] = v.includes("none") ? ["none"] : v.sort();
     }
     if (Object.keys(packs).length) {
-      result.competitor_packs = packs;
+      result.competitor_packs = { ...packs };
       const present = new Set((result.competitors ?? []).filter((k) => !packs[k]?.includes("none")));
       for (const [k, v] of Object.entries(packs)) if (!v.includes("none")) present.add(k);
       if (present.size) result.competitors = [...present];

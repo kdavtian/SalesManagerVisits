@@ -550,12 +550,13 @@ customersRouter.get("/brand-summary", async (req, res) => {
     ${join}
     CROSS JOIN unnest($1::text[]) AS g(grp)
     WHERE ch.brand_status IS NOT NULL
-      AND jsonb_typeof(ch.brand_status -> g.grp) = 'array'
-      AND jsonb_array_length(ch.brand_status -> g.grp) > 0
+      AND ((jsonb_typeof(ch.brand_status -> g.grp) = 'array' AND jsonb_array_length(ch.brand_status -> g.grp) > 0)
+           -- a visit that marked competitors bottles / drum / not available recorded the group even when none is present (2026-11-19)
+           OR (g.grp = 'competitors' AND jsonb_typeof(ch.brand_status -> 'competitor_packs') = 'object'))
       ${where}`;
   const [{ rows: currentRows }, { rows: everRows }] = await Promise.all([
     pool.query(
-      `SELECT DISTINCT ON (ch.customer_id, g.grp) ch.customer_id, g.grp AS grp, ch.brand_status -> g.grp AS vals, ch.timestamp AS as_of
+      `SELECT DISTINCT ON (ch.customer_id, g.grp) ch.customer_id, g.grp AS grp, COALESCE(ch.brand_status -> g.grp, '[]'::jsonb) AS vals, ch.timestamp AS as_of
        ${base}
        ORDER BY ch.customer_id, g.grp, ch.timestamp DESC`,
       params

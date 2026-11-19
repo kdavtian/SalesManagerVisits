@@ -88,3 +88,35 @@ test("admin / CEO decide on the Requests card; a rep or the accountant cannot; d
   assert.equal((await apiRequest(`/api/competitor-brands/${other.id}/deny`, { method: "POST", cookie: cookies.ceo, body: { reason: "typo" } })).status, 200);
   assert.ok(!(await list("rep")).some((b) => b.key === other.key), "denied: out of the list, the asker's too");
 });
+
+test("review fixes: reserved and same-but-spaced names, two reps adding at once, all 'not available' clears the card's chips", async () => {
+  assert.equal((await add("rep", "Constructor")).status, 400);
+  assert.equal((await add("rep", "__proto__")).status, 400);
+  const spaced = await add("rep", "Liqui Moly");
+  assert.deepEqual([spaced.status, spaced.data.created, spaced.data.brand.key], [200, false, "liquimoly"], "the same brand whatever the spacing");
+  const [a, b] = await Promise.all([add("rep", `${tag} Twin`), add("rep2", `${tag} Twin`)]);
+  assert.deepEqual([a.status < 300, b.status < 300, a.data.brand.key === b.data.brand.key], [true, true, true], "no server error, one brand");
+  assert.equal([a.data.created, b.data.created].filter(Boolean).length, 1);
+
+  // a visit marks Mobil present, the next one marks it not available: the card's current competitors are empty (a shop of its own)
+  const shop = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  const post = async (bs, minutesAgo) => {
+    const form = new FormData();
+    form.set("customer_id", String(shop.id));
+    form.set("lat", "40.18");
+    form.set("lng", "44.51");
+    form.set("outcomes", JSON.stringify(["follow_up_required"]));
+    form.set("brand_status", JSON.stringify(bs));
+    form.set("captured_at", new Date(Date.now() - minutesAgo * 60000).toISOString());
+    const r = await apiFormRequest("/api/checkins", { form, cookie: cookies.rep });
+    assert.equal(r.status, 201, JSON.stringify(r.data));
+    trackCheckin(r.data.id);
+    return r;
+  };
+  await post({ competitor_packs: { mobil: ["bottle"] } }, 3);
+  const last = await post({ competitor_packs: { mobil: ["none"] } }, 1);
+  assert.equal(last.data.brand_status.competitors, undefined);
+  const summary = (await apiRequest(`/api/customers/brand-summary?customer_id=${shop.id}`, { cookie: cookies.rep })).data;
+  const row = (Array.isArray(summary) ? summary : summary.rows ?? []).find((r) => r.customer_id === shop.id);
+  assert.deepEqual(row.current.competitors.values, [], "Mobil is no longer 'current'");
+});
