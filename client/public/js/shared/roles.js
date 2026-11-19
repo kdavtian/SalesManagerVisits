@@ -133,6 +133,12 @@ export function canManagePurchases(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "accountant";
 }
 
+// Receive a purchase (Purchases P5, owner 2026-11-20: "Warehouse + office"): count what came. The warehouse manager does it on a screen
+// without prices; the purchases managers too.
+export function canReceivePurchases(role) {
+  return canManagePurchases(role) || role === "warehouse_manager";
+}
+
 // Delete a purchase typed by mistake: the admin and the CEO.
 export function canDeletePurchases(role) {
   return role === "admin" || role === "ceo";

@@ -37,17 +37,31 @@ function cleanLines(lines) {
 }
 
 /** Creates or updates one invoice (id = null: new). Returns the invoice id. A repeated client_ref returns the invoice it already made. */
+export const PURCHASE_STATUSES = ["ordered", "in_transit", "arrived"];
+
 export async function savePurchase(body, userId, id = null, db = pool) {
   const invoiceNo = String(body?.invoice_no ?? "").trim();
   const date = String(body?.invoice_date ?? "").slice(0, 10);
-  const rate = Number(body?.usd_rate);
-  if (!invoiceNo) throw new PurchaseError("The invoice number is required");
+  const rawRate = body?.usd_rate === null || body?.usd_rate === undefined || body?.usd_rate === "" ? null : Number(body.usd_rate);
+  // Ordered -> On the way -> Arrived (P5, owner 2026-11-20). An Ordered purchase needs no invoice number or rate yet; the others do.
+  const askedStatus = body?.status === undefined ? null : String(body.status);
+  if (askedStatus !== null && !PURCHASE_STATUSES.includes(askedStatus)) throw new PurchaseError("status must be ordered, in_transit or arrived");
+  const expected = body?.expected_date ? String(body.expected_date).slice(0, 10) : null;
+  if (expected && !/^\d{4}-\d{2}-\d{2}$/.test(expected)) throw new PurchaseError("expected_date must be YYYY-MM-DD");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new PurchaseError("invoice_date must be YYYY-MM-DD");
-  if (!Number.isFinite(rate) || rate <= 0 || rate > 10000) throw new PurchaseError("usd_rate must be a positive number");
+  if (rawRate !== null && (!Number.isFinite(rawRate) || rawRate <= 0 || rawRate > 10000)) throw new PurchaseError("usd_rate must be a positive number");
   const lines = cleanLines(body?.lines);
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+    const current = id ? (await client.query("SELECT status FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id])).rows[0] : null;
+    if (id && !current) throw new PurchaseError("Purchase not found");
+    const status = askedStatus ?? current?.status ?? "arrived";
+    const rate = rawRate;
+    if (status !== "ordered") {
+      if (!invoiceNo) throw new PurchaseError("The invoice number is required");
+      if (rate === null) throw new PurchaseError("usd_rate must be a positive number");
+    }
     if (!id && body?.client_ref) {
       const { rows } = await client.query("SELECT id FROM purchase_invoices WHERE client_ref = $1", [String(body.client_ref)]);
       if (rows[0]) {
@@ -67,7 +81,7 @@ export async function savePurchase(body, userId, id = null, db = pool) {
     }
     // The same supplier's same invoice number on the same day is almost always a second typing of one invoice (owner, 2026-11-07: ultra
     // version). Refused with the existing one named; the form offers "Save anyway" for the rare real repeat (allow_duplicate).
-    if (!body?.allow_duplicate) {
+    if (!body?.allow_duplicate && invoiceNo) {
       // two people saving the same paper invoice at the same moment: one waits for the other, then sees it (the lock ends with the transaction)
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`purchase:${supplierId}:${keyOf(invoiceNo, date)}`]);
       const { rows: same } = await client.query(
@@ -92,25 +106,36 @@ export async function savePurchase(body, userId, id = null, db = pool) {
     }
     let invoiceId = id;
     const before = id ? await invoiceFacts(client, id) : null;
+    // the office marks it Arrived from the form: who and when, as the receiving screen would
+    const becomesArrived = status === "arrived" && (!current || current.status !== "arrived");
+    const counted = new Map();
     if (id) {
+      // the pieces counted on arrival stay with their product through an edit (the lines are written again)
+      const { rows: old } = await client.query("SELECT product_id, received_qty FROM purchase_lines WHERE invoice_id = $1 AND received_qty IS NOT NULL ORDER BY id", [id]);
+      for (const o of old) if (o.product_id && !counted.has(o.product_id)) counted.set(o.product_id, o.received_qty);
       const { rowCount } = await client.query(
-        "UPDATE purchase_invoices SET invoice_no = $2, invoice_date = $3, supplier_id = $4, usd_rate = $5, note = $6, updated_by = $7, updated_at = now() WHERE id = $1",
-        [id, invoiceNo, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId]
+        `UPDATE purchase_invoices SET invoice_no = $2, invoice_date = $3, supplier_id = $4, usd_rate = $5, note = $6, updated_by = $7, updated_at = now(),
+                status = $8, expected_date = $9,
+                arrived_at = CASE WHEN $10 THEN now() ELSE arrived_at END, arrived_by = CASE WHEN $10 THEN $7::int ELSE arrived_by END
+          WHERE id = $1`,
+        [id, invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId, status, expected, becomesArrived]
       );
       if (!rowCount) throw new PurchaseError("Purchase not found");
       await client.query("DELETE FROM purchase_lines WHERE invoice_id = $1", [id]);
     } else {
       const { rows } = await client.query(
-        `INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, note, client_ref, created_by, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $7) RETURNING id`,
-        [invoiceNo, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, body?.client_ref ? String(body.client_ref) : null, userId]
+        `INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, note, client_ref, created_by, updated_by, status, expected_date, arrived_at, arrived_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, CASE WHEN $8 = 'arrived' THEN now() END, CASE WHEN $8 = 'arrived' THEN $7::int END) RETURNING id`,
+        [invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, body?.client_ref ? String(body.client_ref) : null, userId, status, expected]
       );
       invoiceId = rows[0].id;
     }
     for (const l of lines) {
+      const got = l.product_id && counted.has(l.product_id) ? counted.get(l.product_id) : null;
+      if (l.product_id) counted.delete(l.product_id);
       await client.query(
-        "INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-        [invoiceId, l.product_id, l.product_name, l.brand, l.size_l, l.qty, l.cost_usd]
+        "INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd, received_qty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        [invoiceId, l.product_id, l.product_name, l.brand, l.size_l, l.qty, l.cost_usd, got]
       );
     }
     const after = await invoiceFacts(client, invoiceId);
@@ -129,7 +154,8 @@ export async function savePurchase(body, userId, id = null, db = pool) {
 // The head and the totals of one invoice: what an entry of the history compares.
 export async function invoiceFacts(db, id) {
   const { rows: [f] } = await db.query(
-    `SELECT i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, s.name AS supplier, i.usd_rate::float8 AS usd_rate,
+    `SELECT i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, s.name AS supplier, i.usd_rate::float8 AS usd_rate, i.status,
+            to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date,
             count(l.id)::int AS lines, COALESCE(sum(l.qty), 0)::float8 AS packs, COALESCE(sum(l.qty * l.cost_usd), 0)::float8 AS usd
        FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN purchase_lines l ON l.invoice_id = i.id
       WHERE i.id = $1 GROUP BY i.id, s.name`,
@@ -141,7 +167,7 @@ const totalsOf = (f) => (f ? { lines: f.lines, packs: Math.round(f.packs * 1000)
 // what an edit changed: the head fields that differ, and the totals before and after
 function changesOf(before, after) {
   const fields = {};
-  for (const k of ["invoice_no", "invoice_date", "supplier", "usd_rate"]) {
+  for (const k of ["invoice_no", "invoice_date", "supplier", "usd_rate", "status", "expected_date"]) {
     if (before && after && String(before[k] ?? "") !== String(after[k] ?? "")) fields[k] = [before[k], after[k]];
   }
   return { fields, before: totalsOf(before), after: totalsOf(after) };
@@ -168,6 +194,84 @@ export async function purchaseFiles(id, db = pool) {
     [id]
   );
   return rows;
+}
+
+// ---- receiving (P5, owner 2026-11-20) --------------------------------------------------------------------------------------------------
+// The purchases on their way (Ordered / On the way) and the ones that arrived in the last 7 days, for the warehouse: quantities, no money.
+export async function incomingPurchases(db = pool) {
+  const { rows: invoices } = await db.query(
+    `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, s.name AS supplier, i.status, to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date,
+            i.arrived_at, i.arrival_note
+       FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id
+      WHERE i.status <> 'arrived' OR i.arrived_at >= now() - interval '7 days'
+      ORDER BY (i.status = 'arrived'), COALESCE(i.expected_date, i.invoice_date), i.id
+      LIMIT 200`
+  );
+  if (!invoices.length) return [];
+  const { rows: lines } = await db.query(
+    `SELECT id, invoice_id, product_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, received_qty::float8 AS received_qty
+       FROM purchase_lines WHERE invoice_id = ANY($1) ORDER BY id`,
+    [invoices.map((i) => i.id)]
+  );
+  const byInvoice = new Map(invoices.map((i) => [i.id, { ...i, lines: [] }]));
+  for (const l of lines) byInvoice.get(l.invoice_id)?.lines.push(l);
+  return [...byInvoice.values()];
+}
+
+// The count of a purchase that came: each line's pieces received, then Arrived. A count that differs from the invoice is written in the
+// history and gives every accountant a task (owner decision: "Show + task"). Returns { differences }.
+export async function receivePurchase(id, body, user, db = pool) {
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [inv] } = await client.query("SELECT id, status FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id]);
+    if (!inv) throw new PurchaseError("Purchase not found");
+    const { rows: lines } = await client.query("SELECT id, product_name, brand, qty::float8 AS qty, received_qty FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]);
+    if (inv.status === "arrived" && lines.every((l) => l.received_qty !== null)) throw new PurchaseError("This purchase is already received", { code: "received" });
+    const given = new Map((Array.isArray(body?.lines) ? body.lines : []).map((l) => [Number(l?.id), l?.received_qty]));
+    const differences = [];
+    for (const l of lines) {
+      const raw = given.get(l.id);
+      const got = raw === undefined || raw === null || raw === "" ? l.qty : Number(raw); // a line not counted = all came
+      if (!Number.isFinite(got) || got < 0 || got > 1e9) throw new PurchaseError("Every line needs the pieces received (0 or more)");
+      await client.query("UPDATE purchase_lines SET received_qty = $2 WHERE id = $1", [l.id, got]);
+      if (Math.abs(got - l.qty) > 0.0005) differences.push({ product: [l.brand, l.product_name].filter(Boolean).join(" "), invoiced: l.qty, received: got });
+    }
+    const note = body?.note ? String(body.note).trim().slice(0, 1000) : null;
+    await client.query("UPDATE purchase_invoices SET status = 'arrived', arrived_at = now(), arrived_by = $2, arrival_note = $3, updated_at = now() WHERE id = $1", [id, user.id, note]);
+    const facts = await invoiceFacts(client, id);
+    await logPurchase(client, { invoiceId: id, action: "receive", userId: user.id, facts, details: { differences, note } });
+    if (differences.length) {
+      const { rows: accountants } = await client.query("SELECT id FROM users WHERE role = 'accountant' AND status = 'active' ORDER BY id");
+      const title = `Գնման տարբերություն՝ ${facts?.supplier ?? ""}${facts?.invoice_no ? ` № ${facts.invoice_no}` : ""}`.slice(0, 120);
+      for (const a of accountants) {
+        const { rows: [t] } = await client.query(
+          "INSERT INTO tasks (title, creator_id, assignee_id, due_date, auto_kind) VALUES ($1, $2, $2, CURRENT_DATE, 'purchase_difference') RETURNING id",
+          [title, a.id]
+        );
+        for (const [k, d] of differences.entries()) {
+          await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [t.id, `${d.product}: հաշվում ${d.invoiced}, ստացվել է ${d.received}`.slice(0, 300), k]);
+        }
+        if (note) await client.query("INSERT INTO task_items (task_id, text, sort_order) VALUES ($1, $2, $3)", [t.id, `Նշում՝ ${note}`.slice(0, 300), differences.length]);
+      }
+    }
+    await client.query("COMMIT");
+    return { differences };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Pieces already Ordered / On the way per product: Warehouse > To order subtracts them (owner decision P5)
+export async function incomingQtyByProduct(db = pool) {
+  const { rows } = await db.query(
+    `SELECT l.product_id, sum(l.qty)::float8 AS qty FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id
+      WHERE i.status IN ('ordered', 'in_transit') AND l.product_id IS NOT NULL GROUP BY l.product_id`
+  );
+  return new Map(rows.map((r) => [r.product_id, r.qty]));
 }
 
 // ---- export (owner plan P3): every line of the period, app and Excel-only invoices, one row each ---------------------------------------
@@ -254,6 +358,8 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
   const [{ rows: app }, { rows: excel }] = await Promise.all([
     db.query(
       `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, s.id AS supplier_id, s.name AS supplier,
+              i.status AS flow, to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date,
+              bool_or(l.received_qty IS NOT NULL AND l.received_qty <> l.qty) AS has_difference,
               count(l.id)::int AS lines, COALESCE(sum(l.qty), 0)::float8 AS qty, COALESCE(sum(l.qty * l.cost_usd), 0)::float8 AS usd,
               COALESCE(sum(l.qty * l.size_l), 0)::float8 AS liters, COALESCE(sum(l.qty * l.cost_usd) FILTER (WHERE l.size_l > 0), 0)::float8 AS liquid_usd,
               u.name AS created_by_name
@@ -279,6 +385,7 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
   const pairs = app.map((a) => ({ app: a, excel: null }));
   const byKey = new Map();
   for (const p of pairs) {
+    if (!String(p.app.invoice_no ?? "").trim()) continue; // no number yet (Ordered, P5): nothing in the Excel is this purchase
     const k = keyOf(p.app.invoice_no, p.app.invoice_date);
     if (!byKey.has(k)) byKey.set(k, []);
     byKey.get(k).push(p);
@@ -332,11 +439,16 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
       liquid_usd: round2(base.liquid_usd ?? base.usd),
       amd: a ? Math.round(a.usd * a.usd_rate) : Math.round(e.amd || 0),
       usd_rate: a?.usd_rate ?? null,
+      // P5: ordered | in_transit | arrived (an Excel-only invoice has arrived); the expected date; a count that differs from the invoice
+      flow: a?.flow ?? "arrived",
+      expected_date: a?.expected_date ?? null,
+      has_difference: Boolean(a?.has_difference),
+      paper_missing: Boolean(a && (!a.invoice_no || a.usd_rate === null)),
       created_by_name: a?.created_by_name ?? null,
       excel: e ? { qty: e.qty, usd: round2(e.usd), lines: e.lines } : null,
     };
   });
-  out.sort((x, y) => y.invoice_date.localeCompare(x.invoice_date) || String(y.invoice_no).localeCompare(String(x.invoice_no)));
+  out.sort((x, y) => y.invoice_date.localeCompare(x.invoice_date) || String(y.invoice_no ?? "").localeCompare(String(x.invoice_no ?? "")));
   return out;
 }
 
@@ -344,13 +456,14 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
 export async function getPurchase(id, db = pool) {
   const { rows: [inv] } = await db.query(
     `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, i.supplier_id, s.name AS supplier,
+            i.status, to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date, i.arrived_at, i.arrival_note, ua.name AS arrived_by_name,
             i.created_at, i.updated_at, u.name AS created_by_name
-       FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN users u ON u.id = i.created_by WHERE i.id = $1`,
+       FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN users u ON u.id = i.created_by LEFT JOIN users ua ON ua.id = i.arrived_by WHERE i.id = $1`,
     [id]
   );
   if (!inv) return null;
   const [{ rows: lines }, { rows: excel }] = await Promise.all([
-    db.query("SELECT id, product_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]),
+    db.query("SELECT id, product_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd, received_qty::float8 AS received_qty FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]),
     db.query(
       `SELECT erp_product_id, supplier, brand, product_name, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd, amount_amd::float8 AS amount_amd, info
          FROM erp_purchase_lines WHERE invoice_date = $1::date AND lower(regexp_replace(trim(invoice_no), '\\s+', ' ', 'g')) = lower(regexp_replace(trim($2), '\\s+', ' ', 'g'))
@@ -358,6 +471,7 @@ export async function getPurchase(id, db = pool) {
       [inv.invoice_date, inv.invoice_no]
     ),
   ]);
+  if (!inv.invoice_no) excel.length = 0; // no number yet (Ordered): nothing in the Excel can be this purchase
   const [files, log] = await Promise.all([purchaseFiles(id, db), purchaseLog(id, db)]);
   return { ...inv, lines, excel_lines: ofSupplier(excel, inv.supplier), files, log };
 }

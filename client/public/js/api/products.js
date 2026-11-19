@@ -26,6 +26,9 @@ export const productsApi = {
     return request(`/purchases/${id}/files`, { method: "POST", body: form });
   },
   deletePurchaseFile: (fileId) => request(`/purchases/files/${fileId}`, { method: "DELETE" }),
+  // receiving (P5): the purchases on their way, for the warehouse and the office; the count of what came
+  listIncomingPurchases: () => request("/purchase-receiving", { fresh: true }),
+  receivePurchase: (id, data) => json(`/purchase-receiving/${id}/receive`, "POST", data),
   importPurchasesExcel: (file) => {
     const form = new FormData();
     form.set("file", file);

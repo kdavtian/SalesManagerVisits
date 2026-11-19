@@ -49,6 +49,7 @@ export const hyOrders = {
     warehouse_tab_staging: "Փաթեթավորում",
     warehouse_tab_inventory: "Պաշար",
     warehouse_tab_reorder: "Պատվիրել",
+    warehouse_tab_incoming: "Սպասվող",
     warehouse_reorder_none: "Այս պահին պատվիրելու բան չկա՝ բոլոր ապրանքների պաշարը բավարար է։",
     warehouse_reorder_hint: "Վերջացած կամ քիչ մնացած ապրանքները՝ 90 օրվա պաշար ապահովելու համար գնելիք քանակով (վերջին վաճառքների հիման վրա՝ հանած բաց պատվերներում արդեն պահվածը)։",
     warehouse_reorder_out: "Վերջացած",

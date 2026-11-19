@@ -1,5 +1,5 @@
 import { state } from "../state.js";
-import { seesTierPrices, canManagePurchases } from "../shared/roles.js";
+import { seesTierPrices, canManagePurchases, canReceivePurchases } from "../shared/roles.js";
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
@@ -48,6 +48,7 @@ export async function renderWarehouse(root, navigate) {
         <button type="button" class="chip" style="flex:0 0 auto" data-tab="staging">${t("warehouse_tab_staging")}</button>
         <button type="button" class="chip chip-active" style="flex:0 0 auto" data-tab="inventory">${t("warehouse_tab_inventory")}</button>
         <button type="button" class="chip" style="flex:0 0 auto" data-tab="reorder">${t("warehouse_tab_reorder")}</button>
+        ${canReceivePurchases(state.user?.role) ? `<button type="button" class="chip" style="flex:0 0 auto" data-tab="incoming">${t("warehouse_tab_incoming")}</button>` : ""}
       </div>
       <p class="form-error" id="warehouse-error" hidden></p>
       <div id="warehouse-content" style="margin-top:12px;"></div>
@@ -93,7 +94,7 @@ export async function renderWarehouse(root, navigate) {
             <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}${labelColon()}${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}${labelColon()}${r.reserved_qty})` : ""}${days}</p>
             <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}${labelColon()}${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong>${
               r.pack_kind === "bottle" && r.pack_size > 1 ? ` <span class="muted">(${r.packs} × ${r.pack_size})</span>` : ""
-            }</p>
+            }</p>${r.incoming_qty > 0 ? `<p class="muted reorder-incoming" style="margin:4px 0 0">+${r.incoming_qty} ${t("warehouse_pcs_suffix")} ${t("pu_on_the_way")}</p>` : ""}
           </div>`;
           })
           .join("")}
@@ -153,6 +154,40 @@ export async function renderWarehouse(root, navigate) {
     );
   }
 
+  // "Incoming" (Purchases P5, owner 2026-11-20): what is Ordered / On the way, when it is expected, and the count when it comes. Pieces
+  // only, no prices (GET /api/purchase-receiving gives none). Then what arrived in the last 7 days, a counted difference in red.
+  async function loadIncoming() {
+    const { purchases } = await api.listIncomingPurchases();
+    const coming = purchases.filter((p) => p.status !== "arrived");
+    const arrived = purchases.filter((p) => p.status === "arrived");
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Yerevan" });
+    const pcs = (list) => list.reduce((a, l) => a + (Number(l.qty) || 0), 0);
+    const diffOf = (l) => l.received_qty != null && Math.abs(Number(l.received_qty) - Number(l.qty)) > 0.0005;
+    const card = (p, i) => {
+      const late = p.status !== "arrived" && p.expected_date && p.expected_date < today;
+      const diffs = p.lines.filter(diffOf);
+      return `<div class="card incoming-card">
+        <div class="incoming-head">
+          <div><strong>${escapeHtml(p.supplier || "—")}</strong><br><span class="muted">${p.invoice_no ? `№ ${escapeHtml(p.invoice_no)} · ` : ""}${p.lines.length} ${t("warehouse_reorder_products")} · ${pcs(p.lines)} ${t("warehouse_pcs_suffix")}</span></div>
+          <span class="badge ${p.status === "arrived" ? (diffs.length ? "badge-danger" : "badge-success") : "badge-info"}">${p.status === "arrived" && diffs.length ? t("pu_difference") : t(`pu_flow_${p.status}`)}</span>
+        </div>
+        ${p.status !== "arrived" ? `<p class="${late ? "incoming-late" : "muted"}" style="margin:6px 0 0">${t("pu_expected")}${labelColon()}${p.expected_date ? escapeHtml(formatDateDMY(p.expected_date)) : "—"}</p>` : ""}
+        ${diffs.length ? `<ul class="incoming-diffs">${diffs.map((l) => `<li>${escapeHtml([l.brand, l.product_name].filter(Boolean).join(" "))}: ${l.received_qty} / ${l.qty}</li>`).join("")}</ul>` : ""}
+        ${p.arrival_note ? `<p class="muted" style="margin:4px 0 0">${escapeHtml(p.arrival_note)}</p>` : ""}
+        ${p.status !== "arrived" ? `<button type="button" class="btn btn-primary btn-block" data-receive="${i}" style="margin-top:8px">${t("pu_receive")}</button>` : ""}
+      </div>`;
+    };
+    contentEl.innerHTML = `
+      ${coming.length ? `<div class="card-list">${coming.map((p) => card(p, purchases.indexOf(p))).join("")}</div>` : `<p class="muted">${t("pu_incoming_none")}</p>`}
+      ${arrived.length ? `<h3 class="section-title section-title-tight">${t("pu_arrived_recently")}</h3><div class="card-list">${arrived.map((p) => card(p, purchases.indexOf(p))).join("")}</div>` : ""}`;
+    contentEl.querySelectorAll("[data-receive]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const { openReceiveSheet } = await import("../purchaseReceive.js");
+        openReceiveSheet(purchases[Number(btn.dataset.receive)], { onDone: () => load() });
+      })
+    );
+  }
+
   async function load() {
     contentEl.innerHTML = `<p class="loading-state" role="status">${t("loading")}</p>`;
     errorEl.hidden = true;
@@ -160,6 +195,7 @@ export async function renderWarehouse(root, navigate) {
       if (activeTab === "pick-list") await loadPickList();
       else if (activeTab === "staging") await loadStaging();
       else if (activeTab === "reorder") await loadReorder();
+      else if (activeTab === "incoming") await loadIncoming();
       else await loadInventory();
     } catch (err) {
       errorEl.textContent = err.message;

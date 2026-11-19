@@ -8,13 +8,25 @@ import { compareProducts, sortedBrands, FAMILY_PRIORITY } from "../productSort.j
 import { icons } from "../icons.js";
 import { activateDialog, escapeHtml, formatAmd, formatDateDMY, groupDigits, openInfoPopup, showToast, downloadFromUrl } from "../util.js";
 import { state } from "../state.js";
-import { canDeletePurchases } from "../shared/roles.js";
+import { canDeletePurchases, canReceivePurchases } from "../shared/roles.js";
+import { openReceiveSheet } from "../purchaseReceive.js";
 import { sinceText } from "../purchaseNumbers.js";
 import { openPurchaseForm } from "./purchases/form.js";
 import { openImportSheet } from "./purchases/importSheet.js";
 
-const STATUSES = ["", "match", "diff", "app_only", "excel_only"];
-const STATUS_LABEL = { "": "pu_st_all", match: "pu_st_match", diff: "pu_st_diff", app_only: "pu_st_app_only", excel_only: "pu_st_excel_only" };
+// "coming" (P5): the purchases Ordered / On the way; they are not yet bought stock, so the KPIs and supplier cards leave them out
+const STATUSES = ["", "coming", "match", "diff", "app_only", "excel_only"];
+const STATUS_LABEL = { "": "pu_st_all", coming: "pu_status_coming", match: "pu_st_match", diff: "pu_st_diff", app_only: "pu_st_app_only", excel_only: "pu_st_excel_only" };
+const isComing = (r) => r.flow && r.flow !== "arrived";
+const noOf = (no) => (String(no ?? "").trim() ? `№ ${escapeHtml(no)}` : `<span class="muted">№ —</span>`);
+// the flow of a purchase as small badges: Ordered / On the way (+ the expected date), the paper missing, a counted difference
+function flowBadges(r) {
+  const out = [];
+  if (isComing(r)) out.push(`<span class="badge badge-info">${t(`pu_flow_${r.flow}`)}${r.expected_date ? ` · ${escapeHtml(formatDateDMY(r.expected_date))}` : ""}</span>`);
+  if (r.paper_missing && !isComing(r)) out.push(`<span class="badge badge-warning">${t("pu_paper_missing")}</span>`);
+  if (r.has_difference) out.push(`<span class="badge badge-danger">${t("pu_difference")}</span>`);
+  return out.join("");
+}
 const STATUS_BADGE = { match: "badge-success", diff: "badge-danger", app_only: "badge-warning", excel_only: "badge-neutral" };
 const PERIODS = ["month", "3m", "year", "all"];
 
@@ -138,17 +150,17 @@ export function renderPurchases(root) {
     return [...map.values()].sort((a, b) => b.usd - a.usd);
   };
   const matches = (r) => {
-    if (status && r.status !== status) return false;
-    if (query && !`${r.supplier ?? ""} ${r.invoice_no}`.toLowerCase().includes(query)) return false;
+    if (status === "coming" ? !isComing(r) : status && r.status !== status) return false;
+    if (query && !`${r.supplier ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) return false;
     return true;
   };
 
   function paint() {
     const base = rows.filter(matches); // before the supplier filter: the supplier cards show every supplier's share
     const shown = supplier ? base.filter((r) => String(r.supplier || "—").toLowerCase() === supplier) : base;
-    const statusBase = rows.filter((r) => (!query || `${r.supplier ?? ""} ${r.invoice_no}`.toLowerCase().includes(query)) && (!supplier || String(r.supplier || "—").toLowerCase() === supplier));
-    const counts = Object.fromEntries(STATUSES.map((s) => [s, s ? statusBase.filter((r) => r.status === s).length : statusBase.length]));
-    root.querySelector("#pu-statuses").innerHTML = STATUSES.map(
+    const statusBase = rows.filter((r) => (!query || `${r.supplier ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) && (!supplier || String(r.supplier || "—").toLowerCase() === supplier));
+    const counts = Object.fromEntries(STATUSES.map((s) => [s, s === "coming" ? statusBase.filter(isComing).length : s ? statusBase.filter((r) => r.status === s).length : statusBase.length]));
+    root.querySelector("#pu-statuses").innerHTML = STATUSES.filter((s) => s !== "coming" || counts.coming || status === "coming").map(
       (s) => `<button type="button" class="map-filter-chip ${s === status ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === status}">${t(STATUS_LABEL[s])} <span class="pu-count">${counts[s]}</span></button>`
     ).join("");
     root.querySelectorAll("[data-status]").forEach((b) =>
@@ -157,15 +169,16 @@ export function renderPurchases(root) {
         paint();
       })
     );
-    // KPI cards of what is shown
-    const sum = (k) => shown.reduce((a, r) => a + (Number(r[k]) || 0), 0);
+    // KPI cards of what is shown; a purchase still coming is not bought stock yet (P5), unless "Coming" itself is the filter
+    const bought = status === "coming" ? shown : shown.filter((r) => !isComing(r));
+    const sum = (k) => bought.reduce((a, r) => a + (Number(r[k]) || 0), 0);
     const usdTotal = sum("usd");
     const litersTotal = sum("liters");
     // per litre: only the dollars of lines that have litres (owner, 2026-11-20: a stand or a filter is not oil)
-    const liquidTotal = shown.reduce((a, r) => a + (Number(r.liquid_usd ?? r.usd) || 0), 0);
-    root.querySelector("#pu-kpis").innerHTML = shown.length
+    const liquidTotal = bought.reduce((a, r) => a + (Number(r.liquid_usd ?? r.usd) || 0), 0);
+    root.querySelector("#pu-kpis").innerHTML = bought.length
       ? [
-          [t("pu_kpi_invoices"), groupDigits(shown.length), ""],
+          [t("pu_kpi_invoices"), groupDigits(bought.length), ""],
           [t("pu_kpi_liters"), liters(litersTotal), ""],
           [t("pu_kpi_usd"), usd0(usdTotal), formatAmd(sum("amd"))],
           [t("pu_kpi_per_l"), litersTotal > 0 ? usd(liquidTotal / litersTotal) : "—", ""],
@@ -174,7 +187,7 @@ export function renderPurchases(root) {
           .join("")
       : "";
     // supplier cards: share of the spend; a tap filters by that supplier (a second tap clears it)
-    const groups = bySupplier(base);
+    const groups = bySupplier(status === "coming" ? base : base.filter((r) => !isComing(r)));
     const topUsd = groups.reduce((a, g) => a + g.usd, 0) || 1;
     root.querySelector("#pu-suppliers").innerHTML =
       groups.length > 1 || supplier
@@ -215,15 +228,15 @@ export function renderPurchases(root) {
       <div class="card pu-group">${list
         .map(
           (r) => `<button type="button" class="pu-row" data-idx="${shown.indexOf(r)}">
-            <span class="pu-row-main"><strong>${escapeHtml(r.supplier || "—")}</strong><span class="muted">${escapeHtml(formatDateDMY(r.invoice_date))} · № ${escapeHtml(r.invoice_no)} · ${liters(r.liters)}</span></span>
+            <span class="pu-row-main"><strong>${escapeHtml(r.supplier || "—")}</strong><span class="muted">${escapeHtml(formatDateDMY(r.invoice_date))} · ${noOf(r.invoice_no)} · ${liters(r.liters)}</span>${flowBadges(r) ? `<span class="pu-flow">${flowBadges(r)}</span>` : ""}</span>
             <span class="pu-row-cols">
               <span class="pu-col-date">${escapeHtml(formatDateDMY(r.invoice_date))}</span>
-              <span class="pu-col-no">№ ${escapeHtml(r.invoice_no)}</span>
+              <span class="pu-col-no">${noOf(r.invoice_no)}</span>
               <span class="pu-col-liters">${liters(r.liters)}</span>
               <span class="pu-col-perl">${r.liters > 0 ? `${usd((r.liquid_usd ?? r.usd) / r.liters)}/L` : "—"}</span>
               <span class="pu-col-amd muted">${formatAmd(r.amd)}</span>
             </span>
-            <span class="pu-row-side"><strong>${usd(r.usd)}</strong><span class="badge ${STATUS_BADGE[r.status]}">${t(STATUS_LABEL[r.status])}</span></span>
+            <span class="pu-row-side"><strong>${usd(r.usd)}</strong>${isComing(r) ? "" : `<span class="badge ${STATUS_BADGE[r.status]}">${t(STATUS_LABEL[r.status])}</span>`}</span>
           </button>`
         )
         .join("")}</div>`
@@ -369,8 +382,10 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
     const excel = app ? app.excel_lines : await api.getExcelPurchase(invoiceNo, date, row?.supplier ?? "");
     const sumOf = (lines) => lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.cost_usd) || 0), 0);
     const litersOf = (lines) => lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.size_l) || 0), 0);
-    const lineRow = (l, side) => `<div class="pu-line">
-        <span class="pu-line-name">${escapeHtml(l.app_product_name || l.product_name || l.erp_product_id || "")}${l.size_l ? ` <span class="muted">· ${groupDigits(l.size_l)} L</span>` : ""}${side === "excel" && !l.product_id && !app ? ` <span class="muted">(${t("pu_unknown_product")})</span>` : ""}</span>
+    // the count on arrival (P5): a line whose pieces received differ from the invoice says so, in red
+    const recvDiff = (l) => l.received_qty !== null && l.received_qty !== undefined && Math.abs(Number(l.received_qty) - Number(l.qty)) > 0.0005;
+    const lineRow = (l, side) => `<div class="pu-line${side === "app" && recvDiff(l) ? " pu-line-diff" : ""}">
+        <span class="pu-line-name">${escapeHtml(l.app_product_name || l.product_name || l.erp_product_id || "")}${l.size_l ? ` <span class="muted">· ${groupDigits(l.size_l)} L</span>` : ""}${side === "excel" && !l.product_id && !app ? ` <span class="muted">(${t("pu_unknown_product")})</span>` : ""}${side === "app" && recvDiff(l) ? ` <span class="pu-recv-diff">${t("pu_received")} ${groupDigits(l.received_qty)}</span>` : ""}</span>
         <span class="pu-line-qty">${groupDigits(l.qty)} × ${usd(l.cost_usd)}</span>
         <span class="pu-line-sum">${usd((Number(l.qty) || 0) * (Number(l.cost_usd) || 0))}</span>
       </div>`;
@@ -410,8 +425,9 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}">${icons.close}</button>
       <h2>${escapeHtml(head.supplier || "—")}</h2>
-      <p class="muted">№ ${escapeHtml(head.invoice_no)} · ${escapeHtml(formatDateDMY(head.invoice_date))}${app ? ` · ${t("pu_rate")} ${groupDigits(app.usd_rate)}${app.created_by_name ? ` · ${t("pu_by")} ${escapeHtml(app.created_by_name)}` : ""}` : ""}</p>
-      ${row ? `<p class="pu-sheet-status"><span class="badge ${STATUS_BADGE[row.status]}">${t(STATUS_LABEL[row.status])}</span>${rate ? ` <span class="muted">${formatAmd(Math.round(sumOf(app.lines) * rate))} · ${liters(litersOf(app.lines))}</span>` : ""}</p>` : ""}
+      <p class="muted">${noOf(head.invoice_no)} · ${escapeHtml(formatDateDMY(head.invoice_date))}${app ? `${app.usd_rate ? ` · ${t("pu_rate")} ${groupDigits(app.usd_rate)}` : ""}${app.created_by_name ? ` · ${t("pu_by")} ${escapeHtml(app.created_by_name)}` : ""}` : ""}</p>
+      ${row ? `<p class="pu-sheet-status">${isComing(row) ? "" : `<span class="badge ${STATUS_BADGE[row.status]}">${t(STATUS_LABEL[row.status])}</span>`}${flowBadges(app ? { ...row, flow: app.status, expected_date: app.expected_date, paper_missing: !app.invoice_no || !app.usd_rate, has_difference: app.lines.some(recvDiff) } : row)}${rate ? ` <span class="muted">${formatAmd(Math.round(sumOf(app.lines) * rate))} · ${liters(litersOf(app.lines))}</span>` : ""}</p>` : ""}
+      ${app?.arrived_at && app.lines.some((l) => l.received_qty !== null) ? `<p class="muted pu-arrived">${t("pu_received_by")}: ${escapeHtml(formatDateDMY(new Date(app.arrived_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Yerevan" })))}${app.arrived_by_name ? ` · ${escapeHtml(app.arrived_by_name)}` : ""}${app.arrival_note ? ` · ${escapeHtml(app.arrival_note)}` : ""}</p>` : ""}
       ${app?.note ? `<p class="muted">${escapeHtml(app.note)}</p>` : ""}
       ${notes.length ? `<p class="pu-excel-notes"><span class="muted">${t("pu_excel_notes")}:</span> ${notes.map(escapeHtml).join(" · ")}</p>` : ""}
       ${block(t("pu_app_side"), app?.lines, "app")}
@@ -422,10 +438,15 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
       <div class="sheet-actions sheet-actions-floating">
         ${canDelete ? `<button type="button" class="btn btn-danger" id="pu-del">${t("pu_delete")}</button>` : ""}
         <button type="button" class="btn" id="pu-repeat">${t("pu_repeat")}</button>
+        ${app && app.status !== "arrived" && canReceivePurchases(state.user.role) ? `<button type="button" class="btn" id="pu-receive">${t("pu_receive")}</button>` : ""}
         ${app ? `<button type="button" class="btn btn-primary" id="pu-edit">${t("pu_edit")}</button>` : `<button type="button" class="btn btn-primary" id="pu-copy">${t("pu_copy_from_excel")}</button>`}
       </div>`;
     sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
     if (app) wireFiles(sheet, app, onSaved);
+    sheet.querySelector("#pu-receive")?.addEventListener("click", () => {
+      close();
+      openReceiveSheet(app, { onDone: () => onSaved?.() });
+    });
     sheet.querySelector("#pu-edit")?.addEventListener("click", () => {
       close();
       openPurchaseForm(app, { onSaved, rows, openInvoice });
