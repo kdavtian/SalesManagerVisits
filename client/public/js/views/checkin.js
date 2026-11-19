@@ -12,7 +12,6 @@ import { state } from "../state.js";
 import { openPhotoLightbox } from "../photoLightbox.js";
 import { openOrderTaskSheet } from "../orderTaskSheet.js";
 import { loadReorderProfile, usualOrderHash } from "../reorder.js";
-import { COMPETITORS } from "../brandChips.js";
 import { openCompetitorSheet } from "../competitorShelf.js";
 import { openSignaturePad, ensureOwnSignature, clearPendingOwnSignature } from "../signaturePad.js";
 import { customerSignStatement } from "../signStatement.js";
@@ -63,10 +62,7 @@ const BRAND_GROUPS = [
   {
     key: "competitors",
     labelKey: "brand_group_competitors",
-    options: COMPETITORS.map((v) => ({
-      value: v,
-      labelKey: `competitor_${v}`,
-    })),
+    options: [], // the competitors sheet (competitorShelf.js) reads the live list: competitorBrandList.js
   },
 ];
 

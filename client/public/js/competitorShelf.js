@@ -6,7 +6,8 @@ import { api } from "./api.js";
 import { t, hasText, getLang } from "./i18n.js";
 import { icons } from "./icons.js";
 import { activateDialog, escapeHtml, showToast, groupDigits, formatDateDMY } from "./util.js";
-import { COMPETITORS, brandNameOfKey } from "./brandChips.js";
+import { competitorName } from "./brandChips.js";
+import { loadCompetitorBrands as loadBrands } from "./competitorBrandList.js";
 
 const BOTTLE = `<svg viewBox="0 0 24 24" class="cs-svg" aria-hidden="true" focusable="false"><path class="cs-fill" d="M10 2.5h4v2.2h-4z"/><path class="cs-fill" d="M9.6 4.7h4.8l.4 1.9c1.6.4 2.4 1.5 2.4 3V20a2 2 0 0 1-2 2H8.8a2 2 0 0 1-2-2V9.6c0-1.5.8-2.6 2.4-3z"/><path class="cs-label" d="M8.6 12.2h6.8v4.6H8.6z"/></svg>`;
 const DRUM = `<svg viewBox="0 0 24 24" class="cs-svg" aria-hidden="true" focusable="false"><path class="cs-fill" d="M5 5.5C5 4.1 8.1 3 12 3s7 1.1 7 2.5v13c0 1.4-3.1 2.5-7 2.5s-7-1.1-7-2.5z"/><path class="cs-line" d="M5 5.5C5 6.9 8.1 8 12 8s7-1.1 7-2.5M5 10.5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5M5 15.5c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5"/></svg>`;
@@ -17,27 +18,7 @@ const BUTTONS = [
   ["none", NONE, "cs_none"],
 ];
 
-const labelOf = (b) => (hasText(`competitor_${b.key}`) ? t(`competitor_${b.key}`) : b.name || brandNameOfKey(b.key));
-
-// the list: the server's (approved + this rep's waiting ones); without signal, the built-in list (and whatever was marked before)
-// Cache first (review, 2026-11-19): the sheet opens at once from the last list and reads it again in the background; the first time it
-// waits at most 3 s, then opens with the built-in list.
-let cached = null;
-const builtIn = () => COMPETITORS.map((key) => ({ key, name: "", status: "approved" }));
-function refresh() {
-  return api.getCompetitorBrands().then((r) => (cached = r.brands));
-}
-async function loadBrands() {
-  if (cached) {
-    refresh().catch(() => {});
-    return cached;
-  }
-  try {
-    return await Promise.race([refresh(), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 3000))]);
-  } catch {
-    return builtIn();
-  }
-}
+const labelOf = (b) => (hasText(`competitor_${b.key}`) ? t(`competitor_${b.key}`) : b.name || competitorName(b.key));
 
 // packs: { [brandKey]: ["bottle"] | ["drum"] | ["bottle","drum"] | ["none"] } -- edited in place; onApply() after the sheet closes.
 // linePacks: { [brandKey]: { [lineCode]: packs } } and prices: Map "brand|line|volume" -> { brand, line, volume, wholesale, retail }
@@ -163,7 +144,7 @@ export async function openCompetitorSheet({ title, packs, linePacks = Object.cre
     send.disabled = true;
     try {
       const { brand, created } = await api.addCompetitorBrand(name);
-      refresh().catch(() => {}); // the next sheet has it
+      loadBrands().catch(() => {}); // reads the list again: the next sheet and the map filter have it
       let row = list.querySelector(`.cs-row[data-key="${CSS.escape(brand.key)}"]`);
       if (!row) {
         brands.push(brand);

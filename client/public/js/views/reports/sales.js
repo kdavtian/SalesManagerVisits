@@ -3,7 +3,8 @@
 import { api } from "../../api.js";
 import { REGION_LIST, amdWithUnitHtml, channelDisplayLabel, escapeHtml, formatAmd, formatDateDMY, labelColon, regionLabelHy } from "../../util.js";
 import { t } from "../../i18n.js";
-import { brandNameOfKey } from "../../brandChips.js";
+import { competitorName } from "../../brandChips.js";
+import { knownCompetitorBrands } from "../../competitorBrandList.js";
 import { channelOptions, currentYearMonth, formatDate, periodTabsHtml, reportHeaderHtml, selectHtml, wireSyncHint } from "./common.js";
 
 export async function renderSalesBudgetReport(root, navigate) {
@@ -108,7 +109,8 @@ export const BRAND_LABELS = {
 
 // a competitor brand a rep added at a check-in (2026-11-19) has no label here: its key is its name (brandChips.js brandNameOfKey)
 export function brandLabel(key) {
-  return BRAND_LABELS[key] || brandNameOfKey(key) || key;
+  knownCompetitorBrands(); // teaches the names of the brands reps added
+  return BRAND_LABELS[key] || competitorName(key) || key;
 }
 
 export async function renderBrandVolumeReport(root, navigate) {

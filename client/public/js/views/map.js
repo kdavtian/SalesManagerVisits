@@ -10,7 +10,8 @@ import { getPerfMode } from "../perfMode.js";
 import { ensureLeaflet } from "../leafletLoader.js";
 import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
-import { COMPETITORS, currentChips, matchedEverEntries, chipHtml, shortDate } from "../brandChips.js";
+import { currentChips, matchedEverEntries, chipHtml, shortDate, competitorName } from "../brandChips.js";
+import { loadCompetitorBrands, knownCompetitorBrands, builtInCompetitorBrands, onCompetitorBrandsChange } from "../competitorBrandList.js";
 import * as mapTiles from "./map/tiles.js";
 import * as mapMarkers from "./map/markers.js";
 import * as mapFilters from "./map/filters.js";
@@ -26,15 +27,18 @@ export const NEARBY_RADIUS_METERS = 5000;
 // Mirrors the brand_status shape recorded at check-in (see BRAND_GROUPS in
 // checkin.js) -- castrol/lotos/royal get their own status tags, each
 // competitor is a flat presence flag inside brand_status.competitors.
-const BRAND_FILTER_OPTIONS = [
-  { value: "castrol", labelKey: "brand_group_castrol" },
-  { value: "lotos", labelKey: "brand_group_lotos" },
-  { value: "royal", labelKey: "brand_group_royal" },
-  ...COMPETITORS.map((v) => ({
-    value: `competitor:${v}`,
-    labelKey: `competitor_${v}`,
-  })),
-];
+// The competitors are the live list (owner, 2026-11-19: approved brands and the ones reps added, competitorBrandList.js), plus any brand a
+// loaded visit recorded that the list does not name (another rep's brand still waiting for approval).
+const KAD_BRAND_FILTER_OPTIONS = ["castrol", "lotos", "royal"].map((value) => ({ value, label: () => t(`brand_group_${value}`) }));
+function brandFilterOptions(brands, brandStatusByCustomer) {
+  const keys = brands.map((b) => b.key);
+  const seen = new Set(keys);
+  for (const status of brandStatusByCustomer?.values() ?? []) {
+    const recorded = [...(Array.isArray(status?.competitors) ? status.competitors : []), ...Object.keys(status?.competitor_packs ?? {})];
+    for (const k of recorded) if (typeof k === "string" && k && !seen.has(k)) seen.add(k) && keys.push(k);
+  }
+  return [...KAD_BRAND_FILTER_OPTIONS, ...keys.map((k) => ({ value: `competitor:${k}`, label: () => competitorName(k) }))];
+}
 
 // CARTO's rastertiles (the previous primary provider here) now returns an
 // "API key required" placeholder for every request, confirmed live against
@@ -1068,25 +1072,43 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
 
   const brandPickerRow = root.querySelector("#brand-picker-row");
   const brandLegend = root.querySelector("#brand-legend");
+  // drawn from the last known list at once, again when the server's list arrives and when the visits are loaded (a brand only they name)
+  let pickerBrands = knownCompetitorBrands() ?? builtInCompetitorBrands();
+  function renderBrandPicker() {
+    if (!brandPickerRow) return;
+    brandPickerRow.innerHTML = brandFilterOptions(pickerBrands, ctx.brandStatusByCustomer)
+      .map((o) => {
+        const on = o.value === selectedBrand;
+        return `<button type="button" class="map-filter-chip brand-picker-chip${on ? " chip-active" : ""}" data-brand="${escapeHtml(o.value)}" aria-pressed="${on}">${escapeHtml(o.label())}</button>`;
+      })
+      .join("");
+  }
   if (brandPickerRow) {
-    brandPickerRow.innerHTML = BRAND_FILTER_OPTIONS.map(
-      (o) => `<button type="button" class="map-filter-chip brand-picker-chip" data-brand="${o.value}" aria-pressed="false">${t(o.labelKey)}</button>`
-    ).join("");
-    brandPickerRow.querySelectorAll(".brand-picker-chip").forEach((chip) => {
-      chip.addEventListener("click", () => {
-        brandPickerRow.querySelectorAll(".brand-picker-chip").forEach((c) => {
-          c.classList.toggle("chip-active", c === chip);
-          c.setAttribute("aria-pressed", String(c === chip));
-        });
-        selectedBrand = chip.dataset.brand;
-        brandLegend.hidden = false;
-        applyFilter();
+    renderBrandPicker();
+    const useList = (list) => {
+      pickerBrands = list;
+      renderBrandPicker();
+    };
+    loadCompetitorBrands().then(useList).catch(() => {});
+    // a newer list (read in the background, a brand just added or approved) redraws the row while the map stays open
+    const stop = onCompetitorBrandsChange((list) => (brandPickerRow.isConnected ? useList(list) : stop()));
+    brandPickerRow.addEventListener("click", (e) => {
+      const chip = e.target.closest(".brand-picker-chip");
+      if (!chip) return;
+      brandPickerRow.querySelectorAll(".brand-picker-chip").forEach((c) => {
+        c.classList.toggle("chip-active", c === chip);
+        c.setAttribute("aria-pressed", String(c === chip));
       });
+      selectedBrand = chip.dataset.brand;
+      brandLegend.hidden = false;
+      applyFilter();
     });
   }
 
   let brandStatusLoaded = false;
-  function loadBrandStatus(...args) { return mapFilters.loadBrandStatus(ctx, ...args); }
+  function loadBrandStatus(...args) {
+    return mapFilters.loadBrandStatus(ctx, ...args).then(renderBrandPicker);
+  }
 
   const mapSearchInput = root.querySelector("#map-customer-search");
   const searchNoResults = root.querySelector("#map-search-no-results");

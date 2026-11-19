@@ -192,7 +192,7 @@ export function renderIconFilterRow(ctx) {
   });
 }
 
-// available/full_range -> green, unavailable -> red (or absent from the
+// available/full_range -> green, unavailable -> red (a competitor: present -> green, marked "not available" -> red, absent from the
 // competitors list -> unknown grey, since that list is presence-only --
 // a competitor not ticked was never confirmed absent, just not recorded).
 export function brandAvailabilityStatus(ctx, c) {
@@ -200,7 +200,10 @@ export function brandAvailabilityStatus(ctx, c) {
   if (!status) return "unknown";
   if (ctx.selectedBrand.startsWith("competitor:")) {
     const key = ctx.selectedBrand.slice("competitor:".length);
-    return (status.competitors ?? []).includes(key) ? "available" : "unknown";
+    if ((status.competitors ?? []).includes(key)) return "available";
+    // since 2026-11-19 a visit can also say "not available" for a competitor (check-in bottles / drum / not available): red, not grey
+    const packs = status.competitor_packs?.[key];
+    return Array.isArray(packs) && packs.includes("none") ? "unavailable" : "unknown";
   }
   const tags = status[ctx.selectedBrand] ?? [];
   if (tags.includes("available") || tags.includes("full_range")) return "available";

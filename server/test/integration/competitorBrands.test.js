@@ -174,6 +174,13 @@ test("viscosity: filled from the name by the database, typed by management stays
     assert.equal(n.viscosity, null);
     const { rows: [z] } = await pool.query("INSERT INTO products (name, unit_price_amd) VALUES ($1, 1) RETURNING viscosity", [`${tag} Oil 05W-30`]);
     assert.equal(z.viscosity, "5W-30", "a leading zero is dropped");
+    // a grade inside a code is not a grade; one on its own is (migration 217)
+    const visc = async (name) => (await pool.query("SELECT viscosity_of_name($1) AS v", [name])).rows[0].v;
+    assert.equal(await visc("Zz3w2k EDGE 5W-30"), "5W-30");
+    assert.equal(await visc("MAGNATEC 10W40 A3/B4"), "10W-40");
+    assert.equal(await visc("Edge 0W20"), "0W-20");
+    assert.equal(await visc("AB3W2 filter"), null);
+    assert.equal(await visc("15W400X"), null);
     assert.equal((await apiRequest(`/api/products/${p.id}`, { method: "PATCH", cookie, body: { viscosity: "SAE 40" } })).status, 400, "only like 5W-30");
   } finally {
     await pool.query("DELETE FROM products WHERE name LIKE $1", [`${tag}%`]);

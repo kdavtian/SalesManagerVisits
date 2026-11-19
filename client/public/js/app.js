@@ -522,6 +522,8 @@ async function doLogout() {
   // cached orders/customers/activity data (reported as "another user's
   // orders can appear").
   await clearListCache();
+  // the competitor brands list holds this user's own brands still waiting for approval (competitorBrandList.js)
+  import("./competitorBrandList.js").then((m) => m.forgetCompetitorBrands()).catch(() => {});
   location.hash = "";
   render();
 }
@@ -828,6 +830,8 @@ async function init() {
     setOfficeNavigator(navigate);
     startUsageTracking();
     startErrorMonitoring();
+    // the competitor brands every screen names (map filter, customer chips, reports): the last list at once, the server's in the background
+    import("./competitorBrandList.js").then((m) => m.loadCompetitorBrands()).catch(() => {});
     import("./shell/taskReward.js").then((m) => m.startTaskRewards()).catch(() => {});
   } catch (err) {
     // Only the server's answer "not signed in / not allowed" (401, 403) signs out. No network, a timeout or a server error is not a
@@ -836,6 +840,7 @@ async function init() {
     // user and the screen already drawn; the server still checks the session on every request, and the next focus re-asks /api/me.
     if (err?.status === 401 || err?.status === 403 || !cachedUser) {
       setUser(null);
+      import("./competitorBrandList.js").then((m) => m.forgetCompetitorBrands()).catch(() => {});
     } else {
       skipRedundantRender = optimisticRenderDone;
       startLocationBroadcast();
