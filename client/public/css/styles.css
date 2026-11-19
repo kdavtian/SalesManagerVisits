@@ -10830,3 +10830,9 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
 .sd-versions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sd-versions .btn, .sd-card-actions .btn { min-height: 44px; }
 .sd-card-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* Warehouse > To order > Create a purchase (Purchases P4, 2026-11-20): one button per supplier */
+.reorder-purchase-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.reorder-purchase-list .btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
+.reorder-purchase-list .btn svg { width: 18px; height: 18px; flex: none; }
+.reorder-purchase-list .btn span { overflow-wrap: anywhere; }
