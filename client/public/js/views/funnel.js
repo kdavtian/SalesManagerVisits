@@ -1,7 +1,8 @@
 // Vaghinak - Sales Expert, step 1 (owner, 2026-11-15): the sales funnel. Four stages, how many customers stand on each, this month's moves,
 // per rep and per region, and the list of a stage's customers closest to the next stage first. Rules and numbers: server/src/team/vaghinak/funnel.js.
 import { api } from "../api.js";
-import { t } from "../i18n.js";
+import { t, hasText } from "../i18n.js";
+import { competitorName } from "../brandChips.js";
 import { state } from "../state.js";
 import { editsVaghinakSettings } from "../shared/roles.js";
 import { escapeHtml, activateDialog, showToast } from "../util.js";
@@ -108,7 +109,8 @@ export async function renderFunnel(root, navigate) {
     }
     return fill(`fn_step_${step.kind}`, {
       group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
-      brand: p.brand ? t(`competitor_${p.brand}`) : "",
+      // a brand a rep added has no translation: the name it was added with (review, 2026-11-19)
+      brand: p.brand ? (hasText(`competitor_${p.brand}`) ? t(`competitor_${p.brand}`) : p.brand_name || competitorName(p.brand)) : "",
       share: p.share ?? 0,
       before: p.before ?? 0,
       now: p.now ?? 0,

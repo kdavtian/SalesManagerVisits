@@ -49,7 +49,7 @@ export function stepOf(c, extra = {}, now = Date.now()) {
   }
   if (c.stage === 3) {
     if (c.next === "expected_volume_missing") return { kind: "ask_need", params: {}, value: value(0.9) };
-    if (extra.competitor) return { kind: "raise_share_competitor", params: { brand: extra.competitor, share: c.share ?? 0 }, value: value(1.3) };
+    if (extra.competitor) return { kind: "raise_share_competitor", params: { brand: extra.competitor, ...(extra.competitorName ? { brand_name: extra.competitorName } : {}), share: c.share ?? 0 }, value: value(1.3) };
     return { kind: "raise_share", params: { share: c.share ?? 0 }, value: value(1.0) };
   }
   const before = Number(extra.litresBefore) || 0;
@@ -97,7 +97,8 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
     // the competitor brands at the customer's last visit that recorded competitors (a visit sends only the groups it filled,
     // so a missing group is "not checked", not "gone"; same rule as the customer card's brand summary)
     db.query(
-      `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'competitors' AS brands
+      `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'competitors' AS brands,
+              (SELECT cb.name FROM competitor_brands cb WHERE cb.key = brand_status -> 'competitors' ->> 0) AS first_brand_name
        FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'competitors') = 'array'  -- an empty list = the visit marked every competitor "not available" (2026-11-19): it is the latest state
        ORDER BY customer_id, timestamp DESC`,
       [ids]
@@ -125,6 +126,7 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
   ]);
   const factOf = new Map(facts.map((f) => [f.id, f]));
   const shelfOf = new Map(shelves.map((s) => [s.customer_id, s.brands]));
+  const brandNameOf = new Map(shelves.map((s) => [s.customer_id, s.first_brand_name]));
   const beforeOf = new Map(before.map((b) => [b.customer_id, b.litres]));
   // per tier: how many buying customers buy each group; per customer: its groups
   const tierBuyers = new Map(); // tier -> Set(customer)
@@ -163,6 +165,7 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
         missingGroup,
         similar: missingGroup ? similarFor(c.tier, missingGroup) : null,
         competitor: Array.isArray(brands) && brands.length ? String(brands[0]) : null,
+        competitorName: brandNameOf.get(c.id) ?? null, // a brand a rep added has no translation: the name it was added with
         litresBefore: beforeOf.get(c.id),
       },
       now.getTime()
@@ -185,7 +188,7 @@ export function taskTitleOf(step) {
       return `Առաջարկիր ${GROUP_HY[step.params.group] ?? step.params.group}՝ ${name}${products ? ` (նման խանութները գնում են՝ ${products})` : ""}`;
     }
     case "ask_need": return `Ճշտիր ամսական յուղի պահանջը՝ ${name}`;
-    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand})`;
+    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand_name ?? step.params.brand})`;
     case "raise_share": return `Մեծացրու մեր բաժինը՝ ${name}`;
     case "keep_loyal": return `Ստուգիր, ինչու են պատվերները նվազել՝ ${name}`;
     default: return name;

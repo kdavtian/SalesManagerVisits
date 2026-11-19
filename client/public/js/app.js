@@ -840,6 +840,7 @@ async function init() {
     // user and the screen already drawn; the server still checks the session on every request, and the next focus re-asks /api/me.
     if (err?.status === 401 || err?.status === 403 || !cachedUser) {
       setUser(null);
+      import("./competitorBrandList.js").then((m) => m.forgetCompetitorBrands()).catch(() => {});
     } else {
       skipRedundantRender = optimisticRenderDone;
       startLocationBroadcast();

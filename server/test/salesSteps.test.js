@@ -20,6 +20,10 @@ test("stage 2 offers the missing group; stage 3 asks the need, names the competi
   assert.equal(stepOf({ stage: 2, progress: 50 }, {}, now), null);
   assert.equal(stepOf({ stage: 3, next: "expected_volume_missing", progress: null }, {}, now).kind, "ask_need");
   assert.deepEqual(stepOf({ stage: 3, next: "more_share", progress: 50, share: 30 }, { competitor: "mobil" }, now).params, { brand: "mobil", share: 30 });
+  // a brand a rep added has no translation: its task names it as it was added (2026-11-19)
+  const added = stepOf({ stage: 3, next: "more_share", progress: 50, share: 30 }, { competitor: "eneos", competitorName: "ENEOS" }, now);
+  assert.deepEqual(added.params, { brand: "eneos", brand_name: "ENEOS", share: 30 });
+  assert.ok(taskTitleOf({ ...added, customer: { name: "Shop" } }).includes("ENEOS"));
   assert.equal(stepOf({ stage: 3, next: "more_share", progress: 50, share: 30 }, {}, now).kind, "raise_share");
   assert.equal(stepOf({ stage: 4, progress: 100, litres_month: 90 }, { litresBefore: 100 }, now), null, "a 10 % dip is not a drop");
   assert.deepEqual(stepOf({ stage: 4, progress: 100, litres_month: 60 }, { litresBefore: 100 }, now).params, { before: 100, now: 60 });

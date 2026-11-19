@@ -11,7 +11,7 @@ import { ensureLeaflet } from "../leafletLoader.js";
 import { paintCheckinSpots, parseHere } from "../checkinSpotsLayer.js";
 import { routeLegs, openRouteInMaps, routeShareText, shareRouteToTelegram } from "../routeNavigation.js";
 import { currentChips, matchedEverEntries, chipHtml, shortDate, competitorName } from "../brandChips.js";
-import { loadCompetitorBrands, knownCompetitorBrands, builtInCompetitorBrands } from "../competitorBrandList.js";
+import { loadCompetitorBrands, knownCompetitorBrands, builtInCompetitorBrands, onCompetitorBrandsChange } from "../competitorBrandList.js";
 import * as mapTiles from "./map/tiles.js";
 import * as mapMarkers from "./map/markers.js";
 import * as mapFilters from "./map/filters.js";
@@ -1085,12 +1085,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   }
   if (brandPickerRow) {
     renderBrandPicker();
-    loadCompetitorBrands()
-      .then((list) => {
-        pickerBrands = list;
-        renderBrandPicker();
-      })
-      .catch(() => {});
+    const useList = (list) => {
+      pickerBrands = list;
+      renderBrandPicker();
+    };
+    loadCompetitorBrands().then(useList).catch(() => {});
+    // a newer list (read in the background, a brand just added or approved) redraws the row while the map stays open
+    const stop = onCompetitorBrandsChange((list) => (brandPickerRow.isConnected ? useList(list) : stop()));
     brandPickerRow.addEventListener("click", (e) => {
       const chip = e.target.closest(".brand-picker-chip");
       if (!chip) return;
