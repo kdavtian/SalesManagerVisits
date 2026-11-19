@@ -1,5 +1,5 @@
 import { state } from "../state.js";
-import { seesTierPrices } from "../shared/roles.js";
+import { seesTierPrices, canManagePurchases } from "../shared/roles.js";
 import { api } from "../api.js";
 import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
@@ -98,7 +98,9 @@ export async function renderWarehouse(root, navigate) {
           })
           .join("")}
       </div>
+      <div id="reorder-purchase"></div>
       <button type="button" class="btn btn-block" id="reorder-copy" style="margin-top:12px">${t("warehouse_reorder_copy")}</button>`;
+    if (canManagePurchases(state.user?.role)) paintReorderPurchase(rows);
     contentEl.querySelector("#reorder-copy").addEventListener("click", async () => {
       const text = rows.map((r) => `${r.name} ${normalizeUnitLabel(r.unit)} — ${r.suggested_qty} ${t("warehouse_pcs_suffix")}${r.pack_kind === "bottle" && r.pack_size > 1 ? ` (${r.packs} × ${r.pack_size})` : ""}`).join("\n");
       try {
@@ -108,6 +110,47 @@ export async function renderWarehouse(root, navigate) {
         /* clipboard blocked: nothing to do */
       }
     });
+  }
+
+  // From "To order" to a purchase (owner plan P4, 2026-11-20): the suggestions by each product's last supplier, one "Create purchase" per
+  // supplier, the form filled with the pieces to buy and each product's last price (still editable; the invoice number is typed when the
+  // supplier's paper comes -- the form keeps its draft until then).
+  async function paintReorderPurchase(rows) {
+    const box = contentEl.querySelector("#reorder-purchase");
+    if (!box) return;
+    const ids = rows.map((r) => r.id);
+    const history = {};
+    try {
+      for (let i = 0; i < ids.length; i += 100) Object.assign(history, await api.getPurchaseHistory(ids.slice(i, i + 100)));
+    } catch {
+      // no history: the products still go to one purchase without a supplier and without prices
+    }
+    if (!box.isConnected) return;
+    const bySupplier = new Map();
+    for (const r of rows) {
+      const last = history[r.id]?.last;
+      const supplier = last?.supplier || "";
+      if (!bySupplier.has(supplier)) bySupplier.set(supplier, []);
+      bySupplier.get(supplier).push({ r, cost: last?.cost_usd ?? null });
+    }
+    const groups = [...bySupplier.entries()].sort((a, b) => (a[0] ? 0 : 1) - (b[0] ? 0 : 1) || b[1].length - a[1].length);
+    box.innerHTML = `<h3 class="section-title section-title-tight">${t("warehouse_reorder_purchase")}</h3>
+      <div class="reorder-purchase-list">${groups
+        .map(
+          ([supplier, list], k) => `<button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-block" data-reorder-supplier="${k}">
+            ${icons.plus}<span>${escapeHtml(supplier || t("warehouse_reorder_no_supplier"))} · ${list.length} ${t("warehouse_reorder_products")}</span></button>`
+        )
+        .join("")}</div>`;
+    box.querySelectorAll("[data-reorder-supplier]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const [supplier, list] = groups[Number(btn.dataset.reorderSupplier)];
+        const { openPurchaseForm } = await import("./purchases/form.js");
+        openPurchaseForm(
+          { supplier, draft_tag: `reorder:${supplier.toLowerCase()}`, lines: list.map(({ r, cost }) => ({ product_id: r.id, product_name: r.name, qty: r.suggested_qty, cost_usd: cost })) },
+          { onSaved: () => load() }
+        );
+      })
+    );
   }
 
   async function load() {

@@ -33,6 +33,7 @@ const keyOfNo = (no) => String(no ?? "").trim().toLowerCase().replace(/\s+/g, " 
 function draftKeyOf(invoice) {
   if (!invoice) return DRAFT_KEY;
   if (invoice.id) return `${DRAFT_KEY}:edit:${invoice.id}`;
+  if (invoice.draft_tag) return `${DRAFT_KEY}:${invoice.draft_tag}`; // e.g. a purchase started from Warehouse > To order
   return `${DRAFT_KEY}:pre:${String(invoice.supplier ?? "").toLowerCase()}|${String(invoice.invoice_no ?? "")}|${String(invoice.invoice_date ?? "")}`;
 }
 function readDraft(key) {
