@@ -334,10 +334,24 @@ let editRequestBadgeCount = 0;
 
 /** Plans and change requests waiting for this person: the number on the menu button and on Settings in the More sheet. */
 export const adminReviewCount = () => planApprovalBadgeCount + editRequestBadgeCount;
+/** Approvals waiting for MY decision (every kind, the Requests list): the More sheet's top row (owner, 2026-11-19). */
+export const requestCount = () => requestBadgeCount;
+// The menu button carries whatever waits for this person in the More sheet: the approvals (which already hold the plans and change
+// requests they may decide), or the Settings reviews when those are more.
+const menuBadgeCount = () => Math.max(adminReviewCount(), requestBadgeCount);
+
+function applyMenuBadge() {
+  const el = document.getElementById("topbar-menu-badge");
+  if (!el) return;
+  const total = menuBadgeCount();
+  el.textContent = total > 99 ? "99+" : String(total);
+  el.hidden = !(total > 0);
+}
 
 export function applyPlanApprovalBadge() {
   const total = adminReviewCount();
-  for (const el of [document.getElementById("topbar-menu-badge"), ...document.querySelectorAll('[data-badge="admin-review"]')]) {
+  applyMenuBadge();
+  for (const el of document.querySelectorAll('[data-badge="admin-review"]')) {
     if (!el) continue;
     if (total > 0) {
       el.textContent = total > 99 ? "99+" : String(total);
@@ -375,6 +389,7 @@ export async function refreshEditRequestBadge() {
 // Requests waiting for MY decision (the Requests tile and screen; owner, 2026-11-08), from the combined /api/badges poll.
 let requestBadgeCount = 0;
 export function applyRequestBadge() {
+  applyMenuBadge();
   for (const el of document.querySelectorAll('[data-badge="requests"]')) {
     if (requestBadgeCount > 0) {
       el.textContent = requestBadgeCount > 99 ? "99+" : String(requestBadgeCount);
