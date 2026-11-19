@@ -7,6 +7,7 @@ import express, { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
 import { brandsFor, requestBrand, decideBrand, latestPrices, BrandError } from "../competitorBrands.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
+import { canApproveCompetitorBrands } from "../../shared/roles.js";
 
 export const competitorBrandsRouter = Router();
 competitorBrandsRouter.use(requireAuth);
@@ -25,8 +26,12 @@ competitorBrandsRouter.get("/:key/prices", async (req, res) => {
 
 competitorBrandsRouter.post("/", async (req, res) => {
   try {
-    const { brand, created } = await requestBrand(req.body?.name, req.user.id);
-    if (created) await notifyApproversOf("competitor_brand", brand.id);
+    let { brand, created } = await requestBrand(req.body?.name, req.user.id);
+    // added by someone who approves brands (admin, CEO): approved at once, nobody is asked (owner, 2026-11-19)
+    if (created && brand.status === "pending" && canApproveCompetitorBrands(req.user.role)) {
+      const r = await decideBrand(brand.id, req.user, true);
+      brand = { id: r.id, key: r.key, name: r.name, status: r.status };
+    } else if (created) await notifyApproversOf("competitor_brand", brand.id);
     res.status(created ? 201 : 200).json({ brand, created });
   } catch (err) {
     if (!failed(res, err)) throw err;

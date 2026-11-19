@@ -176,9 +176,10 @@ test("confirming an order with a pending discount approval is blocked until appr
   // exactly the bypass phase-1 of the earlier round closed (it used to
   // read a stale pre-request approval_status instead of the freshly
   // computed one).
+  // the rep sets it: a director's own discount is approved at once (owner, 2026-11-19, selfApproval.test.js), a rep's waits
   const discountEdit = await apiRequest(`/api/orders/${orderId}`, {
     method: "PATCH",
-    cookie: directorCookie,
+    cookie: managerCookie,
     body: { discount_pct: 30 },
   });
   assert.equal(discountEdit.status, 200);

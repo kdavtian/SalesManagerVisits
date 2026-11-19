@@ -572,6 +572,21 @@ teamPerformanceRouter.post("/plans/:id/submit", async (req, res) => {
     return res.status(400).json({ error: "Add at least one channel's targets before submitting" });
   }
 
+  // a plan its own submitter may review (the CEO, the operations director, the admin) is approved at once, in their name
+  // (owner, 2026-11-19); the sales director's plan still goes to the CEO / accountant
+  if (canReviewPlan(req.user.role, req.user.role)) {
+    const { rows: approved } = await pool.query(
+      `UPDATE perf_plans SET status = 'approved', submitted_by = $1, submitted_at = now(), approved_by = $1, approved_at = now(),
+         rejected_reason = NULL, lock_version = lock_version + 1, updated_at = now()
+       WHERE id = $2 AND status IN ('draft', 'rejected') RETURNING *`,
+      [req.user.id, plan.id]
+    );
+    if (!approved[0]) return res.status(409).json({ error: "Only a draft or rejected plan can be submitted" });
+    await writeAudit(pool, plan.id, req.user.id, "submit", { status: plan.status }, { status: "pending_approval" });
+    await writeAudit(pool, plan.id, req.user.id, "approved", { status: "pending_approval" }, { status: "approved" });
+    return res.json({ ...approved[0], self_approved: true });
+  }
+
   const { rows: updated } = await pool.query(
     `UPDATE perf_plans SET status = 'pending_approval', submitted_by = $1, submitted_at = now(),
        rejected_reason = NULL, lock_version = lock_version + 1, updated_at = now()

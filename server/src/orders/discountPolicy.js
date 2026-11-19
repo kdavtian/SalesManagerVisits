@@ -17,7 +17,7 @@
 // from the cash ledger) + 20 % VAT on (price - landing) + 18 % profit tax on the rest. Where landing
 // cost or pack size is unknown the flat workbook net cost is used.
 import { netCost, litersOfUnit } from "../../../client/public/js/costModel.js";
-import { approves } from "../shared/roles.js";
+import { approves, canConfirmOrders } from "../shared/roles.js";
 import { rulesOf } from "../shared/salesChannelRules.js";
 
 export const AUTO_APPROVE_PCT = 3;
@@ -94,6 +94,12 @@ export function decideDiscountApproval({ discountPct, discountAmd, subtotal, bel
   if (!(Number(discountPct) > 0) && !(Number(discountAmd) > 0)) return "not_required";
   const pct = effectiveDiscountPct(subtotal, discountPct, discountAmd);
   return pct <= autoPct && !belowCost ? "approved" : "pending";
+}
+
+// The person making the change may approve it themselves (owner, 2026-11-19: "When management or sales director wants to change
+// something, no need to request approval if he can approve as well"): their own discount / price is approved at once, in their name.
+export function decidesOwnDiscount(role, check = {}) {
+  return canConfirmOrders(role) && canApproveDiscountRole(role, Boolean(check.belowCost), Boolean(check.belowLanding));
 }
 
 // Who may approve is the table APPROVALS in shared/roles.js (orderPricingAny / orderPricingAboveNetCost).

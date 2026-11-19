@@ -290,7 +290,9 @@ visitPlansRouter.post("/", async (req, res) => {
     new Set(previousApprovedIds).size === new Set(customerIds).size &&
     customerIds.every((id) => previousApprovedIds.includes(id));
 
-  const autoApprove = isReorderOnly || req.user.role === "admin" || targetId !== req.user.id;
+  // whoever approves plans (canPlanForOthers) does not ask anyone for their own day (owner, 2026-11-19); a plan made for someone else
+  // is approved by its maker, as before
+  const autoApprove = isReorderOnly || canPlanForOthers(req.user.role) || targetId !== req.user.id;
   const status = autoApprove ? "approved" : "pending";
   const reviewedBy = isReorderOnly ? (existing ? existing.reviewed_by : null) : autoApprove ? req.user.id : null;
   const reviewedAt = isReorderOnly ? (existing ? existing.reviewed_at : new Date()) : autoApprove ? new Date() : null;

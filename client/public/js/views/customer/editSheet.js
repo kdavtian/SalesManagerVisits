@@ -4,7 +4,7 @@ import { dockSheet } from "../../dockSheet.js";
 import { activateCategorySelector, activateDialog, activateTierSelector, categorySelectorHtml, escapeHtml, formatAmd, formatPhoneDisplay, normalizePhone, showToast, tierSelectorHtml } from "../../util.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
-import { canCloseCustomers, canEditDirectly, isAdmin } from "../../state.js";
+import { canCloseCustomers, canEditDirectly, canReviewCustomerEdits, isAdmin } from "../../state.js";
 import { collectSocialPayload, fetchCustomerSocial, saveCustomerSocial, socialFieldsHtml } from "./social.js";
 
 export const EDIT_FIELDS = [
@@ -32,7 +32,7 @@ export async function openEditSheet(customer, navigate, onDone) {
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `
     <div class="sheet">
-      <h2>${canEditDirectly() ? t("edit_customer") : t("request_edit")}</h2>
+      <h2>${canEditDirectly() || canReviewCustomerEdits() ? t("edit_customer") : t("request_edit")}</h2>
       <form id="edit-customer-form">
         ${tierSelectorHtml(customer.customer_tier || "potential")}
         ${categorySelectorHtml(customer.category || "")}
@@ -76,7 +76,7 @@ export async function openEditSheet(customer, navigate, onDone) {
       </div>
       <div class="sheet-actions sheet-actions-floating">
         <button type="button" class="btn" id="cancel-edit-customer">${t("cancel")}</button>
-        <button type="submit" form="edit-customer-form" id="submit-edit-customer" class="btn btn-primary">${canEditDirectly() ? t("save") : t("submit_request")}</button>
+        <button type="submit" form="edit-customer-form" id="submit-edit-customer" class="btn btn-primary">${canEditDirectly() || canReviewCustomerEdits() ? t("save") : t("submit_request")}</button>
       </div>
     </div>
   `;
