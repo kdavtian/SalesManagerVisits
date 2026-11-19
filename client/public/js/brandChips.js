@@ -44,6 +44,17 @@ export function brandNameOfKey(key) {
   const s = String(key ?? "").replace(/_/g, " ").trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
 }
+
+// The names the server gave the brands reps added ("ENEOS", not "Eneos"), learnt from every read of the list (competitorBrandList.js).
+const competitorNames = new Map();
+export function rememberCompetitorNames(brands) {
+  for (const b of brands ?? []) if (b && typeof b.key === "string" && b.name) competitorNames.set(b.key, String(b.name));
+}
+// One label for a competitor brand on every screen: the translated name of a built-in brand, else the name it was added with
+export function competitorName(key) {
+  if (hasText(`competitor_${key}`)) return t(`competitor_${key}`);
+  return competitorNames.get(key) || brandNameOfKey(key);
+}
 function defOf(group, value) {
   const id = `${group}:${value}`;
   let def = DEF_BY_ID.get(id);
@@ -60,7 +71,7 @@ export function chipId(def) {
 }
 
 export function chipLabel(def) {
-  if (def.group === "competitors") return hasText(`competitor_${def.value}`) ? t(`competitor_${def.value}`) : brandNameOfKey(def.value);
+  if (def.group === "competitors") return competitorName(def.value);
   return t(`chip_${def.group}_${def.value}`);
 }
 
