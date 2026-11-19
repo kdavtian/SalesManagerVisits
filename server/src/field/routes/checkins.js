@@ -171,8 +171,8 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
       result.competitor_packs = { ...packs };
       const present = new Set((result.competitors ?? []).filter((k) => !packs[k]?.includes("none")));
       for (const [k, v] of Object.entries(packs)) if (!v.includes("none")) present.add(k);
-      if (present.size) result.competitors = [...present];
-      else delete result.competitors;
+      // all "not available": an explicit empty list, so every reader sees that this visit recorded the competitors (Codex review)
+      result.competitors = [...present];
     }
   }
   return Object.keys(result).length ? result : null;

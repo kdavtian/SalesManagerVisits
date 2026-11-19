@@ -96,8 +96,7 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
     // competitor brands on the shelf at the last visit that recorded them, last 30 days, per region
     db.query(
       `SELECT DISTINCT ON (ch.customer_id) ch.customer_id, ch.brand_status -> 'competitors' AS brands
-       FROM checkins ch WHERE ch.timestamp > now() - interval '30 days' AND jsonb_typeof(ch.brand_status -> 'competitors') = 'array'
-         AND jsonb_array_length(ch.brand_status -> 'competitors') > 0
+       FROM checkins ch WHERE ch.timestamp > now() - interval '30 days' AND jsonb_typeof(ch.brand_status -> 'competitors') = 'array'  -- an empty list = the visit marked every competitor "not available" (2026-11-19): it is the latest state
        ORDER BY ch.customer_id, ch.timestamp DESC`
     ),
     db.query("SELECT customer_id, since FROM customer_funnel_stage"),

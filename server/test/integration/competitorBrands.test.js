@@ -115,7 +115,7 @@ test("review fixes: reserved and same-but-spaced names, two reps adding at once,
   };
   await post({ competitor_packs: { mobil: ["bottle"] } }, 3);
   const last = await post({ competitor_packs: { mobil: ["none"] } }, 1);
-  assert.equal(last.data.brand_status.competitors, undefined);
+  assert.deepEqual(last.data.brand_status.competitors, [], "an explicit empty list: this visit recorded the competitors");
   const summary = (await apiRequest(`/api/customers/brand-summary?customer_id=${shop.id}`, { cookie: cookies.rep })).data;
   const row = (Array.isArray(summary) ? summary : summary.rows ?? []).find((r) => r.customer_id === shop.id);
   assert.deepEqual(row.current.competitors.values, [], "Mobil is no longer 'current'");

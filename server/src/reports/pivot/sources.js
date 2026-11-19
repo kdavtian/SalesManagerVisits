@@ -33,12 +33,15 @@ function customerFields(prefix = "cust_") {
 // Current shelf state per customer and brand group: the group's values from the latest visit that recorded that group (as the customer
 // card shows it); `current` marks every value of that latest record (dense_rank: one visit's values share it), older visits' records
 // are kept as history.
-const SHELF_ROWS = `(SELECT ch.customer_id, ch.user_id, ch.timestamp, g.key AS grp, v.val,
-        dense_rank() OVER (PARTITION BY ch.customer_id, g.key ORDER BY ch.timestamp DESC, ch.id DESC) = 1 AS is_current
-   FROM checkins ch
-   CROSS JOIN LATERAL jsonb_each(ch.brand_status) g
-   CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(g.value) = 'array' THEN g.value ELSE '[]'::jsonb END) v(val)
-  WHERE ch.brand_status IS NOT NULL)`;
+// The latest record of a group is ranked BEFORE its values are expanded: a visit that recorded the group with no value (every competitor
+// "not available", 2026-11-19) is the current state and leaves the older values as history (Codex review).
+const SHELF_ROWS = `(SELECT o.customer_id, o.user_id, o.timestamp, o.grp, v.val, o.is_current
+   FROM (SELECT ch.customer_id, ch.user_id, ch.timestamp, g.key AS grp, g.value,
+                dense_rank() OVER (PARTITION BY ch.customer_id, g.key ORDER BY ch.timestamp DESC, ch.id DESC) = 1 AS is_current
+           FROM checkins ch
+           CROSS JOIN LATERAL jsonb_each(ch.brand_status) g
+          WHERE ch.brand_status IS NOT NULL AND jsonb_typeof(g.value) = 'array') o
+   CROSS JOIN LATERAL jsonb_array_elements_text(o.value) v(val))`;
 
 export const SOURCES = [
   {
