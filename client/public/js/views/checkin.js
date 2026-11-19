@@ -13,6 +13,7 @@ import { openPhotoLightbox } from "../photoLightbox.js";
 import { openOrderTaskSheet } from "../orderTaskSheet.js";
 import { loadReorderProfile, usualOrderHash } from "../reorder.js";
 import { COMPETITORS } from "../brandChips.js";
+import { openCompetitorSheet } from "../competitorShelf.js";
 import { openSignaturePad, ensureOwnSignature, clearPendingOwnSignature } from "../signaturePad.js";
 import { customerSignStatement } from "../signStatement.js";
 
@@ -301,6 +302,9 @@ export async function renderCheckin(root, navigate, customerId) {
   let photos = [];
   const MAX_PHOTOS = 5;
   const brandStatus = Object.fromEntries(BRAND_GROUPS.map((g) => [g.key, []]));
+  // per competitor brand: bottles / drum / not available (owner, 2026-11-19; competitorShelf.js). The brands with bottles or a drum also go
+  // into brandStatus.competitors, which every other screen reads.
+  const competitorPacks = {};
 
   // Which of this customer's own previously-ordered products the rep found
   // in stock right now -- distinct from brandStatus above (that's the
@@ -383,11 +387,12 @@ export async function renderCheckin(root, navigate, customerId) {
 
   availableProductsBtn.addEventListener("click", openAvailableProductsSheet);
 
-  const cardGroupsHaveValues = (card) => card.groups.some((key) => brandStatus[key].length > 0);
+  const cardCount = (card) => (card.key === "competitors" ? Object.keys(competitorPacks).length : card.groups.reduce((n, key) => n + brandStatus[key].length, 0));
+  const cardGroupsHaveValues = (card) => cardCount(card) > 0;
   function paintBrandGroupButtons() {
     container.querySelectorAll("[data-brand-card]").forEach((btn) => {
       const card = BRAND_CARDS.find((c) => c.key === btn.dataset.brandCard);
-      const count = card.groups.reduce((n, key) => n + brandStatus[key].length, 0);
+      const count = cardCount(card);
       btn.classList.toggle("brand-group-btn-active", cardGroupsHaveValues(card));
       btn.textContent = count ? `${t(card.labelKey)} (${count})` : t(card.labelKey);
     });
@@ -396,6 +401,17 @@ export async function renderCheckin(root, navigate, customerId) {
   // One bottom sheet per card. "KAD products" shows two columns: Castrol on the left, Lotos with Royal under it on the right
   // (owner, 2026-10-26); Competitors is one list.
   function openBrandSheet(card) {
+    if (card.key === "competitors") {
+      openCompetitorSheet({
+        title: t(card.labelKey),
+        packs: competitorPacks,
+        onApply: () => {
+          brandStatus.competitors = Object.entries(competitorPacks).filter(([, v]) => !v.includes("none")).map(([k]) => k);
+          paintBrandGroupButtons();
+        },
+      });
+      return;
+    }
     const groups = card.groups.map((key) => BRAND_GROUPS.find((g) => g.key === key));
     const selected = Object.fromEntries(groups.map((g) => [g.key, new Set(brandStatus[g.key])]));
     const sectionHtml = (g) => `
@@ -884,7 +900,7 @@ export async function renderCheckin(root, navigate, customerId) {
         <span class="verify-banner-icon">${withinRange ? "✓" : "!"}</span>
         <div>
           <strong>${withinRange ? t("location_verified") : t("location_mismatch_away")}</strong>
-          <span class="muted">${t("you_are")} ${formatDistance(distance)} ${t("from_customer")} · ±${accuracy}${unit} ${t("accuracy")}</span>
+          <span class="muted">${t("you_are_from_customer").replace("{d}", formatDistance(distance))} · ±${accuracy}${unit} ${t("accuracy")}</span>
         </div>
       `;
       // Check-in allowance: a sales manager too far from the pin cannot check in (management can). The pin
@@ -995,6 +1011,7 @@ export async function renderCheckin(root, navigate, customerId) {
 
     const note = data.get("note");
     const brandStatusPayload = Object.fromEntries(Object.entries(brandStatus).filter(([, v]) => v.length));
+    if (Object.keys(competitorPacks).length) brandStatusPayload.competitor_packs = { ...competitorPacks };
     const { latitude: lat, longitude: lng } = position.coords;
 
     // Generated once, before the first (online) attempt -- reused as-is if

@@ -5,7 +5,7 @@
 //   current -- per brand group, the values of the latest visit that recorded
 //              that group (a visit that skips a group leaves it unchanged);
 //   ever    -- every value any visit recorded + the latest date it was seen.
-import { t } from "./i18n.js";
+import { t, hasText } from "./i18n.js";
 import { escapeHtml, formatDayMonth } from "./util.js";
 
 export const BRAND_GROUP_ORDER = ["castrol", "lotos", "royal", "competitors"];
@@ -38,12 +38,30 @@ const CHIP_DEFS = [
 
 const DEF_BY_ID = new Map(CHIP_DEFS.map((d) => [chipId(d), d]));
 
+// A competitor brand a rep added at a check-in (owner, 2026-11-19: "+ Add new brand") is not in the list above: its key is its own name in
+// lower case, so a chip is made for it on first sight (after the known ones) and shows that name back.
+export function brandNameOfKey(key) {
+  const s = String(key ?? "").replace(/_/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+}
+function defOf(group, value) {
+  const id = `${group}:${value}`;
+  let def = DEF_BY_ID.get(id);
+  if (!def && group === "competitors" && typeof value === "string" && value.trim()) {
+    def = { group, value, tone: "neutral", alias: `competitor ${value.replace(/_/g, " ")}` };
+    DEF_BY_ID.set(id, def);
+    CHIP_DEFS.push(def);
+  }
+  return def ?? null;
+}
+
 export function chipId(def) {
   return `${def.group}:${def.value}`;
 }
 
 export function chipLabel(def) {
-  return def.group === "competitors" ? t(`competitor_${def.value}`) : t(`chip_${def.group}_${def.value}`);
+  if (def.group === "competitors") return hasText(`competitor_${def.value}`) ? t(`competitor_${def.value}`) : brandNameOfKey(def.value);
+  return t(`chip_${def.group}_${def.value}`);
 }
 
 function fold(value) {
@@ -62,7 +80,7 @@ export function currentChips(current) {
     if (!Array.isArray(values)) continue;
     // "Full range" already says the brand is on the shelf, so a separate "available" chip would only repeat it.
     const shown = values.includes("full_range") ? values.filter((v) => v !== "available") : values;
-    const defs = shown.map((v) => DEF_BY_ID.get(`${group}:${v}`)).filter(Boolean);
+    const defs = shown.map((v) => defOf(group, v)).filter(Boolean);
     defs.sort((a, b) => CHIP_DEFS.indexOf(a) - CHIP_DEFS.indexOf(b));
     chips.push(...defs);
   }
@@ -109,7 +127,7 @@ export function brandSearchText(summary) {
   if (cached) return cached;
   const text = fold(
     (summary.ever ?? [])
-      .map((e) => DEF_BY_ID.get(`${e.group}:${e.value}`))
+      .map((e) => defOf(e.group, e.value))
       .filter(Boolean)
       .map((d) => `${chipLabel(d)} ${d.alias}`)
       .join(" ")
@@ -127,7 +145,7 @@ export function matchedEverEntries(summary, { selectedIds, query }) {
     .filter((w) => w.length >= 3);
   const out = [];
   for (const e of summary.ever ?? []) {
-    const def = DEF_BY_ID.get(`${e.group}:${e.value}`);
+    const def = defOf(e.group, e.value);
     if (!def) continue;
     const bySelection = selectedIds?.size && selectedIds.has(chipId(def));
     const text = fold(`${chipLabel(def)} ${def.alias}`);
@@ -156,7 +174,7 @@ export function buildBrandChipTree(summaryByCustomer, customerIds) {
     const seenGroups = new Set();
     for (const e of summary.ever ?? []) {
       const key = `${e.group}:${e.value}`;
-      if (!DEF_BY_ID.has(key)) continue;
+      if (!defOf(e.group, e.value)) continue;
       counts.set(key, (counts.get(key) ?? 0) + 1);
       seenGroups.add(e.group);
     }

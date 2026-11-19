@@ -1,5 +1,6 @@
 import express, { Router } from "express";
 import fs from "node:fs";
+import { recordableKeys } from "../competitorBrands.js";
 import { parseCapturedAt } from "../../utils/capturedAt.js";
 import path from "node:path";
 import { pool } from "../../db/pool.js";
@@ -132,7 +133,11 @@ function parseAvailableProducts(raw) {
   return values.length ? values : null;
 }
 
-function parseBrandStatus(raw) {
+// Per competitor brand, how it is on the shelf (owner, 2026-11-19): bottles, a drum (bulk), both, or not there ("none" alone).
+const PACKS = new Set(["bottle", "drum", "none"]);
+
+// competitorKeys: the brands a visit may record (approved or waiting, field/competitorBrands.js); the code list when the table is not read.
+export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.competitors) {
   if (!raw) return null;
   let parsed;
   try {
@@ -143,13 +148,32 @@ function parseBrandStatus(raw) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
 
   const result = {};
-  for (const [brand, allowed] of Object.entries(BRAND_STATUS_OPTIONS)) {
+  const options = { ...BRAND_STATUS_OPTIONS, competitors: competitorKeys };
+  for (const [brand, allowed] of Object.entries(options)) {
     const values = Array.isArray(parsed[brand]) ? parsed[brand].filter((v) => allowed.has(v)) : [];
     if (!values.length) continue;
     // Defensive: "available" and "unavailable" are mutually exclusive; the
     // client already enforces this, but never trust the client alone.
     const deduped = values.includes("available") ? values.filter((v) => v !== "unavailable") : values;
     result[brand] = deduped;
+  }
+  // bottles / drum / not available per competitor: a brand with bottles or a drum is present (in `competitors`, which every other screen
+  // reads); "not available" is never present and clears bottles / drum
+  if (parsed.competitor_packs && typeof parsed.competitor_packs === "object" && !Array.isArray(parsed.competitor_packs)) {
+    const packs = {};
+    for (const [key, value] of Object.entries(parsed.competitor_packs)) {
+      if (!competitorKeys.has(key) || !Array.isArray(value)) continue;
+      const v = [...new Set(value.filter((x) => PACKS.has(x)))];
+      if (!v.length) continue;
+      packs[key] = v.includes("none") ? ["none"] : v.sort();
+    }
+    if (Object.keys(packs).length) {
+      result.competitor_packs = packs;
+      const present = new Set((result.competitors ?? []).filter((k) => !packs[k]?.includes("none")));
+      for (const [k, v] of Object.entries(packs)) if (!v.includes("none")) present.add(k);
+      if (present.size) result.competitors = [...present];
+      else delete result.competitors;
+    }
   }
   return Object.keys(result).length ? result : null;
 }
@@ -318,7 +342,7 @@ checkinsRouter.post("/", (req, res, next) => {
       allowance_meters: radiusMeters,
     });
   }
-  const brandStatusValue = parseBrandStatus(brand_status);
+  const brandStatusValue = parseBrandStatus(brand_status, brand_status ? await recordableKeys() : undefined);
   const availableProductsValue = parseAvailableProducts(available_products);
 
   // "Products delivered" (stored as customer_unavailable): the orders the rep picked move to Delivered together with the check-in.
