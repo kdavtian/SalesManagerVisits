@@ -114,8 +114,9 @@ export function renderPurchases(root) {
     const map = new Map();
     for (const r of list) {
       const key = String(r.supplier || "—").toLowerCase();
-      const g = map.get(key) ?? { key, name: r.supplier || "—", usd: 0, liters: 0, invoices: 0 };
+      const g = map.get(key) ?? { key, name: r.supplier || "—", usd: 0, liquid: 0, liters: 0, invoices: 0 };
       g.usd += r.usd;
+      g.liquid += r.liquid_usd ?? r.usd;
       g.liters += r.liters;
       g.invoices += 1;
       map.set(key, g);
@@ -146,12 +147,14 @@ export function renderPurchases(root) {
     const sum = (k) => shown.reduce((a, r) => a + (Number(r[k]) || 0), 0);
     const usdTotal = sum("usd");
     const litersTotal = sum("liters");
+    // per litre: only the dollars of lines that have litres (owner, 2026-11-20: a stand or a filter is not oil)
+    const liquidTotal = shown.reduce((a, r) => a + (Number(r.liquid_usd ?? r.usd) || 0), 0);
     root.querySelector("#pu-kpis").innerHTML = shown.length
       ? [
           [t("pu_kpi_invoices"), groupDigits(shown.length), ""],
           [t("pu_kpi_liters"), liters(litersTotal), ""],
           [t("pu_kpi_usd"), usd0(usdTotal), formatAmd(sum("amd"))],
-          [t("pu_kpi_per_l"), litersTotal > 0 ? usd(usdTotal / litersTotal) : "—", ""],
+          [t("pu_kpi_per_l"), litersTotal > 0 ? usd(liquidTotal / litersTotal) : "—", ""],
         ]
           .map(([label, value, sub]) => `<div class="pu-kpi"><span class="pu-kpi-label">${label}</span><strong class="pu-kpi-value">${value}</strong>${sub ? `<span class="pu-kpi-sub muted">${sub}</span>` : ""}</div>`)
           .join("")
@@ -167,7 +170,7 @@ export function renderPurchases(root) {
                 <span class="pu-supplier-name">${escapeHtml(g.name)}</span>
                 <span class="pu-supplier-usd">${usd0(g.usd)}</span>
                 <span class="pu-supplier-bar" aria-hidden="true"><i style="width:${Math.max(3, Math.round((g.usd / topUsd) * 100))}%"></i></span>
-                <span class="pu-supplier-meta muted">${Math.round((g.usd / topUsd) * 100)}% · ${liters(g.liters)}${g.liters > 0 ? ` · ${usd(g.usd / g.liters)}/L` : ""}</span>
+                <span class="pu-supplier-meta muted">${Math.round((g.usd / topUsd) * 100)}% · ${liters(g.liters)}${g.liters > 0 ? ` · ${usd(g.liquid / g.liters)}/L` : ""}</span>
               </button>`
             )
             .join("")
@@ -203,7 +206,7 @@ export function renderPurchases(root) {
               <span class="pu-col-date">${escapeHtml(formatDateDMY(r.invoice_date))}</span>
               <span class="pu-col-no">№ ${escapeHtml(r.invoice_no)}</span>
               <span class="pu-col-liters">${liters(r.liters)}</span>
-              <span class="pu-col-perl">${r.liters > 0 ? `${usd(r.usd / r.liters)}/L` : "—"}</span>
+              <span class="pu-col-perl">${r.liters > 0 ? `${usd((r.liquid_usd ?? r.usd) / r.liters)}/L` : "—"}</span>
               <span class="pu-col-amd muted">${formatAmd(r.amd)}</span>
             </span>
             <span class="pu-row-side"><strong>${usd(r.usd)}</strong><span class="badge ${STATUS_BADGE[r.status]}">${t(STATUS_LABEL[r.status])}</span></span>
@@ -235,6 +238,16 @@ export function renderPurchases(root) {
   load();
 }
 
+// An Excel invoice's lines for the form: a line whose product the app knows is that product; the others come by their own name, brand and
+// litres (they used to be dropped without a word, so the copy's total was smaller than the paper's).
+function excelToFormLines(excel) {
+  return (excel ?? []).map((l) =>
+    l.product_id
+      ? { product_id: l.product_id, product_name: l.app_product_name, qty: l.qty, cost_usd: l.cost_usd }
+      : { product_id: null, product_name: [l.brand, l.product_name || l.erp_product_id].filter(Boolean).join(" "), brand: l.brand ?? null, size_l: l.size_l ?? null, qty: l.qty, cost_usd: l.cost_usd }
+  );
+}
+
 // One invoice: the app lines beside the Excel lines. An app invoice can be edited (and deleted by admin / CEO); an Excel-only one copied in.
 async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows = [], openInvoice }) {
   const overlay = document.createElement("div");
@@ -247,7 +260,7 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
   const sheet = overlay.querySelector(".sheet");
   try {
     const app = id ? await api.getPurchase(id) : null;
-    const excel = app ? app.excel_lines : await api.getExcelPurchase(invoiceNo, date);
+    const excel = app ? app.excel_lines : await api.getExcelPurchase(invoiceNo, date, row?.supplier ?? "");
     const sumOf = (lines) => lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.cost_usd) || 0), 0);
     const litersOf = (lines) => lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.size_l) || 0), 0);
     const lineRow = (l, side) => `<div class="pu-line">
@@ -288,14 +301,14 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
     // Repeat (owner, 2026-11-07): a new invoice with the same supplier, products, packs and prices; today's date, a new number to type
     sheet.querySelector("#pu-repeat").addEventListener("click", () => {
       close();
-      const from = app ? app.lines : excel.filter((l) => l.product_id).map((l) => ({ product_id: l.product_id, product_name: l.app_product_name, qty: l.qty, cost_usd: l.cost_usd }));
+      const from = app ? app.lines : excelToFormLines(excel);
       openPurchaseForm({ supplier: head.supplier ?? "", usd_rate: app?.usd_rate, lines: from }, { onSaved, rows, openInvoice });
     });
     sheet.querySelector("#pu-copy")?.addEventListener("click", () => {
       close();
       // the Excel invoice as a filled form: supplier, number, date, and every line whose product the app knows
       openPurchaseForm(
-        { invoice_no: invoiceNo, invoice_date: date, supplier: excel[0]?.supplier ?? row?.supplier ?? "", lines: excel.filter((l) => l.product_id).map((l) => ({ product_id: l.product_id, product_name: l.app_product_name, qty: l.qty, cost_usd: l.cost_usd })) },
+        { invoice_no: invoiceNo, invoice_date: date, supplier: excel[0]?.supplier ?? row?.supplier ?? "", lines: excelToFormLines(excel) },
         { onSaved, rows, openInvoice }
       );
     });

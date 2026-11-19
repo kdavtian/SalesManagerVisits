@@ -75,7 +75,7 @@ purchasesRouter.post("/import-excel", (req, res, next) => {
 purchasesRouter.get("/excel-invoice", async (req, res) => {
   const date = day(req.query.date);
   if (!date || !req.query.invoice_no) return res.status(400).json({ error: "invoice_no and date are required" });
-  res.json(await getExcelInvoice(String(req.query.invoice_no), date));
+  res.json(await getExcelInvoice(String(req.query.invoice_no), date, undefined, req.query.supplier ? String(req.query.supplier).slice(0, 120) : null));
 });
 
 purchasesRouter.get("/:id", async (req, res) => {

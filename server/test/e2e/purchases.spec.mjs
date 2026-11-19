@@ -20,6 +20,11 @@ test("@smoke Purchases: an Excel-only invoice is entered in the app from its own
     "INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, product_name, size_l, qty, cost_usd, amount_amd, excel_row) VALUES ($1, $2, 'E2E Supplier', $3, 'Edge', 4, 120, 15.5, 716100, 1)",
     [invoiceNo, today, erpId]
   );
+  // a line whose product the app does not know (review 2026-11-20): it comes along by its name, and the copy still matches the Excel
+  await pool.query(
+    "INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, brand, product_name, size_l, qty, cost_usd, amount_amd, excel_row) VALUES ($1, $2, 'E2E Supplier', 'NOT-IN-APP', 'Castrol', 'Stend', NULL, 2, 0, 0, 2)",
+    [invoiceNo, today]
+  );
   try {
     await page.setViewportSize({ width: 390, height: 844 });
     await loginViaUi(page, acc.email);
@@ -31,7 +36,8 @@ test("@smoke Purchases: an Excel-only invoice is entered in the app from its own
     await page.locator("#pu-copy").click();
     const form = page.locator(".pu-form-sheet");
     await expect(form.locator('[name="invoice_no"]')).toHaveValue(invoiceNo);
-    await expect(form.locator(".pu-fl")).toHaveCount(1);
+    await expect(form.locator(".pu-fl")).toHaveCount(2);
+    await expect(form.locator(".pu-fl").nth(1)).toContainText("Castrol Stend");
     await form.locator('[name="usd_rate"]').fill("385");
     await page.waitForTimeout(400); // the sheet has finished sliding in
     await page.screenshot({ path: "test-results/purchases-form.png" });

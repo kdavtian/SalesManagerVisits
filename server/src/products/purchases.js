@@ -8,6 +8,8 @@ import { APP_STOCK_SQL } from "../orders/appStock.js";
 const USD_TOLERANCE = 0.05; // rounding in the workbook's own SUM column
 const keyOf = (invoiceNo, date) => `${String(invoiceNo ?? "").trim().toLowerCase().replace(/\s+/g, " ")}|${String(date).slice(0, 10)}`;
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
+// a supplier's name as both sides write it: case and extra spaces ignored ("Sole  Trans " = "sole trans")
+const supplierKey = (name) => String(name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 export class PurchaseError extends Error {
   constructor(message, extra = {}) {
@@ -17,6 +19,8 @@ export class PurchaseError extends Error {
 }
 // The same invoice number the Excel copy is compared by: case and extra spaces ignored (SQL form of keyOf)
 const SQL_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
+// supplierKey in SQL: tabs, new lines and no-break spaces count as spaces too, the same as JavaScript's \s (review, 2026-11-20)
+const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
 
 function cleanLines(lines) {
   if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");
@@ -28,7 +32,7 @@ function cleanLines(lines) {
     if (!Number.isFinite(qty) || qty <= 0) throw new PurchaseError("Every line needs a positive number of packs");
     if (!Number.isFinite(cost) || cost < 0) throw new PurchaseError("Every line needs a USD price per pack (0 or more)");
     if (productId !== null && !Number.isInteger(productId)) throw new PurchaseError("product_id must be a whole number");
-    return { product_id: productId, qty, cost_usd: cost, product_name: l?.product_name ? String(l.product_name).trim().slice(0, 200) : null };
+    return { product_id: productId, qty, cost_usd: cost, product_name: l?.product_name ? String(l.product_name).trim().slice(0, 200) : null, brand: l?.brand ?? null, size_l: l?.size_l ?? null };
   });
 }
 
@@ -79,10 +83,12 @@ export async function savePurchase(body, userId, id = null, db = pool) {
     for (const l of lines) {
       const p = l.product_id ? byId.get(l.product_id) : null;
       if (l.product_id && !p) throw new PurchaseError("A line names a product that does not exist");
-      l.product_name = p?.name ?? l.product_name;
+      l.product_name = p?.name ?? (l.product_name ? String(l.product_name).trim().slice(0, 200) : null);
       if (!l.product_name) throw new PurchaseError("Every line needs a product");
-      l.brand = p?.brand ?? null;
-      l.size_l = p ? (Number(p.size_l) || Number(String(p.unit ?? "").replace(",", ".").match(/[\d.]+/)?.[0]) || null) : null;
+      // a line without a catalogue product (an Excel line the app does not know, a product deleted later) keeps its own brand and litres
+      const ownSize = Number(l.size_l);
+      l.brand = p ? p.brand ?? null : l.brand ? String(l.brand).trim().slice(0, 80) : null;
+      l.size_l = p ? (Number(p.size_l) || Number(String(p.unit ?? "").replace(",", ".").match(/[\d.]+/)?.[0]) || null) : Number.isFinite(ownSize) && ownSize > 0 && ownSize <= 1000 ? ownSize : null;
     }
     let invoiceId = id;
     if (id) {
@@ -163,7 +169,8 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
     db.query(
       `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, s.id AS supplier_id, s.name AS supplier,
               count(l.id)::int AS lines, COALESCE(sum(l.qty), 0)::float8 AS qty, COALESCE(sum(l.qty * l.cost_usd), 0)::float8 AS usd,
-              COALESCE(sum(l.qty * l.size_l), 0)::float8 AS liters, u.name AS created_by_name
+              COALESCE(sum(l.qty * l.size_l), 0)::float8 AS liters, COALESCE(sum(l.qty * l.cost_usd) FILTER (WHERE l.size_l > 0), 0)::float8 AS liquid_usd,
+              u.name AS created_by_name
          FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN purchase_lines l ON l.invoice_id = i.id
          LEFT JOIN users u ON u.id = i.created_by
         WHERE ($1::date IS NULL OR i.invoice_date >= $1::date) AND ($2::date IS NULL OR i.invoice_date <= $2::date) ${supplierId ? "AND i.supplier_id = $3" : ""}
@@ -171,27 +178,58 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
       supplierId ? [...params, supplierId] : params
     ),
     db.query(
-      `SELECT invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date, min(supplier) AS supplier, count(*)::int AS lines,
+      `SELECT min(invoice_no) AS invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date, min(supplier) AS supplier, count(*)::int AS lines,
               COALESCE(sum(qty), 0)::float8 AS qty, COALESCE(sum(qty * cost_usd), 0)::float8 AS usd, COALESCE(sum(amount_amd), 0)::float8 AS amd,
-              COALESCE(sum(qty * size_l), 0)::float8 AS liters
+              COALESCE(sum(qty * size_l), 0)::float8 AS liters, COALESCE(sum(qty * cost_usd) FILTER (WHERE size_l > 0), 0)::float8 AS liquid_usd
          FROM erp_purchase_lines
         WHERE ($1::date IS NULL OR invoice_date >= $1::date) AND ($2::date IS NULL OR invoice_date <= $2::date)
-        GROUP BY invoice_no, invoice_date`,
+        GROUP BY ${SQL_KEY("invoice_no")}, invoice_date, ${SQL_SUPPLIER_KEY("supplier")}`,
       params
     ),
   ]);
+  // Every app invoice is its own row (two suppliers' invoices with the same number and date used to share one and hide the other,
+  // review 2026-11-20). An Excel invoice pairs with the app invoice of the same number, date and supplier; when the supplier is written
+  // differently on the two sides, with the only app invoice of that number and date that is still unpaired.
+  const pairs = app.map((a) => ({ app: a, excel: null }));
   const byKey = new Map();
-  for (const a of app) byKey.set(keyOf(a.invoice_no, a.invoice_date), { app: a, excel: null });
+  for (const p of pairs) {
+    const k = keyOf(p.app.invoice_no, p.app.invoice_date);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(p);
+  }
   let supplierName = null;
   if (supplierId) supplierName = app.find((a) => a.supplier_id === supplierId)?.supplier ?? (await db.query("SELECT name FROM suppliers WHERE id = $1", [supplierId])).rows[0]?.name ?? null;
-  for (const e of excel) {
-    if (supplierId && String(e.supplier ?? "").toLowerCase() !== String(supplierName ?? "").toLowerCase() && !byKey.has(keyOf(e.invoice_no, e.invoice_date))) continue;
-    const k = keyOf(e.invoice_no, e.invoice_date);
-    const hit = byKey.get(k);
-    if (hit) hit.excel = e;
-    else byKey.set(k, { app: null, excel: e });
+  const rows = [...pairs];
+  // with a supplier filter, the other suppliers' invoices of the same number and date still count (a lone fallback pairing must be lone)
+  const appPerKey = new Map();
+  if (supplierId) {
+    const { rows: allApp } = await db.query(
+      `SELECT invoice_no, to_char(invoice_date, 'YYYY-MM-DD') AS invoice_date FROM purchase_invoices
+        WHERE ($1::date IS NULL OR invoice_date >= $1::date) AND ($2::date IS NULL OR invoice_date <= $2::date)`,
+      params
+    );
+    for (const a of allApp) appPerKey.set(keyOf(a.invoice_no, a.invoice_date), (appPerKey.get(keyOf(a.invoice_no, a.invoice_date)) ?? 0) + 1);
   }
-  const out = [...byKey.values()].map(({ app: a, excel: e }) => {
+  const excelPerKey = new Map();
+  for (const e of excel) excelPerKey.set(keyOf(e.invoice_no, e.invoice_date), (excelPerKey.get(keyOf(e.invoice_no, e.invoice_date)) ?? 0) + 1);
+  // the Excel invoices of the same supplier first, so a name match is never taken by a looser one
+  const sameName = (e, a) => supplierKey(e.supplier) === supplierKey(a.supplier);
+  const excelSorted = [...excel].sort((x, y) => Number((byKey.get(keyOf(y.invoice_no, y.invoice_date)) ?? []).some((p) => sameName(y, p.app))) - Number((byKey.get(keyOf(x.invoice_no, x.invoice_date)) ?? []).some((p) => sameName(x, p.app))));
+  for (const e of excelSorted) {
+    const k = keyOf(e.invoice_no, e.invoice_date);
+    const all = byKey.get(k) ?? [];
+    const candidates = all.filter((p) => !p.excel);
+    // a supplier written differently on the two sides still pairs, but only when that number and date is one invoice on each side
+    const appCount = supplierId ? appPerKey.get(k) ?? 0 : all.length;
+    const hit = candidates.find((p) => sameName(e, p.app)) ?? (appCount === 1 && candidates.length === 1 && (excelPerKey.get(k) ?? 0) === 1 ? candidates[0] : null);
+    if (hit) {
+      hit.excel = e;
+      continue;
+    }
+    if (supplierId && supplierKey(e.supplier) !== supplierKey(supplierName)) continue;
+    rows.push({ app: null, excel: e });
+  }
+  const out = rows.map(({ app: a, excel: e }) => {
     const status = a && e ? (Math.abs(a.qty - e.qty) < 0.001 && Math.abs(a.usd - e.usd) <= USD_TOLERANCE ? "match" : "diff") : a ? "app_only" : "excel_only";
     const base = a ?? e;
     return {
@@ -204,6 +242,8 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
       qty: base.qty,
       liters: round2(base.liters),
       usd: round2(base.usd),
+      // the dollars of the lines that have litres: the base of "USD per litre" (a stand or a filter adds dollars, no litres)
+      liquid_usd: round2(base.liquid_usd ?? base.usd),
       amd: a ? Math.round(a.usd * a.usd_rate) : Math.round(e.amd || 0),
       usd_rate: a?.usd_rate ?? null,
       created_by_name: a?.created_by_name ?? null,
@@ -226,13 +266,13 @@ export async function getPurchase(id, db = pool) {
   const [{ rows: lines }, { rows: excel }] = await Promise.all([
     db.query("SELECT id, product_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]),
     db.query(
-      `SELECT erp_product_id, brand, product_name, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd, amount_amd::float8 AS amount_amd, info
+      `SELECT erp_product_id, supplier, brand, product_name, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd, amount_amd::float8 AS amount_amd, info
          FROM erp_purchase_lines WHERE invoice_date = $1::date AND lower(regexp_replace(trim(invoice_no), '\\s+', ' ', 'g')) = lower(regexp_replace(trim($2), '\\s+', ' ', 'g'))
         ORDER BY excel_row`,
       [inv.invoice_date, inv.invoice_no]
     ),
   ]);
-  return { ...inv, lines, excel_lines: excel };
+  return { ...inv, lines, excel_lines: ofSupplier(excel, inv.supplier) };
 }
 
 export async function listSuppliers(db = pool) {
@@ -326,7 +366,16 @@ export async function productHistory(ids, { excludeNo = null, excludeDate = null
 }
 
 /** The Excel lines of one invoice (number + date), each with the app product it names (by the Excel ProductID), to copy it into the app. */
-export async function getExcelInvoice(invoiceNo, date, db = pool) {
+// The Excel lines of one number + date can belong to two suppliers: when some are this supplier's, only those (review, 2026-11-20).
+function ofSupplier(lines, supplier) {
+  if (!supplier) return lines;
+  const own = lines.filter((l) => supplierKey(l.supplier) === supplierKey(supplier));
+  if (own.length) return own;
+  // none written as this supplier: the lines only when they are one other spelling (the same lone pairing the list makes), else none
+  return new Set(lines.map((l) => supplierKey(l.supplier))).size === 1 ? lines : [];
+}
+
+export async function getExcelInvoice(invoiceNo, date, db = pool, supplier = null) {
   const { rows } = await db.query(
     `SELECT e.invoice_no, to_char(e.invoice_date, 'YYYY-MM-DD') AS invoice_date, e.supplier, e.erp_product_id, e.brand, e.product_name, e.size_l::float8 AS size_l,
             e.qty::float8 AS qty, e.cost_usd::float8 AS cost_usd, e.amount_amd::float8 AS amount_amd, e.info, p.id AS product_id, p.name AS app_product_name
@@ -335,5 +384,5 @@ export async function getExcelInvoice(invoiceNo, date, db = pool) {
       ORDER BY e.excel_row`,
     [date, invoiceNo]
   );
-  return rows;
+  return ofSupplier(rows, supplier);
 }
