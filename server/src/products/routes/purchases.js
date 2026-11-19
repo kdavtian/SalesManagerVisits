@@ -8,6 +8,7 @@ import multer from "multer";
 import ExcelJS from "exceljs";
 import { uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
+import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canManagePurchases, canDeletePurchases } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
@@ -82,7 +83,7 @@ purchasesRouter.get("/export.xlsx", async (req, res) => {
   for (const r of rows) ws.addRow(r);
   for (const k of ["cost_usd", "usd"]) ws.getColumn(k).numFmt = "#,##0.00";
   ws.getColumn("qty").numFmt = "General";
-  const name = `purchases_${day(req.query.from) ?? "all"}_${day(req.query.to) ?? new Date().toISOString().slice(0, 10)}.xlsx`;
+  const name = `purchases_${day(req.query.from) ?? "all"}_${day(req.query.to) ?? yerevanToday()}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
   res.end(Buffer.from(await wb.xlsx.writeBuffer()));
