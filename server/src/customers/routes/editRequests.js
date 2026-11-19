@@ -140,6 +140,23 @@ editRequestsRouter.post("/", async (req, res) => {
   // A reviewer's own change needs nobody's approval (owner, 2026-11-19: "no need to request approval if he can approve as well"):
   // saved at once and kept in the history as a request they approved themselves.
   if (canReviewCustomerEdits(req.user.role)) {
+    // The edit sheet sends every field. Only what differs from the card is written, so a director fixing the phone does not overwrite
+    // (and supersede) a rep's waiting request for the tier or the address (review, 2026-11-19).
+    const cols = Object.keys(filtered).map((f) => `"${f}"`).join(", ");
+    const { rows: [current] } = await pool.query(`SELECT ${cols}, visit_frequency_manual FROM customers WHERE id = $1`, [customerId]);
+    const empty = (v) => v === null || v === undefined || v === "";
+    const same = (field, value) => {
+      if (field === "visit_frequency_days" && (empty(value) || value === 0)) return !current.visit_frequency_manual;
+      const was = current[field];
+      if (empty(was) || empty(value)) return empty(was) && empty(value);
+      if (String(was) === String(value)) return true;
+      const a = Number(was);
+      const b = Number(value);
+      return typeof value !== "boolean" && Number.isFinite(a) && Number.isFinite(b) && a === b;
+    };
+    for (const field of Object.keys(filtered)) if (same(field, filtered[field])) delete filtered[field];
+    if (!Object.keys(filtered).length) return res.status(200).json({ status: "approved", self_approved: true, unchanged: true, changes: {} });
+
     const client = await pool.connect();
     let releaseErr;
     try {

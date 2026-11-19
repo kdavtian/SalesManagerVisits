@@ -102,3 +102,17 @@ test("a monthly plan: the CEO's own is approved at once; the sales director's st
     }
   }
 });
+
+test("a director saving the whole card (only the phone changed) does not overwrite a rep's waiting request for the address", async () => {
+  const shop = await createCustomer({ created_by: people.sales_manager.id, assigned_manager_id: people.sales_manager.id, name: `${tag} Two` });
+  await pool.query("UPDATE customers SET address = $2, phone = NULL WHERE id = $1", [shop.id, `${tag} old`]);
+  const reps = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_manager, body: { customer_id: shop.id, changes: { address: `${tag} new` } } });
+  assert.equal(reps.data.status, "pending");
+  const own = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_director, body: { customer_id: shop.id, changes: { name: `${tag} Two`, address: `${tag} old`, phone: "+37499000111" } } });
+  assert.equal(own.status, 201);
+  assert.deepEqual(Object.keys(own.data.changes), ["phone"], "only the changed field is written");
+  assert.equal((await pool.query("SELECT status FROM customer_edit_requests WHERE id = $1", [reps.data.id])).rows[0].status, "pending", "the rep's request still waits");
+  // nothing changed at all: nothing written
+  const none = await apiRequest("/api/edit-requests", { method: "POST", cookie: cookies.sales_director, body: { customer_id: shop.id, changes: { address: `${tag} old` } } });
+  assert.equal(none.data.unchanged, true);
+});

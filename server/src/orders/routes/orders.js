@@ -461,7 +461,7 @@ export async function createOrderHandler(req, res) {
             `${lines.length} ապրանք`,
             `Գումար՝ ${Number(totalAmd).toLocaleString()} ԱՄԴ`,
             approvalStatus !== "pending" ? null : discountAmd > 0 ? `Զեղչ՝ ${discountAmd.toLocaleString()} ԱՄԴ — սպասում է տնօրենի հաստատմանը` : discountPct > 0 ? `Զեղչ՝ ${discountPct}% — սպասում է տնօրենի հաստատմանը` : null,
-            credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով — սպասում է հաստատման` : null,
+            credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով${selfApprovedCredit ? "" : " — սպասում է հաստատման"}` : null,
             hold?.on_hold ? `Ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ամենահինը՝ ${hold.oldest_due_days} օր ուշացումով` : null,
           ])}`,
           url: `/#/orders?open=${order.id}`,
@@ -1249,6 +1249,11 @@ ordersRouter.patch("/:id", async (req, res) => {
       if (updated.approval_status === "pending" && updated.status !== "draft" && order.approval_status !== "pending") {
         await notifyApproversOf("discount", order.id);
       }
+      // this edit decided a request that was waiting (a rep's): the same follow-up as the Approve button (review, 2026-11-19)
+      if (ownDiscountApproved && order.approval_status === "pending") await afterDiscountApproved(order, req.user.id);
+      if (ownCreditApproved && order.credit_status === "pending" && req.user.id !== order.user_id) {
+        notifyUser(order.user_id, "order_status_changed", { title: "Վարկային սահմանի բացառությունը հաստատվեց", body: "Պատվերը կարող է շարունակվել։", url: `/#/orders?open=${order.id}` });
+      }
       if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
         notifyUser(order.user_id, "order_status_changed", {
@@ -1396,28 +1401,25 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending discount to approve" });
   res.json(updatedRows[0]);
 
-  (async () => {
-    try {
-      const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-      const customerName = customerRows[0]?.name || "Պատվերի";
-
-      // Now that the discount is cleared, the accountant is the next stop --
-      // same order_placed preference gate a rep's original order used.
-      const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
-      for (const accountant of accountants) {
-        notifyUser(accountant.id, "order_placed", {
-          title: "Պատվերի զեղչը հաստատվեց",
-          body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
-          url: `/#/orders?open=${order.id}`,
-        });
-      }
-      // the person who asked hears it on the request card; the other approvers' notifications of it are closed
-      await notifyDecisionOf("discount", order.id, { deciderId: req.user.id, approved: true, type: "order_status_changed" });
-    } catch (err) {
-      console.error("Post-discount-approval notification failed:", err);
-    }
-  })();
+  afterDiscountApproved(order, req.user.id).catch((err) => console.error("Post-discount-approval notification failed:", err));
 });
+
+// After a waiting discount is approved (the Approve button, or a director's edit that decided it): the accountant is the next stop,
+// the person who asked hears it on the request card, and the other approvers' notifications of it are closed.
+async function afterDiscountApproved(order, deciderId) {
+  const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+  const customerName = customerRows[0]?.name || "Պատվերի";
+  // same order_placed preference gate a rep's original order used
+  const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
+  for (const accountant of accountants) {
+    notifyUser(accountant.id, "order_placed", {
+      title: "Պատվերի զեղչը հաստատվեց",
+      body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
+      url: `/#/orders?open=${order.id}`,
+    });
+  }
+  await notifyDecisionOf("discount", order.id, { deciderId, approved: true, type: "order_status_changed" });
+}
 
 // Credit-limit approval (migration 101): the directors and the accountant
 // decide on an order that goes over the customer's credit limit.
@@ -2003,6 +2005,7 @@ async function recordOwnApproval(db, order, userId, { discount = false, credit =
   const { rows } = await db.query(
     `UPDATE orders SET
        approved_by = CASE WHEN $3 THEN $2::int ELSE approved_by END, approved_at = CASE WHEN $3 THEN now() ELSE approved_at END,
+       approval_reason = CASE WHEN $3 THEN NULL ELSE approval_reason END,
        credit_decided_by = CASE WHEN $4 THEN $2::int ELSE credit_decided_by END, credit_decided_at = CASE WHEN $4 THEN now() ELSE credit_decided_at END
      WHERE id = $1 RETURNING *`,
     [order.id, userId, discount, credit]
