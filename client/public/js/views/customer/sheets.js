@@ -3,7 +3,8 @@
 import { api } from "../../api.js";
 import { dockSheet } from "../../dockSheet.js";
 import { reorderHash } from "../../reorder.js";
-import { activateDialog, erpLineDiscountRowHtml, escapeHtml, formatAmd, formatDateDMY, leaveSheetTo } from "../../util.js";
+import { activateDialog, escapeHtml, formatAmd, formatDateDMY, leaveSheetTo } from "../../util.js";
+import { erpOrderLinesHtml } from "../../erpOrderLines.js";
 import { t } from "../../i18n.js";
 import { icons } from "../../icons.js";
 import { canReviewCustomerEdits, state } from "../../state.js";
@@ -206,16 +207,6 @@ export async function openOrdersSheet(customer) {
   load();
 }
 
-export function groupLinesByBrand(lines) {
-  const byBrand = new Map();
-  for (const line of lines) {
-    const brand = line.brand || t("erp_brand_unspecified");
-    if (!byBrand.has(brand)) byBrand.set(brand, []);
-    byBrand.get(brand).push(line);
-  }
-  return byBrand;
-}
-
 // preview: the order's row from the list the card already holds (id, date, total), so the sheet shows its header at once and only the
 // product lines wait for the network (or for the copy kept from last time).
 export async function openOrderDetailSheet(customerId, orderId, preview = null) {
@@ -241,24 +232,7 @@ export async function openOrderDetailSheet(customerId, orderId, preview = null) 
 
   const render = (detail) => {
     if (!overlay.isConnected) return;
-    const byBrand = groupLinesByBrand(detail.lines);
-    const brandSections = [...byBrand.entries()]
-      .map(
-        ([brand, lines]) => `
-      <p class="proposed-changes-label">${escapeHtml(brand)}</p>
-      ${lines
-        .map(
-          (l) => `
-        <div class="erp-line-row">
-          <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
-          <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
-          <span>${formatAmd(l.unit_price_amd)}</span>
-        </div>
-        ${erpLineDiscountRowHtml(l)}`
-        )
-        .join("")}`
-      )
-      .join("");
+    const { html: brandSections } = erpOrderLinesHtml(detail.lines, { totalAmd: detail.total_amd });
     overlay.querySelector(".sheet").innerHTML = `
     ${headHtml(detail.order_id, detail.order_date, detail.total_amd)}
     ${brandSections}

@@ -809,6 +809,7 @@ export const hyCommon = {
     no_orders_for_erp_id: "Excel-ում {id} ID-ով հաճախորդի պատվեր չկա։",
     no_orders_no_erp_id: "Այս հաճախորդին Excel-ի ID կապված չէ։",
     no_orders_found: "Պատվերներ չեն գտնվել։",
+    pcs_short: "հտ", // pieces after a number: "3 հտ" (order lines)
     erp_brand_unspecified: "Այլ",
     amd: "դր",
     usd: "ԱՄՆ դոլար",
