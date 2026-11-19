@@ -6,7 +6,7 @@ import { icons } from "./icons.js";
 import { escapeHtml, activateDialog } from "./util.js";
 import { GROUP_LABEL, groupOrder, pinnableIds, screenItems } from "./screenCatalog.js";
 import { bindPinButtons, pinButtonHtml } from "./pins.js";
-import { adminReviewCount } from "./badges.js";
+import { adminReviewCount, requestCount } from "./badges.js";
 
 let openOverlay = null;
 
@@ -26,8 +26,25 @@ export function openMoreSheet({ navigate, settings }) {
         </div>`
       )
       .join("");
-  const groups = groupOrder().map((key) => ({ key, list: items.filter((it) => it.group === key) })).filter((g) => g.list.length);
+  // Approvals sit at the top (owner, 2026-11-19: "If there is Approval requests, they should appear on the 'Approvals' menu in the MORE
+  // page on top part"): for whoever may decide some kind of request, or has one waiting; not repeated in its group below.
+  const waiting = requestCount();
+  const approvals = items.find((it) => it.id === "qa_requests") ?? (waiting > 0 ? { id: "qa_requests", hash: "#/requests", label: t("qa_requests"), icon: icons.checkCircle, colorClass: "quick-action-icon-requests" } : null);
+  const groups = groupOrder().map((key) => ({ key, list: items.filter((it) => it.group === key && it.id !== "qa_requests") })).filter((g) => g.list.length);
   const review = adminReviewCount();
+  const approvalsHtml = approvals
+    ? `<section class="more-section more-section-approvals">
+        <div class="more-row">
+          <button type="button" class="more-link more-link-approvals${waiting > 0 ? " has-waiting" : ""}${current === "#/requests" ? " is-current" : ""}" data-hash="#/requests" ${current === "#/requests" ? 'aria-current="page"' : ""}>
+            <span class="more-link-icon quick-action-icon quick-action-icon-requests">${icons.checkCircle}<span class="nav-badge count-badge" data-badge="requests" ${waiting > 0 ? "" : "hidden"}>${waiting > 99 ? "99+" : waiting}</span></span>
+            <span class="more-link-text">
+              <span class="more-link-label">${escapeHtml(approvals.label)}</span>
+              <span class="more-link-hint">${escapeHtml(waiting > 0 ? t("more_approvals_waiting").replace("{n}", waiting) : t("more_approvals_none"))}</span>
+            </span>
+          </button>${pinnable.has("qa_requests") ? pinButtonHtml("qa_requests") : ""}
+        </div>
+      </section>`
+    : "";
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay more-overlay";
   overlay.innerHTML = `
@@ -38,6 +55,7 @@ export function openMoreSheet({ navigate, settings }) {
         <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${escapeHtml(t("close"))}">${icons.close}</button>
       </div>
       <nav class="more-sections" aria-label="${escapeHtml(t("nav_more"))}">
+        ${approvalsHtml}
         ${groups.map((g) => `<section class="more-section"><h3 class="more-section-title">${escapeHtml(t(GROUP_LABEL[g.key]))}</h3>${rows(g.list)}</section>`).join("")}
         <section class="more-section more-section-settings">
           <div class="more-row">

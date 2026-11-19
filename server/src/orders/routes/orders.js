@@ -27,7 +27,7 @@ import { evaluateCredit } from "../creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { autoCompleteReorderTasks } from "../../team/taskAutoComplete.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_APPROVE_PCT } from "../discountPolicy.js";
+import { decidesOwnDiscount, orderCostCheck, decideDiscountApproval, canApproveDiscountRole, AUTO_APPROVE_PCT } from "../discountPolicy.js";
 import { bullets } from "../../utils/bullets.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
@@ -351,12 +351,17 @@ export async function createOrderHandler(req, res) {
   // below) -- no discount means nothing to approve.
   // Every discount a person types needs approval; only the KAD OS app's standing discount (up to 3 %) is automatic. See discountPolicy.js.
   const costCheck = await orderCostCheck(pool, lines, subtotalAmd, totalAmd, { customerId });
-  const approvalStatus = decideDiscountApproval({ discountPct, discountAmd, subtotal: subtotalAmd, belowCost: costCheck.belowCost, belowLanding: costCheck.belowLanding, autoPct: partner ? AUTO_APPROVE_PCT : 0 });
+  const askedApproval = decideDiscountApproval({ discountPct, discountAmd, subtotal: subtotalAmd, belowCost: costCheck.belowCost, belowLanding: costCheck.belowLanding, autoPct: partner ? AUTO_APPROVE_PCT : 0 });
+  // a director's own discount / price is approved at once, in their name (owner, 2026-11-19; discountPolicy.js decidesOwnDiscount)
+  const selfApprovedDiscount = askedApproval === "pending" && !partner && decidesOwnDiscount(req.user.role, costCheck);
+  const approvalStatus = selfApprovedDiscount ? "approved" : askedApproval;
   // Credit limit (migration 101): an order that pushes the customer over their
   // limit also needs a director's sign-off. A draft (no ERP link yet, so no
   // debt known) is checked later, when it is submitted.
   const credit = initialStatus === "submitted" ? await evaluateCredit(pool, customer.id, totalAmd) : null;
-  const creditStatus = credit?.exceeded ? "pending" : "not_required";
+  // the credit-limit exception is theirs to decide too (a director or the accountant placing the order)
+  const selfApprovedCredit = Boolean(credit?.exceeded) && !partner && canConfirmSubmittedOrders(req.user.role);
+  const creditStatus = credit?.exceeded ? (selfApprovedCredit ? "approved" : "pending") : "not_required";
 
   const client = await pool.connect();
   let order;
@@ -373,6 +378,7 @@ export async function createOrderHandler(req, res) {
        Boolean(partner), partner && discountAmd > 0 ? appPricing.discountPct : null, promisedDate]
     );
     order = rows[0];
+    if (selfApprovedDiscount || selfApprovedCredit) order = await recordOwnApproval(client, order, req.user.id, { discount: selfApprovedDiscount, credit: selfApprovedCredit });
     for (const line of lines) {
       await client.query(
         `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
@@ -385,6 +391,7 @@ export async function createOrderHandler(req, res) {
        VALUES ($1, NULL, $2, $3, $4)`,
       [order.id, initialStatus, partner ? "Created (KAD OS app)" : "Created", req.user.id]
     );
+    await historyOfOwnApproval(client, order, req.user.id, { discount: selfApprovedDiscount, credit: selfApprovedCredit });
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
@@ -454,7 +461,7 @@ export async function createOrderHandler(req, res) {
             `${lines.length} ապրանք`,
             `Գումար՝ ${Number(totalAmd).toLocaleString()} ԱՄԴ`,
             approvalStatus !== "pending" ? null : discountAmd > 0 ? `Զեղչ՝ ${discountAmd.toLocaleString()} ԱՄԴ — սպասում է տնօրենի հաստատմանը` : discountPct > 0 ? `Զեղչ՝ ${discountPct}% — սպասում է տնօրենի հաստատմանը` : null,
-            credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով — սպասում է հաստատման` : null,
+            credit?.exceeded ? `Վարկային սահմանը գերազանցված է ${Math.round(credit.over).toLocaleString()} ԱՄԴ-ով${selfApprovedCredit ? "" : " — սպասում է հաստատման"}` : null,
             hold?.on_hold ? `Ժամկետանց պարտք՝ ${Math.round(hold.overdue_amd).toLocaleString()} ԱՄԴ, ամենահինը՝ ${hold.oldest_due_days} օր ուշացումով` : null,
           ])}`,
           url: `/#/orders?open=${order.id}`,
@@ -864,12 +871,15 @@ ordersRouter.post("/:id/submit", async (req, res) => {
   // rows back and a 409 instead of silently re-submitting an already-moved
   // order.
   const credit = await evaluateCredit(pool, order.customer_id, order.total_amd, order.id);
+  const ownCredit = Boolean(credit?.exceeded) && canConfirmSubmittedOrders(req.user.role); // theirs to decide: approved at once (2026-11-19)
   const { rows: updatedRows } = await pool.query(
     `UPDATE orders SET status = 'submitted', updated_at = now(),
-            credit_status = $2, credit_exposure_amd = $3, credit_limit_snapshot_amd = $4
+            credit_status = $2, credit_exposure_amd = $3, credit_limit_snapshot_amd = $4,
+            credit_decided_by = CASE WHEN $5 THEN $6::int ELSE credit_decided_by END, credit_decided_at = CASE WHEN $5 THEN now() ELSE credit_decided_at END
      WHERE id = $1 AND status = 'draft' RETURNING *`,
-    [order.id, credit?.exceeded ? "pending" : "not_required", credit ? credit.exposure : null, credit ? credit.limit : null]
+    [order.id, credit?.exceeded ? (ownCredit ? "approved" : "pending") : "not_required", credit ? credit.exposure : null, credit ? credit.limit : null, ownCredit, req.user.id]
   );
+  if (ownCredit && updatedRows[0]) await historyOfOwnApproval(pool, updatedRows[0], req.user.id, { credit: true });
   const updated = updatedRows[0];
   if (!updated) {
     return res.status(409).json({ error: "This order was already submitted (or changed) by another request" });
@@ -968,6 +978,8 @@ ordersRouter.patch("/:id", async (req, res) => {
   let nextDiscountPct = Number(order.discount_pct);
   let nextDiscountAmd = Number(order.discount_amd);
   let nextApprovalStatus = order.approval_status;
+  let ownDiscountApproved = false; // this edit's own discount / price, approved by the person who made it (2026-11-19)
+  let ownCreditApproved = false;
 
   if (discount_pct !== undefined || discount_amd !== undefined) {
     if (!canEditSubmitted) return res.status(403).json({ error: "Not allowed to edit this order" });
@@ -1062,6 +1074,11 @@ ordersRouter.patch("/:id", async (req, res) => {
       const personApproved = order.approval_status === "approved" && order.approved_by !== null && !nextLines;
       nextApprovalStatus = check.belowLanding ? (personApproved ? "approved" : "pending") : "not_required";
     }
+    // decided again by THIS edit and theirs to approve: approved at once, in their name (a rep's request this edit did not touch stays)
+    if (nextApprovalStatus === "pending" && (order.approval_status !== "pending" || discountChanged || Boolean(nextLines)) && decidesOwnDiscount(req.user.role, check)) {
+      nextApprovalStatus = "approved";
+      ownDiscountApproved = true;
+    }
   }
 
   // Credit limit: a changed total is checked again (a draft has no debt yet, it
@@ -1074,7 +1091,10 @@ ordersRouter.patch("/:id", async (req, res) => {
     nextCreditExposure = credit ? credit.exposure : null;
     nextCreditLimit = credit ? credit.limit : null;
     if (!credit?.exceeded) nextCreditStatus = "not_required";
-    else if (!(order.credit_status === "approved" && Number(nextTotal) <= Number(order.total_amd))) nextCreditStatus = "pending";
+    else if (!(order.credit_status === "approved" && Number(nextTotal) <= Number(order.total_amd))) {
+      ownCreditApproved = canConfirmSubmittedOrders(req.user.role); // their own change of the total: theirs to decide
+      nextCreditStatus = ownCreditApproved ? "approved" : "pending";
+    }
   }
 
   let nextStatus = order.status;
@@ -1184,6 +1204,10 @@ ordersRouter.patch("/:id", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
     }
+    if (ownDiscountApproved || ownCreditApproved) {
+      updated = await recordOwnApproval(client, updated, req.user.id, { discount: ownDiscountApproved, credit: ownCreditApproved });
+      await historyOfOwnApproval(client, updated, req.user.id, { discount: ownDiscountApproved, credit: ownCreditApproved });
+    }
 
     if (nextLines) {
       await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
@@ -1224,6 +1248,11 @@ ordersRouter.patch("/:id", async (req, res) => {
       // the order now waits for a discount / price approval it did not wait for before: every approver hears it
       if (updated.approval_status === "pending" && updated.status !== "draft" && order.approval_status !== "pending") {
         await notifyApproversOf("discount", order.id);
+      }
+      // this edit decided a request that was waiting (a rep's): the same follow-up as the Approve button (review, 2026-11-19)
+      if (ownDiscountApproved && order.approval_status === "pending") await afterDiscountApproved(order, req.user.id);
+      if (ownCreditApproved && order.credit_status === "pending" && req.user.id !== order.user_id) {
+        notifyUser(order.user_id, "order_status_changed", { title: "Վարկային սահմանի բացառությունը հաստատվեց", body: "Պատվերը կարող է շարունակվել։", url: `/#/orders?open=${order.id}` });
       }
       if (status !== undefined && nextStatus !== order.status && req.user.id !== order.user_id) {
         const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
@@ -1372,28 +1401,25 @@ ordersRouter.post("/:id/approve-discount", async (req, res) => {
   if (!updatedRows[0]) return res.status(409).json({ error: "This order has no pending discount to approve" });
   res.json(updatedRows[0]);
 
-  (async () => {
-    try {
-      const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
-      const customerName = customerRows[0]?.name || "Պատվերի";
-
-      // Now that the discount is cleared, the accountant is the next stop --
-      // same order_placed preference gate a rep's original order used.
-      const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
-      for (const accountant of accountants) {
-        notifyUser(accountant.id, "order_placed", {
-          title: "Պատվերի զեղչը հաստատվեց",
-          body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
-          url: `/#/orders?open=${order.id}`,
-        });
-      }
-      // the person who asked hears it on the request card; the other approvers' notifications of it are closed
-      await notifyDecisionOf("discount", order.id, { deciderId: req.user.id, approved: true, type: "order_status_changed" });
-    } catch (err) {
-      console.error("Post-discount-approval notification failed:", err);
-    }
-  })();
+  afterDiscountApproved(order, req.user.id).catch((err) => console.error("Post-discount-approval notification failed:", err));
 });
+
+// After a waiting discount is approved (the Approve button, or a director's edit that decided it): the accountant is the next stop,
+// the person who asked hears it on the request card, and the other approvers' notifications of it are closed.
+async function afterDiscountApproved(order, deciderId) {
+  const { rows: customerRows } = await pool.query("SELECT name FROM customers WHERE id = $1", [order.customer_id]);
+  const customerName = customerRows[0]?.name || "Պատվերի";
+  // same order_placed preference gate a rep's original order used
+  const { rows: accountants } = await pool.query("SELECT id FROM users WHERE role = 'accountant'");
+  for (const accountant of accountants) {
+    notifyUser(accountant.id, "order_placed", {
+      title: "Պատվերի զեղչը հաստատվեց",
+      body: `${customerName}-ի զեղչված պատվերը հաստատվել է և պատրաստ է կատարման համար։`,
+      url: `/#/orders?open=${order.id}`,
+    });
+  }
+  await notifyDecisionOf("discount", order.id, { deciderId, approved: true, type: "order_status_changed" });
+}
 
 // Credit-limit approval (migration 101): the directors and the accountant
 // decide on an order that goes over the customer's credit limit.
@@ -1972,3 +1998,26 @@ ordersRouter.delete("/:id", async (req, res) => {
     })();
   }
 });
+
+// The person who made the change may decide it (owner, 2026-11-19): their discount / credit-limit exception is recorded as approved
+// by them, as if they had pressed Approve (approved_by / credit_decided_by), so the order history and reports say who decided.
+async function recordOwnApproval(db, order, userId, { discount = false, credit = false }) {
+  const { rows } = await db.query(
+    `UPDATE orders SET
+       approved_by = CASE WHEN $3 THEN $2::int ELSE approved_by END, approved_at = CASE WHEN $3 THEN now() ELSE approved_at END,
+       approval_reason = CASE WHEN $3 THEN NULL ELSE approval_reason END,
+       credit_decided_by = CASE WHEN $4 THEN $2::int ELSE credit_decided_by END, credit_decided_at = CASE WHEN $4 THEN now() ELSE credit_decided_at END
+     WHERE id = $1 RETURNING *`,
+    [order.id, userId, discount, credit]
+  );
+  return rows[0] ?? order;
+}
+async function historyOfOwnApproval(db, order, userId, { discount = false, credit = false }) {
+  const reasons = [discount ? "Discount approved by the person who set it" : null, credit ? "Credit limit exception approved by the person who placed it" : null].filter(Boolean);
+  for (const reason of reasons) {
+    await db.query(
+      `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by) VALUES ($1, $2, $2, $3, $4)`,
+      [order.id, order.status, reason, userId]
+    );
+  }
+}

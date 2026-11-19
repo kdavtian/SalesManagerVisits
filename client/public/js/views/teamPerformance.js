@@ -510,7 +510,7 @@ async function renderManagementView(root, navigate, managerId, initialTab = null
           ${plan.status === "rejected" && plan.rejected_reason ? `<p class="muted" style="margin:6px 0 0;">${t("perf_rejected_reason_label")}${labelColon()}${escapeHtml(plan.rejected_reason)}</p>` : ""}
         </div>
         <div class="card-list" id="perf-channel-list"></div>
-        ${isEditableStatus ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${plan.status === "rejected" ? t("perf_resubmit_for_approval") : t("perf_submit_for_approval")}</button>` : ""}
+        ${isEditableStatus ? `<button type="button" class="btn btn-primary btn-block" id="perf-submit-btn" ${canSubmit ? "" : "disabled"} style="margin-top:12px;">${canReviewPerfPlan(state.user?.role) ? t("perf_approve") : plan.status === "rejected" ? t("perf_resubmit_for_approval") : t("perf_submit_for_approval")}</button>` : ""}
         ${canReopen ? `<button type="button" class="btn btn-block" id="perf-reopen-btn" style="margin-top:12px;">${t("perf_reopen_as_draft")}</button>` : ""}
         ${canClose ? `<button type="button" class="btn btn-block" id="perf-close-btn" style="margin-top:12px;">${t("perf_close_month")}</button>` : ""}
       `;

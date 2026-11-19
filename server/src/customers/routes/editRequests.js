@@ -59,6 +59,36 @@ function canAutoApprovePin(user, customer, filtered) {
   return user.role === "sales_manager" && (customer.assigned_manager_id === user.id || customer.created_by === user.id);
 }
 
+// An approved request's changes written to the customer (the reviewer's Approve, and a reviewer's own change): the same fields and
+// rules as before, in the caller's transaction.
+async function applyRequestChanges(client, request, reviewerId) {
+  const updates = [];
+  const params = [];
+  const changedFields = [];
+  // a proposed region / subregion is matched against the Armenian places like a direct edit (places.js)
+  const { rows: currentPlaces } = await client.query("SELECT region, subregion FROM customers WHERE id = $1", [request.customer_id]);
+  const placeOutcome = normalizeIncomingPlaces({ region: request.changes.region, subregion: request.changes.subregion }, currentPlaces[0] ?? {});
+  for (const [field, value] of Object.entries(request.changes)) {
+    if (!EDITABLE_FIELDS.includes(field)) continue;
+    // an emptied frequency = back to the default of the customer's type (migration 162)
+    if (field === "visit_frequency_days" && (value === null || value === "" || value === 0)) {
+      updates.push("visit_frequency_manual = false");
+      changedFields.push(field);
+      continue;
+    }
+    const next = field in placeOutcome.values ? placeOutcome.values[field] : value;
+    params.push(field === "phone" ? normalizePhoneForStorage(next) : next);
+    updates.push(`${field} = $${params.length}`);
+    changedFields.push(field);
+  }
+  if (updates.length) {
+    params.push(request.customer_id);
+    await client.query(`UPDATE customers SET ${updates.join(", ")} WHERE id = $${params.length}`, params);
+    await recordPlaceReviews(client, request.customer_id, reviewerId, placeOutcome);
+    await supersedePending(client, request.customer_id, request.id, changedFields, reviewerId);
+  }
+}
+
 editRequestsRouter.post("/", async (req, res) => {
   const { customer_id, changes, note } = req.body ?? {};
   const customerId = Number(customer_id);
@@ -98,6 +128,48 @@ editRequestsRouter.post("/", async (req, res) => {
       await supersedePending(client, customerId, rows[0].id, ["lat", "lng"], req.user.id);
       await client.query("COMMIT");
       return res.status(201).json(rows[0]);
+    } catch (err) {
+      releaseErr = err;
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release(releaseErr);
+    }
+  }
+
+  // A reviewer's own change needs nobody's approval (owner, 2026-11-19: "no need to request approval if he can approve as well"):
+  // saved at once and kept in the history as a request they approved themselves.
+  if (canReviewCustomerEdits(req.user.role)) {
+    // The edit sheet sends every field. Only what differs from the card is written, so a director fixing the phone does not overwrite
+    // (and supersede) a rep's waiting request for the tier or the address (review, 2026-11-19).
+    const cols = Object.keys(filtered).map((f) => `"${f}"`).join(", ");
+    const { rows: [current] } = await pool.query(`SELECT ${cols}, visit_frequency_manual FROM customers WHERE id = $1`, [customerId]);
+    const empty = (v) => v === null || v === undefined || v === "";
+    const same = (field, value) => {
+      if (field === "visit_frequency_days" && (empty(value) || value === 0)) return !current.visit_frequency_manual;
+      const was = current[field];
+      if (empty(was) || empty(value)) return empty(was) && empty(value);
+      if (String(was) === String(value)) return true;
+      const a = Number(was);
+      const b = Number(value);
+      return typeof value !== "boolean" && Number.isFinite(a) && Number.isFinite(b) && a === b;
+    };
+    for (const field of Object.keys(filtered)) if (same(field, filtered[field])) delete filtered[field];
+    if (!Object.keys(filtered).length) return res.status(200).json({ status: "approved", self_approved: true, unchanged: true, changes: {} });
+
+    const client = await pool.connect();
+    let releaseErr;
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        `INSERT INTO customer_edit_requests (customer_id, requested_by, changes, note, status, reviewed_by, reviewed_at)
+         VALUES ($1, $2, $3, $4, 'approved', $2, now())
+         RETURNING *`,
+        [customerId, req.user.id, JSON.stringify(filtered), note ?? null]
+      );
+      await applyRequestChanges(client, rows[0], req.user.id);
+      await client.query("COMMIT");
+      return res.status(201).json({ ...rows[0], self_approved: true });
     } catch (err) {
       releaseErr = err;
       await client.query("ROLLBACK");
@@ -203,37 +275,7 @@ editRequestsRouter.patch("/:id", async (req, res) => {
       return res.status(409).json({ error: "This request was already reviewed" });
     }
 
-    if (action === "approve") {
-      const updates = [];
-      const params = [];
-      const changedFields = [];
-      // a proposed region / subregion is matched against the Armenian places like a direct edit (places.js)
-      const { rows: currentPlaces } = await client.query("SELECT region, subregion FROM customers WHERE id = $1", [request.customer_id]);
-      const placeOutcome = normalizeIncomingPlaces({ region: request.changes.region, subregion: request.changes.subregion }, currentPlaces[0] ?? {});
-      for (const [field, value] of Object.entries(request.changes)) {
-        if (!EDITABLE_FIELDS.includes(field)) continue;
-        // an emptied frequency = back to the default of the customer's type (migration 162)
-        if (field === "visit_frequency_days" && (value === null || value === "" || value === 0)) {
-          updates.push("visit_frequency_manual = false");
-          changedFields.push(field);
-          continue;
-        }
-        const next = field in placeOutcome.values ? placeOutcome.values[field] : value;
-        params.push(field === "phone" ? normalizePhoneForStorage(next) : next);
-        updates.push(`${field} = $${params.length}`);
-        changedFields.push(field);
-      }
-      if (updates.length) {
-        params.push(request.customer_id);
-        await client.query(
-          `UPDATE customers SET ${updates.join(", ")} WHERE id = $${params.length}`,
-          params
-        );
-
-        await recordPlaceReviews(client, request.customer_id, req.user.id, placeOutcome);
-        await supersedePending(client, request.customer_id, request.id, changedFields, req.user.id);
-      }
-    }
+    if (action === "approve") await applyRequestChanges(client, request, req.user.id);
 
     const { rows: updated } = await client.query(
       `UPDATE customer_edit_requests
