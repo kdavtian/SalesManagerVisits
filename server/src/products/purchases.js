@@ -6,8 +6,11 @@ import { pool } from "../db/pool.js";
 import { APP_STOCK_SQL } from "../orders/appStock.js";
 
 const USD_TOLERANCE = 0.05; // rounding in the workbook's own SUM column
+const lineKey = (l) => (l.product_id ? `p${l.product_id}` : `n${String(l.product_name ?? "").trim().toLowerCase()}`);
 const keyOf = (invoiceNo, date) => `${String(invoiceNo ?? "").trim().toLowerCase().replace(/\s+/g, " ")}|${String(date).slice(0, 10)}`;
 const round2 = (n) => Math.round(Number(n) * 100) / 100;
+// a YYYY-MM-DD that is a real calendar day (2026-02-31 is a 400, not a database error)
+const isRealDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
 // a supplier's name as both sides write it: case and extra spaces ignored ("Sole  Trans " = "sole trans")
 const supplierKey = (name) => String(name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -46,15 +49,16 @@ export async function savePurchase(body, userId, id = null, db = pool) {
   // Ordered -> On the way -> Arrived (P5, owner 2026-11-20). An Ordered purchase needs no invoice number or rate yet; the others do.
   const askedStatus = body?.status === undefined ? null : String(body.status);
   if (askedStatus !== null && !PURCHASE_STATUSES.includes(askedStatus)) throw new PurchaseError("status must be ordered, in_transit or arrived");
+  const keepExpected = body?.expected_date === undefined; // an older app does not send it: the stored date stays
   const expected = body?.expected_date ? String(body.expected_date).slice(0, 10) : null;
-  if (expected && !/^\d{4}-\d{2}-\d{2}$/.test(expected)) throw new PurchaseError("expected_date must be YYYY-MM-DD");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new PurchaseError("invoice_date must be YYYY-MM-DD");
+  if (expected && !isRealDay(expected)) throw new PurchaseError("expected_date must be YYYY-MM-DD");
+  if (!isRealDay(date)) throw new PurchaseError("invoice_date must be YYYY-MM-DD");
   if (rawRate !== null && (!Number.isFinite(rawRate) || rawRate <= 0 || rawRate > 10000)) throw new PurchaseError("usd_rate must be a positive number");
   const lines = cleanLines(body?.lines);
   const client = await db.connect();
   try {
     await client.query("BEGIN");
-    const current = id ? (await client.query("SELECT status FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id])).rows[0] : null;
+    const current = id ? (await client.query("SELECT status, to_char(expected_date, 'YYYY-MM-DD') AS expected_date FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id])).rows[0] : null;
     if (id && !current) throw new PurchaseError("Purchase not found");
     const status = askedStatus ?? current?.status ?? "arrived";
     const rate = rawRate;
@@ -111,14 +115,18 @@ export async function savePurchase(body, userId, id = null, db = pool) {
     const counted = new Map();
     if (id) {
       // the pieces counted on arrival stay with their product through an edit (the lines are written again)
-      const { rows: old } = await client.query("SELECT product_id, received_qty FROM purchase_lines WHERE invoice_id = $1 AND received_qty IS NOT NULL ORDER BY id", [id]);
-      for (const o of old) if (o.product_id && !counted.has(o.product_id)) counted.set(o.product_id, o.received_qty);
+      const { rows: old } = await client.query("SELECT product_id, product_name, received_qty FROM purchase_lines WHERE invoice_id = $1 AND received_qty IS NOT NULL ORDER BY id", [id]);
+      for (const o of old) {
+        const k = lineKey(o);
+        if (!counted.has(k)) counted.set(k, []);
+        counted.get(k).push(o.received_qty);
+      }
       const { rowCount } = await client.query(
         `UPDATE purchase_invoices SET invoice_no = $2, invoice_date = $3, supplier_id = $4, usd_rate = $5, note = $6, updated_by = $7, updated_at = now(),
                 status = $8, expected_date = $9,
                 arrived_at = CASE WHEN $10 THEN now() ELSE arrived_at END, arrived_by = CASE WHEN $10 THEN $7::int ELSE arrived_by END
           WHERE id = $1`,
-        [id, invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId, status, expected, becomesArrived]
+        [id, invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId, status, status === "arrived" ? null : keepExpected ? current.expected_date : expected, becomesArrived]
       );
       if (!rowCount) throw new PurchaseError("Purchase not found");
       await client.query("DELETE FROM purchase_lines WHERE invoice_id = $1", [id]);
@@ -131,8 +139,7 @@ export async function savePurchase(body, userId, id = null, db = pool) {
       invoiceId = rows[0].id;
     }
     for (const l of lines) {
-      const got = l.product_id && counted.has(l.product_id) ? counted.get(l.product_id) : null;
-      if (l.product_id) counted.delete(l.product_id);
+      const got = counted.get(lineKey(l))?.shift() ?? null;
       await client.query(
         "INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd, received_qty) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         [invoiceId, l.product_id, l.product_name, l.brand, l.size_l, l.qty, l.cost_usd, got]
@@ -227,8 +234,14 @@ export async function receivePurchase(id, body, user, db = pool) {
     const { rows: [inv] } = await client.query("SELECT id, status FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id]);
     if (!inv) throw new PurchaseError("Purchase not found");
     const { rows: lines } = await client.query("SELECT id, product_name, brand, qty::float8 AS qty, received_qty FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [id]);
-    if (inv.status === "arrived" && lines.every((l) => l.received_qty !== null)) throw new PurchaseError("This purchase is already received", { code: "received" });
-    const given = new Map((Array.isArray(body?.lines) ? body.lines : []).map((l) => [Number(l?.id), l?.received_qty]));
+    if (inv.status === "arrived") throw new PurchaseError("This purchase is already received", { code: "received" });
+    const sent = Array.isArray(body?.lines) ? body.lines : [];
+    const given = new Map(sent.map((l) => [Number(l?.id), l?.received_qty]));
+    // the count is of the lines the person saw: when the office edited the purchase meanwhile (its lines are written again), the count would
+    // land on nothing and every line would read "all came" (review 2026-11-20) -- refuse, the screen loads it again
+    if (sent.length && (given.size !== lines.length || lines.some((l) => !given.has(l.id)))) {
+      throw new PurchaseError("This purchase was changed meanwhile. Open it again and count once more.", { code: "changed" });
+    }
     const differences = [];
     for (const l of lines) {
       const raw = given.get(l.id);
@@ -246,7 +259,7 @@ export async function receivePurchase(id, body, user, db = pool) {
       const title = `Գնման տարբերություն՝ ${facts?.supplier ?? ""}${facts?.invoice_no ? ` № ${facts.invoice_no}` : ""}`.slice(0, 120);
       for (const a of accountants) {
         const { rows: [t] } = await client.query(
-          "INSERT INTO tasks (title, creator_id, assignee_id, due_date, auto_kind) VALUES ($1, $2, $2, CURRENT_DATE, 'purchase_difference') RETURNING id",
+          "INSERT INTO tasks (title, creator_id, assignee_id, due_date, auto_kind) VALUES ($1, $2, $2, (now() AT TIME ZONE 'Asia/Yerevan')::date, 'purchase_difference') RETURNING id",
           [title, a.id]
         );
         for (const [k, d] of differences.entries()) {
@@ -268,8 +281,12 @@ export async function receivePurchase(id, body, user, db = pool) {
 // Pieces already Ordered / On the way per product: Warehouse > To order subtracts them (owner decision P5)
 export async function incomingQtyByProduct(db = pool) {
   const { rows } = await db.query(
-    `SELECT l.product_id, sum(l.qty)::float8 AS qty FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id
-      WHERE i.status IN ('ordered', 'in_transit') AND l.product_id IS NOT NULL GROUP BY l.product_id`
+    `SELECT l.product_id, sum(CASE WHEN i.status = 'arrived' THEN COALESCE(l.received_qty, l.qty) ELSE l.qty END)::float8 AS qty
+       FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id JOIN products p ON p.id = l.product_id
+      WHERE i.status IN ('ordered', 'in_transit')
+         -- arrived after the shelf stock was last read from the Excel: on the shelf, not in stock_qty yet (review 2026-11-20)
+         OR (i.status = 'arrived' AND i.arrived_at IS NOT NULL AND i.arrived_at > COALESCE(p.synced_at, '-infinity'::timestamptz) AND i.arrived_at > now() - interval '14 days')
+      GROUP BY l.product_id`
   );
   return new Map(rows.map((r) => [r.product_id, r.qty]));
 }
@@ -298,6 +315,7 @@ export async function exportPurchaseRows({ from = null, to = null } = {}, db = p
         invoice_no: r.invoice_no,
         supplier: r.supplier ?? "",
         status: r.status,
+        flow: r.flow ?? "arrived",
         brand: l.brand ?? "",
         product: l.product_name ?? "",
         size_l: l.size_l ?? null,
@@ -479,8 +497,8 @@ export async function getPurchase(id, db = pool) {
 export async function listSuppliers(db = pool) {
   const { rows } = await db.query(
     `SELECT s.id, s.name, s.brands, s.active, to_char(max(i.invoice_date), 'YYYY-MM-DD') AS last_invoice_date, count(i.id)::int AS invoices,
-            (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate,
-            (SELECT invoice_no FROM purchase_invoices x WHERE x.supplier_id = s.id ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_invoice_no
+            (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id AND x.usd_rate IS NOT NULL ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate,
+            (SELECT invoice_no FROM purchase_invoices x WHERE x.supplier_id = s.id AND x.invoice_no IS NOT NULL ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_invoice_no
        FROM suppliers s LEFT JOIN purchase_invoices i ON i.supplier_id = s.id
       GROUP BY s.id ORDER BY s.active DESC, max(i.invoice_date) DESC NULLS LAST, s.name`
   );
@@ -506,7 +524,7 @@ export async function listSuppliers(db = pool) {
     const e = excelBy.get(name.toLowerCase());
     return { name, last_invoice_no: e.invoice_no, last_invoice_date: e.invoice_date };
   });
-  const { rows: [recent] } = await db.query("SELECT usd_rate::float8 AS usd_rate FROM purchase_invoices ORDER BY invoice_date DESC, id DESC LIMIT 1");
+  const { rows: [recent] } = await db.query("SELECT usd_rate::float8 AS usd_rate FROM purchase_invoices WHERE usd_rate IS NOT NULL ORDER BY invoice_date DESC, id DESC LIMIT 1");
   return { suppliers: rows, excel_names: excelNames, excel_suppliers: extra, default_usd_rate: recent?.usd_rate ?? null };
 }
 
@@ -532,7 +550,7 @@ export async function productHistory(ids, { excludeNo = null, excludeDate = null
     db.query(
       `SELECT l.product_id AS pid, to_char(i.invoice_date, 'YYYY-MM-DD') AS day, l.qty::float8 AS qty, l.cost_usd::float8 AS cost_usd, s.name AS supplier, i.invoice_no, 'app' AS source
          FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id JOIN suppliers s ON s.id = i.supplier_id
-        WHERE l.product_id = ANY($1) AND NOT ($2::text IS NOT NULL AND i.invoice_date = $3::date AND ${SQL_KEY("i.invoice_no")} = ${SQL_KEY("$2::text")})
+        WHERE l.product_id = ANY($1) AND i.status = 'arrived' AND NOT ($2::text IS NOT NULL AND i.invoice_date = $3::date AND ${SQL_KEY("i.invoice_no")} = ${SQL_KEY("$2::text")})
        UNION ALL
        SELECT p.id, to_char(e.invoice_date, 'YYYY-MM-DD'), e.qty::float8, e.cost_usd::float8, e.supplier, e.invoice_no, 'excel'
          FROM erp_purchase_lines e JOIN products p ON p.erp_product_id = e.erp_product_id

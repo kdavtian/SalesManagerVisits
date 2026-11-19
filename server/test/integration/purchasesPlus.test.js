@@ -282,8 +282,17 @@ test("an order before its invoice; on the way needs the paper; the warehouse rec
   assert.ok(!JSON.stringify(mine).match(/cost|usd|amd|rate/i), "no money for the warehouse");
   assert.equal((await apiRequest("/api/purchase-receiving", { cookie: repCookie })).status, 403);
   assert.equal((await apiRequest(`/api/purchases/${id}`, { cookie: whCookie })).status, 403, "the warehouse does not open the invoice with prices");
+  // an older app saves without the expected date: the date stays (review 2026-11-20)
+  const { expected_date: _drop, ...oldClient } = onWay.data;
+  const oldSave = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...oldClient, note: "old app" } });
+  assert.equal(oldSave.data.expected_date, "2026-12-01");
+  // the office's edit wrote the lines again: a count of the lines seen before is refused, not taken as "all came"
+  const stale = await apiRequest(`/api/purchase-receiving/${id}/receive`, { method: "POST", cookie: whCookie, body: { lines: mine.lines.map((l) => ({ id: l.id, received_qty: 1 })) } });
+  assert.equal(stale.status, 409);
+  const fresh = (await apiRequest("/api/purchase-receiving", { cookie: whCookie })).data.purchases.find((p) => p.id === id);
+  assert.equal(fresh.status, "in_transit");
   // received: 58 of 60, all of the other
-  const [l1, l2] = mine.lines;
+  const [l1, l2] = fresh.lines;
   const rec = await apiRequest(`/api/purchase-receiving/${id}/receive`, { method: "POST", cookie: whCookie, body: { lines: [{ id: l1.id, received_qty: 58 }, { id: l2.id, received_qty: 12 }], note: "2 broken" } });
   assert.equal(rec.status, 200, JSON.stringify(rec.data));
   assert.equal(rec.data.differences.length, 1);

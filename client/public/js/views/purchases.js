@@ -348,12 +348,18 @@ function logItemHtml(g) {
   const d = g.details ?? {};
   const bits = [];
   if (g.action === "update") {
-    for (const [k, [a, b]] of Object.entries(d.fields ?? {})) bits.push(`${t(`pu_log_field_${k}`)}: ${escapeHtml(String(a ?? "—"))} → ${escapeHtml(String(b ?? "—"))}`);
+    // a status reads as its name (Ordered, On the way, Arrived), not its code
+    const val = (k, v) => (v === null || v === undefined || v === "" ? "—" : k === "status" ? t(`pu_flow_${v}`) : k === "expected_date" ? formatDateDMY(v) : String(v));
+    for (const [k, [a, b]] of Object.entries(d.fields ?? {})) bits.push(`${t(`pu_log_field_${k}`)}: ${escapeHtml(val(k, a))} → ${escapeHtml(val(k, b))}`);
     if (d.before && d.after && (d.before.usd !== d.after.usd || d.before.packs !== d.after.packs || d.before.lines !== d.after.lines)) {
       bits.push(`${usd(d.before.usd)} → ${usd(d.after.usd)} · ${groupDigits(d.before.packs)} → ${groupDigits(d.after.packs)} ${t("pu_total_packs").toLowerCase()}`);
     }
   } else if (g.action === "create" && d.after) bits.push(`${usd(d.after.usd)} · ${groupDigits(d.after.packs)} ${t("pu_total_packs").toLowerCase()}`);
   else if ((g.action === "file_add" || g.action === "file_delete") && d.files?.length) bits.push(d.files.filter(Boolean).map(escapeHtml).join(", "));
+  else if (g.action === "receive") {
+    for (const x of d.differences ?? []) bits.push(`${escapeHtml(x.product)}: ${groupDigits(x.received)} / ${groupDigits(x.invoiced)}`);
+    if (d.note) bits.push(escapeHtml(d.note));
+  }
   return `<li><span class="muted">${escapeHtml(stamp)} · ${escapeHtml(g.user_name || "—")}</span> <strong>${t(`pu_log_${g.action}`)}</strong>${bits.length ? `<br /><span class="pu-log-what">${bits.join(" · ")}</span>` : ""}</li>`;
 }
 

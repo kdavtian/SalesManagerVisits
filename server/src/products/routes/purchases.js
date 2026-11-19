@@ -69,6 +69,7 @@ purchasesRouter.get("/export.xlsx", async (req, res) => {
     { header: "Invoice", key: "invoice_no", width: 14 },
     { header: "Supplier", key: "supplier", width: 22 },
     { header: "Status", key: "status", width: 12 },
+    { header: "Flow", key: "flow", width: 11 },
     { header: "Brand", key: "brand", width: 12 },
     { header: "Product", key: "product", width: 36 },
     { header: "Size, L", key: "size_l", width: 9 },

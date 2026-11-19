@@ -22,7 +22,7 @@ purchaseReceivingRouter.post("/:id/receive", async (req, res) => {
     const one = (await incomingPurchases()).find((p) => p.id === id) ?? null;
     res.json({ ...result, purchase: one });
   } catch (err) {
-    if (err instanceof PurchaseError) return res.status(err.message === "Purchase not found" ? 404 : err.code === "received" ? 409 : 400).json({ error: err.message });
+    if (err instanceof PurchaseError) return res.status(err.message === "Purchase not found" ? 404 : err.code === "received" || err.code === "changed" ? 409 : 400).json({ error: err.message });
     throw err;
   }
 });

@@ -75,6 +75,13 @@ export function openReceiveSheet(purchase, { onDone } = {}) {
       showToast(res.differences?.length ? `${t("pu_difference")}: ${res.differences.length}` : t("pu_flow_arrived"));
       onDone?.(res);
     } catch (ex) {
+      // changed or received meanwhile by someone else: the list is loaded again, the reason stays on screen as a toast
+      if (ex.status === 409) {
+        close();
+        showToast(ex.message);
+        onDone?.(null);
+        return;
+      }
       btn.disabled = false;
       err.textContent = ex.message;
       err.hidden = false;
