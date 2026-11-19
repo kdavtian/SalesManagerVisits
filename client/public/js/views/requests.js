@@ -9,7 +9,7 @@ import { t } from "../i18n.js";
 import { escapeHtml, formatAmd, formatDateTime, groupDigits, labelColon, showToast } from "../util.js";
 import { refreshAllBadgesFromServer } from "../badges.js";
 
-const KINDS = ["discount", "return", "customer_edit", "payment", "cashflow", "visit_plan", "perf_plan", "bonus_claim"];
+const KINDS = ["discount", "return", "customer_edit", "payment", "cashflow", "visit_plan", "perf_plan", "bonus_claim", "competitor_brand"];
 
 const BACK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>`;
 
@@ -25,6 +25,7 @@ const DECIDE = {
   visit_plan: { approve: (r) => api.reviewVisitPlan(r.id, "approve"), deny: (r, reason) => api.reviewVisitPlan(r.id, "reject", reason) },
   perf_plan: { approve: (r) => api.approvePerfPlan(r.id), deny: (r, reason) => api.rejectPerfPlan(r.id, reason) },
   bonus_claim: { approve: (r) => api.approveBonusRewardClaim(r.id, r.version), deny: (r, reason) => api.rejectBonusRewardClaim(r.id, reason, r.version) },
+  competitor_brand: { approve: (r) => api.approveCompetitorBrand(r.id), deny: (r, reason) => api.denyCompetitorBrand(r.id, reason) },
 };
 // what each decision changes elsewhere in the app, so those screens and badges catch up at once
 const CHANGED_EVENTS = { discount: "orders-changed", customer_edit: "edit-requests-changed", visit_plan: "plans-changed", payment: "payments-changed" };
@@ -332,6 +333,13 @@ function detailsHtml(r) {
             ${x.new_customers_target ? row(t("req_new_customers"), escapeHtml(String(x.new_customers_target))) : ""}`
             )
             .join("")}
+        </section>`;
+    case "competitor_brand":
+      return `
+        <section class="card req-section">
+          ${row(t("req_brand_name"), `<strong>${escapeHtml(d.name ?? "")}</strong>`)}
+          ${row(t("req_brand_visits"), escapeHtml(String(d.visits ?? 0)))}
+          <p class="muted req-hint">${escapeHtml(t("req_brand_hint"))}</p>
         </section>`;
     case "bonus_claim":
       return `

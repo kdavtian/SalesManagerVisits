@@ -338,3 +338,8 @@ test("canEditCustomerPotential: management any customer, a sales manager only th
   assert.equal(canEditCustomerPotential({ id: 9, role: "sales_manager" }, null), false);
   assert.equal(canEditCustomerPotential({ id: 9, role: "accountant" }, 9), false);
 });
+
+test("canApproveCompetitorBrands: admin and CEO only", async () => {
+  const { canApproveCompetitorBrands } = await import("../src/shared/roles.js");
+  for (const [role, yes] of [["admin", true], ["ceo", true], ["sales_director", false], ["sales_manager", false], ["accountant", false]]) assert.equal(canApproveCompetitorBrands(role), yes, role);
+});

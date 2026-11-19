@@ -3,6 +3,11 @@ import { json, request, stripCompetitorIds } from "./core.js";
 
 export const fieldApi = {
   reportFarAttempt: (data) => json("/checkins/far-attempt", "POST", data),
+  // competitor brands of the check-in shelf (owner, 2026-11-19): the list, a rep's new brand, admin / CEO decisions
+  getCompetitorBrands: () => request("/competitor-brands"),
+  addCompetitorBrand: (name) => json("/competitor-brands", "POST", { name }),
+  approveCompetitorBrand: (id) => json(`/competitor-brands/${id}/approve`, "POST", {}),
+  denyCompetitorBrand: (id, reason) => json(`/competitor-brands/${id}/deny`, "POST", { reason }),
   createCheckin: (formData) =>
     request("/checkins", { method: "POST", body: formData }),
   getDeliverableOrders: (customerId) => request(`/checkins/deliverable-orders?customer_id=${customerId}`),

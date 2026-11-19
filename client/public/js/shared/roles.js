@@ -811,3 +811,8 @@ export function homeShowsCompanyDashboard(role) {
 export function canEditCustomerPotential(user, assignedManagerId) {
   return canManagePotentialAll(user?.role) || (user?.role === "sales_manager" && assignedManagerId != null && assignedManagerId === user.id);
 }
+
+// A competitor brand a rep added at a check-in becomes everyone's after admin or CEO approve it (owner, 2026-11-19).
+export function canApproveCompetitorBrands(role) {
+  return role === "admin" || role === "ceo";
+}

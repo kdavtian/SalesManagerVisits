@@ -98,8 +98,7 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
     // so a missing group is "not checked", not "gone"; same rule as the customer card's brand summary)
     db.query(
       `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'competitors' AS brands
-       FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'competitors') = 'array'
-         AND jsonb_array_length(brand_status -> 'competitors') > 0
+       FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'competitors') = 'array'  -- an empty list = the visit marked every competitor "not available" (2026-11-19): it is the latest state
        ORDER BY customer_id, timestamp DESC`,
       [ids]
     ),

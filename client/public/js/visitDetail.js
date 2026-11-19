@@ -7,6 +7,7 @@ import { api } from "./api.js";
 import { dockSheet } from "./dockSheet.js";
 import { activateDialog, escapeHtml, formatDateTime, formatDistance, formatAmd, categoryIcon, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo } from "./util.js";
 import { t } from "./i18n.js";
+import { chipLabel } from "./brandChips.js";
 import { isAdmin } from "./state.js";
 import { icons } from "./icons.js";
 import { openOrderDetailSheet } from "./orderDetailSheet.js";
@@ -47,15 +48,23 @@ export function checkinOutcomeLabels(ch) {
 export function checkinBrandTags(ch) {
   if (ch.brand_status && Object.keys(ch.brand_status).length) {
     const tags = [];
+    const packs = ch.brand_status.competitor_packs ?? {};
+    const PACK_ORDER = ["bottle", "drum", "none"];
+    const packText = (key) => (Array.isArray(packs[key]) ? packs[key].slice().sort((a, b) => PACK_ORDER.indexOf(a) - PACK_ORDER.indexOf(b)).map((p) => t(`cs_${p}`)).join(" + ") : "");
     for (const [brand, values] of Object.entries(ch.brand_status)) {
+      if (!Array.isArray(values)) continue; // competitor_packs (an object) is read with its brand below
       for (const v of values) {
         if (brand === "competitors") {
-          tags.push(t(`competitor_${v}`));
+          // a brand added at a check-in has no text of its own: its key is its name (brandChips.js); bottles / drum after it
+          const name = chipLabel({ group: "competitors", value: v });
+          tags.push(packText(v) ? `${name}: ${packText(v)}` : name);
         } else {
           tags.push(`${t(BRAND_GROUP_LABEL_KEY[brand])}: ${t(`brand_status_${v}`)}`);
         }
       }
     }
+    // brands marked "not available" (never in `competitors`)
+    for (const [key, v] of Object.entries(packs)) if (Array.isArray(v) && v.includes("none")) tags.push(`${chipLabel({ group: "competitors", value: key })}: ${t("cs_none")}`);
     return tags;
   }
   return (ch.brands_found ?? []).map((b) => t(`brand_${b}`));

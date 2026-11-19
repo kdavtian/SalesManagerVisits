@@ -22,6 +22,7 @@ export const KIND_TITLE_HY = {
   visit_plan: "Այցելությունների պլան",
   perf_plan: "Աշխատանքային պլան",
   bonus_claim: "Բոնուսի պահանջ",
+  competitor_brand: "Նոր մրցակից բրենդ",
 };
 
 export const amdText = (v) => `${Math.round(Number(v) || 0).toLocaleString("en-US")} դր`;
@@ -86,6 +87,7 @@ export function requestLines(request, { costs = true } = {}) {
     visit_plan: [d.plan_date ? `Օր՝ ${d.plan_date}` : null, `${(d.stops ?? []).length} կանգառ`],
     perf_plan: [d.month ? `Ամիս՝ ${d.month}` : null],
     bonus_claim: [d.challenge ? `Մրցույթ՝ ${d.challenge}` : null],
+    competitor_brand: [d.name ? `Բրենդ՝ ${d.name}` : null],
   }[request.kind] ?? [];
   return [
     request.customer ? `Հաճախորդ՝ ${request.customer.name}${request.customer.erp_id ? ` · ID ${request.customer.erp_id}` : ""}` : null,

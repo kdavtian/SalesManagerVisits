@@ -9994,6 +9994,47 @@ html.ios-statusbar-scroll::after { content: ""; display: block; height: 1px; }
   align-items: start;
 }
 .brand-sheet-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* Check-in > Competitors (competitorShelf.js; owner, 2026-11-19): one row per brand, three outline icon buttons on the right -- bottles
+   (golden 1 L bottle), drum (green), not available. Not picked: faded outline; picked: full colour, filled, outlined button. */
+.cs-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin: -4px 0 8px; }
+.cs-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.cs-legend .cs-svg { width: 16px; height: 16px; }
+/* only the brand list scrolls: the close X, the title, "+ Add new brand" and Done stay put, and the X never sits on a row's buttons */
+.sheet.cs-sheet { position: relative; display: flex; flex-direction: column; overflow: hidden; }
+.sheet.cs-sheet > .sheet-close-x { position: absolute; top: 16px; right: 16px; float: none; margin: 0; }
+.sheet.cs-sheet > h2 { margin-right: 52px; }
+.cs-list { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; flex: 1 1 auto; overscroll-behavior: contain; }
+.cs-add, .cs-sheet .sheet-actions { flex: none; }
+.cs-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.cs-row-new { animation: cs-new 1.6s ease-out; }
+@keyframes cs-new { from { background: color-mix(in srgb, var(--accent) 14%, transparent); } to { background: transparent; } }
+.cs-name { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; display: flex; flex-direction: column; }
+.cs-pending { font-weight: 400; font-size: 12px; color: var(--text-dim); }
+.cs-btns { display: flex; gap: 6px; flex: none; }
+.cs-btn { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border-radius: 12px;
+  background: transparent; border: 1.5px solid var(--border); color: var(--text); cursor: pointer; opacity: 0.4; transition: opacity .12s, border-color .12s, background .12s; }
+.cs-btn .cs-svg, .cs-legend .cs-svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.cs-btn .cs-svg { width: 26px; height: 26px; }
+.cs-btn .cs-fill, .cs-legend .cs-fill { fill: none; }
+.cs-btn .cs-label { fill: none; stroke: none; }
+.cs-btn.is-on { opacity: 1; }
+.cs-bottle.is-on { border-color: #c9a227; background: color-mix(in srgb, #c9a227 12%, transparent); color: #8a6d0f; }
+.cs-bottle.is-on .cs-fill { fill: #d4af37; }
+.cs-bottle.is-on .cs-label { fill: #fff3c4; }
+.cs-drum.is-on { border-color: #2e8b57; background: color-mix(in srgb, #2e8b57 12%, transparent); color: #1f6b41; }
+.cs-drum.is-on .cs-fill { fill: #3aa66a; }
+.cs-none.is-on { border-color: #d64545; background: color-mix(in srgb, #d64545 12%, transparent); color: #c0392b; }
+.cs-none.is-on .cs-fill { fill: color-mix(in srgb, #d64545 25%, transparent); }
+.cs-legend .cs-svg { opacity: .8; }
+.cs-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cs-bottle.is-on { color: #e6c35c; } :root:not([data-theme="light"]) .cs-drum.is-on { color: #5cc98c; } }
+[data-theme="dark"] .cs-bottle.is-on { color: #e6c35c; }
+[data-theme="dark"] .cs-drum.is-on { color: #5cc98c; }
+.cs-add { padding: 12px 0 4px; }
+.cs-add-open { min-height: 44px; }
+.cs-add-form { display: flex; gap: 8px; }
+.cs-add-form input { flex: 1 1 auto; min-width: 0; min-height: 44px; }
+.cs-add-form .btn { min-height: 44px; flex: none; }
 .brand-sheet-heading { margin: 4px 0 0; font-size: 0.85rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .brand-sheet-columns .brand-grid { grid-template-columns: 1fr; margin-top: 6px; margin-bottom: 10px; }
 .brand-sheet-columns .brand-chip { padding: 10px; }

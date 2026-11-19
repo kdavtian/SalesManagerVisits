@@ -11,12 +11,13 @@ import {
   canReviewPlan,
   canApproveBonusRewards,
   canConfirmOrders,
+  canApproveCompetitorBrands,
 } from "../../shared/roles.js";
 import { canApproveDiscountRole } from "../../orders/discountPolicy.js";
 import { pendingRequests } from "./queries.js";
 
 // The kinds, in the order the Requests list groups them.
-export const REQUEST_KINDS = ["discount", "return", "customer_edit", "payment", "cashflow", "visit_plan", "perf_plan", "bonus_claim"];
+export const REQUEST_KINDS = ["discount", "return", "customer_edit", "payment", "cashflow", "visit_plan", "perf_plan", "bonus_claim", "competitor_brand"];
 
 export const isRequestKind = (kind) => REQUEST_KINDS.includes(kind);
 
@@ -43,6 +44,8 @@ export function mayDecide(kind, user, facts = {}) {
       return canReviewPlan(user.role, facts.submittedByRole);
     case "bonus_claim":
       return canApproveBonusRewards(user.role) && user.id !== facts.claimantId;
+    case "competitor_brand":
+      return canApproveCompetitorBrands(user.role);
     default:
       return false;
   }

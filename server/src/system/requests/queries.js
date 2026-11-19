@@ -41,6 +41,10 @@ const PENDING_SQL = {
                 FROM bonus_reward_claims b LEFT JOIN users u ON u.id = b.user_id
                 LEFT JOIN bonus_challenge_rounds r ON r.id = b.round_id LEFT JOIN bonus_challenge_templates t ON t.id = r.template_id
                 WHERE b.status IN ('awaiting_validation', 'on_hold')`,
+  competitor_brand: `SELECT b.id, b.requested_by AS requested_by_id, u.name AS requested_by_name, b.requested_at, NULL AS customer_name, NULL AS erp_id,
+                            NULL::numeric AS amount_amd, b.name AS extra
+                     FROM competitor_brands b LEFT JOIN users u ON u.id = b.requested_by
+                     WHERE b.status = 'pending'`,
 };
 
 // The facts a kind's "who may decide" rule needs (rules.js mayDecide), for a pending row.
@@ -397,6 +401,35 @@ const LOADERS = {
       details: { challenge: b.challenge, start_at: b.start_at, end_at: b.end_at, on_hold: b.status === "on_hold" },
       version: b.version,
       source_url: "/#/settings?section=a-bonuses",
+    };
+  },
+
+  // a competitor brand a rep added at a check-in (owner, 2026-11-19; field/competitorBrands.js)
+  async competitor_brand(db, id) {
+    const { rows: [b] } = await db.query(
+      `SELECT b.*, u.name AS requested_by_name, d.name AS decided_by_name,
+              (SELECT COUNT(*)::int FROM checkins c WHERE c.brand_status -> 'competitors' ? b.key) AS visits
+       FROM competitor_brands b LEFT JOIN users u ON u.id = b.requested_by LEFT JOIN users d ON d.id = b.decided_by WHERE b.id = $1`,
+      [id]
+    );
+    if (!b) return null;
+    const status = { pending: "pending", approved: "approved", denied: "rejected" }[b.status] ?? "closed";
+    return {
+      kind: "competitor_brand",
+      id: b.id,
+      status,
+      requested_by_id: b.requested_by,
+      requested_by_name: b.requested_by_name,
+      requested_at: b.requested_at,
+      decided_by_name: b.decided_by ? b.decided_by_name : null,
+      decided_at: b.decided_at,
+      decision_reason: b.decision_reason ?? null,
+      customer: null,
+      amount_amd: null,
+      note: null,
+      facts: {},
+      details: { name: b.name, visits: b.visits },
+      source_url: null,
     };
   },
 };
