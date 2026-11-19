@@ -277,9 +277,14 @@ function wireFiles(sheet, app, onChanged) {
     el.textContent = text || "";
     el.hidden = !text;
   };
-  const repaint = (files) => {
+  const repaint = (files, log) => {
     app.files = files;
     box.innerHTML = filesHtml(files);
+    if (log) {
+      app.log = log;
+      const list = sheet.querySelector(".pu-log ol");
+      if (list) list.innerHTML = log.map(logItemHtml).join("");
+    }
     wire();
   };
   function wire() {
@@ -290,11 +295,12 @@ function wireFiles(sheet, app, onChanged) {
       box.querySelector(".pu-file-add").classList.add("is-busy");
       try {
         const updated = await api.addPurchaseFiles(app.id, files);
-        repaint(updated.files ?? []);
+        repaint(updated.files ?? [], updated.log);
         onChanged?.();
       } catch (ex) {
-        err(ex.message);
+        err(navigator.onLine === false ? t("pu_file_offline") : ex.message);
         box.querySelector(".pu-file-add")?.classList.remove("is-busy");
+        e.target.value = ""; // the same file can be picked again
       }
     });
     box.querySelectorAll("[data-file-del]").forEach((btn) =>
@@ -312,8 +318,9 @@ function wireFiles(sheet, app, onChanged) {
         try {
           await api.deletePurchaseFile(Number(btn.dataset.fileDel));
           repaint(app.files.filter((f) => f.id !== Number(btn.dataset.fileDel)));
+          onChanged?.();
         } catch (ex) {
-          err(ex.message);
+          err(navigator.onLine === false ? t("pu_file_offline") : ex.message);
         }
       })
     );
@@ -323,7 +330,8 @@ function wireFiles(sheet, app, onChanged) {
 // one entry of the history: when, who, what (the totals before -> after of an edit; the fields that changed)
 function logItemHtml(g) {
   const when = new Date(g.at);
-  const stamp = `${formatDateDMY(when.toISOString().slice(0, 10))} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+  const two = (n) => String(n).padStart(2, "0");
+  const stamp = `${two(when.getDate())}-${two(when.getMonth() + 1)}-${when.getFullYear()} ${two(when.getHours())}:${two(when.getMinutes())}`;
   const d = g.details ?? {};
   const bits = [];
   if (g.action === "update") {

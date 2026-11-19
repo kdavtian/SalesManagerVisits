@@ -201,6 +201,11 @@ test("an invoice's photo / PDF, its history (who changed what), the export of th
   const bad = new FormData();
   bad.append("files", new Blob(["hello"], { type: "text/plain" }), "x.txt");
   assert.equal((await apiFormRequest(`/api/purchases/${id}/files`, { form: bad, cookie: accCookie })).status, 400);
+  // a file that SAYS it is a photo but is not (its bytes are checked) is refused, and nothing is kept
+  const fake = new FormData();
+  fake.append("files", new Blob(["<svg onload=alert(1)>"], { type: "image/png" }), "evil.png");
+  assert.equal((await apiFormRequest(`/api/purchases/${id}/files`, { form: fake, cookie: accCookie })).status, 400);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM purchase_files WHERE invoice_id = $1", [id])).rows[0].n, 2);
   // the file opens for the managers, not for a rep
   const fileId = up.data.files[0].id;
   const got = await apiRequest(`/api/purchases/files/${fileId}`, { cookie: accCookie });
@@ -215,6 +220,8 @@ test("an invoice's photo / PDF, its history (who changed what), the export of th
   assert.deepEqual(upd.details.fields.usd_rate, [385, 390]);
   assert.deepEqual([upd.details.before.usd, upd.details.after.usd], [200, 240]);
   assert.ok(edit.data.log.some((g) => g.action === "file_add"));
+  // another manager may not remove someone else's paper (the admin / CEO may); the one who added it may
+  assert.equal((await apiRequest(`/api/purchases/files/${fileId}`, { method: "DELETE", cookie: opsCookie })).status, 403);
   // remove a file: gone, and written
   assert.equal((await apiRequest(`/api/purchases/files/${fileId}`, { method: "DELETE", cookie: accCookie })).status, 204);
   const after = (await apiRequest(`/api/purchases/${id}`, { cookie: accCookie })).data;

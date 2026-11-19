@@ -227,6 +227,7 @@ export const enProducts = {
     pu_log_field_invoice_date: "Date",
     pu_log_field_supplier: "Supplier",
     pu_log_field_usd_rate: "Rate",
+    pu_file_offline: "No connection: the file is not sent. Try again with signal.",
     pu_packs: "Packs",
     pu_cost_usd: "USD per pack",
     pu_total_usd: "Total, USD",

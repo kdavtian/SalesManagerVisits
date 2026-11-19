@@ -7,6 +7,7 @@ import { Router } from "express";
 import multer from "multer";
 import ExcelJS from "exceljs";
 import { uploadDirPath } from "../../shared/upload.js";
+import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canManagePurchases, canDeletePurchases } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
@@ -39,6 +40,23 @@ const purchaseFileUpload = multer({
   fileFilter: (_req, file, cb) => (PURCHASE_FILE_MIME[file.mimetype] ? cb(null, true) : cb(new PurchaseError("Only a photo (JPEG, PNG, WebP) or a PDF"))),
 });
 const dropFile = (name) => fs.unlink(path.join(purchaseFilesDir, path.basename(String(name))), () => {});
+// the bytes are what the type says (the declared type is only the client's word): a photo by its signature, a PDF by "%PDF-"
+function realFile(f) {
+  try {
+    if (f.mimetype !== "application/pdf") return matchesDeclaredImageType(f.path, f.mimetype);
+    const fd = fs.openSync(f.path, "r");
+    try {
+      const head = Buffer.alloc(5);
+      fs.readSync(fd, head, 0, 5, 0);
+      return head.toString("latin1") === "%PDF-";
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+}
+const MAX_INT = 2147483647;
 
 // Excel export of the period (owner plan P3): one row per line, app and Excel-only invoices
 purchasesRouter.get("/export.xlsx", async (req, res) => {
@@ -63,7 +81,7 @@ purchasesRouter.get("/export.xlsx", async (req, res) => {
   ws.views = [{ state: "frozen", ySplit: 1 }];
   for (const r of rows) ws.addRow(r);
   for (const k of ["cost_usd", "usd"]) ws.getColumn(k).numFmt = "#,##0.00";
-  ws.getColumn("qty").numFmt = "#,##0.###";
+  ws.getColumn("qty").numFmt = "General";
   const name = `purchases_${day(req.query.from) ?? "all"}_${day(req.query.to) ?? new Date().toISOString().slice(0, 10)}.xlsx`;
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
@@ -78,7 +96,7 @@ purchasesRouter.get("/files/:fileId", async (req, res) => {
   if (!fs.existsSync(full)) return res.status(404).json({ error: "File not found" });
   res.setHeader("Content-Type", f.mime);
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(f.original_name || path.basename(f.file_path))}"`);
+  res.setHeader("Content-Disposition", `inline; filename="${path.basename(f.file_path)}"; filename*=UTF-8''${encodeURIComponent(f.original_name || path.basename(f.file_path))}`);
   res.setHeader("Cache-Control", "private, max-age=86400");
   fs.createReadStream(full).pipe(res);
 });
@@ -92,28 +110,72 @@ purchasesRouter.post("/:id/files", (req, res, next) =>
   async (req, res) => {
     const id = Number(req.params.id);
     const files = req.files ?? [];
-    const facts = Number.isInteger(id) ? await invoiceFacts(pool, id) : null;
-    if (!facts) {
-      files.forEach((f) => dropFile(f.filename));
+    const dropAll = () => files.forEach((f) => dropFile(f.filename));
+    if (!Number.isInteger(id) || id <= 0 || id > MAX_INT) {
+      dropAll();
       return res.status(404).json({ error: "Purchase not found" });
     }
     if (!files.length) return res.status(400).json({ error: "Choose a photo or a PDF" });
-    for (const f of files) {
-      await pool.query(
-        "INSERT INTO purchase_files (invoice_id, file_path, mime, size_bytes, original_name, created_by) VALUES ($1, $2, $3, $4, $5, $6)",
-        [id, f.filename, f.mimetype, f.size, String(f.originalname ?? "").slice(0, 200) || null, req.user.id]
-      );
+    if (!files.every(realFile)) {
+      dropAll();
+      return res.status(400).json({ error: "Only a photo (JPEG, PNG, WebP) or a PDF" });
     }
-    await logPurchase(pool, { invoiceId: id, action: "file_add", userId: req.user.id, facts, details: { files: files.map((f) => String(f.originalname ?? "").slice(0, 200)) } });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const facts = await invoiceFacts(client, id);
+      if (!facts) {
+        await client.query("ROLLBACK");
+        dropAll();
+        return res.status(404).json({ error: "Purchase not found" });
+      }
+      for (const f of files) {
+        await client.query(
+          "INSERT INTO purchase_files (invoice_id, file_path, mime, size_bytes, original_name, created_by) VALUES ($1, $2, $3, $4, $5, $6)",
+          [id, f.filename, f.mimetype, f.size, String(f.originalname ?? "").slice(0, 200) || null, req.user.id]
+        );
+      }
+      await logPurchase(client, { invoiceId: id, action: "file_add", userId: req.user.id, facts, details: { files: files.map((f) => String(f.originalname ?? "").slice(0, 200)) } });
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      dropAll();
+      throw err;
+    } finally {
+      client.release();
+    }
     res.status(201).json(await getPurchase(id));
   }
 );
 
 purchasesRouter.delete("/files/:fileId", async (req, res) => {
-  const { rows: [f] } = await pool.query("DELETE FROM purchase_files WHERE id = $1 RETURNING invoice_id, file_path, original_name", [Number(req.params.fileId) || 0]);
-  if (!f) return res.status(404).json({ error: "File not found" });
-  dropFile(f.file_path);
-  await logPurchase(pool, { invoiceId: f.invoice_id, action: "file_delete", userId: req.user.id, facts: await invoiceFacts(pool, f.invoice_id), details: { files: [f.original_name] } });
+  const fileId = Number(req.params.fileId);
+  if (!Number.isInteger(fileId) || fileId <= 0 || fileId > MAX_INT) return res.status(404).json({ error: "File not found" });
+  const client = await pool.connect();
+  let removed;
+  try {
+    await client.query("BEGIN");
+    const { rows: [f] } = await client.query("SELECT invoice_id, file_path, original_name, created_by FROM purchase_files WHERE id = $1 FOR UPDATE", [fileId]);
+    if (!f) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "File not found" });
+    }
+    // the paper is evidence: whoever added it may take it back; anyone else's only the admin / CEO (who may delete a whole invoice)
+    if (f.created_by !== req.user.id && !canDeletePurchases(req.user.role)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Only the person who added it, the admin or the CEO can remove it" });
+    }
+    await client.query("DELETE FROM purchase_files WHERE id = $1", [fileId]);
+    await logPurchase(client, { invoiceId: f.invoice_id, action: "file_delete", userId: req.user.id, facts: await invoiceFacts(client, f.invoice_id), details: { files: [f.original_name] } });
+    await client.query("COMMIT");
+    removed = f;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  dropFile(removed.file_path); // only after the row is gone for good
   res.status(204).end();
 });
 
@@ -206,13 +268,29 @@ purchasesRouter.put("/:id", async (req, res) => {
 // A mistaken invoice (typed twice, wrong supplier): only the admin / CEO delete one (canDeletePurchases).
 purchasesRouter.delete("/:id", async (req, res) => {
   if (!canDeletePurchases(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  const id = Number(req.params.id) || 0;
-  const facts = await invoiceFacts(pool, id);
-  const { rows: files } = await pool.query("SELECT file_path FROM purchase_files WHERE invoice_id = $1", [id]);
-  const { rowCount } = await pool.query("DELETE FROM purchase_invoices WHERE id = $1", [id]);
-  if (!rowCount) return res.status(404).json({ error: "Purchase not found" });
-  files.forEach((f) => dropFile(f.file_path));
-  // the history stays after the invoice is gone (purchase_log has no foreign key to it)
-  await logPurchase(pool, { invoiceId: id, action: "delete", userId: req.user.id, facts, details: { before: facts ? { lines: facts.lines, packs: facts.packs, usd: Math.round(facts.usd * 100) / 100 } : null } });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || id > MAX_INT) return res.status(404).json({ error: "Purchase not found" });
+  const client = await pool.connect();
+  let files = [];
+  try {
+    await client.query("BEGIN");
+    const { rows: [locked] } = await client.query("SELECT id FROM purchase_invoices WHERE id = $1 FOR UPDATE", [id]);
+    if (!locked) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Purchase not found" });
+    }
+    const facts = await invoiceFacts(client, id);
+    ({ rows: files } = await client.query("DELETE FROM purchase_files WHERE invoice_id = $1 RETURNING file_path", [id]));
+    await client.query("DELETE FROM purchase_invoices WHERE id = $1", [id]);
+    // the history stays after the invoice is gone (purchase_log has no foreign key to it)
+    await logPurchase(client, { invoiceId: id, action: "delete", userId: req.user.id, facts, details: { before: facts ? { lines: facts.lines, packs: facts.packs, usd: Math.round(facts.usd * 100) / 100 } : null } });
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  files.forEach((f) => dropFile(f.file_path)); // the disk only after the rows are gone for good
   res.status(204).end();
 });

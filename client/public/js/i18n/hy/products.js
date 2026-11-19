@@ -227,6 +227,7 @@ export const hyProducts = {
     pu_log_field_invoice_date: "Ամսաթիվ",
     pu_log_field_supplier: "Մատակարար",
     pu_log_field_usd_rate: "Փոխարժեք",
+    pu_file_offline: "Կապ չկա, ֆայլը չուղարկվեց։ Փորձեք կրկին, երբ կապ լինի։",
     pu_packs: "Քանակ",
     pu_cost_usd: "USD մեկ հատի",
     pu_total_usd: "Ընդամենը, USD",
