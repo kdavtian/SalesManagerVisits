@@ -19,6 +19,13 @@ export const productsApi = {
   listSuppliers: () => request("/purchases/suppliers", { fresh: true }),
   getPurchasesStatus: () => request("/purchases/status", { fresh: true }),
   getPurchaseHistory: (ids, exclude = {}) => request(`/purchases/product-history?${new URLSearchParams({ ids: ids.join(","), ...(exclude.no && exclude.date ? { exclude_no: exclude.no, exclude_date: exclude.date } : {}) }).toString()}`, { fresh: true }),
+  // the paper of an invoice (photos / a PDF) and the export of the period (owner plan P3, 2026-11-20)
+  addPurchaseFiles: (id, files) => {
+    const form = new FormData();
+    for (const f of files) form.append("files", f);
+    return request(`/purchases/${id}/files`, { method: "POST", body: form });
+  },
+  deletePurchaseFile: (fileId) => request(`/purchases/files/${fileId}`, { method: "DELETE" }),
   importPurchasesExcel: (file) => {
     const form = new FormData();
     form.set("file", file);

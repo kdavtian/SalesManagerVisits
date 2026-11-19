@@ -91,6 +91,7 @@ export async function savePurchase(body, userId, id = null, db = pool) {
       l.size_l = p ? (Number(p.size_l) || Number(String(p.unit ?? "").replace(",", ".").match(/[\d.]+/)?.[0]) || null) : Number.isFinite(ownSize) && ownSize > 0 && ownSize <= 1000 ? ownSize : null;
     }
     let invoiceId = id;
+    const before = id ? await invoiceFacts(client, id) : null;
     if (id) {
       const { rowCount } = await client.query(
         "UPDATE purchase_invoices SET invoice_no = $2, invoice_date = $3, supplier_id = $4, usd_rate = $5, note = $6, updated_by = $7, updated_at = now() WHERE id = $1",
@@ -112,6 +113,8 @@ export async function savePurchase(body, userId, id = null, db = pool) {
         [invoiceId, l.product_id, l.product_name, l.brand, l.size_l, l.qty, l.cost_usd]
       );
     }
+    const after = await invoiceFacts(client, invoiceId);
+    await logPurchase(client, { invoiceId, action: id ? "update" : "create", userId, facts: after, details: id ? changesOf(before, after) : { after: totalsOf(after) } });
     await client.query("COMMIT");
     return invoiceId;
   } catch (err) {
@@ -120,6 +123,89 @@ export async function savePurchase(body, userId, id = null, db = pool) {
   } finally {
     client.release();
   }
+}
+
+// ---- history (purchase_log, migration 218; owner plan P3, 2026-11-20) ------------------------------------------------------------------
+// The head and the totals of one invoice: what an entry of the history compares.
+export async function invoiceFacts(db, id) {
+  const { rows: [f] } = await db.query(
+    `SELECT i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, s.name AS supplier, i.usd_rate::float8 AS usd_rate,
+            count(l.id)::int AS lines, COALESCE(sum(l.qty), 0)::float8 AS packs, COALESCE(sum(l.qty * l.cost_usd), 0)::float8 AS usd
+       FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN purchase_lines l ON l.invoice_id = i.id
+      WHERE i.id = $1 GROUP BY i.id, s.name`,
+    [id]
+  );
+  return f ?? null;
+}
+const totalsOf = (f) => (f ? { lines: f.lines, packs: Math.round(f.packs * 1000) / 1000, usd: round2(f.usd) } : null);
+// what an edit changed: the head fields that differ, and the totals before and after
+function changesOf(before, after) {
+  const fields = {};
+  for (const k of ["invoice_no", "invoice_date", "supplier", "usd_rate"]) {
+    if (before && after && String(before[k] ?? "") !== String(after[k] ?? "")) fields[k] = [before[k], after[k]];
+  }
+  return { fields, before: totalsOf(before), after: totalsOf(after) };
+}
+export async function logPurchase(db, { invoiceId, action, userId, facts = null, details = null }) {
+  await db.query(
+    "INSERT INTO purchase_log (invoice_id, invoice_no, supplier, action, user_id, details) VALUES ($1, $2, $3, $4, $5, $6)",
+    [invoiceId, facts?.invoice_no ?? null, facts?.supplier ?? null, action, userId ?? null, details ? JSON.stringify(details) : null]
+  );
+}
+export async function purchaseLog(id, db = pool) {
+  const { rows } = await db.query(
+    `SELECT g.action, g.at, g.details, u.name AS user_name FROM purchase_log g LEFT JOIN users u ON u.id = g.user_id
+      WHERE g.invoice_id = $1 ORDER BY g.at DESC, g.id DESC LIMIT 100`,
+    [id]
+  );
+  return rows;
+}
+// the files (a photo / PDF of the paper) of one invoice
+export async function purchaseFiles(id, db = pool) {
+  const { rows } = await db.query(
+    `SELECT f.id, f.mime, f.size_bytes, f.original_name, f.created_at, u.name AS created_by_name
+       FROM purchase_files f LEFT JOIN users u ON u.id = f.created_by WHERE f.invoice_id = $1 ORDER BY f.id`,
+    [id]
+  );
+  return rows;
+}
+
+// ---- export (owner plan P3): every line of the period, app and Excel-only invoices, one row each ---------------------------------------
+export async function exportPurchaseRows({ from = null, to = null } = {}, db = pool) {
+  const invoices = await listPurchases({ from, to }, db);
+  const appIds = invoices.filter((r) => r.id).map((r) => r.id);
+  const { rows: appLines } = appIds.length
+    ? await db.query(
+        "SELECT invoice_id, product_name, brand, size_l::float8 AS size_l, qty::float8 AS qty, cost_usd::float8 AS cost_usd FROM purchase_lines WHERE invoice_id = ANY($1) ORDER BY invoice_id, id",
+        [appIds]
+      )
+    : { rows: [] };
+  const byInvoice = new Map();
+  for (const l of appLines) {
+    if (!byInvoice.has(l.invoice_id)) byInvoice.set(l.invoice_id, []);
+    byInvoice.get(l.invoice_id).push(l);
+  }
+  const out = [];
+  for (const r of invoices) {
+    const lines = r.id ? byInvoice.get(r.id) ?? [] : await getExcelInvoice(r.invoice_no, r.invoice_date, db, r.supplier);
+    for (const l of lines) {
+      out.push({
+        date: r.invoice_date,
+        invoice_no: r.invoice_no,
+        supplier: r.supplier ?? "",
+        status: r.status,
+        brand: l.brand ?? "",
+        product: l.product_name ?? "",
+        size_l: l.size_l ?? null,
+        qty: l.qty ?? 0,
+        cost_usd: l.cost_usd ?? 0,
+        usd: round2((Number(l.qty) || 0) * (Number(l.cost_usd) || 0)),
+        liters: l.size_l ? round2((Number(l.qty) || 0) * Number(l.size_l)) : null,
+        usd_rate: r.usd_rate ?? null,
+      });
+    }
+  }
+  return out;
 }
 
 /** The Purchase_IN rows the bot sends replace the previous copy. Rows without a date or an invoice number are skipped. */
@@ -272,7 +358,8 @@ export async function getPurchase(id, db = pool) {
       [inv.invoice_date, inv.invoice_no]
     ),
   ]);
-  return { ...inv, lines, excel_lines: ofSupplier(excel, inv.supplier) };
+  const [files, log] = await Promise.all([purchaseFiles(id, db), purchaseLog(id, db)]);
+  return { ...inv, lines, excel_lines: ofSupplier(excel, inv.supplier), files, log };
 }
 
 export async function listSuppliers(db = pool) {

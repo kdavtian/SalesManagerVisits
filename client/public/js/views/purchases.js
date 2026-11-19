@@ -6,7 +6,7 @@ import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { compareProducts, sortedBrands, FAMILY_PRIORITY } from "../productSort.js";
 import { icons } from "../icons.js";
-import { activateDialog, escapeHtml, formatAmd, formatDateDMY, groupDigits, openInfoPopup, showToast } from "../util.js";
+import { activateDialog, escapeHtml, formatAmd, formatDateDMY, groupDigits, openInfoPopup, showToast, downloadFromUrl } from "../util.js";
 import { state } from "../state.js";
 import { canDeletePurchases } from "../shared/roles.js";
 import { sinceText } from "../purchaseNumbers.js";
@@ -53,7 +53,7 @@ export function renderPurchases(root) {
         </div>
       </div>
       <div id="pu-excel"></div>
-      <div class="pu-chips" id="pu-periods" role="group">${PERIODS.map((p) => `<button type="button" class="map-filter-chip ${p === period ? "chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(`pu_period_${p}`)}</button>`).join("")}</div>
+      <div class="pu-chips" id="pu-periods" role="group">${PERIODS.map((p) => `<button type="button" class="map-filter-chip ${p === period ? "chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(`pu_period_${p}`)}</button>`).join("")}<button type="button" class="map-filter-chip pu-export-btn" id="pu-export"><span aria-hidden="true">${icons.download}</span>${t("pu_export")}</button></div>
       <div class="pu-kpis" id="pu-kpis"></div>
       <div class="pu-suppliers" id="pu-suppliers"></div>
       <div class="pu-toolbar">
@@ -63,6 +63,19 @@ export function renderPurchases(root) {
       <div class="card-list" id="pu-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   const listEl = root.querySelector("#pu-list");
+  // every line of the period's invoices, app and Excel-only, as an Excel file (owner plan P3, 2026-11-20)
+  root.querySelector("#pu-export").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const from = periodFrom(period);
+      await downloadFromUrl(`/api/purchases/export.xlsx${from ? `?from=${from}` : ""}`, "purchases.xlsx");
+    } catch (err) {
+      showToast(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
   // an invoice by its id (the form's "Open it" of a duplicate warning)
   const openInvoice = (id) => {
     const r = rows.find((x) => x.id === id);
@@ -239,6 +252,90 @@ export function renderPurchases(root) {
   load();
 }
 
+// ---- the paper of an invoice and its history (owner plan P3, 2026-11-20) -------------------------------------------------------------
+const fileUrl = (f) => `/api/purchases/files/${f.id}`;
+function filesHtml(files = []) {
+  const items = files
+    .map((f) => {
+      const isPdf = f.mime === "application/pdf";
+      const name = f.original_name || (isPdf ? "PDF" : t("pu_file_photo"));
+      return `<div class="pu-file">
+          <a class="pu-file-open" href="${fileUrl(f)}" target="_blank" rel="noopener">${isPdf ? `<span class="pu-file-pdf" aria-hidden="true">PDF</span>` : `<img src="${fileUrl(f)}" alt="" loading="lazy" />`}<span class="pu-file-name">${escapeHtml(name)}</span></a>
+          <button type="button" class="icon-btn icon-btn-danger" data-file-del="${f.id}" aria-label="${escapeHtml(`${t("pu_file_delete")}: ${name}`)}">${icons.trash}</button>
+        </div>`;
+    })
+    .join("");
+  return `<h3 class="section-title section-title-tight">${t("pu_files")}</h3>
+    <div class="pu-file-list">${items || `<p class="muted pu-files-none">${t("pu_files_none")}</p>`}</div>
+    <label class="btn pu-file-add"><input type="file" accept="image/*,application/pdf" multiple hidden data-file-input />${icons.plus}<span>${t("pu_file_add")}</span></label>
+    <p class="form-error" data-file-err hidden></p>`;
+}
+function wireFiles(sheet, app, onChanged) {
+  const box = sheet.querySelector("#pu-files");
+  const err = (text) => {
+    const el = box.querySelector("[data-file-err]");
+    el.textContent = text || "";
+    el.hidden = !text;
+  };
+  const repaint = (files) => {
+    app.files = files;
+    box.innerHTML = filesHtml(files);
+    wire();
+  };
+  function wire() {
+    box.querySelector("[data-file-input]").addEventListener("change", async (e) => {
+      const files = [...(e.target.files ?? [])];
+      if (!files.length) return;
+      err("");
+      box.querySelector(".pu-file-add").classList.add("is-busy");
+      try {
+        const updated = await api.addPurchaseFiles(app.id, files);
+        repaint(updated.files ?? []);
+        onChanged?.();
+      } catch (ex) {
+        err(ex.message);
+        box.querySelector(".pu-file-add")?.classList.remove("is-busy");
+      }
+    });
+    box.querySelectorAll("[data-file-del]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        // one tap arms, the second deletes (no confirm dialogs in this app)
+        if (!btn.dataset.armed) {
+          btn.dataset.armed = "1";
+          btn.classList.add("is-armed");
+          setTimeout(() => {
+            delete btn.dataset.armed;
+            btn.classList.remove("is-armed");
+          }, 3000);
+          return;
+        }
+        try {
+          await api.deletePurchaseFile(Number(btn.dataset.fileDel));
+          repaint(app.files.filter((f) => f.id !== Number(btn.dataset.fileDel)));
+        } catch (ex) {
+          err(ex.message);
+        }
+      })
+    );
+  }
+  wire();
+}
+// one entry of the history: when, who, what (the totals before -> after of an edit; the fields that changed)
+function logItemHtml(g) {
+  const when = new Date(g.at);
+  const stamp = `${formatDateDMY(when.toISOString().slice(0, 10))} ${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+  const d = g.details ?? {};
+  const bits = [];
+  if (g.action === "update") {
+    for (const [k, [a, b]] of Object.entries(d.fields ?? {})) bits.push(`${t(`pu_log_field_${k}`)}: ${escapeHtml(String(a ?? "—"))} → ${escapeHtml(String(b ?? "—"))}`);
+    if (d.before && d.after && (d.before.usd !== d.after.usd || d.before.packs !== d.after.packs || d.before.lines !== d.after.lines)) {
+      bits.push(`${usd(d.before.usd)} → ${usd(d.after.usd)} · ${groupDigits(d.before.packs)} → ${groupDigits(d.after.packs)} ${t("pu_total_packs").toLowerCase()}`);
+    }
+  } else if (g.action === "create" && d.after) bits.push(`${usd(d.after.usd)} · ${groupDigits(d.after.packs)} ${t("pu_total_packs").toLowerCase()}`);
+  else if ((g.action === "file_add" || g.action === "file_delete") && d.files?.length) bits.push(d.files.filter(Boolean).map(escapeHtml).join(", "));
+  return `<li><span class="muted">${escapeHtml(stamp)} · ${escapeHtml(g.user_name || "—")}</span> <strong>${t(`pu_log_${g.action}`)}</strong>${bits.length ? `<br /><span class="pu-log-what">${bits.join(" · ")}</span>` : ""}</li>`;
+}
+
 // An Excel invoice's lines for the form: a line whose product the app knows is that product; the others come by their own name, brand and
 // litres (they used to be dropped without a word, so the copy's total was smaller than the paper's).
 function excelToFormLines(excel) {
@@ -311,6 +408,8 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
       ${notes.length ? `<p class="pu-excel-notes"><span class="muted">${t("pu_excel_notes")}:</span> ${notes.map(escapeHtml).join(" · ")}</p>` : ""}
       ${block(t("pu_app_side"), app?.lines, "app")}
       ${block(t("pu_excel_side"), excel, "excel")}
+      ${app ? `<section class="pu-files" id="pu-files">${filesHtml(app.files)}</section>` : ""}
+      ${app?.log?.length ? `<details class="pu-log"><summary>${t("pu_history")} <span class="muted">(${app.log.length})</span></summary><ol>${app.log.map(logItemHtml).join("")}</ol></details>` : ""}
       <p class="form-error" id="pu-sheet-error" hidden></p>
       <div class="sheet-actions sheet-actions-floating">
         ${canDelete ? `<button type="button" class="btn btn-danger" id="pu-del">${t("pu_delete")}</button>` : ""}
@@ -318,6 +417,7 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
         ${app ? `<button type="button" class="btn btn-primary" id="pu-edit">${t("pu_edit")}</button>` : `<button type="button" class="btn btn-primary" id="pu-copy">${t("pu_copy_from_excel")}</button>`}
       </div>`;
     sheet.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
+    if (app) wireFiles(sheet, app, onSaved);
     sheet.querySelector("#pu-edit")?.addEventListener("click", () => {
       close();
       openPurchaseForm(app, { onSaved, rows, openInvoice });

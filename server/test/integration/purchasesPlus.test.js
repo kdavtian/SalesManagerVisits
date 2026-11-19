@@ -4,7 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
-import { startTestServer, stopTestServer, cleanupAll, createUser, createProduct, apiRequest, apiFormRequest, loginAs } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createProduct, apiRequest, apiFormRequest, loginAs, testBaseUrl } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
 let accCookie, repCookie, opsCookie, p1, p2;
@@ -181,4 +181,70 @@ test("a product id beyond the database range is ignored, not a 500", async () =>
   const r = await apiRequest("/api/purchases/product-history?ids=99999999999,-5,abc", { cookie: accCookie });
   assert.equal(r.status, 200);
   assert.deepEqual(r.data, {});
+});
+
+// Owner plan P3 (2026-11-20): the paper of an invoice, its history, and the Excel export
+test("an invoice's photo / PDF, its history (who changed what), the export of the period; a rep is refused; the history stays after a delete", async () => {
+  const made = await apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: { invoice_no: "P3/1", invoice_date: "2026-10-20", supplier_name: "P3 Supplier", usd_rate: 385, lines: [{ product_id: p1.id, qty: 10, cost_usd: 20 }] } });
+  assert.equal(made.status, 201, JSON.stringify(made.data));
+  const id = made.data.id;
+  assert.deepEqual(made.data.log.map((g) => g.action), ["create"]);
+  // a PDF and a photo; a text file is refused
+  const pdf = new Blob([Buffer.from("%PDF-1.4\n%fake\n")], { type: "application/pdf" });
+  const png = new Blob([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex")], { type: "image/png" });
+  const form = new FormData();
+  form.append("files", pdf, "invoice.pdf");
+  form.append("files", png, "paper.png");
+  const up = await apiFormRequest(`/api/purchases/${id}/files`, { form, cookie: accCookie });
+  assert.equal(up.status, 201, JSON.stringify(up.data));
+  assert.deepEqual(up.data.files.map((f) => [f.original_name, f.mime]), [["invoice.pdf", "application/pdf"], ["paper.png", "image/png"]]);
+  const bad = new FormData();
+  bad.append("files", new Blob(["hello"], { type: "text/plain" }), "x.txt");
+  assert.equal((await apiFormRequest(`/api/purchases/${id}/files`, { form: bad, cookie: accCookie })).status, 400);
+  // the file opens for the managers, not for a rep
+  const fileId = up.data.files[0].id;
+  const got = await apiRequest(`/api/purchases/files/${fileId}`, { cookie: accCookie });
+  assert.equal(got.status, 200);
+  assert.equal((await apiRequest(`/api/purchases/files/${fileId}`, { cookie: repCookie })).status, 403);
+  assert.equal((await apiFormRequest(`/api/purchases/${id}/files`, { form: (() => { const f = new FormData(); f.append("files", pdf, "a.pdf"); return f; })(), cookie: repCookie })).status, 403);
+  // an edit: the history says what changed (the rate, the total)
+  const full = (await apiRequest(`/api/purchases/${id}`, { cookie: accCookie })).data;
+  const edit = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...full, usd_rate: 390, lines: [{ product_id: p1.id, qty: 12, cost_usd: 20 }] } });
+  assert.equal(edit.status, 200, JSON.stringify(edit.data));
+  const upd = edit.data.log.find((g) => g.action === "update");
+  assert.deepEqual(upd.details.fields.usd_rate, [385, 390]);
+  assert.deepEqual([upd.details.before.usd, upd.details.after.usd], [200, 240]);
+  assert.ok(edit.data.log.some((g) => g.action === "file_add"));
+  // remove a file: gone, and written
+  assert.equal((await apiRequest(`/api/purchases/files/${fileId}`, { method: "DELETE", cookie: accCookie })).status, 204);
+  const after = (await apiRequest(`/api/purchases/${id}`, { cookie: accCookie })).data;
+  assert.equal(after.files.length, 1);
+  assert.ok(after.log.some((g) => g.action === "file_delete"));
+  // the export: one row per line with the invoice's head
+  const exp = await apiRequest("/api/purchases/export.xlsx?from=2026-10-20&to=2026-10-20", { cookie: accCookie });
+  assert.equal(exp.status, 200);
+  // the delete keeps the history; the files are gone with the invoice
+  const { rows: [{ n: filesBefore }] } = await pool.query("SELECT count(*)::int AS n FROM purchase_files WHERE invoice_id = $1", [id]);
+  assert.equal(filesBefore, 1);
+  const admin = await loginAs((await createUser("admin")).email);
+  assert.equal((await apiRequest(`/api/purchases/${id}`, { method: "DELETE", cookie: admin })).status, 204);
+  const { rows: log } = await pool.query("SELECT action FROM purchase_log WHERE invoice_id = $1 ORDER BY id", [id]);
+  assert.deepEqual(log.map((g) => g.action), ["create", "file_add", "update", "file_delete", "delete"]);
+  assert.equal((await pool.query("SELECT count(*)::int AS n FROM purchase_files WHERE invoice_id = $1", [id])).rows[0].n, 0);
+});
+
+const rawGet = (path, cookie) => fetch(`${testBaseUrl()}${path}`, { headers: { Cookie: cookie } });
+
+test("the export is a real workbook with the invoice's lines", async () => {
+  await apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: { invoice_no: "P3/2", invoice_date: "2026-10-21", supplier_name: "P3 Supplier", usd_rate: 385, lines: [{ product_id: p1.id, qty: 3, cost_usd: 7.5 }, { product_id: p2.id, qty: 2, cost_usd: 1 }] } });
+  const res = await rawGet("/api/purchases/export.xlsx?from=2026-10-21&to=2026-10-21", accCookie);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /spreadsheetml/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.from(await res.arrayBuffer()));
+  const ws = wb.worksheets[0];
+  assert.equal(ws.getRow(1).getCell(1).value, "Date");
+  const rows = [];
+  ws.eachRow((r, n) => n > 1 && rows.push([r.getCell(2).value, r.getCell(8).value, r.getCell(10).value]));
+  assert.deepEqual(rows, [["P3/2", 3, 22.5], ["P3/2", 2, 2]]);
 });
