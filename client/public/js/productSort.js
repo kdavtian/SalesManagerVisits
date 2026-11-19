@@ -80,8 +80,9 @@ function viscosityOf(p) {
 
 function parseViscosity(name) {
   if (!name) return null;
-  const m = name.match(/(\d{1,2})\s*w\s*-?\s*(\d{1,3})/i);
-  return m ? `${m[1]}W-${m[2]}` : null;
+  // on its own only (2026-11-19, same rule as the database's viscosity_of_name, migration 217): "AB3W2" in a code is not a grade
+  const m = name.match(/(?<![A-Za-z0-9])(\d{1,2})\s*w\s*-?\s*(\d{1,2})(?!\d)/i);
+  return m ? `${Number(m[1])}W-${m[2]}` : null;
 }
 
 // Matches an ACEA-style spec ("C3", "A3/B4", "A3-B4", "E7") or "LL"
