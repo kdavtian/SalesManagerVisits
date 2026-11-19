@@ -281,6 +281,9 @@
 .pu-line-qty { color: var(--text-dim); white-space: nowrap; }
 .pu-line-sum { text-align: right; white-space: nowrap; }
 .pu-line-total { font-weight: 700; }
+/* a brand's row in an invoice (P2, 2026-11-20): its name, packs, litres and dollars, above its lines */
+.pu-line.pu-line-brand { font-weight: 700; text-transform: none; padding-top: 12px; border-top: 2px solid var(--border); }
+.pu-line.pu-line-brand:first-child { border-top: 0; padding-top: 8px; }
 .sheet.pu-sheet .sheet-actions-floating, .sheet.pu-import-sheet .sheet-actions { margin-top: 14px; }
 
 /* Import from Excel */
@@ -346,10 +349,19 @@
 .pu-results:empty { display: none; }
 .pu-result { display: block; width: 100%; min-height: 44px; padding: 8px 12px; text-align: left; color: inherit; cursor: pointer; background: none; border: 0; border-bottom: 1px solid var(--border); }
 .pu-result-active, .pu-result:hover { background: var(--bg-card-pressed); }
-.pu-flines { display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.pu-flines { display: flex; flex-direction: column; gap: 10px; }
 .pu-flines:empty { display: none; }
-.pu-fl { display: grid; grid-template-columns: minmax(0, 1fr) 110px 130px 120px 44px; align-items: start; gap: 8px 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
-.pu-fl:first-child { border-top: 0; }
+/* one brand of the invoice (owner plan P2, 2026-11-20): its name with packs, litres and dollars, the column titles once, then its lines */
+.pu-fl-group { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
+.pu-fl-group[hidden] { display: none; }
+.pu-fl-brand { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px 2px; }
+.pu-fl-brand strong { text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.85rem; }
+.pu-fl-brand span { font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pu-fl-cols { display: grid; grid-template-columns: minmax(0, 1fr) 110px 130px 120px 44px; gap: 10px; padding: 2px 12px 4px; font-size: 0.72rem; }
+.pu-fl-cols span:nth-child(n + 2) { text-align: right; }
+.pu-fl { display: grid; grid-template-columns: minmax(0, 1fr) 110px 130px 120px 44px; align-items: center; gap: 6px 10px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.pu-fl[hidden] { display: none; }
+.pu-lines-filter { width: 100%; min-height: 44px; margin-bottom: 8px; }
 .pu-fl-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .pu-fl-name { font-weight: 600; overflow-wrap: anywhere; }
 .pu-fl-hist { font-size: 0.78rem; overflow-wrap: anywhere; }
@@ -358,15 +370,17 @@
 .pu-delta { align-self: flex-end; font-size: 0.75rem; font-style: normal; font-weight: 700; }
 .pu-delta-up { color: var(--danger); }
 .pu-delta-down { color: var(--success); }
-.pu-fl-sum { display: flex; flex-direction: column; align-items: flex-end; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.pu-fl-sum { display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pu-fl-sum-label { font-size: 0.72rem; color: var(--text-dim); }
-.pu-fl > .icon-btn { align-self: end; }
+.pu-fl > .icon-btn { align-self: center; }
 .pu-fl-err { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 719px) {
-  .pu-fl { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px; }
+  /* a phone: the name on its own row, then packs | price | sum | delete on ONE row (it used to take three) */
+  .pu-fl, .pu-fl-cols { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(64px, auto) 44px; gap: 4px 8px; }
   .pu-fl-main { grid-column: 1 / -1; }
-  .pu-fl-sum { grid-column: 1 / -1; grid-row: 3; flex-direction: row; justify-content: space-between; align-items: baseline; }
-  .pu-fl > .icon-btn { grid-column: 3; grid-row: 2; }
+  .pu-fl-cols span:first-child { display: none; }
+  .pu-fl-cols span:nth-child(2) { text-align: left; }
+  .pu-fl-sum { font-size: 0.85rem; }
 }
 
 /* Products header (owner, 2026-11-07): the "!" sits after the title; on a phone the action buttons stay on the title's row */

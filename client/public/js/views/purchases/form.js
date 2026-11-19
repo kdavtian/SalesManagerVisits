@@ -11,7 +11,7 @@ import { activateDialog, escapeHtml, formatAmd, formatDateDMY, groupDigits } fro
 import { pickDate } from "../../activityDatePicker.js";
 import { getProductCatalog } from "../../productCatalog.js";
 import { searchProducts } from "../../productSearch.js";
-import { compareProducts } from "../../productSort.js";
+import { compareProducts, sortedBrands } from "../../productSort.js";
 import { nextInvoiceNo, parseAmount, priceChangePct } from "../../purchaseNumbers.js";
 
 const DRAFT_KEY = "fv_pu_draft";
@@ -28,24 +28,31 @@ const sizeOf = (p) => (p ? Number(p.size_l) || Number(String(p.unit ?? "").repla
 const productLabel = (p) => `${p.brand ? `${p.brand} ` : ""}${p.name}${p.unit ? ` · ${p.unit}` : ""}`;
 const keyOfNo = (no) => String(no ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
-function readDraft() {
+// Every form keeps its own draft (owner plan P2, 2026-11-20: Edit, Repeat and "Enter in app" lost the typing when the app closed): a new
+// invoice under the old key, an edited one by its id, a prefilled one by its supplier, number and date.
+function draftKeyOf(invoice) {
+  if (!invoice) return DRAFT_KEY;
+  if (invoice.id) return `${DRAFT_KEY}:edit:${invoice.id}`;
+  return `${DRAFT_KEY}:pre:${String(invoice.supplier ?? "").toLowerCase()}|${String(invoice.invoice_no ?? "")}|${String(invoice.invoice_date ?? "")}`;
+}
+function readDraft(key) {
   try {
-    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+    const d = JSON.parse(localStorage.getItem(key) || "null");
     return d && Date.now() - d.at < DRAFT_MAX_AGE_MS ? d : null;
   } catch {
     return null;
   }
 }
-const writeDraft = (d) => {
+const writeDraft = (key, d) => {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, at: Date.now() }));
+    localStorage.setItem(key, JSON.stringify({ ...d, at: Date.now() }));
   } catch {
     // storage unavailable: the form still works, only the draft is not kept
   }
 };
-const clearDraft = () => {
+const clearDraft = (key) => {
   try {
-    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(key);
   } catch {
     // nothing to clear
   }
@@ -57,8 +64,8 @@ const clearDraft = () => {
  */
 export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoice } = {}) {
   const editing = Boolean(invoice?.id);
-  const fresh = !invoice; // only a blank new invoice has a draft
-  const draft = fresh ? readDraft() : null;
+  const draftKey = draftKeyOf(invoice);
+  const draft = readDraft(draftKey);
   const source = draft ?? invoice ?? {};
   let supplierName = source.supplier ?? source.supplierName ?? "";
   let date = source.invoice_date ?? source.date ?? isoDay(new Date());
@@ -130,6 +137,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           <input type="search" id="pu-search" placeholder="${t("pu_search_hint")}" aria-label="${t("pu_search_product")}" autocomplete="off" />
           <div id="pu-results" class="pu-results" role="listbox"></div>
         </div>
+        <input type="search" id="pu-lines-filter" class="pu-lines-filter" placeholder="${t("pu_lines_filter")}" aria-label="${t("pu_lines_filter")}" autocomplete="off" hidden />
         <div id="pu-lines" class="pu-flines"></div>
         <p class="pu-field-err" id="err-lines" role="alert" hidden></p>
         <div class="pu-field">
@@ -169,15 +177,14 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const snapshot = () => ({ supplier: supplierName, supplier_new: $("#pu-new-supplier input").value, invoice_no: noInput.value, invoice_date: date, usd_rate: rateInput.value, note: $("#pu-note").value, lines: lines.map((l) => ({ ...l })) });
   const touched = () => Boolean(supplierName || noInput.value.trim() || lines.length || $("#pu-note").value.trim());
   function scheduleDraft() {
-    if (!fresh) return;
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => (touched() ? writeDraft(snapshot()) : clearDraft()), 400);
+    saveTimer = setTimeout(() => (touched() ? writeDraft(draftKey, snapshot()) : clearDraft(draftKey)), 400);
   }
   if (draft) $("#pu-draft").hidden = false;
   $("#pu-draft-discard").addEventListener("click", () => {
-    clearDraft();
+    clearDraft(draftKey);
     close();
-    openPurchaseForm(null, { onSaved, rows, openInvoice });
+    openPurchaseForm(invoice ?? null, { onSaved, rows, openInvoice });
   });
 
   // ---- supplier chips, number and rate hints -------------------------------------------------------------------------------------------
@@ -340,29 +347,82 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       updateDelta(row, i);
     });
   }
-  function paintLines() {
-    linesEl.innerHTML = lines.length
-      ? lines
-          .map((l, i) => {
+  // Lines are shown by brand in the price-list order, each brand's products in the catalogue order, with the brand's packs, litres and
+  // dollars beside its name (owner plan P2, 2026-11-20). `lines` keeps the typing order; only the view is sorted.
+  const asProduct = (l) => byId.get(l.product_id) ?? { name: l.product_name || "", brand: l.brand || "", unit: l.size_l ? `${l.size_l}L` : "" };
+  const brandOf = (l) => byId.get(l.product_id)?.brand || l.brand || "—";
+  const litersOfLine = (l) => sizeOf(byId.get(l.product_id)) || Number(l.size_l) || 0;
+  let viewOrder = [];
+  function brandGroups() {
+    const byBrand = new Map();
+    lines.forEach((l, i) => {
+      const b = brandOf(l);
+      if (!byBrand.has(b)) byBrand.set(b, []);
+      byBrand.get(b).push(i);
+    });
+    const known = sortedBrands([...byBrand.keys()].filter((b) => b !== "—").map((brand) => ({ brand })));
+    const order = byBrand.has("—") ? [...known, "—"] : known;
+    return order.map((brand) => ({ brand, idx: byBrand.get(brand).sort((a, b) => compareProducts(asProduct(lines[a]), asProduct(lines[b])) || a - b) }));
+  }
+  const brandFacts = (idx) => {
+    const packs = idx.reduce((a, i) => a + (Number(lines[i].qty) || 0), 0);
+    const l = idx.reduce((a, i) => a + (Number(lines[i].qty) || 0) * litersOfLine(lines[i]), 0);
+    const sum = idx.reduce((a, i) => a + (Number(lines[i].qty) || 0) * (Number(lines[i].cost_usd) || 0), 0);
+    return `${groupDigits(packs)} ${t("pu_total_packs").toLowerCase()}${l > 0 ? ` · ${groupDigits(Math.round(l))} L` : ""} · ${usd(sum)}`;
+  };
+  function paintBrandFacts() {
+    for (const g of brandGroups()) {
+      const el = linesEl.querySelector(`[data-brand-facts="${CSS.escape(g.brand)}"]`);
+      if (el) el.textContent = brandFacts(g.idx);
+    }
+  }
+  const filterEl = $("#pu-lines-filter");
+  function applyLineFilter() {
+    const q = filterEl.value.trim().toLowerCase();
+    linesEl.querySelectorAll("[data-i]").forEach((row) => {
+      row.hidden = Boolean(q) && !row.querySelector(".pu-fl-name").textContent.toLowerCase().includes(q);
+    });
+    linesEl.querySelectorAll(".pu-fl-group").forEach((g) => {
+      g.hidden = Boolean(q) && !g.querySelector("[data-i]:not([hidden])");
+    });
+  }
+  filterEl.addEventListener("input", applyLineFilter);
+  function lineHtml(l, i) {
             const p = byId.get(l.product_id);
             const h = history.get(l.product_id);
             const change = h?.last ? priceChangePct(h.last.cost_usd, l.cost_usd) : null;
             const sum = (Number(l.qty) || 0) * (Number(l.cost_usd) || 0);
+            const name = p ? `${p.name}${p.unit ? ` · ${p.unit}` : ""}` : `${l.product_name || ""}${l.size_l ? ` · ${groupDigits(l.size_l)} L` : ""}`;
             return `<div class="pu-fl" data-i="${i}">
               <div class="pu-fl-main">
-                <span class="pu-fl-name">${escapeHtml(p ? productLabel(p) : l.product_name || "")}</span>
+                <span class="pu-fl-name">${escapeHtml(name)}</span>
                 <span class="pu-fl-hist">${h ? histText(h) : ""}</span>
               </div>
-              <label class="pu-fl-num"><span>${t("pu_packs")}</span><input data-f="qty" inputmode="decimal" aria-label="${t("pu_packs")}" value="${l.qty || ""}" /></label>
-              <label class="pu-fl-num"><span>${t("pu_cost_usd")}</span><input data-f="cost_usd" inputmode="decimal" aria-label="${t("pu_cost_usd")}" value="${l.cost_usd === null || l.cost_usd === undefined ? "" : l.cost_usd}" />
+              <label class="pu-fl-num"><input data-f="qty" inputmode="decimal" aria-label="${t("pu_packs")}" placeholder="${t("pu_packs")}" value="${l.qty || ""}" /></label>
+              <label class="pu-fl-num"><input data-f="cost_usd" inputmode="decimal" aria-label="${t("pu_cost_usd")}" placeholder="$" value="${l.cost_usd === null || l.cost_usd === undefined ? "" : l.cost_usd}" />
                 ${change !== null && change !== 0 ? `<em class="pu-delta ${change > 0 ? "pu-delta-up" : "pu-delta-down"}">${change > 0 ? "+" : ""}${change}%</em>` : ""}</label>
-              <span class="pu-fl-sum"><span class="pu-fl-sum-label">${t("pu_line_sum")}</span><strong>${usd(sum)}</strong></span>
+              <span class="pu-fl-sum"><strong>${usd(sum)}</strong></span>
               <button type="button" class="icon-btn icon-btn-danger" data-remove aria-label="${t("pu_remove")}">${icons.trash}</button>
               <p class="pu-field-err pu-fl-err" data-err hidden role="alert"></p>
             </div>`;
-          })
+  }
+  function paintLines() {
+    const groups = brandGroups();
+    viewOrder = groups.flatMap((g) => g.idx);
+    linesEl.innerHTML = lines.length
+      ? groups
+          .map(
+            (g) => `<section class="pu-fl-group">
+              <div class="pu-fl-brand"><strong>${escapeHtml(g.brand)}</strong><span class="muted" data-brand-facts="${escapeHtml(g.brand)}">${escapeHtml(brandFacts(g.idx))}</span></div>
+              <div class="pu-fl-cols muted" aria-hidden="true"><span></span><span>${t("pu_packs")}</span><span>${t("pu_cost_usd")}</span><span>${t("pu_line_sum")}</span><span></span></div>
+              ${g.idx.map((i) => lineHtml(lines[i], i)).join("")}
+            </section>`
+          )
           .join("")
       : ""; // nothing yet: the search box above says what to do, and Save names what is missing
+    // a long invoice gets a filter box over its lines
+    filterEl.hidden = lines.length < 8;
+    if (filterEl.hidden) filterEl.value = "";
     linesEl.querySelectorAll("[data-i]").forEach((row) => {
       const i = Number(row.dataset.i);
       const inputs = [...row.querySelectorAll("[data-f]")];
@@ -375,6 +435,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           // the line total, the change chip and the bar follow without redrawing the inputs (focus stays)
           row.querySelector(".pu-fl-sum strong").textContent = usd((Number(lines[i].qty) || 0) * (Number(lines[i].cost_usd) || 0));
           updateDelta(row, i);
+          paintBrandFacts();
           paintTotal();
           scheduleDraft();
         });
@@ -383,7 +444,12 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           if (e.key !== "Enter") return;
           e.preventDefault();
           if (k === 0) inputs[1].focus();
-          else (linesEl.querySelector(`[data-i="${i + 1}"] [data-f="qty"]`) ?? searchEl).focus();
+          else {
+            // the next line as shown (brand, then the catalogue order), skipping the ones the filter hides
+            const pos = viewOrder.indexOf(i);
+            const nextRow = viewOrder.slice(pos + 1).map((j) => linesEl.querySelector(`[data-i="${j}"]`)).find((r) => r && !r.hidden);
+            (nextRow?.querySelector('[data-f="qty"]') ?? searchEl).focus();
+          }
         });
       });
       row.querySelector("[data-remove]").addEventListener("click", () => {
@@ -392,6 +458,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         scheduleDraft();
       });
     });
+    applyLineFilter();
     paintTotal();
   }
 
@@ -406,6 +473,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   }
   function add(id) {
     lines.push({ product_id: id, qty: null, cost_usd: null });
+    filterEl.value = ""; // the new line is never hidden by an old filter
     searchEl.value = "";
     found = [];
     resultsEl.innerHTML = "";
@@ -517,7 +585,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         allow_duplicate: allowDuplicate || undefined,
       });
       clearTimeout(saveTimer);
-      if (fresh) clearDraft();
+      clearDraft(draftKey);
       close();
       onSaved?.();
     } catch (err) {

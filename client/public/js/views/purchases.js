@@ -4,6 +4,7 @@
 // Server: server/src/products/routes/purchases.js. Who: admin, CEO, operations director, accountant (canManagePurchases).
 import { api } from "../api.js";
 import { t } from "../i18n.js";
+import { compareProducts, sortedBrands, FAMILY_PRIORITY } from "../productSort.js";
 import { icons } from "../icons.js";
 import { activateDialog, escapeHtml, formatAmd, formatDateDMY, groupDigits, openInfoPopup, showToast } from "../util.js";
 import { state } from "../state.js";
@@ -268,9 +269,32 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
         <span class="pu-line-qty">${groupDigits(l.qty)} × ${usd(l.cost_usd)}</span>
         <span class="pu-line-sum">${usd((Number(l.qty) || 0) * (Number(l.cost_usd) || 0))}</span>
       </div>`;
+    // by brand in the price-list order, each brand's products in the catalogue order, the brand's packs, litres and dollars on its row
+    // (owner plan P2, 2026-11-20)
+    const grouped = (lines, side) => {
+      const byBrand = new Map();
+      for (const l of lines) {
+        const b = l.brand || "—";
+        if (!byBrand.has(b)) byBrand.set(b, []);
+        byBrand.get(b).push(l);
+      }
+      const known = sortedBrands([...byBrand.keys()].filter((b) => b !== "—").map((brand) => ({ brand })));
+      const order = byBrand.has("—") ? [...known, "—"] : known;
+      // the product line (Edge, Magnatec, GTX...) is a word of the name: these lines carry no family of their own
+      const familyOf = (name) => FAMILY_PRIORITY.find((f) => String(name ?? "").toLowerCase().split(/\s+/).includes(f.toLowerCase())) ?? "";
+      const asProduct = (l) => ({ name: l.app_product_name || l.product_name || "", brand: l.brand || "", family: familyOf(l.app_product_name || l.product_name), unit: l.size_l ? `${l.size_l}L` : "" });
+      return order
+        .map((brand) => {
+          const list = byBrand.get(brand).slice().sort((a, b) => compareProducts(asProduct(a), asProduct(b)));
+          const packs = list.reduce((a, l) => a + (Number(l.qty) || 0), 0);
+          const l = litersOf(list);
+          return `<div class="pu-line pu-line-brand"><span>${escapeHtml(brand)} <span class="muted">· ${groupDigits(packs)} ${t("pu_total_packs").toLowerCase()}${l > 0 ? ` · ${liters(l)}` : ""}</span></span><span></span><span>${usd(sumOf(list))}</span></div>${list.map((x) => lineRow(x, side)).join("")}`;
+        })
+        .join("");
+    };
     const block = (title, lines, side) =>
       lines?.length
-        ? `<h3 class="section-title section-title-tight">${title}</h3><div class="card pu-lines">${lines.map((l) => lineRow(l, side)).join("")}
+        ? `<h3 class="section-title section-title-tight">${title}</h3><div class="card pu-lines">${grouped(lines, side)}
             <div class="pu-line pu-line-total"><span>${t("total")} · ${groupDigits(lines.reduce((a, l) => a + (Number(l.qty) || 0), 0))} ${t("pu_total_packs").toLowerCase()}${litersOf(lines) > 0 ? ` · ${liters(litersOf(lines))}` : ""}</span><span></span><span>${usd(sumOf(lines))}</span></div></div>`
         : "";
     const head = app ?? { supplier: row?.supplier, invoice_no: invoiceNo, invoice_date: date };
