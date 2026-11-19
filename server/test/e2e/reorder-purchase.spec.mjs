@@ -22,7 +22,9 @@ test("@smoke Warehouse To order: a purchase is created from the suggestions, by 
     await expect(btn).toBeVisible({ timeout: 15000 });
     await btn.click();
     const form = page.locator(".pu-form-sheet");
-    await expect(form.locator(".pu-chip-on")).toContainText("RO Supplier");
+    await expect(form.locator("#pu-supplier-chips .pu-chip-on")).toContainText("RO Supplier");
+    // a purchase from "To order" starts as Ordered (P5): the supplier's invoice comes later
+    await expect(form.locator("#pu-status .pu-chip-on")).toHaveAttribute("data-status", "ordered");
     const line = form.locator(".pu-fl", { hasText: `RO Edge ${stamp}` });
     await expect(line).toHaveCount(1);
     expect(Number(await line.locator('[data-f="qty"]').inputValue())).toBeGreaterThan(0);
