@@ -62,7 +62,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const source = draft ?? invoice ?? {};
   let supplierName = source.supplier ?? source.supplierName ?? "";
   let date = source.invoice_date ?? source.date ?? isoDay(new Date());
-  const lines = (source.lines ?? []).map((l) => ({ product_id: l.product_id, product_name: l.product_name, qty: Number(l.qty) || null, cost_usd: l.cost_usd === null || l.cost_usd === undefined || l.cost_usd === "" ? null : Number(l.cost_usd) }));
+  const lines = (source.lines ?? []).map((l) => ({ product_id: l.product_id || null, product_name: l.product_name, brand: l.brand ?? null, size_l: Number(l.size_l) || null, qty: Number(l.qty) || null, cost_usd: l.cost_usd === null || l.cost_usd === undefined || l.cost_usd === "" ? null : Number(l.cost_usd) }));
   const clientRef = `pu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const history = new Map(); // product_id -> GET /purchases/product-history entry
   let allowDuplicate = false;
@@ -305,11 +305,14 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   function paintTotal() {
     const rate = num(rateInput.value);
     const packs = lines.reduce((a, l) => a + (Number(l.qty) || 0), 0);
-    const liters = lines.reduce((a, l) => a + (Number(l.qty) || 0) * sizeOf(byId.get(l.product_id)), 0);
+    const litersOf = (l) => sizeOf(byId.get(l.product_id)) || Number(l.size_l) || 0;
+    const liters = lines.reduce((a, l) => a + (Number(l.qty) || 0) * litersOf(l), 0);
     const sum = lines.reduce((a, l) => a + (Number(l.qty) || 0) * (Number(l.cost_usd) || 0), 0);
+    // per litre: only the lines that have litres (a stand, a filter adds dollars but no oil; owner, 2026-11-20)
+    const liquid = lines.reduce((a, l) => a + (litersOf(l) > 0 ? (Number(l.qty) || 0) * (Number(l.cost_usd) || 0) : 0), 0);
     $("#pu-total").innerHTML = `
       <span class="pu-bar-main"><strong>${usd(sum)}</strong>${rate > 0 ? `<span class="muted">${formatAmd(Math.round(sum * rate))}</span>` : ""}</span>
-      <span class="pu-bar-sub muted">${groupDigits(packs)} ${t("pu_total_packs").toLowerCase()} · ${groupDigits(Math.round(liters))} L${liters > 0 && sum > 0 ? ` · ${usd(sum / liters)}/L` : ""}</span>`;
+      <span class="pu-bar-sub muted">${groupDigits(packs)} ${t("pu_total_packs").toLowerCase()} · ${groupDigits(Math.round(liters))} L${liters > 0 && liquid > 0 ? ` · ${usd(liquid / liters)}/L` : ""}</span>`;
   }
 
   // ---- lines -------------------------------------------------------------------------------------------------------------------------
@@ -505,7 +508,11 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         supplier_name: supplier ? null : name,
         usd_rate: rate,
         note: $("#pu-note").value.trim() || null,
-        lines: lines.map((l) => ({ product_id: l.product_id, qty: Number(l.qty), cost_usd: Number(l.cost_usd) })),
+        lines: lines.map((l) =>
+          l.product_id
+            ? { product_id: l.product_id, qty: Number(l.qty), cost_usd: Number(l.cost_usd) }
+            : { product_id: null, product_name: l.product_name, brand: l.brand ?? null, size_l: l.size_l ?? null, qty: Number(l.qty), cost_usd: Number(l.cost_usd) }
+        ),
         client_ref: editing ? undefined : clientRef,
         allow_duplicate: allowDuplicate || undefined,
       });
