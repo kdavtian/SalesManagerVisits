@@ -11,6 +11,8 @@ import bcrypt from "bcryptjs";
 
 let server;
 let baseUrl;
+// the running test server's address, for a test that needs the raw response (a file download)
+export const testBaseUrl = () => baseUrl;
 
 export async function startTestServer() {
   if (server) return baseUrl;

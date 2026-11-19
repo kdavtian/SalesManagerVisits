@@ -393,3 +393,23 @@
   .pricelist-no-print.detail-header { flex-wrap: nowrap; gap: 10px; }
   .pricelist-no-print.detail-header .detail-header-title { min-width: 0; flex: 1 1 auto; }
 }
+
+/* Purchases P3 (2026-11-20): the paper of an invoice (photos / PDF), its history, the Excel export chip */
+.pu-export-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.pu-export-btn svg { width: 16px; height: 16px; }
+.pu-file-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.pu-files-none { grid-column: 1 / -1; margin: 0; }
+.pu-file { position: relative; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-card); }
+.pu-file-open { display: flex; flex-direction: column; color: inherit; text-decoration: none; min-height: 44px; }
+.pu-file-open img { width: 100%; height: 96px; object-fit: cover; display: block; }
+.pu-file-pdf { display: flex; align-items: center; justify-content: center; height: 96px; font-weight: 700; color: var(--danger); background: var(--bg); }
+.pu-file-name { padding: 6px 44px 6px 8px; font-size: 0.78rem; overflow-wrap: anywhere; }
+.pu-file .icon-btn { position: absolute; right: 4px; bottom: 2px; }
+.pu-file .icon-btn.is-armed { background: var(--danger); color: #fff; }
+.pu-file-add { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; cursor: pointer; }
+.pu-file-add svg { width: 18px; height: 18px; }
+.pu-file-add.is-busy { opacity: 0.6; pointer-events: none; }
+.pu-log { margin: 12px 0; }
+.pu-log summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.pu-log ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; }
+.pu-log-what { overflow-wrap: anywhere; }

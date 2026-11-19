@@ -301,6 +301,17 @@ test("@smoke Purchases P2: lines grouped by brand and sorted, brand totals, filt
     await page.locator(".sheet").last().locator("#pu-edit").click();
     await expect(page.locator("#pu-draft")).toBeVisible();
     await expect(page.locator(".pu-fl", { hasText: "P2 Lotos 5w30" }).locator('[data-f="qty"]')).toHaveValue("40");
+    // P3: the paper of the invoice and its history on the invoice's sheet
+    await page.locator(".pu-form-sheet [data-close]").first().click();
+    await page.locator(".pu-row", { hasText: "E2E P2 Supplier" }).click();
+    const inv = page.locator(".sheet").last();
+    await expect(inv.locator(".pu-files-none")).toBeVisible();
+    await inv.locator("[data-file-input]").setInputFiles({ name: "invoice.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex") });
+    await expect(inv.locator(".pu-file")).toHaveCount(1);
+    await expect(inv.locator(".pu-file-name")).toHaveText("invoice.png");
+    await inv.locator(".pu-files").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: "test-results/purchases-p3-sheet.png" });
   } finally {
     await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("fv_pu_draft")).forEach((k) => localStorage.removeItem(k))).catch(() => {});
     await page.close();
