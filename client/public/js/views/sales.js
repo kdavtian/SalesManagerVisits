@@ -6,8 +6,9 @@
 // contract as Debt Balances.
 import { api } from "../api.js";
 import { loadWithCache } from "../listCache.js";
-import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, erpLineDiscountRowHtml, monthShort, labelColon, formatDateDMY } from "../util.js";
+import { escapeHtml, saveBlob, openInfoPopup, formatAmd, formatLiters, channelDisplayLabel, activateDialog, syncBadgeHtml, parseDateOnly, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, monthShort, labelColon, formatDateDMY } from "../util.js";
 import { t } from "../i18n.js";
+import { erpOrderLinesHtml } from "../erpOrderLines.js";
 import { seesFinancialExports } from "../state.js";
 import { icons } from "../icons.js";
 import { unpaidRowClass, dueChipHtml } from "../debtChip.js";
@@ -48,16 +49,6 @@ function formatSalesDateCaption(dateOnly) {
   return `${d.getDate()} ${month} ${d.getFullYear()}`;
 }
 
-function groupLinesByBrand(lines) {
-  const byBrand = new Map();
-  for (const line of lines) {
-    const brand = line.brand || t("erp_brand_unspecified");
-    if (!byBrand.has(brand)) byBrand.set(brand, []);
-    byBrand.get(brand).push(line);
-  }
-  return byBrand;
-}
-
 async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
   const overlay = document.createElement("div");
   overlay.className = "sheet-overlay";
@@ -74,24 +65,7 @@ async function openSalesOrderSheet(erpCustomerId, orderId, navigate) {
     return;
   }
 
-  const byBrand = groupLinesByBrand(detail.lines);
-  const brandSections = [...byBrand.entries()]
-    .map(
-      ([brand, lines]) => `
-      <p class="proposed-changes-label">${escapeHtml(brand)}</p>
-      ${lines
-        .map(
-          (l) => `
-        <div class="erp-line-row">
-          <span>${escapeHtml(l.product_name || "")}${l.size_l ? ` ${escapeHtml(String(l.size_l))}L` : ""}</span>
-          <span class="muted">${escapeHtml(String(l.qty ?? ""))}pcs</span>
-          <span>${formatAmd(l.unit_price_amd)}</span>
-        </div>
-        ${erpLineDiscountRowHtml(l)}`
-        )
-        .join("")}`
-    )
-    .join("");
+  const { html: brandSections } = erpOrderLinesHtml(detail.lines, { totalAmd: detail.total_amd });
 
   overlay.querySelector(".sheet").innerHTML = `
     <div class="order-detail-header">

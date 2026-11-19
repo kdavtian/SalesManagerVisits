@@ -3406,6 +3406,33 @@ label.checkbox-row input[type="checkbox"] {
   border-top: 1px solid var(--border);
 }
 
+/* one brand of an order (erpOrderLines.js): its name with its pieces on the right, space above every brand but the first */
+.erp-brand-group + .erp-brand-group {
+  margin-top: 14px;
+}
+.erp-brand-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.erp-brand-qty {
+  font-size: var(--fs-eyebrow);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* the order's total line under the products: pieces and amount, bold */
+.erp-line-row.erp-line-total {
+  margin-top: 10px;
+  border-top: 2px solid var(--text-dim);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.erp-line-row.erp-line-total > span:nth-child(2) {
+  white-space: nowrap;
+}
+
 .erp-line-row > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;

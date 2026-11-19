@@ -808,6 +808,7 @@ export const enCommon = {
     no_orders_for_erp_id: "The Excel has no order for Customer ID {id}.",
     no_orders_no_erp_id: "This customer has no Excel Customer ID linked.",
     no_orders_found: "No orders found.",
+    pcs_short: "pcs", // pieces after a number: "3 pcs" (order lines)
     erp_brand_unspecified: "Other",
     amd: "AMD",
     usd: "USD",
