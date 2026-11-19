@@ -41,12 +41,16 @@ test("check-in outcomes, note for Other, KAD products and competitors sheets", a
   await expect(page.locator('[data-brand-card="kad"]')).toContainText("(2)"); // Lotos: Available + Full range
 
   await page.locator('[data-brand-card="competitors"]').click();
-  const names = await page.locator(".brand-sheet-competitors .brand-chip span").allTextContents();
+  // one row per brand (owner, 2026-11-19): the brand name is the button that opens its product lines
+  const sheetCs = page.locator(".cs-sheet").last();
+  await expect(sheetCs.locator(".cs-row[data-key]").first()).toBeVisible();
+  const names = await sheetCs.locator(".cs-row[data-key] .cs-name").evaluateAll((els) => els.map((el) => el.firstChild.textContent.trim()));
   expect(names).toEqual([
     "Mobil", "Motul", "Shell", "LiquiMoly", "Aral", "Bardahl", "Petronas", "Fuchs", "Total",
     "Ravenol", "Oscar", "AMSoil", "Zic", "Pennzoil", "Addinol", "S-Oil", "Kixx", "Russian oil",
   ]);
-  await page.locator('.brand-sheet-competitors [data-action="close-sheet"]').click();
+  await sheetCs.locator('[data-action="close-sheet"]').click();
+  await expect(page.locator(".cs-sheet")).toHaveCount(0);
 
   // Take photo is the wide button of its row, the voice note button sits next to it (owner, 2026-11-12); High resolution sits at the
   // left edge under them
