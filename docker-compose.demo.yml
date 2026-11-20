@@ -35,6 +35,19 @@ services:
       DATABASE_URL: postgres://demo:${DEMO_DB_PASSWORD}@db:5432/demo
       JWT_SECRET: ${DEMO_JWT_SECRET:?run deploy/demo.sh up}
       DEMO_MODE: "1"
+      # Every integration set EMPTY on purpose. The image can carry a server/.env from the checkout (.dockerignore drops only the root .env)
+      # and dotenv loads it at start, but dotenv never overrides a variable that is already set, even to "". Without these lines the demo
+      # picked up the real server's keys (2026-11-20: a VAPID key in server/.env crashed the seed with "Vapid public key must be URL safe Base64").
+      ERP_SYNC_KEY: ""
+      PLATFORM_SYNC_URL: ""
+      PLATFORM_SYNC_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      OPENAI_API_KEY: ""
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_NOTIFY_CHAT_IDS: ""
+      VAPID_PUBLIC_KEY: ""
+      VAPID_PRIVATE_KEY: ""
+      E2E_RATE_LIMIT_BYPASS_TOKEN: ""
       PORT: 3000
       UPLOAD_DIR: /app/server/uploads
       CHECKIN_RADIUS_METERS: 200
