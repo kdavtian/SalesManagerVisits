@@ -178,6 +178,16 @@ export async function renderCheckin(root, navigate, customerId) {
           ).join("")}
         </div>
       </label>
+      <!-- the shelf (owner, 2026-11-20): a reminder at a shop's first visit, required when it still has none or the last one is 60+ days old -->
+      <div class="shelf-rule" id="shelf-rule" hidden>
+        <p class="shelf-rule-text" id="shelf-rule-text"></p>
+        <button type="button" class="btn btn-link shelf-skip-btn" id="shelf-skip-btn" aria-expanded="false">${t("shelf_skip")}</button>
+        <label class="shelf-skip-field" id="shelf-skip-field" hidden>
+          <span>${t("shelf_skip_reason")}</span>
+          <input type="text" id="shelf-skip-reason" maxlength="300" autocomplete="off" />
+        </label>
+        <p class="form-error" id="shelf-error" role="alert" hidden>${t("shelf_error")}</p>
+      </div>
 
 
       <label id="note-field">
@@ -387,6 +397,46 @@ export async function renderCheckin(root, navigate, customerId) {
 
   availableProductsBtn.addEventListener("click", openAvailableProductsSheet);
 
+  // ---- the shelf rule (owner, 2026-11-20; server field/shelfData.js) ----------------------------------------------------------------------
+  // off: an office check-in, a never-visited channel, or an older server that sends no shelf facts
+  const SHELF_FRESH_DAYS = 60;
+  const shelfAgeDays = customer.shelf_last_at ? Math.floor((Date.now() - new Date(customer.shelf_last_at).getTime()) / 86_400_000) : null;
+  const shelfMode =
+    customer.checkin_for_all || customer.requires_visit === false || customer.checkins_count === undefined
+      ? "off"
+      : customer.shelf_last_at
+        ? shelfAgeDays > SHELF_FRESH_DAYS
+          ? "required"
+          : "off"
+        : customer.checkins_count > 0
+          ? "required"
+          : "nudge";
+  const shelfRule = container.querySelector("#shelf-rule");
+  const shelfSkipBtn = container.querySelector("#shelf-skip-btn");
+  const shelfSkipField = container.querySelector("#shelf-skip-field");
+  const shelfSkipInput = container.querySelector("#shelf-skip-reason");
+  const shelfError = container.querySelector("#shelf-error");
+  const shelfFilled = () => BRAND_GROUPS.some((g) => brandStatus[g.key].length) || Object.keys(competitorPacks).length > 0;
+  const shelfSkipReason = () => (shelfSkipField.hidden ? "" : shelfSkipInput.value.trim());
+  function paintShelfRule() {
+    if (shelfMode === "off") return;
+    const filled = shelfFilled();
+    shelfRule.hidden = filled;
+    if (filled) shelfError.hidden = true;
+    shelfRule.classList.toggle("shelf-rule-required", shelfMode === "required");
+    container.querySelector("#shelf-rule-text").textContent =
+      shelfMode === "nudge" ? t("shelf_nudge") : customer.shelf_last_at ? t("shelf_required_old").replace("{n}", shelfAgeDays) : t("shelf_required_none");
+    // "could not check" is offered only where the shelf is required; a first-visit reminder needs no excuse
+    shelfSkipBtn.hidden = shelfMode !== "required";
+  }
+  shelfSkipBtn.addEventListener("click", () => {
+    shelfSkipField.hidden = !shelfSkipField.hidden;
+    shelfSkipBtn.setAttribute("aria-expanded", String(!shelfSkipField.hidden));
+    if (!shelfSkipField.hidden) shelfSkipInput.focus();
+  });
+  shelfSkipInput.addEventListener("input", () => (shelfError.hidden = true));
+  paintShelfRule();
+
   const cardCount = (card) => (card.key === "competitors" ? Object.keys(competitorPacks).length : card.groups.reduce((n, key) => n + brandStatus[key].length, 0));
   const cardGroupsHaveValues = (card) => cardCount(card) > 0;
   function paintBrandGroupButtons() {
@@ -396,6 +446,7 @@ export async function renderCheckin(root, navigate, customerId) {
       btn.classList.toggle("brand-group-btn-active", cardGroupsHaveValues(card));
       btn.textContent = count ? `${t(card.labelKey)} (${count})` : t(card.labelKey);
     });
+    paintShelfRule();
   }
 
   // One bottom sheet per card. "KAD products" shows two columns: Castrol on the left, Lotos with Royal under it on the right
@@ -995,6 +1046,13 @@ export async function renderCheckin(root, navigate, customerId) {
       return;
     }
 
+    if (shelfMode === "required" && !shelfFilled() && shelfSkipReason().length < 3) {
+      shelfError.hidden = false;
+      shelfRule.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (!shelfSkipField.hidden) shelfSkipInput.focus({ preventScroll: true });
+      return;
+    }
+
     if (openOrderTasks.length && !orderTaskAnswered && !outcomes.includes("order_placed")) {
       const answer = await openOrderTaskSheet(openOrderTasks);
       if (!answer) return;
@@ -1017,6 +1075,7 @@ export async function renderCheckin(root, navigate, customerId) {
     const brandStatusPayload = Object.fromEntries(Object.entries(brandStatus).filter(([, v]) => v.length));
     if (Object.keys(competitorPacks).length) brandStatusPayload.competitor_packs = { ...competitorPacks };
     if (Object.keys(competitorLinePacks).length) brandStatusPayload.competitor_line_packs = { ...competitorLinePacks };
+    if (!shelfFilled() && shelfSkipReason().length >= 3) brandStatusPayload.shelf_skipped = { reason: shelfSkipReason() };
     const competitorPricesPayload = [...competitorPrices.values()];
     const { latitude: lat, longitude: lng } = position.coords;
 

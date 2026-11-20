@@ -115,3 +115,38 @@ test("map-facts: last order date, same RBAC as the debt", async () => {
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [erp]);
   }
 });
+
+// owner, 2026-11-20: "Rep has visited this customer but it still shows planned today. It should show next planned visit"
+test("visited today: today's plan is done -- not 'planned today', the next date is shown; the card knows the shelf facts", async () => {
+  const c = await createCustomer({ created_by: mgr.id, assigned_manager_id: mgr.id });
+  const today = (await apiRequest(`/api/customers/${c.id}/visit-schedule`, { cookie: mgrCookie })).data.today;
+  await pool.query("DELETE FROM visit_plans WHERE user_id = $1 AND plan_date = $2::date", [mgr.id, today]);
+  await pool.query("INSERT INTO visit_plans (user_id, plan_date, status, customer_ids, created_by) VALUES ($1, $2::date, 'approved', $3, $1)", [mgr.id, today, [c.id]]);
+  const before = (await apiRequest(`/api/customers/${c.id}/visit-schedule`, { cookie: mgrCookie })).data;
+  assert.equal(before.planned_today, true);
+  const { rows } = await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, timestamp)
+     VALUES ($1, $2, 40.18, 44.51, 5, true, ARRAY['no_order'], now() - interval '1 minute') RETURNING id`,
+    [c.id, mgr.id]
+  );
+  trackCheckin(rows[0].id);
+  const after = (await apiRequest(`/api/customers/${c.id}/visit-schedule`, { cookie: mgrCookie })).data;
+  assert.equal(after.planned_today, false);
+  assert.equal(after.visited_today, true);
+  assert.ok(!after.planned.some((p) => p.date === today));
+  // the shelf facts of the check-in's rule (field/shelfData.js): one visit, no shelf yet
+  const card = (await apiRequest(`/api/customers/${c.id}`, { cookie: mgrCookie })).data;
+  assert.equal(card.checkins_count, 1);
+  assert.equal(card.shelf_last_at, null);
+  const shelf = await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, outcomes, brand_status, timestamp)
+     VALUES ($1, $2, 40.18, 44.51, 5, true, ARRAY['no_order'], $3, now() - interval '70 days'), ($1, $2, 40.18, 44.51, 5, true, ARRAY['no_order'], $4, now() - interval '2 days') RETURNING id`,
+    [c.id, mgr.id, JSON.stringify({ castrol: ["available"] }), JSON.stringify({ shelf_skipped: { reason: "owner away" } })]
+  );
+  shelf.rows.forEach((r) => trackCheckin(r.id));
+  const card2 = (await apiRequest(`/api/customers/${c.id}`, { cookie: mgrCookie })).data;
+  assert.equal(card2.checkins_count, 3);
+  // the shelf was recorded 70 days ago; "could not check" two days ago is no shelf data
+  assert.ok(Date.now() - new Date(card2.shelf_last_at).getTime() > 69 * 86_400_000);
+  await pool.query("DELETE FROM visit_plans WHERE user_id = $1 AND plan_date = $2::date", [mgr.id, today]);
+});

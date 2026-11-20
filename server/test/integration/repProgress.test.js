@@ -68,6 +68,17 @@ test("only management reads it; numbers add up per rep", async () => {
   assert.equal(data.days.length, 1);
   assert.equal(row.hours_by_day[data.today], 6.25);
 
+  // the shelf (owner, 2026-11-20): of the 2 shops visited, none has shelf data yet; then c1 gets it, c2 only "could not check"
+  assert.equal(row.shelf_shops, 2);
+  assert.equal(row.shelf_pct, 0);
+  await pool.query(
+    `INSERT INTO checkins (customer_id, user_id, lat, lng, distance_meters, within_range, brand_status, timestamp)
+     VALUES ($1, $3, 40.18, 44.51, 5, true, $4, now() - interval '20 days'), ($2, $3, 40.18, 44.51, 5, true, $5, now() - interval '20 days')`,
+    [c1.id, c2.id, rep.id, JSON.stringify({ lotos: ["available"] }), JSON.stringify({ shelf_skipped: { reason: "closed" } })]
+  );
+  const shelfRow = (await apiRequest("/api/dashboard/rep-progress?period=today", { cookie: directorCookie })).data.reps.find((r) => r.user_id === rep.id);
+  assert.deepEqual([shelfRow.shelf_shops, shelfRow.shelf_fresh, shelfRow.shelf_pct], [2, 1, 50]);
+
   // The week contains today too; last week does not.
   const week = (await apiRequest("/api/dashboard/rep-progress?period=week", { cookie: directorCookie })).data.reps.find((r) => r.user_id === rep.id);
   assert.equal(week.checkins, 3);

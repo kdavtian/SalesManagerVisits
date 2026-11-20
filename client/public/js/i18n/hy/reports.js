@@ -103,6 +103,7 @@ export const hyReports = {
     rp_sec_payments: "Հավաքված վճարումներ",
     rp_sec_orders: "Ստեղծված պատվերներ",
     rp_sec_time: "Աշխատած ժամեր",
+    rp_shelf: "Դարակը լրացված, %",
     rp_visits: "Այցեր",
     rp_checkins: "Չեք-իներ",
     rp_customers: "Հաճախորդներ",

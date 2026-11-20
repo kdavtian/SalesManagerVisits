@@ -3,6 +3,7 @@
 // orders placed (+ liters, the volume goal) and hours worked, plus the per-day hours behind the total.
 import { pool } from "../db/pool.js";
 import { FIELD_REP_ROLE } from "./visitCount.js";
+import { shelfRecordedSql, SHELF_FRESH_DAYS } from "./shelfData.js";
 
 const TZ = "Asia/Yerevan";
 export const PERIODS = ["today", "yesterday", "week", "last_week", "month", "last_month"];
@@ -45,7 +46,7 @@ export async function computeRepProgress(period) {
   );
   const { from_ts: from, to_ts: to, from_day, last_day, today } = bounds[0];
 
-  const [repsRes, checkinsRes, dayRes, paymentsRes, ordersRes] = await Promise.all([
+  const [repsRes, checkinsRes, dayRes, paymentsRes, ordersRes, shelfRes] = await Promise.all([
     pool.query(`SELECT id AS user_id, name FROM users WHERE role = $1 ORDER BY name`, [FIELD_REP_ROLE]),
     pool.query(
       `SELECT ch.user_id, count(*)::int AS checkins, count(DISTINCT ch.customer_id)::int AS customers,
@@ -79,12 +80,26 @@ export async function computeRepProgress(period) {
        GROUP BY o.user_id`,
       [from, to]
     ),
+    // the shops a rep visited (not the office) and how many of them have shelf data of the last 60 days at the period's end (owner, 2026-11-20)
+    pool.query(
+      `SELECT v.user_id, count(*)::int AS shops,
+              count(*) FILTER (WHERE EXISTS (SELECT 1 FROM checkins s WHERE s.customer_id = v.customer_id AND ${shelfRecordedSql("s")}
+                                               AND s.timestamp < LEAST($2::timestamptz, now())
+                                               AND s.timestamp >= LEAST($2::timestamptz, now()) - interval '${SHELF_FRESH_DAYS} days'))::int AS fresh
+       FROM (SELECT DISTINCT ch.user_id, ch.customer_id FROM checkins ch
+               JOIN users u ON u.id = ch.user_id AND u.role = $3
+               JOIN customers c ON c.id = ch.customer_id AND NOT COALESCE(c.checkin_for_all, false)
+              WHERE ch.timestamp >= $1 AND ch.timestamp < $2) v
+       GROUP BY v.user_id`,
+      [from, to, FIELD_REP_ROLE]
+    ),
   ]);
 
   const by = (rows) => new Map(rows.map((r) => [r.user_id, r]));
   const checkins = by(checkinsRes.rows);
   const payments = by(paymentsRes.rows);
   const orders = by(ordersRes.rows);
+  const shelf = by(shelfRes.rows);
   const hoursByRep = new Map();
   for (const r of dayRes.rows) {
     if (!hoursByRep.has(r.user_id)) hoursByRep.set(r.user_id, {});
@@ -119,6 +134,9 @@ export async function computeRepProgress(period) {
       days_worked: daysWorked,
       avg_hours_per_day: daysWorked ? Math.round((hours / daysWorked) * 100) / 100 : 0,
       hours_by_day: Object.fromEntries(Object.entries(days).map(([d, v]) => [d, v.hours])),
+      shelf_shops: shelf.get(user_id)?.shops ?? 0,
+      shelf_fresh: shelf.get(user_id)?.fresh ?? 0,
+      shelf_pct: pct(shelf.get(user_id)?.fresh ?? 0, shelf.get(user_id)?.shops ?? 0),
     };
   });
 
