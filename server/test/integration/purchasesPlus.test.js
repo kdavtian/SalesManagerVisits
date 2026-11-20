@@ -255,3 +255,76 @@ test("the export is a real workbook with the invoice's lines", async () => {
   ws.eachRow((r, n) => n > 1 && rows.push([r.getCell(2).value, r.getCell(8).value, r.getCell(10).value]));
   assert.deepEqual(rows, [["P3/2", 3, 22.5], ["P3/2", 2, 2]]);
 });
+
+// Purchases P5 (owner, 2026-11-20): Ordered -> On the way -> Arrived; the warehouse counts without prices; a difference -> accountant's task;
+// Warehouse > To order subtracts what is coming.
+test("an order before its invoice; on the way needs the paper; the warehouse receives without prices; a difference makes the accountant's task", async () => {
+  const wh = await createUser("warehouse_manager");
+  const whCookie = await loginAs(wh.email);
+  const accountant = (await pool.query("SELECT id FROM users WHERE role = 'accountant' AND status = 'active' ORDER BY id DESC LIMIT 1")).rows[0];
+  // Ordered: no number, no rate
+  const ord = await apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: { status: "ordered", expected_date: "2026-12-01", invoice_date: "2026-11-20", supplier_name: "P5 Supplier", lines: [{ product_id: p1.id, qty: 60, cost_usd: 10 }, { product_id: p2.id, qty: 12, cost_usd: 3 }] } });
+  assert.equal(ord.status, 201, JSON.stringify(ord.data));
+  assert.deepEqual([ord.data.status, ord.data.invoice_no, ord.data.usd_rate, ord.data.expected_date], ["ordered", null, null, "2026-12-01"]);
+  // On the way without the paper: refused; with it: fine
+  const id = ord.data.id;
+  const full = ord.data;
+  const noPaper = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...full, status: "in_transit" } });
+  assert.equal(noPaper.status, 400);
+  const onWay = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...full, status: "in_transit", invoice_no: "P5/1", usd_rate: 386 } });
+  assert.equal(onWay.status, 200, JSON.stringify(onWay.data));
+  assert.equal(onWay.data.status, "in_transit");
+  // the warehouse sees it, without any money
+  const inc = await apiRequest("/api/purchase-receiving", { cookie: whCookie });
+  assert.equal(inc.status, 200);
+  const mine = inc.data.purchases.find((p) => p.id === id);
+  assert.ok(mine);
+  assert.ok(!JSON.stringify(mine).match(/cost|usd|amd|rate/i), "no money for the warehouse");
+  assert.equal((await apiRequest("/api/purchase-receiving", { cookie: repCookie })).status, 403);
+  assert.equal((await apiRequest(`/api/purchases/${id}`, { cookie: whCookie })).status, 403, "the warehouse does not open the invoice with prices");
+  // an older app saves without the expected date: the date stays (review 2026-11-20)
+  const { expected_date: _drop, ...oldClient } = onWay.data;
+  const oldSave = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...oldClient, note: "old app" } });
+  assert.equal(oldSave.data.expected_date, "2026-12-01");
+  // the office's edit wrote the lines again: a count of the lines seen before is refused, not taken as "all came"
+  const stale = await apiRequest(`/api/purchase-receiving/${id}/receive`, { method: "POST", cookie: whCookie, body: { lines: mine.lines.map((l) => ({ id: l.id, received_qty: 1 })) } });
+  assert.equal(stale.status, 409);
+  const fresh = (await apiRequest("/api/purchase-receiving", { cookie: whCookie })).data.purchases.find((p) => p.id === id);
+  assert.equal(fresh.status, "in_transit");
+  // received: 58 of 60, all of the other
+  const [l1, l2] = fresh.lines;
+  const rec = await apiRequest(`/api/purchase-receiving/${id}/receive`, { method: "POST", cookie: whCookie, body: { lines: [{ id: l1.id, received_qty: 58 }, { id: l2.id, received_qty: 12 }], note: "2 broken" } });
+  assert.equal(rec.status, 200, JSON.stringify(rec.data));
+  assert.equal(rec.data.differences.length, 1);
+  assert.equal(rec.data.differences[0].received, 58);
+  const after = (await apiRequest(`/api/purchases/${id}`, { cookie: accCookie })).data;
+  assert.equal(after.status, "arrived");
+  assert.deepEqual(after.lines.map((l) => l.received_qty), [58, 12]);
+  assert.ok(after.log.some((g) => g.action === "receive"));
+  const { rows: tasks } = await pool.query("SELECT t.id, t.assignee_id FROM tasks t WHERE t.auto_kind = 'purchase_difference' AND t.title LIKE '%P5 Supplier%'");
+  assert.ok(tasks.some((t) => t.assignee_id === accountant.id), "the accountant has the task");
+  // a second count of the same purchase is refused
+  assert.equal((await apiRequest(`/api/purchase-receiving/${id}/receive`, { method: "POST", cookie: whCookie, body: { lines: [] } })).status, 409);
+  // an edit by the office keeps the counts
+  const kept = await apiRequest(`/api/purchases/${id}`, { method: "PUT", cookie: accCookie, body: { ...after, note: "checked" } });
+  assert.deepEqual(kept.data.lines.map((l) => l.received_qty), [58, 12]);
+  await pool.query("DELETE FROM task_items WHERE task_id = ANY($1)", [tasks.map((t) => t.id)]);
+  await pool.query("DELETE FROM tasks WHERE id = ANY($1)", [tasks.map((t) => t.id)]);
+});
+
+test("Warehouse > To order: the pieces already ordered are not suggested again", async () => {
+  const admin = await loginAs((await createUser("admin")).email);
+  const prod = await createProduct({ unit: "4L" });
+  const erpId = `P5-RO-${Date.now()}`;
+  await pool.query("UPDATE products SET erp_product_id = $2, stock_qty = 0 WHERE id = $1", [prod.id, erpId]);
+  await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) SELECT 'P5-RO', $1 || '-' || g, CURRENT_DATE - (g * 7), $2, 15, 15000 FROM generate_series(0, 12) g", [erpId, erpId]);
+  try {
+    const before = (await apiRequest("/api/warehouse/reorder-suggestions", { cookie: admin })).data.find((r) => r.id === prod.id);
+    assert.ok(before && before.suggested_qty > 0);
+    await apiRequest("/api/purchases", { method: "POST", cookie: accCookie, body: { status: "ordered", invoice_date: "2026-11-20", supplier_name: "P5 Supplier", lines: [{ product_id: prod.id, qty: before.suggested_qty, cost_usd: 1 }] } });
+    const after = (await apiRequest("/api/warehouse/reorder-suggestions", { cookie: admin })).data.find((r) => r.id === prod.id);
+    assert.ok(!after || after.suggested_qty < before.suggested_qty, "what is coming is not suggested again");
+  } finally {
+    await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = 'P5-RO'");
+  }
+});

@@ -364,3 +364,81 @@ test.describe("narrow Armenian", () => {
     }
   });
 });
+
+// Purchases P5 (owner, 2026-11-20): Ordered before the paper exists, the "Coming" filter, the warehouse counts it without prices, a
+// difference shows in red on both sides.
+test("@smoke Purchases P5: an Ordered purchase is Coming, the warehouse receives it without prices, a difference is shown", async ({ page, fixtures }) => {
+  const acc = await fixtures.createUser("accountant");
+  const wm = await fixtures.createUser("warehouse_manager");
+  const a = await fixtures.createProduct({ name: "P5 Edge 5w30", brand: "Castrol", unit: "4L" });
+  const b = await fixtures.createProduct({ name: "P5 Magnatec 10w40", brand: "Castrol", unit: "1L" });
+  const supplier = (await pool.query("INSERT INTO suppliers (name) VALUES ('E2E P5 Supplier') ON CONFLICT (lower(name)) DO UPDATE SET active = true RETURNING id")).rows[0].id;
+  const inv = (
+    await pool.query(
+      "INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, created_by, status, expected_date) VALUES (NULL, current_date, $1, NULL, $2, 'ordered', current_date + 3) RETURNING id",
+      [supplier, acc.id]
+    )
+  ).rows[0].id;
+  await pool.query("INSERT INTO purchase_lines (invoice_id, product_id, product_name, brand, size_l, qty, cost_usd) VALUES ($1, $2, $3, 'Castrol', 4, 60, 15.25), ($1, $4, $5, 'Castrol', 1, 24, 4.75)", [inv, a.id, a.name, b.id, b.name]);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // the office: the Coming chip, the Ordered badge with its expected date, no number yet, the Receive button
+    await loginViaUi(page, acc.email);
+    await page.goto("/#/purchases");
+    const coming = page.locator('#pu-statuses [data-status="coming"]');
+    await expect(coming).toBeVisible({ timeout: 15000 });
+    await coming.click();
+    const row = page.locator(".pu-row", { hasText: "E2E P5 Supplier" });
+    await expect(row.locator(".pu-flow")).toContainText("Ordered");
+    await page.screenshot({ path: "test-results/purchases-p5-list.png" });
+    await row.click();
+    const sheet = page.locator(".sheet").last();
+    await expect(sheet.locator("#pu-receive")).toBeVisible();
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "test-results/purchases-p5-sheet.png" });
+    await sheet.locator("[data-close]").first().click();
+    // the warehouse: Incoming, pieces only
+    await page.context().clearCookies();
+    await loginViaUi(page, wm.email);
+    await page.goto("/#/warehouse");
+    await page.locator('[data-tab="incoming"]').click();
+    const card = page.locator(".incoming-card", { hasText: "E2E P5 Supplier" });
+    await expect(card).toContainText("84");
+    await expect(page.locator("#warehouse-content")).not.toContainText("$");
+    await expect(page.locator("#warehouse-content")).not.toContainText("15.25");
+    await page.screenshot({ path: "test-results/purchases-p5-incoming.png" });
+    await card.locator("[data-receive]").click();
+    const recv = page.locator(".pu-receive-sheet");
+    await expect(recv.locator(".pu-receive-row")).toHaveCount(2);
+    await expect(recv).not.toContainText("15.25");
+    await recv.locator(".pu-receive-row", { hasText: "P5 Edge" }).locator("input").fill("58");
+    await expect(recv.locator(".pu-receive-diff")).toHaveCount(1);
+    await recv.locator("#pu-receive-note").fill("2 broken");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "test-results/purchases-p5-receive.png" });
+    await recv.locator("#pu-receive-save").click();
+    // it moved to "Arrived lately", the difference in red; the accountant got a task
+    const done = page.locator(".incoming-card", { hasText: "E2E P5 Supplier" });
+    await expect(done.locator(".incoming-diffs")).toContainText("58 / 60");
+    await expect(done.locator("[data-receive]")).toHaveCount(0);
+    const { rows: tasks } = await pool.query("SELECT id FROM tasks WHERE auto_kind = 'purchase_difference' AND assignee_id = $1", [acc.id]);
+    expect(tasks.length).toBe(1);
+    const { rows: lines } = await pool.query("SELECT received_qty::float8 AS r FROM purchase_lines WHERE invoice_id = $1 ORDER BY id", [inv]);
+    expect(lines.map((l) => l.r)).toEqual([58, 24]);
+    // the office sees it arrived, the paper still missing and the difference
+    await page.context().clearCookies();
+    await loginViaUi(page, acc.email);
+    await page.goto("/#/purchases");
+    const after = page.locator(".pu-row", { hasText: "E2E P5 Supplier" });
+    await expect(after.locator(".pu-flow")).toContainText("Paper missing", { timeout: 15000 });
+    await expect(after.locator(".pu-flow")).toContainText("Difference");
+    await after.click();
+    await expect(page.locator(".sheet").last().locator(".pu-recv-diff")).toContainText("58");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: "test-results/purchases-p5-arrived.png" });
+  } finally {
+    await pool.query("DELETE FROM tasks WHERE auto_kind = 'purchase_difference' AND assignee_id = $1", [acc.id]);
+    await pool.query("DELETE FROM purchase_invoices WHERE supplier_id = $1", [supplier]);
+    await pool.query("DELETE FROM suppliers WHERE id = $1", [supplier]);
+  }
+});

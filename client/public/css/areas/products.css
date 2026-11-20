@@ -413,3 +413,28 @@
 .pu-log summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .pu-log ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 0.85rem; }
 .pu-log-what { overflow-wrap: anywhere; }
+
+/* Purchases P5 (owner, 2026-11-20): Ordered / On the way / Arrived, the expected date, the count on arrival */
+.pu-status-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.pu-expected { margin-top: 10px; max-width: 260px; }
+.pu-status-hint { margin: 8px 0 0; font-size: 0.8rem; }
+.pu-flow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.pu-flow .badge, .pu-sheet-status .badge { white-space: normal; }
+.pu-sheet-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pu-line-diff .pu-line-name { color: var(--danger); }
+.pu-recv-diff { font-weight: 600; color: var(--danger); white-space: nowrap; }
+.pu-arrived { font-size: 0.82rem; overflow-wrap: anywhere; }
+.pu-receive-lines { padding: 4px 12px; }
+.pu-receive-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
+.pu-receive-row:first-child { border-top: 0; }
+.pu-receive-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; font-size: 0.9rem; }
+.pu-receive-name small { font-size: 0.78rem; }
+.pu-receive-row input { min-height: 44px; width: 100%; text-align: right; font-variant-numeric: tabular-nums; font-size: 1rem; }
+.pu-receive-diff input { border-color: var(--danger); color: var(--danger); }
+.pu-receive-diff .pu-receive-name > :first-child { color: var(--danger); }
+.pu-receive-hint { font-size: 0.82rem; }
+.incoming-card .incoming-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.incoming-card .incoming-head > div { min-width: 0; overflow-wrap: anywhere; }
+.incoming-card .incoming-head .badge { flex: none; }
+.incoming-late { margin: 6px 0 0; color: var(--danger); font-weight: 600; }
+.incoming-diffs { margin: 6px 0 0; padding-left: 18px; color: var(--danger); font-size: 0.85rem; }

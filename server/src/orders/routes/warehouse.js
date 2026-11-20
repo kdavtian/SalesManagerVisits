@@ -12,6 +12,7 @@ import { canManageWarehouse } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
 import { computeReorderSuggestion, roundToPacks } from "../../products/stockForecast.js";
+import { incomingQtyByProduct } from "../../products/purchases.js";
 import { computeDemandForecast } from "../../products/demandModel.js";
 import { getDemandSettings } from "../../products/demandSettings.js";
 import { loadDemandInputs } from "../../products/demandInputs.js";
@@ -298,17 +299,20 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     [today]
   );
   const out = [];
-  const [demand, demandSettings] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool)]);
+  const [demand, demandSettings, incoming] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool), incomingQtyByProduct()]);
   for (const row of rows) {
-    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: row.stock_qty, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    // pieces already Ordered / On the way (Purchases P5, owner 2026-11-20): what is coming is not suggested again
+    const coming = incoming.get(row.id) ?? 0;
+    const stockWithComing = (Number(row.stock_qty) || 0) + coming;
+    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
     const suggestion = computeReorderSuggestion({
-      stockQty: row.stock_qty, reservedQty: row.reserved_qty, status: forecast.status,
+      stockQty: stockWithComing, reservedQty: row.reserved_qty, status: forecast.status,
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
     });
     if (!suggestion) continue;
     // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
     const packs = roundToPacks(suggestion.suggested_qty, row);
-    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
+    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, incoming_qty: coming, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
   }
   const rank = { out: 0, critical: 1, low: 2 };
   out.sort((a, b) => rank[a.urgency] - rank[b.urgency] || (a.days_of_stock ?? 0) - (b.days_of_stock ?? 0));

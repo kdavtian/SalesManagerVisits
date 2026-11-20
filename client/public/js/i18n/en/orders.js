@@ -49,6 +49,7 @@ export const enOrders = {
     warehouse_tab_staging: "Staging",
     warehouse_tab_inventory: "Inventory",
     warehouse_tab_reorder: "To order",
+    warehouse_tab_incoming: "Incoming",
     warehouse_reorder_none: "Nothing to order right now: every product has enough stock.",
     warehouse_reorder_hint: "Products that are out or running low, with the pieces to buy to be covered for 90 days again (based on recent sales, minus what open orders already promised).",
     warehouse_reorder_out: "Out",

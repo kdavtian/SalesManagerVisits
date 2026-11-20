@@ -70,6 +70,9 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const source = draft ?? invoice ?? {};
   let supplierName = source.supplier ?? source.supplierName ?? "";
   let date = source.invoice_date ?? source.date ?? isoDay(new Date());
+  // Ordered -> On the way -> Arrived (P5, owner 2026-11-20): a purchase started from "To order" is Ordered; a typed invoice has arrived
+  let status = source.status ?? (invoice?.draft_tag?.startsWith("reorder") ? "ordered" : "arrived");
+  let expected = source.expected_date ?? null;
   const lines = (source.lines ?? []).map((l) => ({ product_id: l.product_id || null, product_name: l.product_name, brand: l.brand ?? null, size_l: Number(l.size_l) || null, qty: Number(l.qty) || null, cost_usd: l.cost_usd === null || l.cost_usd === undefined || l.cost_usd === "" ? null : Number(l.cost_usd) }));
   const clientRef = `pu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const history = new Map(); // product_id -> GET /purchases/product-history entry
@@ -110,6 +113,17 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           <div class="pu-supplier-pick" id="pu-supplier-chips" role="radiogroup" aria-label="${t("pu_supplier")}"></div>
           <div id="pu-new-supplier" hidden><input name="supplier_new" maxlength="120" value="${escapeHtml(source.supplier_new ?? "")}" placeholder="${t("pu_supplier_new")}" aria-label="${t("pu_supplier_new")}" /></div>
           <p class="pu-field-err" id="err-supplier" role="alert" hidden></p>
+        </fieldset>
+        <fieldset class="pu-block">
+          <legend>${t("pu_status")}</legend>
+          <div class="pu-supplier-pick pu-status-pick" id="pu-status" role="radiogroup" aria-label="${t("pu_status")}">${["ordered", "in_transit", "arrived"]
+            .map((s) => `<button type="button" class="pu-chip ${s === status ? "pu-chip-on" : ""}" role="radio" aria-checked="${s === status}" data-status="${s}"><strong>${t(`pu_flow_${s}`)}</strong></button>`)
+            .join("")}</div>
+          <div class="pu-field pu-expected" id="pu-expected-wrap" ${status === "arrived" ? "hidden" : ""}>
+            <label for="pu-expected">${t("pu_expected")}</label>
+            <button type="button" class="btn pu-date-btn" id="pu-expected">${expected ? escapeHtml(formatDateDMY(expected)) : t("pu_expected_none")}</button>
+          </div>
+          <p class="muted pu-status-hint" id="pu-status-hint" ${status === "ordered" ? "" : "hidden"}>${t("pu_ordered_hint")}</p>
         </fieldset>
         <div class="pu-grid3">
           <div class="pu-field">
@@ -175,7 +189,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
 
   // ---- draft -------------------------------------------------------------------------------------------------------------------------
   let saveTimer = null;
-  const snapshot = () => ({ supplier: supplierName, supplier_new: $("#pu-new-supplier input").value, invoice_no: noInput.value, invoice_date: date, usd_rate: rateInput.value, note: $("#pu-note").value, lines: lines.map((l) => ({ ...l })) });
+  const snapshot = () => ({ supplier: supplierName, supplier_new: $("#pu-new-supplier input").value, invoice_no: noInput.value, invoice_date: date, usd_rate: rateInput.value, note: $("#pu-note").value, status, expected_date: expected, lines: lines.map((l) => ({ ...l })) });
   const touched = () => Boolean(supplierName || noInput.value.trim() || lines.length || $("#pu-note").value.trim());
   function scheduleDraft() {
     clearTimeout(saveTimer);
@@ -277,6 +291,32 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     scheduleDraft();
   });
   $("#pu-note").addEventListener("input", scheduleDraft);
+  // the status: Ordered needs no number or rate yet; Ordered / On the way have an expected date
+  $("#pu-status").querySelectorAll("[data-status]").forEach((b) =>
+    b.addEventListener("click", () => {
+      status = b.dataset.status;
+      $("#pu-status").querySelectorAll("[data-status]").forEach((x) => {
+        x.classList.toggle("pu-chip-on", x === b);
+        x.setAttribute("aria-checked", String(x === b));
+      });
+      $("#pu-expected-wrap").hidden = status === "arrived";
+      $("#pu-status-hint").hidden = status !== "ordered";
+      if (status === "ordered") {
+        fieldErr("no", "");
+        fieldErr("rate", "");
+      }
+      scheduleDraft();
+    })
+  );
+  $("#pu-expected").addEventListener("click", async () => {
+    const button = $("#pu-expected");
+    const picked = await pickDate({ value: expected ?? date, title: t("pu_expected") });
+    if (picked) {
+      expected = picked;
+      button.textContent = formatDateDMY(expected);
+      scheduleDraft();
+    }
+  });
   $("#pu-date").addEventListener("click", async () => {
     const button = $("#pu-date"); // not e.currentTarget: it is null once the click has been dispatched and the picker answers
     const picked = await pickDate({ value: date, title: t("pu_date") });
@@ -527,13 +567,15 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       fieldErr("supplier", t("pu_need_supplier"));
       bad(supplierName === "__new" ? $("#pu-new-supplier input") : $("#pu-supplier-chips button"));
     }
-    if (!noInput.value.trim()) {
+    const paperNeeded = status !== "ordered"; // an Ordered purchase has no invoice yet (P5)
+    if (paperNeeded && !noInput.value.trim()) {
       fieldErr("no", t("pu_need_no"));
       flag(noInput, true);
       bad(noInput);
     }
     const rate = parseAmount(rateInput.value);
-    if (!(Number.isFinite(rate) && rate > 0)) {
+    const rateOk = Number.isFinite(rate) && rate > 0;
+    if ((paperNeeded || rateInput.value.trim()) && !rateOk) {
       fieldErr("rate", t("pu_err_rate"));
       flag(rateInput, true);
       bad(rateInput);
@@ -575,7 +617,9 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         invoice_date: date,
         supplier_id: supplier?.id ?? null,
         supplier_name: supplier ? null : name,
-        usd_rate: rate,
+        usd_rate: rateOk ? rate : null,
+        status,
+        expected_date: status === "arrived" ? null : expected,
         note: $("#pu-note").value.trim() || null,
         lines: lines.map((l) =>
           l.product_id

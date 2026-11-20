@@ -41,7 +41,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/team-performance": ["reports"],
   "#/company-dashboard": [],
   "#/pricelist": ["products"],
-  "#/warehouse": ["customers", "money", "orders"],
+  "#/warehouse": ["customers", "money", "orders", "products"],
   "#/delivery": ["orders"],
   "#/accounting": ["customers", "money", "orders"],
   "#/documents": ["money", "orders"],

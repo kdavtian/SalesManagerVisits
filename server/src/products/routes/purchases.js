@@ -77,6 +77,8 @@ purchasesRouter.get("/export.xlsx", async (req, res) => {
     { header: "USD", key: "usd", width: 13 },
     { header: "Liters", key: "liters", width: 10 },
     { header: "USD rate", key: "usd_rate", width: 10 },
+    // P5: ordered / in_transit / arrived, last so the columns people already read keep their place
+    { header: "Flow", key: "flow", width: 11 },
   ];
   ws.getRow(1).font = { bold: true };
   ws.views = [{ state: "frozen", ySplit: 1 }];
