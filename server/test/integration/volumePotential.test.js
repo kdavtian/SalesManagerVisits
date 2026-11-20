@@ -31,6 +31,7 @@ test("the catalogue is seeded (litres, grease in kg, Castrol hints) and the opti
   const r = await apiRequest("/api/volume-potential/lines", { cookie: cookies.rep });
   assert.equal(r.status, 200);
   assert.ok(line("pcmo_5w30") && line("hdeo_15w40") && line("ev_thermal") && line("coolant"));
+  assert.ok(line("pcmo_5w20") && line("pcmo_0w40") && line("hdeo_10w30"), "the three lines added 2026-11-20 (migration 220)");
   assert.equal(line("grease").unit, "kg");
   assert.equal(line("atf").castrol_hint, "Transmax");
   assert.ok(r.data.services.some((s) => s.key === "atf_flush" && s.machine));
