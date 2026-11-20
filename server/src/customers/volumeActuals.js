@@ -16,6 +16,10 @@ const TRUCK_WORDS = /\b(TURDUS|DIESEL|TRUCK|HD|HDEO|SHPD|UHPD|TIR|RIMULA|DELVAC|
 const MOTO_WORDS = /\b(4T|2T|POWER\s*1|MOTO|MOTORCYCLE|SCOOTER)\b/;
 const NOT_A_LINE_FAMILIES = new Set(["merch", "hydraulic"]);
 
+// grades with no line of their own, counted under the closest one (owner, 2026-11-20): an ultra-thin hybrid oil with 0W-16, a sports
+// 10W-60 with 10W-40, a car 10W-30 with 5W-30 (same hot thickness), an old-truck 20W-50 with 15W-40
+export const GRADE_INTO = { pcmo_0w8: "pcmo_0w16", pcmo_10w60: "pcmo_10w40", pcmo_10w30: "pcmo_5w30", hdeo_20w50: "hdeo_15w40" };
+
 export function gradeOf(name) {
   const m = String(name ?? "").toUpperCase().match(/\b(\d{1,2})\s*W\s*-?\s*(\d{1,3})\b/);
   return m ? `${Number(m[1])}w${Number(m[2])}` : null;
@@ -57,7 +61,8 @@ export function autoLineCode({ name, family, brand } = {}) {
   const both = `${n} ${String(family ?? "").toUpperCase()} `;
   const carRange = PCMO_RANGES.test(both) || ["edge", "magnatec", "gtx"].includes(fam);
   const kind = HDEO_RANGES.test(both) || (!carRange && TRUCK_WORDS.test(both)) ? "hdeo" : "pcmo";
-  return { code: `${kind}_${grade}`, reason: "rule" };
+  const code = `${kind}_${grade}`;
+  return { code: GRADE_INTO[code] ?? code, reason: "rule" };
 }
 
 // "4", "4L", "4 l", "0.4kg", "208" -> number; anything else -> null

@@ -72,6 +72,15 @@ test("the rules: exact products map, unclear ones wait for a person", () => {
   assert.equal(autoLineCode({ name: "Brake & parts cleaner spray", family: "Other" }).code, null);
   assert.equal(autoLineCode({ name: "Castrol Brake Fluid DOT 4", family: "Other" }).code, "brake");
   assert.equal(autoLineCode({ name: "Castrol ON EV Coolant", family: "ON" }).code, "ev_thermal");
+  // owner, 2026-11-20: three new lines, four grades counted under the closest line
+  assert.equal(autoLineCode({ name: "Castrol Magnatec 5w20", family: "Magnatec" }).code, "pcmo_5w20");
+  assert.equal(autoLineCode({ name: "Orlen 5w20", family: "Engine Oil" }).code, "pcmo_5w20");
+  assert.equal(autoLineCode({ name: "Castrol Edge 0w40", family: "Edge" }).code, "pcmo_0w40");
+  assert.equal(autoLineCode({ name: "Castrol Vecton LD 10w30 E8/E11", family: "Vecton" }).code, "hdeo_10w30");
+  assert.equal(autoLineCode({ name: "Royal 0w8", family: "Engine Oil" }).code, "pcmo_0w16");
+  assert.equal(autoLineCode({ name: "Castrol Edge 10w60", family: "Edge" }).code, "pcmo_10w40");
+  assert.equal(autoLineCode({ name: "Royal 10w30", family: "Engine Oil" }).code, "pcmo_5w30");
+  assert.equal(autoLineCode({ name: "Castrol CRB 20w50", family: "CRB" }).code, "hdeo_15w40");
 });
 
 test("grease (kg) never counts in litres: a grease-only customer has no litre potential unless kg lines alone are filtered", () => {
