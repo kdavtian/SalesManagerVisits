@@ -5,7 +5,8 @@ import { customerIdsMatching } from "../customerSearch.js";
 import { pool } from "../../db/pool.js";
 import { placeNewCustomer } from "../../field/autoRoutePlan.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
-import { yerevanToday } from "../../utils/yerevanDate.js";
+import { yerevanToday, yerevanDateOf } from "../../utils/yerevanDate.js";
+import { shelfRecordedSql } from "../../field/shelfData.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
 import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
@@ -807,6 +808,9 @@ customersRouter.get("/:id", async (req, res) => {
        (SELECT json_build_object('stage', s.stage, 'since', s.since) FROM customer_funnel_stage s WHERE s.customer_id = c.id) AS funnel_stage,
        -- when the volume potential was last saved (the card's "update it" badge without loading the section)
        (SELECT cp.updated_at FROM volume_potential_profiles cp WHERE cp.customer_id = c.id) AS volume_potential_at,
+       -- the shelf (owner, 2026-11-20): the last visit that recorded it, and the visits so far (field/shelfData.js)
+       (SELECT max(ch.timestamp) FROM checkins ch WHERE ch.customer_id = c.id AND ${shelfRecordedSql("ch")}) AS shelf_last_at,
+       (SELECT count(*)::int FROM checkins ch WHERE ch.customer_id = c.id) AS checkins_count,
        (SELECT COALESCE(SUM(ch.amount_collected_amd), 0)
           FROM checkins ch
           WHERE ch.customer_id = c.id
@@ -1602,7 +1606,12 @@ function scheduleForCustomer(customer, ctx) {
       }
     }
   }
-  const plannedList = [...planned.values()].sort((a, b) => a.date.localeCompare(b.date) || a.user_name.localeCompare(b.user_name)).slice(0, SCHEDULE_MAX_ENTRIES);
+  // visited today (owner, 2026-11-20: "visited but still shows planned today"): today's planned visit is done -- the next one is shown
+  const visitedToday = Boolean(customer.last_visit_at) && yerevanDateOf(customer.last_visit_at) === today;
+  const plannedList = [...planned.values()]
+    .filter((p) => !(visitedToday && p.date === today))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.user_name.localeCompare(b.user_name))
+    .slice(0, SCHEDULE_MAX_ENTRIES);
   const due = computeVisitDue({
     lastVisitAt: customer.last_visit_at,
     frequencyDays: customer.visit_frequency_days,
@@ -1613,6 +1622,7 @@ function scheduleForCustomer(customer, ctx) {
     today,
     planned: plannedList,
     planned_today: plannedList.some((p) => p.date === today),
+    visited_today: visitedToday,
     cadence: {
       frequency_days: Number(customer.visit_frequency_days) || null,
       last_visit_at: customer.last_visit_at,

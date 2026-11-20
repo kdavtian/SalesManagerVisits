@@ -65,6 +65,8 @@ export function checkinBrandTags(ch) {
     }
     // brands marked "not available" (never in `competitors`)
     for (const [key, v] of Object.entries(packs)) if (Array.isArray(v) && v.includes("none")) tags.push(`${chipLabel({ group: "competitors", value: key })}: ${t("cs_none")}`);
+    // the rep could not look at the shelf, and why (owner, 2026-11-20)
+    if (ch.brand_status.shelf_skipped?.reason) tags.push(`${t("shelf_skipped_tag")}: ${ch.brand_status.shelf_skipped.reason}`);
     return tags;
   }
   return (ch.brands_found ?? []).map((b) => t(`brand_${b}`));

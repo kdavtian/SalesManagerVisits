@@ -42,6 +42,14 @@ test("bottles and drum are separate; not available clears them and is never 'pre
   assert.deepEqual(parseBrandStatus(JSON.stringify({ competitors: ["mobil", "x"] }), keys), { competitors: ["mobil"] });
 });
 
+// owner, 2026-11-20: a rep who could not look at the shelf says why; it is kept only when no shelf data was recorded with it
+test("could not check the shelf: kept with its reason, dropped beside real shelf data or without a reason", () => {
+  const keys = new Set(["mobil"]);
+  assert.deepEqual(parseBrandStatus(JSON.stringify({ shelf_skipped: { reason: "  owner away  " } }), keys), { shelf_skipped: { reason: "owner away" } });
+  assert.equal(parseBrandStatus(JSON.stringify({ shelf_skipped: { reason: "x" } }), keys), null, "a reason of 3+ letters");
+  assert.deepEqual(parseBrandStatus(JSON.stringify({ castrol: ["available"], shelf_skipped: { reason: "owner away" } }), keys), { castrol: ["available"] });
+});
+
 test("the seeded list; a rep adds a brand: usable now by them only, a duplicate is not asked twice, too short is refused", async () => {
   const seeded = await list("rep");
   assert.ok(["mobil", "motul", "russian_oil"].every((k) => seeded.some((b) => b.key === k && b.status === "approved")));

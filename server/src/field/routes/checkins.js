@@ -19,6 +19,7 @@ import { insertPayment } from "../../money/routes/payments.js";
 import { autoCompleteCollectionTasks, autoCompleteOrderTasksNoOrder, autoCompleteProductCheckTasks, autoCompleteVisitTasks } from "../../team/taskAutoComplete.js";
 import { lockSignedOrders, createSignedActs, createPaymentSlip, saveOwnSignature } from "../../orders/signedActs.js";
 import { scheduleAiCheck } from "../../customers/aiBlankCheck.js";
+import { parseShelfSkipped, SHELF_GROUPS } from "../shelfData.js";
 import { parseDeliveredOrderIds, deliverableOrders, deliverOrdersAtCheckin, notifyCheckinDelivered, CHECKIN_ORDER_LINKS_SQL } from "../checkinDelivery.js";
 
 // Below this, a payment isn't worth interrupting anyone's Telegram for.
@@ -198,6 +199,9 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
       result.competitors = [...present];
     }
   }
+  // the rep could not look at the shelf, and why (owner, 2026-11-20): kept with the visit, never counted as shelf data (field/shelfData.js)
+  const skipped = parseShelfSkipped(parsed.shelf_skipped);
+  if (skipped && !SHELF_GROUPS.some((g) => result[g]?.length) && !result.competitor_packs) result.shelf_skipped = skipped;
   return Object.keys(result).length ? result : null;
 }
 

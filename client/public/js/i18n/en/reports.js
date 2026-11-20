@@ -103,6 +103,7 @@ export const enReports = {
     rp_sec_payments: "Payments collected",
     rp_sec_orders: "Orders placed",
     rp_sec_time: "Hours worked",
+    rp_shelf: "Shelf filled, %",
     rp_visits: "Visits",
     rp_checkins: "Check-ins",
     rp_customers: "Customers",

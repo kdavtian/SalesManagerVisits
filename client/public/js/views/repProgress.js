@@ -27,6 +27,8 @@ function metricRows() {
       ["visits", "rp_visits", (r) => r.visits, (rs) => sum(rs, "visits"), String],
       ["checkins", "rp_checkins", (r) => r.checkins, (rs) => sum(rs, "checkins"), String],
       ["customers", "rp_customers", (r) => r.customers_visited, (rs) => sum(rs, "customers_visited"), String],
+      // the shops visited with shelf data of the last 60 days (owner, 2026-11-20)
+      ["shelf", "rp_shelf", (r) => r.shelf_pct ?? null, (rs) => ratio(sum(rs, "shelf_fresh"), sum(rs, "shelf_shops")), pctLabel],
     ]],
     ["rp_sec_payments", [
       ["pay_n", "rp_payments_qty", (r) => r.payments_count, (rs) => sum(rs, "payments_count"), String],
