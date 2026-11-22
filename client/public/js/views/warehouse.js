@@ -1,7 +1,7 @@
 import { state } from "../state.js";
 import { seesTierPrices, canManagePurchases, canReceivePurchases } from "../shared/roles.js";
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY } from "../util.js";
+import { escapeHtml, formatAmd, customerNameLinkHtml, activateCustomerNameLinks, activateDialog, firstUseHintHtml, activateFirstUseHints, labelColon, formatDateDMY, activateProductOpen } from "../util.js";
 import { t } from "../i18n.js";
 import { appBadgeHtml } from "../orderDetailSheet.js";
 import { icons } from "../icons.js";
@@ -59,6 +59,8 @@ export async function renderWarehouse(root, navigate) {
   const contentEl = container.querySelector("#warehouse-content");
   const errorEl = container.querySelector("#warehouse-error");
   const tabsEl = container.querySelector("#warehouse-tabs");
+  // Tapping a product (Stock list, a size pill, a To-order card) opens its product card; Back returns to this screen as it was.
+  activateProductOpen(contentEl, navigate);
 
   tabsEl.querySelectorAll("[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -86,7 +88,7 @@ export async function renderWarehouse(root, navigate) {
             const [cls, key] = badge[r.urgency];
             const days = r.days_of_stock != null ? ` · ${Math.round(r.days_of_stock)} ${t("warehouse_reorder_days")}` : "";
             return `
-          <div class="card">
+          <div class="card product-open-card" data-open-product="${r.id}" role="button" tabindex="0">
             <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
               <div><strong>${escapeHtml(r.name)}</strong><br><span class="muted">${[r.brand, normalizeUnitLabel(r.unit)].filter(Boolean).map(escapeHtml).join(" · ")}</span></div>
               <span class="badge ${cls}">${t(key)}</span>
@@ -412,7 +414,7 @@ export async function renderWarehouse(root, navigate) {
     function productRowHtml(p) {
       const sizeLabel = p.unit ? normalizeUnitLabel(p.unit) : "";
       return `
-        <div class="card inventory-row-card">
+        <div class="card inventory-row-card product-open-card" data-open-product="${p.id}" role="button" tabindex="0">
           <div class="inventory-row">
             <span class="inventory-row-name-wrap">
               <span class="inventory-row-name">${escapeHtml(p.name)}</span>
@@ -491,7 +493,7 @@ export async function renderWarehouse(root, navigate) {
         .map((line) => `<span class="inventory-variant-pill-price">${line}</span>`)
         .join("");
       return `
-        <span class="inventory-variant-pill">
+        <span class="inventory-variant-pill product-open-card" data-open-product="${p.id}" role="button" tabindex="0">
           <span class="inventory-variant-pill-top">
             ${p.unit ? `<span class="inventory-variant-pill-size">${escapeHtml(normalizeUnitLabel(p.unit))}</span>` : ""}
             <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${p.stock_qty} ${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
@@ -518,8 +520,9 @@ export async function renderWarehouse(root, navigate) {
       const amountLines = groupAmountLines(totals)
         .map((line) => `<div class="inventory-row-prices">${line}</div>`)
         .join("");
+      // Tapping the card outside a pill opens its first size; keyboard users reach each size through its pill (no button inside a button).
       return `
-        <div class="card inventory-row-card">
+        <div class="card inventory-row-card product-open-card" data-open-product="${group.products[0].id}">
           <div class="inventory-row">
             <span class="inventory-row-name">${escapeHtml(group.name)}</span>
             <span class="inventory-row-qty">${groupQtyLabel(totals)}</span>

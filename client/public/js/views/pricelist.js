@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl, yerevanToday } from "../util.js";
+import { escapeHtml, formatAmd, activateDialog, saveBlob, downloadFromUrl, yerevanToday, activateProductOpen } from "../util.js";
 import { t } from "../i18n.js";
 import { state, canManageProducts, seesProductCosts, canPrintCostColumns } from "../state.js";
 import { seesTierPrices } from "../shared/roles.js";
@@ -564,7 +564,7 @@ export async function renderPricelist(root, navigate) {
       })
       .join("");
     return `
-      <div class="card pricelist-row pricelist-row-open ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : `data-open-id="${p.id}"`} role="button" tabindex="0">
+      <div class="card pricelist-row pricelist-row-open ${selectMode ? "pricelist-row-selectable" : ""}" ${selectMode ? `data-select-id="${p.id}"` : `data-open-product="${p.id}"`} role="button" tabindex="0">
         ${selectMode ? `<span class="pricelist-select-check ${selected ? "pricelist-select-check-on" : ""}">${selected ? icons.checkCircle : ""}</span>` : ""}
         ${thumbHtml(p)}
         <div class="pricelist-row-main">
@@ -599,7 +599,7 @@ export async function renderPricelist(root, navigate) {
             ${list
               .map(
                 (p) => `
-              <tr class="pricelist-table-row" data-open-id="${p.id}" tabindex="0">
+              <tr class="pricelist-table-row" data-open-product="${p.id}" tabindex="0">
                 <td class="pl-td-photo">${thumbHtml(p)}</td>
                 <td>${escapeHtml(p.brand ?? "")}</td>
                 <td>${escapeHtml(p.name)}</td>
@@ -616,16 +616,8 @@ export async function renderPricelist(root, navigate) {
     `;
   }
 
-  // One delegated listener: tapping a card/row opens that product's detail card.
-  catalogEl.addEventListener("click", (e) => {
-    const open = e.target.closest("[data-open-id]");
-    if (open) navigate(`#/product/${open.dataset.openId}`);
-  });
-  catalogEl.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter") return;
-    const open = e.target.closest("[data-open-id]");
-    if (open) navigate(`#/product/${open.dataset.openId}`);
-  });
+  // One delegated listener: tapping a card/row opens that product's detail card (shared with Warehouse, util.js).
+  activateProductOpen(catalogEl, navigate);
 
   paint();
 

@@ -8,13 +8,13 @@ test("Product page: the Home tab and Back both lead home", async ({ page, fixtur
   await page.setViewportSize({ width: 390, height: 844 });
   await loginViaUi(page, rep.email);
   await page.goto("/#/pricelist");
-  await page.locator("[data-open-id]").first().click();
+  await page.locator("[data-open-product]").first().click();
   await expect(page).toHaveURL(/#\/product\/\d+/);
   await page.locator("[data-hash='#/dashboard']:visible").first().click();
   await expect(page).toHaveURL(/#\/dashboard/);
   // Back route: Products -> product -> Back -> Back
   await page.goto("/#/pricelist");
-  await page.locator("[data-open-id]").first().click();
+  await page.locator("[data-open-product]").first().click();
   await expect(page).toHaveURL(/#\/product\/\d+/);
   await page.locator("#back-btn").first().click();
   await expect(page).toHaveURL(/#\/pricelist/);
