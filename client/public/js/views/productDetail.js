@@ -9,8 +9,43 @@ import { state, canManageProducts, seesProductCosts } from "../state.js";
 import { seesTierPrices } from "../shared/roles.js";
 import { icons } from "../icons.js";
 import { openCostCalculator } from "../costCalculator.js";
+import { parseLiters, normalizeUnitLabel } from "../productSort.js";
 
 const KIND_LABEL = { front: "photo_front", back: "photo_back", other: "photo_other" };
+
+// Free stock on the product card (owner, 2026-11-22): "Edge • 4 L • 23 հատ", a tap switches to liters ("Edge • 4 L • 92 L"), and a switch
+// shows or hides the line. Free = shelf stock minus what open orders already hold (server available_qty, the number order creation uses).
+// Both choices are this phone's own preference (localStorage), not shared and not saved on the server.
+const STOCK_ON_KEY = "fv_pd_stock_on";
+const STOCK_UNIT_KEY = "fv_pd_stock_unit";
+function readPref(key, fallback) {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writePref(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // private mode / storage blocked: the choice simply lasts for this screen
+  }
+}
+
+// The line starts with the product line ("Edge", "Magnatec"); a family that is only a workbook category says nothing, so the name is used.
+const CATEGORY_FAMILIES = new Set(["Engine Oil", "Transmission", "Hydraulic", "Antifreeze", "Grease", "Other"]);
+
+/** "Edge • 4 L • 23 հատ" or, in liters, "Edge • 4 L • 92 L"; null when the product has no stock on record. */
+function stockLineText(p, unit, pcsSuffix) {
+  if (p.stock_qty == null) return null;
+  const free = Math.max(Number(p.available_qty ?? p.stock_qty) || 0, 0);
+  const perUnit = parseLiters(p.unit);
+  const qty = unit === "l" && perUnit != null ? `${Math.round(free * perUnit * 10) / 10} L` : `${free} ${pcsSuffix}`;
+  // the pack size only for oils ("4 L"): a filter's unit is "pcs", which the quantity already says
+  const label = p.family && !CATEGORY_FAMILIES.has(p.family) ? p.family : p.name;
+  return [label, perUnit != null ? normalizeUnitLabel(p.unit) : "", qty].filter(Boolean).join(" • ");
+}
 
 function priceRow(label, value, { strong = false } = {}) {
   if (value == null || value === "" || Number(value) <= 0) return "";
@@ -35,6 +70,8 @@ export async function renderProductDetail(root, navigate, productId) {
   const manage = canManageProducts();
   const costs = seesProductCosts();
   let activeImageId = product.images[0]?.id ?? null;
+  let stockOn = readPref(STOCK_ON_KEY, "1") === "1";
+  let stockUnit = readPref(STOCK_UNIT_KEY, "pcs") === "l" ? "l" : "pcs";
 
   function render() {
     const p = product;
@@ -95,6 +132,8 @@ export async function renderProductDetail(root, navigate, productId) {
         ${p.active ? "" : `<span class="badge badge-neutral">${t("inactive")}</span>`}
       </div>
 
+      ${stockCardHtml(p)}
+
       <div class="card pd-card">
         <h3 class="pd-card-title">${t("product_prices")}</h3>
         ${hasSpecial ? `<div class="pd-row"><span class="muted">${t("price_special_period")}</span><span class="pd-amount pd-amount-strong">${formatAmd(p.effective_special_amd)}</span></div>
@@ -147,6 +186,18 @@ export async function renderProductDetail(root, navigate, productId) {
       })
     );
     container.querySelector("#pd-main-image")?.addEventListener("click", () => active && openLightbox(active.url));
+    container.querySelector("#pd-stock-toggle")?.addEventListener("click", () => {
+      stockOn = !stockOn;
+      writePref(STOCK_ON_KEY, stockOn ? "1" : "0");
+      render();
+      container.querySelector("#pd-stock-toggle")?.focus(); // the card is drawn again: keep the focus (VoiceOver, keyboard) on the switch
+    });
+    container.querySelector("#pd-stock-line")?.addEventListener("click", () => {
+      stockUnit = stockUnit === "l" ? "pcs" : "l";
+      writePref(STOCK_UNIT_KEY, stockUnit);
+      render();
+      container.querySelector("#pd-stock-line")?.focus();
+    });
     container.querySelector("#pd-calc-btn")?.addEventListener("click", () => openCostCalculator({ product: p }));
     if (manage) {
       container.querySelector("#edit-details-btn")?.addEventListener("click", openEditSheet);
@@ -163,6 +214,27 @@ export async function renderProductDetail(root, navigate, productId) {
         render();
       });
     }
+  }
+
+  // Hidden entirely for a product with no stock on record (a manually added line): nothing to show or switch.
+  function stockCardHtml(p) {
+    const text = stockLineText(p, stockUnit, t("warehouse_pcs_suffix"));
+    if (text == null) return "";
+    const hasLiters = parseLiters(p.unit) != null;
+    const zero = Math.max(Number(p.available_qty ?? p.stock_qty) || 0, 0) === 0;
+    return `<div class="card pd-card pd-stock-card">
+        <div class="pd-stock-head">
+          <h3 class="pd-card-title">${t("pd_stock_title")}</h3>
+          <button type="button" class="toggle-switch" id="pd-stock-toggle" role="switch" aria-checked="${stockOn}" aria-label="${escapeHtml(t("pd_stock_show"))}"><span class="toggle-thumb"></span></button>
+        </div>
+        ${
+          !stockOn
+            ? ""
+            : hasLiters
+              ? `<button type="button" class="pd-stock-line ${zero ? "pd-stock-zero" : ""}" id="pd-stock-line" aria-label="${escapeHtml(`${text}. ${t("pd_stock_switch_unit")}`)}">${escapeHtml(text)}<span class="pd-stock-swap" aria-hidden="true">⇄</span></button>`
+              : `<p class="pd-stock-line ${zero ? "pd-stock-zero" : ""}">${escapeHtml(text)}</p>`
+        }
+      </div>`;
   }
 
   function openLightbox(url) {

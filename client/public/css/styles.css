@@ -7195,6 +7195,18 @@ form select,
 .pd-title-block h2 { margin: 4px 0 2px; overflow-wrap: anywhere; }
 .pd-title-block .badge { margin-right: 6px; }
 .pd-card { margin: 12px 0; }
+/* Free stock on the product card: a show/hide switch, the line itself switches pieces <-> liters on tap (views/productDetail.js). */
+.pd-stock-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pd-stock-head .pd-card-title { margin: 0; }
+.pd-stock-head .toggle-switch { flex: none; }
+.pd-stock-line {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 44px; margin: 8px 0 0; padding: 0;
+  border: 0; background: none; color: var(--text); font: inherit; font-size: 1.05rem; font-weight: 700; text-align: left;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+}
+button.pd-stock-line { cursor: pointer; }
+.pd-stock-zero { color: var(--warning); }
+.pd-stock-swap { flex: none; color: var(--accent); font-size: 1.1rem; font-weight: 400; }
 .pd-card-title { margin: 14px 0 6px; font-size: var(--fs-eyebrow); letter-spacing: var(--ls-eyebrow); text-transform: uppercase; color: var(--text-dim); }
 .pd-card-title:first-child { margin-top: 0; }
 .pd-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
