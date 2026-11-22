@@ -388,6 +388,9 @@ const REAL_APP_BRANDING = {
 // miss it: another name on the home screen / in the app switcher / in the tab, and a purple status bar, so it is never mistaken for the real app.
 const isDemoSite = () => process.env.DEMO_MODE === "1";
 const DEMO_BRANDING = { title: "KAD Demo", themeColor: "#6d28d9" };
+// The demo is shown to clients abroad (owner, 2026-11-22): English until the visitor picks Armenian, amounts in US dollars. Read by the page
+// before anything else runs (theme-init.js, browser-check.js, bootGate.js, i18n.js); a language picked in Settings still wins.
+const DEMO_HEAD_META = '<meta name="robots" content="noindex, nofollow" />\n    <meta name="default-lang" content="en" />\n    <meta name="site-currency" content="USD" />';
 
 app.get("/manifest.json", async (req, res) => {
   if (isDemoSite()) {
@@ -438,7 +441,7 @@ app.get(/.*/, async (req, res) => {
     <link rel="manifest" href="${b.manifest}" />
     <link rel="icon" href="${b.icon192}" />
     <link rel="apple-touch-icon" href="${b.appleTouchIcon}" />
-    <meta name="apple-mobile-web-app-title" content="${b.title}" />${demoSite ? '\n    <meta name="robots" content="noindex, nofollow" />' : ""}`;
+    <meta name="apple-mobile-web-app-title" content="${b.title}" />${demoSite ? `\n    ${DEMO_HEAD_META}` : ""}`;
   // A <meta> tag, not an inline <script>, because the CSP above has no
   // 'unsafe-inline' in script-src -- bootGate.js reads this via
   // document.querySelector instead.

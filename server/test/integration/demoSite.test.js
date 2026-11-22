@@ -18,6 +18,7 @@ test("normal app: not branded as the demo, indexable", async () => {
   const res = await fetch(`${baseUrl}/`);
   const html = await res.text();
   assert.doesNotMatch(html, /KAD Demo/);
+  assert.doesNotMatch(html, /name="default-lang"|name="site-currency"/, "the real app stays Armenian-first and in AMD");
   assert.doesNotMatch(html, /noindex/);
   assert.equal(res.headers.get("x-robots-tag"), null);
   const manifest = await (await fetch(`${baseUrl}/manifest.json`)).json();
@@ -32,6 +33,8 @@ test("demo site: own name, purple status bar, own manifest, noindex", async () =
   assert.match(html, /apple-mobile-web-app-title" content="KAD Demo"/);
   assert.match(html, /<link rel="manifest" href="manifest\.json"/);
   assert.match(html, /name="robots" content="noindex, nofollow"/);
+  assert.match(html, /name="default-lang" content="en"/, "the demo opens in English");
+  assert.match(html, /name="site-currency" content="USD"/, "the demo shows amounts in US dollars");
   assert.equal(res.headers.get("x-robots-tag"), "noindex, nofollow");
   const manifest = await (await fetch(`${baseUrl}/manifest.json`)).json();
   assert.equal(manifest.name, "KAD Demo");

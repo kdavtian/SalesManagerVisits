@@ -16,7 +16,10 @@ try {
 try {
   var calcMeta = document.querySelector('meta[name="calc-mode"]');
   if (!(calcMeta && calcMeta.content === "true")) {
-    var lang = localStorage.getItem("fieldvisits_lang") === "en" ? "en" : "hy";
+    // the language Settings stored, else the site's default (the demo site: English, a <meta> from the server), else Armenian -- as i18n.js getLang
+    var storedLang = localStorage.getItem("fieldvisits_lang");
+    var langMeta = document.querySelector('meta[name="default-lang"]');
+    var lang = storedLang === "en" || storedLang === "hy" ? storedLang : langMeta && langMeta.content === "en" ? "en" : "hy";
     // the common texts (i18n/<lang>/common.js): every first screen needs them; the other areas follow after it (i18n.js, step 11)
     // Opening on Home (most launches): Home's own text area too, so it does not wait for the app's code to ask for it (about 0.3 s on
     // a slow phone). HOME_TEXT_AREAS = i18nAreas.js ROUTE_TEXT_AREAS["#/dashboard"] (i18nParity.test.js checks they match).
