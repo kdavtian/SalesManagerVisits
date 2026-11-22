@@ -175,6 +175,9 @@
 .product-open-card:active { background: var(--bg-card-pressed); }
 .product-open-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (hover: hover) { .product-open-card:hover { background: var(--bg-card-pressed); } }
+/* a size pill pressed inside a multi-size product card lights up alone, not the whole card around it */
+.inventory-row-card.product-open-card:has(.product-open-card:active),
+.inventory-row-card.product-open-card:has(.product-open-card:hover) { background: var(--bg-card); }
 .pricelist-table-row:hover { background: var(--bg-card-pressed); }
 .pl-col-option { display: flex; justify-content: space-between; align-items: center; }
 .pl-col-option input { width: 22px; height: 22px; }
