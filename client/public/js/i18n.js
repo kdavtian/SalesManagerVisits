@@ -44,14 +44,17 @@ export function getLang() {
 }
 
 // The demo site shows money in US dollars (its made-up amounts are dollar-sized): every text says USD / դոլար instead of AMD / դրամ.
-// Whole words only, so դրամարկղ (cash desk), դրամական, դրամապանակ and մետաղադրամ (coin) stay as they are.
+// Whole words only, so դրամարկղ (cash desk), դրամական, դրամապանակ and մետաղադրամ (coin) stay as they are. A text that already names USD
+// is about both currencies (the USD/AMD rate in Cashflow, the cost calculator, Ops control) and is left alone: "USD to USD rate" is wrong.
 const USD_SITE = headMeta("site-currency") === "USD";
+const ARM_LETTER = "\u0531-\u0556\u0561-\u0587"; // letters only: the Armenian comma/emphasis marks (U+055A-U+055F) end a word
+const DRAM_WORD = new RegExp(`(^|[^${ARM_LETTER}])դրամ(ով|ից|ի|անոց|անոցը)?(?![${ARM_LETTER}])`, "g");
 const usdTexts = new Map();
-function inUsd(text) {
-  if (typeof text !== "string") return text;
+export function inUsd(text) {
+  if (typeof text !== "string" || /\bUSD\b|դոլար/.test(text)) return text;
   let out = usdTexts.get(text);
   if (out === undefined) {
-    out = text.replace(/\bAMD\b/g, "USD").replace(/(^|[^\u0531-\u0587])դրամ(ով|անոց|անոցը)?(?![\u0531-\u0587])/g, (m, before, ending) => `${before}դոլար${ending ?? ""}`);
+    out = text.replace(/\bAMD\b/g, "USD").replace(DRAM_WORD, (m, before, ending) => `${before}դոլար${ending ?? ""}`);
     usdTexts.set(text, out);
   }
   return out;
