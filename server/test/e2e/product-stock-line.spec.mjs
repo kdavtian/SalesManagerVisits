@@ -22,6 +22,7 @@ test("@iphone product card: free stock line, pcs <-> liters on tap, show/hide sw
   await expect(line).toContainText("Edge • 4 L • 23 pcs");
   await line.click();
   await expect(line).toContainText("Edge • 4 L • 92 L");
+  await expect(page.locator("#pd-stock-line")).toBeFocused(); // redrawn, focus kept
 
   // the liters choice is remembered on the next card
   await page.reload();
@@ -37,6 +38,11 @@ test("@iphone product card: free stock line, pcs <-> liters on tap, show/hide sw
   await expect(page.locator("#pd-stock-line")).toHaveCount(0);
   await page.locator("#pd-stock-toggle").click();
   await expect(page.locator("#pd-stock-line")).toContainText("92 L");
+
+  // a workbook category as family ("Other") is not a product line: the name is used instead
+  await pool.query("UPDATE products SET family = 'Other' WHERE id = $1", [oil.id]);
+  await page.reload();
+  await expect(page.locator("#pd-stock-line")).toContainText(`${oil.name} • 4 L • 92 L`);
 
   // a filter (no liters): pieces only, not a button
   await page.goto(`/#/product/${filter.id}`);

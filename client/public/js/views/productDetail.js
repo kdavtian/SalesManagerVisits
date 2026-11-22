@@ -33,6 +33,9 @@ function writePref(key, value) {
   }
 }
 
+// The line starts with the product line ("Edge", "Magnatec"); a family that is only a workbook category says nothing, so the name is used.
+const CATEGORY_FAMILIES = new Set(["Engine Oil", "Transmission", "Hydraulic", "Antifreeze", "Grease", "Other"]);
+
 /** "Edge • 4 L • 23 հատ" or, in liters, "Edge • 4 L • 92 L"; null when the product has no stock on record. */
 function stockLineText(p, unit, pcsSuffix) {
   if (p.stock_qty == null) return null;
@@ -40,7 +43,8 @@ function stockLineText(p, unit, pcsSuffix) {
   const perUnit = parseLiters(p.unit);
   const qty = unit === "l" && perUnit != null ? `${Math.round(free * perUnit * 10) / 10} L` : `${free} ${pcsSuffix}`;
   // the pack size only for oils ("4 L"): a filter's unit is "pcs", which the quantity already says
-  return [p.family || p.name, perUnit != null ? normalizeUnitLabel(p.unit) : "", qty].filter(Boolean).join(" • ");
+  const label = p.family && !CATEGORY_FAMILIES.has(p.family) ? p.family : p.name;
+  return [label, perUnit != null ? normalizeUnitLabel(p.unit) : "", qty].filter(Boolean).join(" • ");
 }
 
 function priceRow(label, value, { strong = false } = {}) {
@@ -186,11 +190,13 @@ export async function renderProductDetail(root, navigate, productId) {
       stockOn = !stockOn;
       writePref(STOCK_ON_KEY, stockOn ? "1" : "0");
       render();
+      container.querySelector("#pd-stock-toggle")?.focus(); // the card is drawn again: keep the focus (VoiceOver, keyboard) on the switch
     });
     container.querySelector("#pd-stock-line")?.addEventListener("click", () => {
       stockUnit = stockUnit === "l" ? "pcs" : "l";
       writePref(STOCK_UNIT_KEY, stockUnit);
       render();
+      container.querySelector("#pd-stock-line")?.focus();
     });
     container.querySelector("#pd-calc-btn")?.addEventListener("click", () => openCostCalculator({ product: p }));
     if (manage) {
