@@ -133,6 +133,24 @@ export function activateCustomerNameLinks(container, navigate) {
   });
 }
 
+// Tapping a product anywhere it is listed (Price list, Warehouse stock, To order) opens its product card (owner, 2026-11-22). One delegated
+// listener on a container that stays on screen: any element inside it with data-open-product="<id>" opens #/product/<id>; the innermost one
+// wins, so a size pill inside a product card opens that size. Enter / Space work too for the ones made focusable (role="button" tabindex="0").
+export function activateProductOpen(container, navigate) {
+  const target = (e) => e.target.closest("[data-open-product]");
+  container.addEventListener("click", (e) => {
+    const el = target(e);
+    if (el && container.contains(el)) navigate(`#/product/${el.dataset.openProduct}`);
+  });
+  container.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const el = target(e);
+    if (!el || el !== e.target) return; // only the focused card itself, never a search field or button inside the list
+    e.preventDefault();
+    navigate(`#/product/${el.dataset.openProduct}`);
+  });
+}
+
 // Normalizes any Armenian phone number a user might type/paste (with or
 // without +374, spaces, dashes, a leading 0, or a leading 8) into a plain
 // digit string prefixed with the country code, e.g. "374910070 19" or

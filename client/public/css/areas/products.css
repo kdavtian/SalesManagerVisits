@@ -170,6 +170,11 @@
 .pricelist-desktop-table th.pl-th-photo { width: 48px; }
 .pricelist-desktop-table td.pl-td-photo { padding-top: 4px; padding-bottom: 4px; }
 .pricelist-table-row { cursor: pointer; }
+/* A product in a list that opens its product card on tap (Warehouse stock rows, size pills, To-order cards; util.js activateProductOpen). */
+.product-open-card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.product-open-card:active { background: var(--bg-card-pressed); }
+.product-open-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) { .product-open-card:hover { background: var(--bg-card-pressed); } }
 .pricelist-table-row:hover { background: var(--bg-card-pressed); }
 .pl-col-option { display: flex; justify-content: space-between; align-items: center; }
 .pl-col-option input { width: 22px; height: 22px; }
