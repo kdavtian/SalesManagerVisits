@@ -47,6 +47,11 @@ export function getLang() {
 // Whole words only, so դրամարկղ (cash desk), դրամական, դրամապանակ and մետաղադրամ (coin) stay as they are. A text that already names USD
 // is about both currencies (the USD/AMD rate in Cashflow, the cost calculator, Ops control) and is left alone: "USD to USD rate" is wrong.
 const USD_SITE = headMeta("site-currency") === "USD";
+export const usdSite = () => USD_SITE;
+// A dram amount written in a text ("a 50,000 AMD bonus", "under 300,000 AMD") is shown in dollars at the rate the demo data uses
+// (server/scripts/demo-site.mjs AMD_PER_USD).
+const AMD_PER_USD = 400;
+const AMOUNT_BEFORE_DRAM = /(\d[\d,]*\d|\d)(\s?)(?=(?:AMD|amd)(?![A-Za-z])|դրամ)/g;
 const ARM_LETTER = "\u0531-\u0556\u0561-\u0587"; // letters only: the Armenian comma/emphasis marks (U+055A-U+055F) end a word
 const DRAM_WORD = new RegExp(`(^|[^${ARM_LETTER}])դրամ(ով|ից|ի|անոց|անոցը)?(?![${ARM_LETTER}])`, "g");
 const usdTexts = new Map();
@@ -54,7 +59,9 @@ export function inUsd(text) {
   if (typeof text !== "string" || /\bUSD\b|դոլար/.test(text)) return text;
   let out = usdTexts.get(text);
   if (out === undefined) {
-    out = text.replace(/\bAMD\b/g, "USD").replace(DRAM_WORD, (m, before, ending) => `${before}դոլար${ending ?? ""}`);
+    out = text
+      .replace(AMOUNT_BEFORE_DRAM, (m, amount, space) => `${Math.max(1, Math.round(Number(amount.replace(/,/g, "")) / AMD_PER_USD)).toLocaleString("en-US")}${space || " "}`)
+      .replace(/(?<![A-Za-z_])AMD(?![A-Za-z_])/gi, "USD").replace(DRAM_WORD, (m, before, ending) => `${before}դոլար${ending ?? ""}`);
     usdTexts.set(text, out);
   }
   return out;

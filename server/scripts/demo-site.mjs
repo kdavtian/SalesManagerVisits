@@ -53,16 +53,19 @@ const usd = (amd) => Math.max(1, Math.round(amd / AMD_PER_USD));
 
 // ---------- the cast ----------
 const REPS = [
-  { key: "aram", name: "Aram Sargsyan", hy: "Արամ Սարգսյան", channel: "SM YVN", color: "#2563eb", centre: [40.185, 44.51], spread: 0.09, sub: ["Kentron", "Arabkir", "Ajapnyak", "Nor Nork", "Shengavit"], region: "Yerevan" },
-  { key: "artak", name: "Artak Hakobyan", hy: "Արտակ Հակոբյան", channel: "SM Davtashen", color: "#f97316", centre: [40.215, 44.49], spread: 0.05, sub: ["Davtashen", "Avan", "Kanaker-Zeytun", "Erebuni"], region: "Yerevan" },
-  { key: "lilit", name: "Lilit Petrosyan", hy: "Լիլիթ Պետրոսյան", channel: "SM Shirak", color: "#9333ea", centre: [40.79, 43.845], spread: 0.04, sub: ["Gyumri"], region: "Shirak" },
+  { key: "aram", name: "Aram Sargsyan", hy: "Արամ Սարգսյան", channel: "Sales Manager 1", realChannel: "SM YVN", color: "#2563eb", centre: [40.185, 44.51], spread: 0.09, sub: ["Kentron", "Arabkir", "Ajapnyak", "Nor Nork", "Shengavit"], region: "Yerevan" },
+  { key: "artak", name: "Artak Hakobyan", hy: "Արտակ Հակոբյան", channel: "Sales Manager 2", realChannel: "SM Davtashen", color: "#f97316", centre: [40.215, 44.49], spread: 0.05, sub: ["Davtashen", "Avan", "Kanaker-Zeytun", "Erebuni"], region: "Yerevan" },
+  { key: "lilit", name: "Lilit Petrosyan", hy: "Լիլիթ Պետրոսյան", channel: "Sales Manager 3", realChannel: "SM Shirak", color: "#9333ea", centre: [40.79, 43.845], spread: 0.04, sub: ["Gyumri"], region: "Shirak" },
 ];
-const NAME_FIRST = ["Արարատ", "Սասուն", "Կենտրոն", "Երևան", "Մասիս", "Արաբկիր", "Շենգավիթ", "Նոր Նորք", "Էրեբունի", "Մալաթիա", "Դավթաշեն", "Աջափնյակ", "Քանաքեռ", "Զեյթուն", "Ավան", "Նորագավիթ", "Վարդանանք", "Շիրակ", "Գյումրի", "Լուսավոր", "Արծիվ", "Սևան", "Հրազդան", "Այգեստան", "Նաիրի", "Գառնի"];
+// The demo is shown to people who do not read Armenian (owner, 2026-11-22: "make everything simple so a new user understands right away"):
+// customer names, notes and tasks are in plain English, and the sales directions are "Sales Manager 1..3" instead of the company's own
+// codes (SM YVN ...). The categories stay the app's own values: the screens translate them.
+const NAME_FIRST = ["Ararat", "Sasun", "Central", "Yerevan", "Masis", "Arabkir", "Shengavit", "Nor Nork", "Erebuni", "Malatia", "Davtashen", "Ajapnyak", "Kanaker", "Zeytun", "Avan", "Noragavit", "Vardanants", "Shirak", "Gyumri", "Bright", "Eagle", "Sevan", "Hrazdan", "Aygestan", "Nairi", "Garni"];
 const NAME_TYPE = {
-  "Ավտոսերվիս": ["Ավտոսերվիս", "Սերվիս", "Գարաժ", "Ավտոկենտրոն"],
-  "Յուղման կետ": ["Յուղման կետ", "Լուբ", "Օյլ Սերվիս", "Յուղ"],
-  "Խանութ": ["Ավտոպարտս", "Շոփ", "Լուբրիկանտ", "Ավտո"],
-  "Այլ": ["Ավտոլվացում", "Ավտոտեխսպասարկում"],
+  "Ավտոսերվիս": ["Auto Service", "Service", "Garage", "Auto Center"],
+  "Յուղման կետ": ["Oil Change", "Lube", "Oil Service", "Quick Lube"],
+  "Խանութ": ["Auto Parts", "Shop", "Lubricants", "Auto Store"],
+  "Այլ": ["Car Wash", "Car Care"],
 };
 const CATEGORIES = ["Ավտոսերվիս", "Ավտոսերվիս", "Յուղման կետ", "Յուղման կետ", "Խանութ", "Խանութ", "Այլ"];
 const POTENTIAL_REASON_SETS = [["active_interest", "gave_price_list"], ["ready_first_order", "introduced_products"], ["price_mismatch", "negotiating"], ["own_import"], ["competitor_loyal"], ["no_decision_maker"], ["high_potential", "gave_price_list"], ["small_volume"]];
@@ -113,6 +116,12 @@ async function seed() {
     }
 
     await client.query("BEGIN");
+    // The sales directions the migrations create carry the company's own codes: the three the demo uses get plain names (the row keeps its
+    // rules), the rest are switched off so lists and reports show only what a visitor can make sense of.
+    for (const [i, r] of REPS.entries()) {
+      await client.query("UPDATE sales_channels SET code = $1, name = $1, cash_source = $2 WHERE code = $3", [r.channel, `Cash desk ${i + 1}`, r.realChannel]);
+    }
+    await client.query("UPDATE sales_channels SET active = false WHERE code <> ALL($1)", [REPS.map((r) => r.channel)]);
     const ceoPassword = process.env.DEMO_PASSWORD ?? newPassword();
     const ceoId = await insertUser(client, { name: "Demo CEO", hy: "Դեմո տնօրեն", email: `ceo@${DOMAIN}`, role: "ceo", password: ceoPassword });
     const repIds = [];
@@ -171,7 +180,7 @@ async function seed() {
 
     // Visits: each buying customer visited some days ago (some today, some overdue), potential ones partly never visited.
     let visits = 0;
-    const notes = ["Շնորհանդես՝ նոր ապրանքատեսակ", "Պատվեր է ձևակերպվել", "Սեփականատերը բացակայում էր", "Գնացուցակ է տրամադրվել", "Վճարումը ստացվել է", "Ստուգվեց պահեստը"];
+    const notes = ["Presented a new product", "Order taken", "The owner was away", "Gave the price list", "Payment received", "Checked the stock on the shelf"];
     const addVisit = async (c, daysAgo, hour) => {
       const at = dayAgo(daysAgo, hour, between(0, 55));
       await client.query(
@@ -275,7 +284,7 @@ async function seed() {
     }
 
     // Tasks for each rep.
-    const taskKinds = [["collect_debt", "Հավաքել պարտքը"], ["visit_customer", "Այցելել և գնացուցակ տալ"], ["make_order", "Պատվեր ձևակերպել"], ["call_customer", "Զանգահարել"], ["check_products", "Ստուգել ապրանքատեսականին"]];
+    const taskKinds = [["collect_debt", "Collect the debt"], ["visit_customer", "Visit and give the price list"], ["make_order", "Take an order"], ["call_customer", "Call the customer"], ["check_products", "Check the product range"]];
     for (const [ri] of REPS.entries()) {
       const mine = customers.filter((c) => c.rep === ri && c.tier !== "competitor");
       for (let k = 0; k < 4; k++) {
@@ -283,7 +292,7 @@ async function seed() {
         const [kind, label] = taskKinds[(k + ri) % taskKinds.length];
         await client.query(
           `INSERT INTO tasks (title, creator_id, assignee_id, customer_id, due_date, task_kind, status, created_at) VALUES ($1, $2, $3, $4, $5, $6, 'open', now() - interval '2 days')`,
-          [`${label}՝ ${c.name}`, ceoId, repIds[ri], c.id, dateOnly(dayAgo(between(-3, 2))), kind]
+          [`${label}: ${c.name}`, ceoId, repIds[ri], c.id, dateOnly(dayAgo(between(-3, 2))), kind]
         );
       }
     }

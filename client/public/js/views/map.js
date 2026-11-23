@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { openInfoPopup, escapeHtml, formatAmd, parseDateOnly, formatDayMonth } from "../util.js";
-import { t } from "../i18n.js";
+import { t, usdSite } from "../i18n.js";
 import { NO_GROUP_KEY } from "../regionTree.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { state } from "../state.js";
@@ -816,7 +816,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // Optional "debt coin" (owner, 2026-10-26; Off by default): a coin at the lower left of every customer pin that owes money, in three sizes and colours
   // by the amount (AMD): under 300,000 small yellow, under 1,000,000 medium orange, 1,000,000 and more large red.
   // The debtors come from one light request (ids + amounts, same RBAC as every debt figure) and are only fetched while the switch is on.
-  const DEBT_COIN_STEPS = [300000, 1000000];
+  // the demo site's amounts are in US dollars (i18n.js usdSite): the same steps at its rate, so the legend and the coins agree
+  const DEBT_COIN_STEPS = usdSite() ? [750, 2500] : [300000, 1000000];
   const debtCoinSize = (amd) => (amd < DEBT_COIN_STEPS[0] ? "s" : amd < DEBT_COIN_STEPS[1] ? "m" : "l");
   let debtCoinOn = getDebtCoin(state.user?.id);
   let debtors = new Map(); // customer id -> debt in AMD

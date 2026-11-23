@@ -9,15 +9,17 @@ const { inUsd } = await import("../../client/public/js/i18n.js");
 test("AMD and the Armenian word for dram become USD / dollar", () => {
   assert.equal(inUsd("Amount (AMD)"), "Amount (USD)");
   assert.equal(inUsd("AMD/L"), "USD/L");
-  assert.equal(inUsd("500 դրամ"), "500 դոլար");
+  assert.equal(inUsd("Top scorer wins a 50,000amd bonus"), "Top scorer wins a 125 USD bonus");
+  assert.equal(inUsd("8,000 դրամ"), "20 դոլար");
   assert.equal(inUsd("դրամով"), "դոլարով");
-  assert.equal(inUsd("300,000 դրամից"), "300,000 դոլարից");
-  assert.equal(inUsd("500 դրամ՝"), "500 դոլար՝");
-  assert.equal(inUsd("10 000 դրամանոցը"), "10 000 դոլարանոցը");
+  assert.equal(inUsd("300,000 դրամից"), "750 դոլարից");
+  assert.equal(inUsd("Small yellow coin: owes under 300,000 AMD"), "Small yellow coin: owes under 750 USD");
+  assert.equal(inUsd("{amount} դրամ՝"), "{amount} դոլար՝");
+  assert.equal(inUsd("{n} դրամանոցը"), "{n} դոլարանոցը");
 });
 
 test("other words and two-currency texts are left alone", () => {
-  for (const s of ["Դրամարկղ", "դրամարկղեր", "դրամական", "դրամապանակ", "մետաղադրամ", "CASH_AMD", "USD to AMD rate", "USD at {rate} AMD", "USD՝ {rate} դրամով"]) {
+  for (const s of ["Դրամարկղ", "դրամարկղեր", "դրամական", "դրամապանակ", "մետաղադրամ", "CASH_AMD", "Ramada", "USD to AMD rate", "USD at {rate} AMD", "USD՝ {rate} դրամով"]) {
     assert.equal(inUsd(s), s);
   }
   assert.equal(inUsd(42), 42);
