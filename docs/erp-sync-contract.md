@@ -240,3 +240,32 @@ Response: `{ synced: true, report_type, report_date }`.
 - Bot side, with the sync key: `GET /api/erp-sync/requests/pending` -> `{ request_id }` (marks it picked up, once) and `POST /api/erp-sync/requests/:id/result` `{ ok, message }`. A failed result also becomes a failed attempt (notification to admins). The bot checks about every 30 seconds between Telegram polls (`sync_field_visits.poll_sync_request`). "Sync now" cannot fetch a NEWER Excel file: that arrives only when it is posted in the Telegram group (chat ID must be in `telegram.allowed_chat_ids` and `upload_chat_ids` of the bot's config.json).
 - Lesson (2026-10-24): renaming the Telegram group gave it a NEW chat ID; the bot logged "Ignored unauthorized Telegram chat ID" and silently dropped every workbook for days. The file date on the Home line is what makes that visible.
 
+
+## Group messages written by the app (2026-11-23)
+
+A confirmed order's details go to the accounting Telegram group at once, so the accountants know what to put in the waybill or invoice
+(`server/src/orders/orderGroupPost.js`, table `group_posts`, migration 222; switch `app_settings.order_confirm_telegram`, ON by default).
+The app decides and writes the text; the bot only carries it.
+
+What the app says (it compares the order as it is now with what the group was last told, from the routes at once and from the job
+`order-group-posts` every minute):
+
+| The order | The group so far | Message (`kind`) |
+|---|---|---|
+| confirmed (or already packed / delivered) | nothing | the details (`order_confirmed`) |
+| the same, but lines, prices, payment method or "test" changed | other details | the details again, marked changed (`order_confirmed`) |
+| back to submitted, or a draft after a stock issue | its details | "do not issue yet" (`order_unconfirmed`) |
+| cancelled or deleted | its details, or "do not issue yet" | "cancelled, do not issue" (`order_cancelled`) |
+
+A message the bot has not taken yet is corrected or withdrawn in place. Only orders confirmed since the switch was last turned on are
+announced. Switched off: nothing new is announced, but an order the group already has is still corrected or taken back.
+
+- `GET /api/erp-sync/group-posts/pending` -> `{ posts: [{ id, kind, text }] }`, oldest first, at most 20. Taking a message claims it: it
+  is not offered again for 2 minutes, so two bot processes do not post it twice. Never offered: posted, failed 10 times, older than 3 days.
+- `POST /api/erp-sync/group-posts/:id/posted` `{ ok, error }` -> posted, or one more failed try (offered again after the claim time).
+
+Both need the sync key and use the polling rate limit (60 per minute), as do the cash-sheet and money-board routes since this change:
+on the Excel push's limit (20 per 15 minutes) the bot's 30-second polling used the budget up and delayed posts and the sync itself.
+The bot (`work/sync_field_visits.py` `post_group_messages`) asks about every 30 s together with the cash sheets and posts to the same
+group (`telegram.cash_sheet_chat_ids`, else `upload_chat_ids`). A message is sent at least once: if the bot dies between sending and
+reporting, it is sent again. An older bot without it: the messages wait. A new kind of message needs no bot change.
