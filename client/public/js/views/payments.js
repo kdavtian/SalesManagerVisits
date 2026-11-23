@@ -13,6 +13,7 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { CASH_PLACES } from "../shared/cashPlace.js";
 import { cashPlaceChipHtml } from "../cashPlaceChip.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, validHandoffRecipientRoles } from "../shared/roles.js";
 import { loadWithCache } from "../listCache.js";
@@ -190,6 +191,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   let managerFilter = initialQuery?.get("sales_manager_id") || "";
   // signed / photo / none (owner, 2026-10-27: unconfirmed payments must be findable)
   let confirmationFilter = CONFIRMATIONS.includes(initialQuery?.get("confirmation")) ? initialQuery.get("confirmation") : "";
+  // where the cash is now (a tile of the Cash screen opens the list on it); cleared with its chip
+  let placeFilter = CASH_PLACES.includes(initialQuery?.get("place")) ? initialQuery.get("place") : "";
+  let receivedToday = initialQuery?.get("received") === "today"; // the Cash screen's "received at the office today"
   // Only ever arrives via a Reports drill-down (no on-page control sets
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
   let periodFilter = PERIOD_KEYS.includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
@@ -243,6 +247,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (channelFilter) params.sales_channel = channelFilter;
     if (managerFilter) params.sales_manager_id = managerFilter;
     if (confirmationFilter) params.confirmation = confirmationFilter;
+    if (placeFilter) params.place = placeFilter;
+    if (receivedToday) params.received = "today";
     if (activeFilter === "pending" || activeFilter === "approved" || activeFilter === "rejected") {
       params.status = activeFilter;
     } else if (activeFilter === "today") {
@@ -282,6 +288,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
       chips.push({ label: periodKeyLabel(periodFilter), clear: () => (periodFilter = "") });
     }
+    if (receivedToday) chips.push({ label: t("cash_now_office_today"), clear: () => (receivedToday = false) });
+    if (placeFilter) chips.push({ label: t(`cash_now_${placeFilter === "office" ? "office" : placeFilter}`), clear: () => (placeFilter = "") });
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
     if (confirmationFilter) chips.push({ label: t(`pay_conf_${confirmationFilter}`), clear: () => (confirmationFilter = "") });
     if (managerFilter) {

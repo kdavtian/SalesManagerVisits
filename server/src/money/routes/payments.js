@@ -11,9 +11,11 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
 import { approvalBlock, approverTakesCash, getAccountantDirectApproval } from "../cashRoute.js";
-import { CASH_PLACE_SELECT, CASH_PLACE_JOINS, addCashPlace } from "../cashPlaceSql.js";
+import { CASH_PLACE_SELECT, CASH_PLACE_JOINS, CASH_PLACE_SQL, RECEIVED_TODAY_SQL, addCashPlace } from "../cashPlaceSql.js";
+import { CASH_PLACES } from "../../shared/cashPlace.js";
+import { CASH_IN_HAND_SQL } from "../cashCustody.js";
 import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
-import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
+import { IN_EXCEL_SQL, DAYS_OLD_SQL, EXCEL_MISSING_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
@@ -384,7 +386,7 @@ paymentsRouter.get("/pending-count", async (req, res) => {
 });
 
 paymentsRouter.get("/", async (req, res) => {
-  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel, confirmation } = req.query;
+  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel, confirmation, place, received } = req.query;
 
   const conditions = [];
   const params = [];
@@ -397,6 +399,12 @@ paymentsRouter.get("/", async (req, res) => {
     conditions.push(`p.sales_manager_id = $${params.length}`);
   }
 
+  // place = where the cash is now (the Cash screen's tiles): the three "still on its way" places count what the hand-over lists count
+  if (place) {
+    if (!CASH_PLACES.includes(place)) return res.status(400).json({ error: "Unknown place" });
+    params.push(place);
+    conditions.push(`${CASH_PLACE_SQL} = $${params.length}${place === "office" || place === "rejected" ? "" : ` AND ${CASH_IN_HAND_SQL}`}`);
+  }
   if (status) {
     params.push(status);
     conditions.push(`p.status = $${params.length}`);
@@ -405,9 +413,11 @@ paymentsRouter.get("/", async (req, res) => {
     params.push(sales_channel);
     conditions.push(`p.sales_channel = $${params.length}`);
   }
+  // received=today: the payments whose cash a person received today (the Cash screen's "received at the office today")
+  if (received === "today") conditions.push(RECEIVED_TODAY_SQL);
   // "Not in Excel": recorded in the app, older than the grace days, and the workbook still shows nothing like it.
   if (excel === "missing") {
-    conditions.push(`p.status <> 'rejected' AND p.erp_customer_id_snapshot IS NOT NULL AND ${DAYS_OLD_SQL} >= ${EXCEL_GRACE_DAYS} AND NOT ${IN_EXCEL_SQL}`);
+    conditions.push(EXCEL_MISSING_SQL);
   }
   // How the customer confirmed money collected at a visit (migration 163): signed / photo / none (saved after the warning, unconfirmed).
   if (["signed", "photo", "none"].includes(confirmation)) {

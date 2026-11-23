@@ -14,7 +14,28 @@ export const CASH_PLACE_SELECT = `cph.role AS holder_role, cph.name AS holder_na
 export const CASH_PLACE_JOINS = `LEFT JOIN users cph ON cph.id = p.current_holder_id
   LEFT JOIN cash_handoffs cpo ON cpo.id = p.pending_handoff_id LEFT JOIN users cpt ON cpt.id = cpo.to_user_id`;
 
+// The same answer as shared/cashPlace.js, as SQL, for filtering and adding up (test/integration/cashOverview.test.js holds the two together).
+// Needs CASH_PLACE_JOINS.
+export const CASH_PLACE_SQL = `(CASE
+  WHEN p.status = 'rejected' THEN 'rejected'
+  WHEN (p.status = 'approved' AND (p.approved_by IS NOT NULL OR NOT p.approved_from_erp
+        OR (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date < (SELECT payments_cutover FROM app_settings WHERE id = 1)))
+       OR cph.role = 'accountant' OR ${officeDeskSql("p.current_holder_id")} THEN 'office'
+  WHEN p.pending_handoff_id IS NOT NULL THEN 'on_the_way'
+  WHEN cph.role IN ('sales_director', 'ceo', 'operations_director', 'admin') THEN 'with_director'
+  ELSE 'with_rep' END)`;
+
 export function addCashPlace(row) {
   row.cash_place = cashPlace(row);
   return row;
 }
+
+// "Reached the office today": a person received this payment's cash today (Yerevan) -- the accountant confirmed its hand-over, or
+// somebody approved it directly. NOT the Excel's own approval (the notes did not move). Each payment counts once, whatever happened
+// to it twice. ONE condition for the Cash screen's number and the list a tap opens (GET /api/payments?received=today).
+const TODAY_SQL = (col) => `(${col} AT TIME ZONE 'Asia/Yerevan')::date = (now() AT TIME ZONE 'Asia/Yerevan')::date`;
+export const RECEIVED_TODAY_SQL = `(p.status = 'approved' AND (
+  EXISTS (SELECT 1 FROM cash_handoff_items ri JOIN cash_handoffs rh ON rh.id = ri.handoff_id JOIN users ru ON ru.id = rh.to_user_id
+          WHERE ri.payment_id = p.id AND rh.status = 'confirmed' AND ru.role = 'accountant' AND ${TODAY_SQL("rh.confirmed_at")})
+  OR EXISTS (SELECT 1 FROM payment_status_history rs WHERE rs.payment_id = p.id AND rs.new_status = 'approved' AND rs.reason = 'Approved'
+             AND ${TODAY_SQL("rs.changed_at")})))`;
