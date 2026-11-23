@@ -11,9 +11,8 @@
 //     workbook up to 14 days after its delivery, so an older one that never matched (a customer with no ERP id, a total entered
 //     differently) is taken as already in the Excel stock instead of being subtracted forever.
 //   + pieces of returns the warehouse received back in good condition that Excel does not hold yet (order_returns.recorded_at empty, or
-//     marked by hand after the product's Excel stock last CHANGED, so the synced stock cannot include them yet).
-//   + pieces of purchases received in the app (Warehouse > Incoming) that Excel does not show yet: no Excel purchase invoice of the same
-//     number and date (erp_purchase_lines, from the bot), inside ARRIVED_WINDOW_DAYS.
+//     marked by hand after the last product sync: the accountant marks a return AFTER entering it in Excel, so any sync after the mark has it).
+//   + pieces of purchases received in the app (Warehouse > Incoming) that Excel cannot hold yet: see ARRIVED_NOT_IN_EXCEL_COND.
 // Packed orders follow the same 14-day "Excel clock" as deliveries (review 2026-11-23): a packed order the sync could not move to
 // delivered (the accountant entered the sale under another total) used to be subtracted for ever.
 // Orders only submitted or confirmed are NOT subtracted: their goods are still on the shelf (unlike products.js "reserved", which answers
@@ -49,18 +48,22 @@ export const DELIVERED_OLDER_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(oi.quantit
                 AND ${DELIVERED_AT} BETWEEN ${EXCEL_NOW_SQL} - interval '180 days' AND ${EXCEL_NOW_SQL} - interval '${MATCH_WINDOW_DAYS} days'), 0)`;
 // `r` = order_returns, `ri` = order_return_items, `p` = products.
 export const RETURNS_BACK_COND = `(r.kind = 'return' AND r.status = 'done' AND COALESCE(ri.condition, 'good') = 'good'
-                AND (r.recorded_at IS NULL OR (r.recorded_via = 'manual' AND p.stock_changed_at IS NOT NULL AND r.recorded_at > p.stock_changed_at)))`;
+                AND (r.recorded_at IS NULL OR (r.recorded_via = 'manual' AND p.synced_at IS NOT NULL AND r.recorded_at > p.synced_at)))`;
 export const RETURNS_BACK_SQL = `COALESCE((SELECT SUM(ri.quantity) FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
               WHERE ri.product_id = p.id AND ${RETURNS_BACK_COND}), 0)`;
-// Purchases received in the app that the Excel does not show yet (review 2026-11-23). "In Excel" = the bot sent an Excel purchase invoice of the
-// same number and date (erp_purchase_lines, the same pairing as the Purchases screen). While the bot sends no purchases at all, the older rule:
-// received after the product's Excel stock last changed. Only ARRIVED_WINDOW_DAYS: an invoice never entered must not stay added for ever.
+// Purchases received in the app that the Excel cannot hold yet (review 2026-11-23). Counted only while ALL of these hold, so a doubt always
+// ends on the safe side (less free stock, never stock that is not there):
+//   - received in the last ARRIVED_WINDOW_DAYS, on an invoice dated in that window (an old invoice typed in afterwards is taken as in Excel);
+//   - no Excel purchase invoice of the same number and date yet (erp_purchase_lines, the same pairing as the Purchases screen);
+//   - the product's Excel stock has not changed since the goods arrived (products.stock_changed_at, migration 223): once it has, the Excel
+//     may well include them -- an invoice entered with another number or date must not be added a second time.
 // `i` = purchase_invoices, `p` = products.
 export const ARRIVED_WINDOW_DAYS = 14;
 const INVOICE_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
 export const ARRIVED_NOT_IN_EXCEL_COND = `(i.status = 'arrived' AND i.arrived_at IS NOT NULL AND i.arrived_at > now() - interval '${ARRIVED_WINDOW_DAYS} days'
-     AND NOT EXISTS (SELECT 1 FROM erp_purchase_lines e WHERE e.invoice_date = i.invoice_date AND ${INVOICE_KEY("e.invoice_no")} = ${INVOICE_KEY("i.invoice_no")})
-     AND (EXISTS (SELECT 1 FROM erp_purchase_lines) OR i.arrived_at > COALESCE(p.stock_changed_at, '-infinity'::timestamptz)))`;
+     AND i.invoice_date > (now() AT TIME ZONE 'Asia/Yerevan')::date - ${ARRIVED_WINDOW_DAYS}
+     AND i.arrived_at > COALESCE(p.stock_changed_at, '-infinity'::timestamptz)
+     AND NOT EXISTS (SELECT 1 FROM erp_purchase_lines e WHERE e.invoice_date = i.invoice_date AND ${INVOICE_KEY("e.invoice_no")} = ${INVOICE_KEY("i.invoice_no")}))`;
 export const ARRIVED_NOT_IN_EXCEL_SQL = `COALESCE((SELECT SUM(COALESCE(l.received_qty, l.qty)) FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id
               WHERE l.product_id = p.id AND ${ARRIVED_NOT_IN_EXCEL_COND}), 0)`;
 // An order HOLDS stock (it is subtracted from the Excel stock to get what can still be sold) while it is open, packed and out, or delivered in
@@ -88,6 +91,30 @@ export const SUBMITTED_QTY_SQL = `COALESCE((SELECT SUM(oi.quantity) FROM order_i
 // Back on the shelf but not in the Excel stock yet: added to the Excel stock by every stock number that means "on the shelf".
 export const BACK_ON_SHELF_SQL = `(${RETURNS_BACK_SQL} + ${ARRIVED_NOT_IN_EXCEL_SQL})`;
 export const freeStockSql = (excludeOrder = null) => `(p.stock_qty - ${heldSql(excludeOrder)} + ${BACK_ON_SHELF_SQL})`;
+
+// The same figures for a whole LIST of products in one pass (review 2026-11-23: a subquery per product took 0.96 s for 5,000 products with
+// 300,000 order lines, the grouped join 0.14 s -- products.js). `sel` = a CTE holding the products' `id`; add STOCK_FIGURE_JOINS after
+// `FROM products p` and select STOCK_FIGURE_COLUMNS (held_qty, submitted_qty, back_on_shelf_qty). free = stock_qty - held + back on shelf.
+export const stockFigureCtes = (sel = "sel") => `
+     st_held AS (
+       SELECT oi.product_id, SUM(oi.quantity) FILTER (WHERE ${HOLDS_STOCK_SQL}) AS held, SUM(oi.quantity) FILTER (WHERE ${SUBMITTED_SQL}) AS submitted
+       FROM ${sel} JOIN order_items oi ON oi.product_id = ${sel}.id JOIN orders o ON o.id = oi.order_id
+       WHERE ${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL}
+       GROUP BY oi.product_id
+     ),
+     st_back AS (
+       SELECT x.product_id, SUM(x.qty) AS qty FROM (
+         SELECT ri.product_id, ri.quantity AS qty
+         FROM ${sel} JOIN order_return_items ri ON ri.product_id = ${sel}.id JOIN order_returns r ON r.id = ri.return_id JOIN products p ON p.id = ri.product_id
+         WHERE ${RETURNS_BACK_COND}
+         UNION ALL
+         SELECT l.product_id, COALESCE(l.received_qty, l.qty)
+         FROM ${sel} JOIN purchase_lines l ON l.product_id = ${sel}.id JOIN purchase_invoices i ON i.id = l.invoice_id JOIN products p ON p.id = l.product_id
+         WHERE ${ARRIVED_NOT_IN_EXCEL_COND}
+       ) x GROUP BY x.product_id
+     )`;
+export const STOCK_FIGURE_JOINS = "LEFT JOIN st_held ON st_held.product_id = p.id LEFT JOIN st_back ON st_back.product_id = p.id";
+export const STOCK_FIGURE_COLUMNS = "COALESCE(st_held.held, 0)::int AS held_qty, COALESCE(st_held.submitted, 0)::int AS submitted_qty, COALESCE(st_back.qty, 0)::int AS back_on_shelf_qty";
 
 /** Where the app's number comes from, per product: Excel stock, packed out, delivered but not in Excel yet, returns back, purchases received. As of now. */
 export async function appStockParts(db, productIds) {

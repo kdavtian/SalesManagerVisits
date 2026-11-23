@@ -80,12 +80,12 @@ test("a good return back on the shelf is free stock again before the Excel has i
   // the catalogue list says the same as the card
   const list = (await apiRequest("/api/products", { cookie: cookies.sales_manager })).data.find((x) => x.id === product.id);
   assert.equal(list.available_qty, 10);
-  // marked by hand as entered in Excel AFTER the Excel stock last changed: still added (the Excel cannot have it yet)
-  await pool.query("UPDATE products SET stock_changed_at = now() - interval '1 hour', synced_at = now() WHERE id = $1", [product.id]);
+  // marked by hand as entered in Excel (the accountant marks it after entering it): still added until the next sync
+  await pool.query("UPDATE products SET synced_at = now() - interval '1 hour' WHERE id = $1", [product.id]);
   await pool.query("UPDATE order_returns SET recorded_at = now(), recorded_via = 'manual' WHERE id = $1", [r.id]);
-  assert.equal((await view(product)).available_qty, 10, "a sync that did not change the stock does not mean the Excel has the return");
-  // the Excel stock changed after the mark: taken as in the Excel now
-  await pool.query("UPDATE products SET stock_changed_at = now() WHERE id = $1", [product.id]);
+  assert.equal((await view(product)).available_qty, 10, "no sync since the mark: the synced Excel stock cannot have it yet");
+  // a sync after the mark: the Excel stock includes it now, not added twice
+  await pool.query("UPDATE products SET synced_at = now() WHERE id = $1", [product.id]);
   assert.equal((await view(product)).available_qty, 0);
 });
 
@@ -106,6 +106,23 @@ test("a purchase received in the app is free stock until the Excel shows its inv
   // the accountant entered the invoice in Excel (same number, written differently, same date): the Excel stock has it now, no double count
   await pool.query("INSERT INTO erp_purchase_lines (invoice_no, invoice_date, qty) VALUES ($1, CURRENT_DATE, 11)", [`  ${invoiceNo.toLowerCase()} `]);
   assert.equal((await view(product)).available_qty, 0);
+});
+
+test("a received purchase stops counting once the Excel stock changed after it, or when its invoice is old (never stock that is not there)", async () => {
+  const product = await createProduct();
+  await pool.query("UPDATE products SET stock_qty = 0, stock_changed_at = now() - interval '1 day' WHERE id = $1", [product.id]);
+  const inv = await arrivedPurchase(product, 6, { invoiceNo: null });
+  assert.equal((await view(product)).available_qty, 6, "no number, no Excel match yet: counted");
+  // the Excel stock changed after the goods arrived: the accountant may have entered the invoice under another number -- not added again
+  await pool.query("UPDATE products SET stock_qty = 6, stock_changed_at = now() WHERE id = $1", [product.id]);
+  assert.equal((await view(product)).available_qty, 6, "6 from the Excel, not 12");
+  // an old invoice typed in afterwards (dated 20 days ago) is taken as already in the Excel
+  const other = await createProduct();
+  await pool.query("UPDATE products SET stock_qty = 0 WHERE id = $1", [other.id]);
+  const old = await arrivedPurchase(other, 4, { invoiceNo: `ITEST-SL-OLD-${stamp}` });
+  await pool.query("UPDATE purchase_invoices SET invoice_date = CURRENT_DATE - 20 WHERE id = $1", [old]);
+  assert.equal((await view(other)).available_qty, 0);
+  assert.ok(inv);
 });
 
 test("a packed order the sync never moved to delivered stops holding after 14 days of the Excel clock", async () => {

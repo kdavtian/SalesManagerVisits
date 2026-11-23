@@ -22,7 +22,7 @@ import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
-import { APP_STOCK_SQL, BACK_ON_SHELF_SQL, SUBMITTED_QTY_SQL, heldSql } from "../appStock.js";
+import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
 import { MODEL } from "../../products/demandModel.js";
 
 
@@ -211,7 +211,9 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
   // just ordering on the raw text.
   const { rows } = await pool.query(
-    `WITH demand AS (
+    `WITH sel AS (SELECT p.id FROM products p ${where}),
+     ${stockFigureCtes("sel")},
+     demand AS (
        SELECT product_id,
               SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 30) AS qty_30d,
               SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 90) AS qty_90d,
@@ -223,9 +225,10 @@ warehouseRouter.get("/inventory", async (req, res) => {
      SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd, p.silver_price_amd,
             COALESCE(NULLIF(p.silver_price_amd, 0), NULLIF(p.bronze_price_amd, 0)) AS wholesale_price_amd,
             p.landing_cost_amd, p.net_cost_amd, p.created_at,
-            ${heldSql()}::int AS held_qty, ${SUBMITTED_QTY_SQL}::int AS submitted_qty, ${BACK_ON_SHELF_SQL}::int AS back_on_shelf_qty,
+            ${STOCK_FIGURE_COLUMNS},
             d.qty_30d, d.qty_90d, d.last_sale_date
      FROM products p
+     ${STOCK_FIGURE_JOINS}
      LEFT JOIN demand d ON d.product_id = p.erp_product_id
      ${where}
      ORDER BY p.brand NULLS LAST, p.family NULLS LAST, p.name`,
@@ -294,7 +297,9 @@ warehouseRouter.get("/inventory", async (req, res) => {
 warehouseRouter.get("/reorder-suggestions", async (req, res) => {
   const today = yerevanToday();
   const { rows } = await pool.query(
-    `WITH demand AS (
+    `WITH sel AS (SELECT p.id FROM products p WHERE p.active),
+     ${stockFigureCtes("sel")},
+     demand AS (
        SELECT product_id,
               SUM(qty) FILTER (WHERE order_date >= $1::date - 30) AS qty_30d,
               SUM(qty) FILTER (WHERE order_date >= $1::date - 90) AS qty_90d,
@@ -302,8 +307,8 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
      SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
-            ${heldSql()}::int AS held_qty, ${SUBMITTED_QTY_SQL}::int AS submitted_qty, ${BACK_ON_SHELF_SQL}::int AS back_on_shelf_qty
-     FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
+            ${STOCK_FIGURE_COLUMNS}
+     FROM products p ${STOCK_FIGURE_JOINS} LEFT JOIN demand d ON d.product_id = p.erp_product_id
      WHERE p.active`,
     [today]
   );
