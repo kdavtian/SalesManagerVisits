@@ -375,6 +375,13 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Only the recipient can confirm this handoff" });
     }
+    // Nobody confirms a receipt for somebody else that they set up themselves (independent review, 2026-11-23): not the sender, and not
+    // the person who declared it into another person's hands. Confirming means "the receiver counted it", and one person cannot say
+    // both sides. Refusing it is still open to them (the cash only goes back to the sender).
+    if (handoff.to_user_id !== req.user.id && (handoff.from_user_id === req.user.id || handoff.submitted_by === req.user.id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "You sent this hand-over: its receiver confirms it" });
+    }
     if (handoff.status !== "pending") {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This handoff has already been resolved" });

@@ -9,7 +9,7 @@ import { Router } from "express";
 import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, receivesCashWithoutHandover, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
+import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
 import { approvalBlock, approverTakesCash, getAccountantDirectApproval } from "../cashRoute.js";
 import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
 import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
@@ -350,11 +350,11 @@ paymentsRouter.post("/", proofUpload, async (req, res) => {
     }
   }
 
-  // A payment the accountant, the admin or the CEO records themselves needs nobody's approval (owner, 2026-11-20 for the first two;
-  // 2026-11-23 "CEO can do all"): the people who may receive cash without a hand-over (cashRoute.js approvalBlock). It goes through the
-  // same approveOnePayment as the Approve button: approved in their name, the cash lands in their hands, history written. If it cannot
-  // be approved, the payment simply stays pending.
-  if (receivesCashWithoutHandover(req.user.role) || req.user.role === "accountant") {
+  // A payment the accountant or the admin records themselves needs nobody's approval (owner, 2026-11-20: yes, for those two only).
+  // It goes through the same approveOnePayment as the Approve button: approved in their name, the cash lands in their hands, history
+  // written. The CEO's own entry waits like anybody's (he may approve it with one tap): entered for a rep, the notes are still with
+  // that rep, and approving at once would take them out of his hand-over. If it cannot be approved, the payment simply stays pending.
+  if (req.user.role === "admin" || req.user.role === "accountant") {
     try {
       await approveOnePayment(paymentId, req.user, { loadRow: false });
     } catch (err) {

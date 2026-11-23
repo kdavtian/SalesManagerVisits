@@ -61,6 +61,8 @@ export function mayApprove(kind, user, facts = {}) {
   if (kind !== "payment" || !facts.payment) return true;
   return !approvalBlock(facts.payment, user, { accountantDirect: Boolean(facts.accountantDirect) });
 }
+// A payment inside a hand-over waiting for its receiver can be neither approved nor refused until that is decided (the card says so).
+export const paymentInHandover = (kind, facts = {}) => kind === "payment" && Boolean(facts.payment?.pending_handoff_id);
 
 // Who may open a card: whoever may decide it, and the person who asked (to see the result).
 export function mayView(kind, user, request) {

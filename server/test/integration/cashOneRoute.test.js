@@ -75,6 +75,19 @@ test("the CEO keeps every right: confirms and refuses a hand-over addressed to s
   const { rows: [h] } = await pool.query("SELECT confirmed_by FROM cash_handoffs WHERE id = $1", [h1.data.id]);
   assert.equal(h.confirmed_by, users.ceo.id, "and the record says who confirmed");
 
+  // ... but not both sides of one hand-over: the CEO does not confirm cash he sent himself, nor one he declared into another's hands
+  const own = await seed(23000, "ceo");
+  const sent = await hand("ceo", "accountant", [own]);
+  assert.equal(sent.status, 201, JSON.stringify(sent.data));
+  assert.equal((await apiRequest(`/api/cash-handoffs/${sent.data.id}/confirm`, { method: "POST", cookie: cookies.ceo, body: {} })).status, 403);
+  const forRep = await seed(24000);
+  const declared = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.ceo, body: { to_user_id: users.accountant.id, on_behalf_of_user_id: users.sales_manager.id, payment_ids: [forRep] } });
+  assert.equal(declared.status, 201, JSON.stringify(declared.data));
+  trackHandoff(declared.data.id);
+  assert.equal((await apiRequest(`/api/cash-handoffs/${declared.data.id}/confirm`, { method: "POST", cookie: cookies.ceo, body: {} })).status, 403);
+  assert.equal((await apiRequest(`/api/cash-handoffs/${declared.data.id}/confirm`, { method: "POST", cookie: cookies.accountant, body: {} })).status, 200);
+  assert.equal((await apiRequest(`/api/cash-handoffs/${sent.data.id}/confirm`, { method: "POST", cookie: cookies.accountant, body: {} })).status, 200);
+
   const b = await seed(22000);
   const h2 = await hand("sales_manager", "accountant", [b]);
   const refused = await apiRequest(`/api/cash-handoffs/${h2.data.id}/reject`, { method: "POST", cookie: cookies.ceo, body: { reason: "wrong payments" } });

@@ -581,7 +581,8 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
       return;
     }
 
-    const isRecipient = handoff.to_user_id === state.user.id || decidesAnyHandoff(state.user.role);
+    // the receiver; admin and the CEO for anybody's, except one they sent or declared themselves (the server refuses both sides in one person)
+    const isRecipient = handoff.to_user_id === state.user.id || (decidesAnyHandoff(state.user.role) && handoff.from_user_id !== state.user.id && handoff.submitted_by !== state.user.id);
     const canDecide = isRecipient && handoff.status === "pending";
     const meta = HANDOFF_STATUS_META[handoff.status] ?? HANDOFF_STATUS_META.pending;
 
