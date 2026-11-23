@@ -13,6 +13,7 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { cashPlaceChipHtml } from "../cashPlaceChip.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, validHandoffRecipientRoles } from "../shared/roles.js";
 import { loadWithCache } from "../listCache.js";
 import { pickDate } from "../activityDatePicker.js";
@@ -79,10 +80,18 @@ function armedTap(btn, go) {
   }, 4000);
 }
 
+// Where the cash is now: ONE mark (owner, 2026-11-23), from the server's cash_place. It replaces the "awaiting approval / approved" badge
+// and the "From ERP" badge (the Excel has its own mark next to it). An older server sends no cash_place: the old status badge then.
+function placeBadgeHtml(p) {
+  if (p.cash_place) return cashPlaceChipHtml(p.cash_place, { extraClass: "payment-status-badge" });
+  const meta = STATUS_META[p.status] ?? STATUS_META.pending;
+  return `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>`;
+}
+
 // Does the Excel show this payment? Only said when it is worth saying: matched (green), or still missing after the grace days (amber).
 function excelBadgeHtml(p) {
-  if (p.status === "rejected" || p.approved_from_erp || !p.erp_customer_id_snapshot) return "";
-  if (p.in_excel) return ` <span class="badge badge-success">${t("pay_in_excel")}</span>`;
+  if (p.status === "rejected" || !p.erp_customer_id_snapshot) return "";
+  if (p.in_excel || p.approved_from_erp) return ` <span class="badge badge-success">${t("pay_in_excel")}</span>`;
   if (p.days_old >= 3) return ` <span class="badge badge-warning">${t("pay_not_in_excel").replace("{n}", p.days_old)}</span>`;
   return "";
 }
@@ -454,12 +463,11 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   // The status chip says what the list filter already says when the list is filtered by that status (every row of "Pending" was
   // "Pending" -- the long Armenian label wrapped onto three lines and pushed Approve off the card, owner screenshot 2026-11-13).
-  const statusChipShown = (p) => !(activeFilter && activeFilter === p.status);
+  // The place mark always says something the filter does not (with the rep, handed over, counted), so it is always shown; only the old
+  // badge of an older server is still hidden under its own filter.
+  const statusChipShown = (p) => Boolean(p.cash_place) || !(activeFilter && activeFilter === p.status);
   function paymentRowHtml(p) {
-    const meta = STATUS_META[p.status] ?? STATUS_META.pending;
-    const chips = `${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${
-      p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""
-    }${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
+    const chips = `${statusChipShown(p) ? placeBadgeHtml(p) : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
     const approve = canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
     const on = selected.has(p.id);
     return `
@@ -499,7 +507,6 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     { items: [] },
   ];
   function deskRowHtml(p) {
-    const meta = STATUS_META[p.status] ?? STATUS_META.pending;
     const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
     const excel = excelBadgeHtml(p).trim();
     const on = selected.has(p.id);
@@ -508,7 +515,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
       ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
-      ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
+      ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? placeBadgeHtml(p) : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
       <div class="dtl-cell dtl-end">${canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
@@ -835,10 +842,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     renderDetail(payment);
 
     function renderDetail(p) {
-      const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</p>
+        <p>${placeBadgeHtml(p)}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
@@ -847,7 +853,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         </div>
         <p class="muted">${t("payment_manager_label")}${labelColon()}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
         ${
-          p.current_holder_name
+          // the mark above already says who holds the cash and whom it was handed to; the old line stays only for an older server
+          !p.cash_place && p.current_holder_name
             ? `<p class="muted">${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}${
                 p.pending_handoff_to_name
                   ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}`
@@ -883,7 +890,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         if (canApprove(p)) buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
         // one route for cash: not handed over yet = no Approve here, and the reason stands next to the buttons (not only in a toast)
         else approveHint = `<p class="muted payment-approve-hint">${t(p.pending_handoff_id ? "payment_approve_in_handover" : "payment_approve_by_handover")}</p>`;
-        buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
+        // inside a waiting hand-over the server refuses a rejection too: not offered (the hint above says what it waits for)
+        if (!p.pending_handoff_id) buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
       } else if (p.status !== "pending" && canReview) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }

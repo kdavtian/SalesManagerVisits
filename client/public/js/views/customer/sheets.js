@@ -1,5 +1,6 @@
 // Customer card > payments received, order detail and the pending change request (moved out of customerDetail.js with the refactor
 // tool, docs/architecture-roadmap.md step 6).
+import { cashPlaceChipHtml } from "../../cashPlaceChip.js";
 import { api } from "../../api.js";
 import { dockSheet } from "../../dockSheet.js";
 import { reorderHash } from "../../reorder.js";
@@ -53,7 +54,9 @@ export async function openPaymentsReceivedSheet(customer) {
   const sourceBadge = (r) =>
     r.source === "excel"
       ? `<span class="badge badge-neutral">${t("payments_source_excel")}</span>`
-      : `<span class="badge ${r.status === "approved" ? "badge-success" : "badge-warning"}">${t("payments_source_app")} · ${t(r.status === "approved" ? "payment_status_approved" : "payment_status_pending")}</span>`;
+      : r.cash_place
+        ? cashPlaceChipHtml(r.cash_place) // where this money is now: the same mark as on the Payments screen
+        : `<span class="badge ${r.status === "approved" ? "badge-success" : "badge-warning"}">${t("payments_source_app")} · ${t(r.status === "approved" ? "payment_status_approved" : "payment_status_pending")}</span>`;
   let shown = FIRST_ROWS;
   let lastJson = "";
   const render = (data) => {

@@ -360,3 +360,32 @@ test("POST /api/cash-handoffs with payment_ids hands over ONLY the chosen paymen
   const available = await apiRequest("/api/cash-handoffs/available", { cookie: cookies.sales_manager2 });
   assert.deepEqual(available.data.payments.map((p) => p.id), [keep]);
 });
+
+// --- Where is the cash now (owner, 2026-11-23): one answer on every payment the server sends ---------------------------------------
+
+test("cash_place follows the money: with the rep -> handed over -> counted by the director -> at the office; rejected says so", async () => {
+  const id = await seedAvailablePayment(users.sales_manager.id, 5500);
+  const inList = async (cookie) => (await apiRequest(`/api/payments?customer_id=${customer.id}`, { cookie })).data.rows.find((r) => r.id === id)?.cash_place;
+  const one = async () => (await apiRequest(`/api/payments/${id}`, { cookie: cookies.admin })).data.cash_place;
+  assert.deepEqual(await one(), { place: "with_rep", name: users.sales_manager.name, to: null });
+  assert.deepEqual(await inList(cookies.sales_manager), { place: "with_rep", name: users.sales_manager.name, to: null });
+
+  const h1 = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager, body: { to_user_id: users.sales_director.id, payment_ids: [id] } });
+  trackHandoff(h1.data.id);
+  assert.deepEqual(await one(), { place: "on_the_way", name: users.sales_manager.name, to: users.sales_director.name });
+  await apiRequest(`/api/cash-handoffs/${h1.data.id}/confirm`, { method: "POST", cookie: cookies.sales_director, body: {} });
+  assert.deepEqual(await inList(cookies.accountant), { place: "with_director", name: users.sales_director.name, to: null });
+
+  const h2 = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_director, body: { to_user_id: users.accountant.id, payment_ids: [id] } });
+  trackHandoff(h2.data.id);
+  assert.deepEqual(await one(), { place: "on_the_way", name: users.sales_director.name, to: users.accountant.name });
+  await apiRequest(`/api/cash-handoffs/${h2.data.id}/confirm`, { method: "POST", cookie: cookies.accountant, body: {} });
+  assert.equal((await one()).place, "office");
+  // the customer's own payments list carries the same mark
+  const card = await apiRequest(`/api/customers/${customer.id}/payments-received`, { cookie: cookies.admin });
+  assert.ok(card.data.rows.filter((r) => r.source === "app").every((r) => r.cash_place?.place), JSON.stringify(card.data.rows).slice(0, 300));
+
+  const bad = await seedAvailablePayment(users.sales_manager.id, 6600);
+  await apiRequest(`/api/payments/${bad}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "typed twice" } });
+  assert.equal((await apiRequest(`/api/payments/${bad}`, { cookie: cookies.admin })).data.cash_place.place, "rejected");
+});
