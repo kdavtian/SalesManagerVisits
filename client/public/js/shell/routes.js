@@ -383,7 +383,7 @@ export async function renderRoute(ctx) {
   } else if (path === "#/cash-handoffs") {
     (await fresh(import("../views/cashHandoffs.js"))).renderCashHandoffs(ctx.app, ctx.navigate, null, { handover: query.get("handover") === "1" });
   } else if (path === "#/money") {
-    (await fresh(import("../views/money.js"))).renderMoney(ctx.app, ctx.navigate);
+    ctx.currentCleanup = (await fresh(import("../views/money.js"))).renderMoney(ctx.app, ctx.navigate);
   } else if (path === "#/expenses") {
     (await fresh(import("../views/cashExpenses.js"))).renderCashExpenses(ctx.app, ctx.navigate);
   } else if (path === "#/reports") {

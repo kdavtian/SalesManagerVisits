@@ -14,6 +14,17 @@ export const CASH_PLACE_SELECT = `cph.role AS holder_role, cph.name AS holder_na
 export const CASH_PLACE_JOINS = `LEFT JOIN users cph ON cph.id = p.current_holder_id
   LEFT JOIN cash_handoffs cpo ON cpo.id = p.pending_handoff_id LEFT JOIN users cpt ON cpt.id = cpo.to_user_id`;
 
+// The same answer as shared/cashPlace.js, as SQL, for filtering and adding up (test/integration/cashOverview.test.js holds the two together).
+// Needs CASH_PLACE_JOINS.
+export const CASH_PLACE_SQL = `(CASE
+  WHEN p.status = 'rejected' THEN 'rejected'
+  WHEN (p.status = 'approved' AND (p.approved_by IS NOT NULL OR NOT p.approved_from_erp
+        OR (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date < (SELECT payments_cutover FROM app_settings WHERE id = 1)))
+       OR cph.role = 'accountant' OR ${officeDeskSql("p.current_holder_id")} THEN 'office'
+  WHEN p.pending_handoff_id IS NOT NULL THEN 'on_the_way'
+  WHEN cph.role IN ('sales_director', 'ceo', 'operations_director', 'admin') THEN 'with_director'
+  ELSE 'with_rep' END)`;
+
 export function addCashPlace(row) {
   row.cash_place = cashPlace(row);
   return row;

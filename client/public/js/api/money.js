@@ -81,6 +81,8 @@ export const moneyApi = {
   closeCashShortfall: (id, how, note) => json(`/cash-handoffs/shortfalls/${id}/close`, "POST", { how, note }),
   listCashHandoffs: (offset = 0) => request(`/cash-handoffs?offset=${offset}`),
   getCashHandoff: (id) => request(`/cash-handoffs/${id}`),
+  // the Cash screen: my cash, what waits for me, where the company's cash is now (always read fresh: it is the page's whole point)
+  getCashOverview: () => request("/cash/overview", { fresh: true }),
   createCashHandoff: (data) => json("/cash-handoffs", "POST", data),
   // body: { counted_amd, note } -- what the receiver counted; a different amount needs a note (document flow, 1.453.0)
   confirmCashHandoff: (id, body = {}) => json(`/cash-handoffs/${id}/confirm`, "POST", body),
