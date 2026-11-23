@@ -48,8 +48,9 @@ test("warehouse home: only the warehouse roles; counts what waits and what is sh
   assert.equal(after.packed.count, before.packed.count + 1);
   assert.equal(after.packed.unrouted, before.packed.unrouted + 1);
   assert.ok(after.shortage.products >= 1);
-  const row = after.shortage.sample.find((r) => r.have === 2 && r.need >= 5);
-  assert.ok(row, "the short product is named with what is needed and what is in stock");
+  // what is ON THE SHELF (review 2026-11-23, appStock.js APP_STOCK_SQL): Excel 2 minus the 1 piece packed and taken out = 1
+  const row = after.shortage.sample.find((r) => r.have === 1 && r.need >= 5);
+  assert.ok(row, "the short product is named with what is needed and what is on the shelf");
   assert.ok(typeof after.tasks.open === "number" && typeof after.today.stops === "number" && typeof after.stale_stops === "number");
   // a packed order on a route is no longer "unrouted"
   const { rows } = await pool.query("INSERT INTO delivery_routes (driver_id, route_date, created_by) VALUES ($1, (now() AT TIME ZONE 'Asia/Yerevan')::date, $1) RETURNING id", [driver.id]);
