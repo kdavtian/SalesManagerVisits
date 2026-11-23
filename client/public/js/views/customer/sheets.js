@@ -55,7 +55,7 @@ export async function openPaymentsReceivedSheet(customer) {
     r.source === "excel"
       ? `<span class="badge badge-neutral">${t("payments_source_excel")}</span>`
       : r.cash_place
-        ? cashPlaceChipHtml(r.cash_place) // where this money is now: the same mark as on the Payments screen
+        ? `<span class="badge badge-neutral">${t("payments_source_app")}</span> ${cashPlaceChipHtml(r.cash_place)}` // recorded in the app + where this money is now (the mark of the Payments screen)
         : `<span class="badge ${r.status === "approved" ? "badge-success" : "badge-warning"}">${t("payments_source_app")} · ${t(r.status === "approved" ? "payment_status_approved" : "payment_status_pending")}</span>`;
   let shown = FIRST_ROWS;
   let lastJson = "";

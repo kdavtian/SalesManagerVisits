@@ -463,9 +463,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   // The status chip says what the list filter already says when the list is filtered by that status (every row of "Pending" was
   // "Pending" -- the long Armenian label wrapped onto three lines and pushed Approve off the card, owner screenshot 2026-11-13).
-  // The place mark always says something the filter does not (with the rep, handed over, counted), so it is always shown; only the old
-  // badge of an older server is still hidden under its own filter.
-  const statusChipShown = (p) => Boolean(p.cash_place) || !(activeFilter && activeFilter === p.status);
+  // The place mark says more than the status filter (with the rep, handed over, counted), so it stays under Pending and Approved; under
+  // Rejected it would only repeat the filter on every row. The old badge of an older server is still hidden under its own filter.
+  const statusChipShown = (p) => (p.cash_place ? !(activeFilter === "rejected" && p.cash_place.place === "rejected") : !(activeFilter && activeFilter === p.status));
   function paymentRowHtml(p) {
     const chips = `${statusChipShown(p) ? placeBadgeHtml(p) : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
     const approve = canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
@@ -853,14 +853,11 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         </div>
         <p class="muted">${t("payment_manager_label")}${labelColon()}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
         ${
-          // the mark above already says who holds the cash and whom it was handed to; the old line stays only for an older server
-          !p.cash_place && p.current_holder_name
-            ? `<p class="muted">${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}${
-                p.pending_handoff_to_name
-                  ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}`
-                  : ""
-              }</p>`
-            : ""
+          // under the mark: the approval state in words (a reopened payment at the office still waits for approval) and who holds
+          // the notes right now (the mark of a hand-over names the receiver, "At the office" names nobody)
+          `<p class="muted">${t((STATUS_META[p.status] ?? STATUS_META.pending).key)}${
+            p.current_holder_name && p.status !== "rejected" ? ` · ${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}` : ""
+          }${p.pending_handoff_to_name && !p.cash_place ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}` : ""}</p>`
         }
         ${p.note ? `<p class="muted">${escapeHtml(p.note)}</p>` : ""}
         ${p.rejection_reason ? `<p class="form-error" style="position:static;">${escapeHtml(p.rejection_reason)}</p>` : ""}

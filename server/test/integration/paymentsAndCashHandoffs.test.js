@@ -383,7 +383,13 @@ test("cash_place follows the money: with the rep -> handed over -> counted by th
   assert.equal((await one()).place, "office");
   // the customer's own payments list carries the same mark
   const card = await apiRequest(`/api/customers/${customer.id}/payments-received`, { cookie: cookies.admin });
-  assert.ok(card.data.rows.filter((r) => r.source === "app").every((r) => r.cash_place?.place), JSON.stringify(card.data.rows).slice(0, 300));
+  const appRows = card.data.rows.filter((r) => r.source === "app");
+  assert.ok(appRows.some((r) => r.amount_amd === 5500 && r.cash_place.place === "office"), JSON.stringify(card.data.rows).slice(0, 300));
+  assert.ok(appRows.every((r) => r.cash_place?.place));
+  // an Excel-approved payment from before the cut-over is the archive: at the office, not "with the rep" for ever
+  const old = await seedAvailablePayment(users.sales_manager.id, 7700);
+  await pool.query("UPDATE payments SET status = 'approved', approved_from_erp = true, approved_at = now(), payment_date = (SELECT payments_cutover FROM app_settings WHERE id = 1) - interval '20 days' WHERE id = $1", [old]);
+  assert.equal((await apiRequest(`/api/payments/${old}`, { cookie: cookies.admin })).data.cash_place.place, "office");
 
   const bad = await seedAvailablePayment(users.sales_manager.id, 6600);
   await apiRequest(`/api/payments/${bad}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "typed twice" } });

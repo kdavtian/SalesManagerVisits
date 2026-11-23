@@ -14,6 +14,7 @@
 //   GET  /desks                     the cash desks with holders and the cash waiting on each; reps without a desk
 //   POST /desks, PATCH /desks/:id   { name, holder_ids, active } (admin); POST /desks/auto: every rep without a desk gets his own (admin)
 import { cashPlace } from "../../shared/cashPlace.js";
+import { officeDeskSql } from "../cashPlaceSql.js";
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -125,6 +126,7 @@ payments2Router.get("/bank/payments", bankOnly, async (req, res) => {
             p.cash_state, hu.name AS holder_name, p.legacy_payment_id,
             op.status AS old_status, op.approved_by AS old_approved_by, op.approved_from_erp AS old_approved_from_erp, op.pending_handoff_id AS old_handoff_id,
             ohu.role AS old_holder_role, ohu.name AS old_holder_name, oto.name AS old_handoff_to_name,
+            ${officeDeskSql("op.current_holder_id")} AS old_on_office_desk, (op.approved_by IS NOT NULL AND op.approved_by = op.current_holder_id) AS old_holder_approved,
             p.created_at, u.name AS created_by_name,
             CASE WHEN l.id IS NULL THEN NULL ELSE json_build_object('id', l.id, 'day', to_char(l.line_date, 'YYYY-MM-DD'), 'counterparty', l.counterparty, 'description', l.description) END AS line
      FROM customer_payments p LEFT JOIN cash_accounts a ON a.id = p.account_id LEFT JOIN bank_statement_lines l ON l.id = p.bank_line_id
@@ -135,13 +137,13 @@ payments2Router.get("/bank/payments", bankOnly, async (req, res) => {
     [cutover, limit, req.query.methods === "all"]
   );
   // a cash payment of the Payments screen: where its cash is NOW, read from the payment itself (the copy here is up to 10 minutes
-  // behind) by the one rule every screen uses (shared/cashPlace.js); `received` of the copy = on the office desk
+  // behind) by the one rule every screen uses (shared/cashPlace.js), with the same facts as the Payments screen
   for (const r of rows) {
     if (r.method === "cash" && r.old_status && !r.voided_at) {
       r.cash_place = cashPlace({ status: r.old_status, approved_by: r.old_approved_by, approved_from_erp: r.old_approved_from_erp, pending_handoff_id: r.old_handoff_id,
-        holder_role: r.old_holder_role, holder_name: r.old_holder_name, handoff_to_name: r.old_handoff_to_name, on_office_desk: r.cash_state === "received" });
+        holder_role: r.old_holder_role, holder_name: r.old_holder_name, handoff_to_name: r.old_handoff_to_name, on_office_desk: r.old_on_office_desk, holder_approved: r.old_holder_approved });
     }
-    for (const k of ["old_status", "old_approved_by", "old_approved_from_erp", "old_handoff_id", "old_holder_role", "old_holder_name", "old_handoff_to_name"]) delete r[k];
+    for (const k of ["old_status", "old_approved_by", "old_approved_from_erp", "old_handoff_id", "old_holder_role", "old_holder_name", "old_handoff_to_name", "old_on_office_desk", "old_holder_approved"]) delete r[k];
   }
   res.json({ payments: rows });
 });

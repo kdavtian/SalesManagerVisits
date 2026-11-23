@@ -9,7 +9,8 @@ const CLS = { with_rep: "badge-warning", on_the_way: "badge-info", with_director
 export function cashPlaceText(place) {
   if (!place) return "";
   const text = t(place.direct ? "cash_place_received_by" : `cash_place_${place.place}`);
-  return text.replace("{name}", place.name || "—").replace("{to}", place.to || "—");
+  // function replacements: a person's name is put in as it is (a "$&" in a name is not a pattern)
+  return text.replace("{name}", () => place.name || "—").replace("{to}", () => place.to || "—");
 }
 
 export function cashPlaceChipHtml(place, { extraClass = "" } = {}) {

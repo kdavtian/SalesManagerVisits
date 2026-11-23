@@ -19,11 +19,16 @@ test("the Excel alone does not move the notes: approved from the Excel only is s
   assert.equal(place({ status: "approved", approved_from_erp: true }).place, "with_rep");
   assert.equal(place({ status: "approved", approved_from_erp: true, holder_role: "sales_director" }).place, "with_director");
   assert.equal(place({ status: "approved", approved_from_erp: true, approved_by: 3 }).place, "office", "then the accountant received it in a hand-over");
+  // the archive from before the cut-over is not in anybody's hand-over any more: the books have it
+  assert.equal(place({ status: "approved", approved_from_erp: true, before_cutover: true }).place, "office");
+  assert.equal(place({ status: "pending", before_cutover: true }).place, "with_rep", "an old payment still pending is still with its holder");
 });
 
 test("at the office: an accountant holds it, a person approved it (the CEO directly), or it is on the office desk", () => {
   assert.equal(place({ holder_role: "accountant" }).place, "office");
-  assert.deepEqual(place({ status: "approved", approved_by: 9, holder_role: "ceo", holder_name: "Ilona" }), { place: "office", name: "Ilona", to: null, direct: true }, "taken directly: the mark names the person");
+  assert.deepEqual(place({ status: "approved", approved_by: 9, holder_approved: true, holder_role: "ceo", holder_name: "Ilona" }), { place: "office", name: "Ilona", to: null, direct: true }, "taken directly: the mark names the person");
+  // an old row: somebody approved it while the holder stayed the rep -> at the office, and the rep is NOT named as the receiver
+  assert.deepEqual(place({ status: "approved", approved_by: 9, holder_approved: false }), { place: "office", name: null, to: null });
   assert.equal(place({ status: "approved", approved_by: 3, holder_role: "accountant", holder_name: "Mane" }).direct, undefined);
   assert.equal(place({ holder_role: "ceo", on_office_desk: true }).place, "office");
   assert.equal(place({ holder_role: "ceo" }).place, "with_director", "a CEO holding cash from before, not on the office desk");
@@ -48,4 +53,8 @@ test("the cash track of the copy: collected / counted / received; a waiting hand
   assert.equal(cashStateOf({ ...base, status: "approved", approved_by: 2 }), "received");
   assert.equal(cashStateOf({ ...base, status: "approved", approved_from_erp: true }), "collected");
   assert.equal(cashStateOf({ ...base, holder_role: "ceo", on_office_desk: true }), "received");
+  // a refused payment keeps the track of where its cash was (exactly as before this rule moved here)
+  assert.equal(cashStateOf({ ...base, status: "rejected" }), "collected");
+  assert.equal(cashStateOf({ ...base, status: "rejected", holder_role: "sales_director" }), "counted");
+  assert.equal(cashStateOf({ ...base, status: "rejected", holder_role: "accountant" }), "received");
 });
