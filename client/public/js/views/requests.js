@@ -214,13 +214,14 @@ export function renderRequestCard(root, navigate, kind, id) {
     }
     bar.innerHTML = `
       ${err}
+      ${request.can_approve === false ? `<p class="muted req-approve-hint">${escapeHtml(t(request.in_handover ? "req_payment_in_handover" : "req_payment_by_handover"))}</p>` : ""}
       <div class="req-bar-buttons">
-        <button type="button" class="btn req-btn req-btn-deny" data-act="deny">${escapeHtml(t("req_deny"))}</button>
-        <button type="button" class="btn btn-primary req-btn req-btn-approve" data-act="approve">${escapeHtml(t("req_approve"))}</button>
+        ${request.in_handover ? "" : `<button type="button" class="btn req-btn req-btn-deny" data-act="deny">${escapeHtml(t("req_deny"))}</button>`}
+        ${request.can_approve === false ? "" : `<button type="button" class="btn btn-primary req-btn req-btn-approve" data-act="approve">${escapeHtml(t("req_approve"))}</button>`}
       </div>`;
-    bar.querySelector('[data-act="deny"]').addEventListener("click", () => paintBar("deny"));
+    bar.querySelector('[data-act="deny"]')?.addEventListener("click", () => paintBar("deny"));
     const approveBtn = bar.querySelector('[data-act="approve"]');
-    approveBtn.addEventListener("click", () => {
+    approveBtn?.addEventListener("click", () => {
       // money: two taps, as on the Payments screen (an approved payment lands on the approver's desk)
       if (kind === "payment" && approveBtn.dataset.armed !== "1") {
         approveBtn.dataset.armed = "1";

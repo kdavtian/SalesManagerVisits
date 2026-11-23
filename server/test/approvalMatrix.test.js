@@ -10,6 +10,7 @@ const RULES = {
   paymentReview: R.canReviewPayments,
   returns: R.canApproveReturns,
   countedPaymentVoid: R.canVoidCountedPayment,
+  cashWithoutHandover: R.receivesCashWithoutHandover,
   fuel: R.canManageFuel,
   routePlanSuggestions: R.canReviewRoutePlanSuggestions,
   cashDesks: R.canManageCashDesks,
@@ -40,7 +41,7 @@ test("the sales director approves anything on an order; the operations director 
 test("what only the CEO (and admin) decide: the list the owner was given", () => {
   assert.deepEqual(
     R.ceoOnlyApprovals().map((a) => a.key).sort(),
-    ["appOrderPerks", "cashDesks", "cashflowManagement", "countedPaymentVoid", "fuel", "pivot", "routePlanSuggestions", "signedDocuments", "staffRules", "tasksAnyone"]
+    ["appOrderPerks", "cashDesks", "cashWithoutHandover", "cashflowManagement", "countedPaymentVoid", "fuel", "pivot", "routePlanSuggestions", "signedDocuments", "staffRules", "tasksAnyone"]
   );
   assert.equal(R.canReviewCustomerEdits("sales_director"), true);
 });

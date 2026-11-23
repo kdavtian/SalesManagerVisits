@@ -1,15 +1,17 @@
-// Daily cash sheets in the app (cashSheets.js): the list with "posted to Telegram" and "recorded in Excel", the Excel file, and the
-// accountant's "Recorded in Excel" mark (undoable). A rep sees only his own sheets; management, the accountant and the sales director see all.
+// Daily cash sheets in the app (cashSheets.js): the list with "posted to Telegram" and "in Excel", and the Excel file. A sheet closes by
+// itself when the Excel has its payments (owner, 2026-11-23: no "Recorded in Excel" button in the routine). The mark by hand is only the
+// way out for a sheet still open after NOT_RECORDED_DAYS (`late`), for the accountant, admin and the CEO; old app versions still send it.
+// A rep sees only his own sheets; management, the accountant and the sales director see all.
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { cashSheetFilename, cashSheetXlsx, loadCashSheet } from "../cashSheets.js";
+import { cashSheetFilename, cashSheetXlsx, loadCashSheet, NOT_RECORDED_DAYS } from "../cashSheets.js";
 
 export const cashSheetsRouter = Router();
 cashSheetsRouter.use(requireAuth);
 
 const SEES_ALL = new Set(["admin", "ceo", "operations_director", "sales_director", "accountant"]);
-const RECORDS = new Set(["admin", "accountant"]);
+const RECORDS = new Set(["admin", "ceo", "accountant"]);
 const canSee = (user, sheet) => SEES_ALL.has(user.role) || (user.role === "sales_manager" && sheet.rep_id === user.id);
 
 cashSheetsRouter.get("/", async (req, res) => {
@@ -17,7 +19,8 @@ cashSheetsRouter.get("/", async (req, res) => {
   const mine = !SEES_ALL.has(req.user.role);
   const { rows } = await pool.query(
     `SELECT s.id, s.handoff_id, to_char(s.sheet_date, 'YYYY-MM-DD') AS sheet_date, s.total_amd, s.counted_amd, s.item_count, s.created_at,
-            s.posted_at, s.last_post_error, s.recorded_at, s.recorded_auto, r.name AS rep_name, d.name AS director_name, rb.name AS recorded_by_name
+            s.posted_at, s.last_post_error, s.recorded_at, s.recorded_auto,
+            (s.recorded_at IS NULL AND s.created_at < now() - make_interval(days => ${NOT_RECORDED_DAYS})) AS late, r.name AS rep_name, d.name AS director_name, rb.name AS recorded_by_name
      FROM cash_sheets s LEFT JOIN users r ON r.id = s.rep_id LEFT JOIN users d ON d.id = s.director_id LEFT JOIN users rb ON rb.id = s.recorded_by
      WHERE s.created_at > now() - interval '60 days' ${mine ? "AND s.rep_id = $1" : ""}
      ORDER BY (s.recorded_at IS NULL) DESC, s.id DESC LIMIT 200`,

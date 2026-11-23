@@ -56,11 +56,14 @@ test("a payment the Excel already shows is still in the rep's hand-over; the acc
   assert.ok(!after.data.payments.some((x) => x.id === erp), "gone once received");
 });
 
-test("approving directly: the accountant now holds the money", async () => {
+test("approving directly: the CEO now holds the money; the accountant waits for the hand-over (one route, 2026-11-23)", async () => {
   const id = await seed(12000);
-  assert.equal((await apiRequest(`/api/payments/${id}/approve`, { method: "POST", cookie: cookies.accountant })).status, 200);
-  const { rows: [p] } = await pool.query("SELECT current_holder_id FROM payments WHERE id = $1", [id]);
-  assert.equal(p.current_holder_id, users.accountant.id);
+  const refused = await apiRequest(`/api/payments/${id}/approve`, { method: "POST", cookie: cookies.accountant });
+  assert.equal(refused.status, 409, JSON.stringify(refused.data));
+  assert.match(refused.data.error, /not handed over/);
+  assert.equal((await apiRequest(`/api/payments/${id}/approve`, { method: "POST", cookie: cookies.ceo })).status, 200);
+  const { rows: [p] } = await pool.query("SELECT status, current_holder_id FROM payments WHERE id = $1", [id]);
+  assert.deepEqual([p.status, p.current_holder_id], ["approved", users.ceo.id]);
 });
 
 test("counted less: the shortfall stays on the rep's line until paid in or written off; who may close it", async () => {

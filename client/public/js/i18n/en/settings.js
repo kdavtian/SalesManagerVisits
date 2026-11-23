@@ -215,6 +215,8 @@ export const enSettings = {
     usage_hour: "h",
     auto_route_plan_help: "A new customer goes into its rep's route plan by itself: on the weekday that already holds most of the rep's customers of the same subregion (else region), after the nearest one. The rep is told. Customers of channels nobody visits are left out.",
     auto_route_plan_label: "Add new customers to route plans",
+    accountant_direct_approval_help: "Off (the rule): cash goes rep → sales director → accountant, or rep → accountant, and a payment is approved when its hand-over is confirmed. The accountant still approves payments she entered herself. Admin and the CEO can always approve. On: the accountant may also approve a rep's cash that was never handed over in the app.",
+    accountant_direct_approval_label: "Accountant approves without a hand-over",
     visit_type_group_channels: "Channels",
     visit_type_group_potential: "Potential customers",
     visit_type_group_tiers: "Levels",

@@ -19,6 +19,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import {
   validHandoffRecipientRoles,
   canSubmitHandoffForOthers,
+  decidesAnyHandoff,
   canVoidCountedPayment,
   closesCashShortfall,
   seesExcelBalance,
@@ -93,7 +94,7 @@ export function checkOnBehalf(actor, sender, recipient) {
   if (sender.role !== "sales_manager") {
     return "A handoff can only be submitted on behalf of a sales manager";
   }
-  if (recipient.id !== actor.id && actor.role !== "admin") {
+  if (recipient.id !== actor.id && !decidesAnyHandoff(actor.role)) {
     return "You can only declare a handoff into your own custody";
   }
   return null;
@@ -369,10 +370,17 @@ cashHandoffsRouter.post("/:id/confirm", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Handoff not found" });
     }
-    // Admin as backstop, matching every other review gate in this app.
-    if (handoff.to_user_id !== req.user.id && req.user.role !== "admin") {
+    // Admin and the CEO as backstop (roles.js decidesAnyHandoff: the owner's side may confirm or refuse any hand-over).
+    if (handoff.to_user_id !== req.user.id && !decidesAnyHandoff(req.user.role)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Only the recipient can confirm this handoff" });
+    }
+    // Nobody confirms a receipt for somebody else that they set up themselves (independent review, 2026-11-23): not the sender, and not
+    // the person who declared it into another person's hands. Confirming means "the receiver counted it", and one person cannot say
+    // both sides. Refusing it is still open to them (the cash only goes back to the sender).
+    if (handoff.to_user_id !== req.user.id && (handoff.from_user_id === req.user.id || handoff.submitted_by === req.user.id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "You sent this hand-over: its receiver confirms it" });
     }
     if (handoff.status !== "pending") {
       await client.query("ROLLBACK");
@@ -437,7 +445,7 @@ cashHandoffsRouter.post("/:id/reject", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Handoff not found" });
     }
-    if (handoff.to_user_id !== req.user.id && req.user.role !== "admin") {
+    if (handoff.to_user_id !== req.user.id && !decidesAnyHandoff(req.user.role)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Only the recipient can reject this handoff" });
     }
