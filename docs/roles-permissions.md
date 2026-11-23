@@ -77,11 +77,12 @@ shared set used to gate the order status-transition endpoints.
 
 | Action | Function | Behavior |
 |---|---|---|
-| Approve/reject/reverse a submitted payment | `canReviewPayments` | `admin`, `ceo`, `accountant`. Not `sales_director`. |
+| Approve/reject/reverse a submitted payment | `canReviewPayments` + `money/cashRoute.js` `approvalBlock` | `admin`, `ceo`, `operations_director`, `accountant`. Not `sales_director`. One route for cash (2026-11-23): cash that was not handed over yet is approved only by `admin` / `ceo` (`receivesCashWithoutHandover`); the accountant approves her own entries, and anybody's only when App configuration switches "Accountant approves without a hand-over" on; every reviewer may approve again once the cash is with an accountant. Never while a hand-over is waiting. |
 | Submit a payment on someone else's behalf | `canSubmitPaymentsForOthers` | `admin`, `ceo`, `accountant`, `sales_director`. A plain `sales_manager` always self-submits. |
 | Declare a cash handoff on someone else's behalf | `canSubmitHandoffForOthers` (= `canSubmitPaymentsForOthers`) | Same as above. |
-| Receive a cash handoff | `validHandoffRecipientRoles(fromRole)` | Chain: `sales_manager → sales_director → (ceo \| accountant)`. `ceo` can only forward to `accountant`. See [`data-model.md`](data-model.md) for the underlying table. |
-| Terminal custody (flips the payment to `approved`) | `isTerminalHandoffRole` | `accountant` only — a `ceo` confirming mid-chain leaves the payment `pending`. |
+| Receive a cash handoff | `validHandoffRecipientRoles(fromRole)` | One route (2026-11-23): `sales_manager → sales_director → accountant`, or `sales_manager → accountant`. The CEO / operations director are no longer a stop; cash one of them still holds goes on to the `accountant`. See [`data-model.md`](data-model.md) for the underlying table. |
+| Confirm or refuse ANY hand-over (also one addressed to somebody else) | `decidesAnyHandoff` | `admin`, `ceo`. Everybody else: only the receiver. |
+| Terminal custody (flips the payment to `approved`) | `isTerminalHandoffRole` | `accountant` only. |
 
 Push notifications for payments go only to `accountant`
 (`PAYMENT_NOTIFY_ROLES`) — explicitly not `ceo`/`admin`, who can still
@@ -111,6 +112,7 @@ code ever disagree, the code wins; open a PR to fix whichever is wrong.
 
 Everything below is limited to `ceo` + `admin`; the sales director cannot do it.
 - Voiding a payment whose cash was already counted, with a reason (`canVoidCountedPayment`).
+- Receiving cash without a hand-over (approving the payment directly) and confirming or refusing any hand-over (`receivesCashWithoutHandover`, `decidesAnyHandoff`).
 - Fuel allowance: consumption, fuel price, home addresses, day corrections (`canManageFuel`).
 - Accepting or dismissing Vaghinak's route-plan suggestions (`canReviewRoutePlanSuggestions`).
 - Cash desks setup (`canManageCashDesks`).

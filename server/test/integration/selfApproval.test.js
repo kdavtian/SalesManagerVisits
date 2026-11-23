@@ -117,7 +117,7 @@ test("a director saving the whole card (only the phone changed) does not overwri
   assert.equal(none.data.unchanged, true);
 });
 
-test("a payment: recorded by the accountant is approved at once and the cash is on their desk; by the CEO or a rep it waits", async () => {
+test("a payment: recorded by the accountant or the CEO is approved at once and the cash is in their hands; by a rep it waits", async () => {
   const accountant = await createUser("accountant", { name: "Self accountant" });
   const cookie = await loginAs(accountant.email);
   const pay = (c, amount) => apiRequest("/api/payments", { method: "POST", cookie: c, body: { customer_id: customer.id, amount_amd: amount, sales_manager_id: people.sales_manager.id } });
@@ -129,11 +129,12 @@ test("a payment: recorded by the accountant is approved at once and the cash is 
     assert.equal(own.data.status, "approved");
     const { rows: [row] } = await pool.query("SELECT approved_by, current_holder_id FROM payments WHERE id = $1", [own.data.id]);
     assert.deepEqual([row.approved_by, row.current_holder_id], [accountant.id, accountant.id]);
-    for (const [who, amount] of [["ceo", 12000], ["sales_manager", 13000]]) {
+    // the CEO keeps every right on cash (owner, 2026-11-23): their own entry is received at once too; a rep's waits for the hand-over
+    for (const [who, amount, status] of [["ceo", 12000, "approved"], ["sales_manager", 13000, "pending"]]) {
       const r = await pay(cookies[who], amount);
       assert.equal(r.status, 201, `${who}: ${JSON.stringify(r.data).slice(0, 200)}`);
       ids.push(r.data.id);
-      assert.equal(r.data.status, "pending", who);
+      assert.equal(r.data.status, status, who);
     }
   } finally {
     if (ids.length) {

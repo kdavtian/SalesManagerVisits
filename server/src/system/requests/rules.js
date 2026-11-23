@@ -14,6 +14,7 @@ import {
   canApproveCompetitorBrands,
 } from "../../shared/roles.js";
 import { canApproveDiscountRole } from "../../orders/discountPolicy.js";
+import { approvalBlock } from "../../money/cashRoute.js";
 import { pendingRequests } from "./queries.js";
 
 // The kinds, in the order the Requests list groups them.
@@ -25,6 +26,7 @@ export const isRequestKind = (kind) => REQUEST_KINDS.includes(kind);
 //   discount    -> belowCost, belowLanding (a line below net / landing cost narrows who may approve)
 //   perf_plan   -> submittedByRole (the accountant reviews only a sales director's plan)
 //   bonus_claim -> claimantId (nobody approves their own reward)
+//   payment     -> payment { status, pending_handoff_id, created_by, holder_role }, accountantDirect (where the cash is decides who may APPROVE: mayApprove)
 export function mayDecide(kind, user, facts = {}) {
   if (!user) return false;
   switch (kind) {
@@ -35,6 +37,7 @@ export function mayDecide(kind, user, facts = {}) {
     case "customer_edit":
       return canReviewCustomerEdits(user.role);
     case "payment":
+      // may decide = may at least refuse it; whether Approve is offered too is mayApprove below (one route for cash)
       return canReviewPayments(user.role);
     case "cashflow":
       return isCashflowManagement(user.role);
@@ -49,6 +52,14 @@ export function mayDecide(kind, user, facts = {}) {
     default:
       return false;
   }
+}
+
+// Approve, next to Deny, on a request this person may decide. Only a payment differs: cash that was not handed over yet is approved by
+// its hand-over (money/cashRoute.js approvalBlock; admin and the CEO always), but a wrong record can still be refused.
+export function mayApprove(kind, user, facts = {}) {
+  if (!mayDecide(kind, user, facts)) return false;
+  if (kind !== "payment" || !facts.payment) return true;
+  return !approvalBlock(facts.payment, user, { accountantDirect: Boolean(facts.accountantDirect) });
 }
 
 // Who may open a card: whoever may decide it, and the person who asked (to see the result).

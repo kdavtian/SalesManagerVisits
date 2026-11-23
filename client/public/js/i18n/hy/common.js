@@ -1678,6 +1678,7 @@ export const hyCommon = {
     req_reason: "Պատճառ",
     req_approve: "Հաստատել",
     req_deny: "Մերժել",
+    req_payment_by_handover: "Կանխիկը դեռ չի հանձնվել. վճարումը հաստատվում է հանձնումը հաստատելիս։ Սխալ գրառումը կարելի է մերժել։",
     req_tap_again: "Հպեք կրկին՝ հաստատելու համար",
     req_deny_reason: "Ինչու՞ եք մերժում",
     req_deny_placeholder: "Կարճ պատճառ (պարտադիր)",

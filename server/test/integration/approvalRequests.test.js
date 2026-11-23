@@ -171,6 +171,11 @@ test("a payment: its push still goes to the accountant only, every approver sees
   assert.equal(asked?.type, "payment_submitted");
   assert.equal((await notesOf(people.ceo.id, url)).length, 0, "CEO is not paged for every payment (PAYMENT_NOTIFY_ROLES)");
   assert.ok((await apiRequest("/api/requests", { cookie: cookies.ceo })).data.items.some((i) => i.kind === "payment" && i.id === id));
+  // one route for cash (2026-11-23): the cash is still with the rep, so the accountant's card offers Deny only, the CEO's also Approve
+  const accCard = await apiRequest(`/api/requests/payment/${id}`, { cookie: cookies.accountant });
+  assert.deepEqual([accCard.data.can_decide, accCard.data.can_approve], [true, false]);
+  const ceoCard = await apiRequest(`/api/requests/payment/${id}`, { cookie: cookies.ceo });
+  assert.deepEqual([ceoCard.data.can_decide, ceoCard.data.can_approve], [true, true]);
   assert.equal((await apiRequest(`/api/payments/${id}/reject`, { method: "POST", cookie: cookies.accountant, body: {} })).status, 400);
   assert.equal((await apiRequest(`/api/payments/${id}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "no receipt" } })).status, 200);
   const result = await waitFor(async () => (await notesOf(people.sales_manager.id, url)).find((n) => n.type === "approval_result"));

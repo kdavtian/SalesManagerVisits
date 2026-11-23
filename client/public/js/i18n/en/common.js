@@ -1677,6 +1677,7 @@ export const enCommon = {
     req_reason: "Reason",
     req_approve: "Approve",
     req_deny: "Deny",
+    req_payment_by_handover: "The cash was not handed over yet: the payment is approved when its hand-over is confirmed. A wrong record can be denied.",
     req_tap_again: "Tap again to approve",
     req_deny_reason: "Why is it denied?",
     req_deny_placeholder: "A short reason (required)",

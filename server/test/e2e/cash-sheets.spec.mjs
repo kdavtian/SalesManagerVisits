@@ -1,7 +1,7 @@
 import { test, expect, loginViaUi, newIdentityPage, pool } from "./fixtures.mjs";
 
 // Document flow (owner, 2026-10-28): the rep taps "Hand over today's cash" on Home and confirms once; the director counts in the sheet
-// (a different amount needs a note, no browser pop-ups); the confirmation makes the daily cash sheet the accountant marks "Recorded in Excel".
+// (a different amount needs a note, no browser pop-ups); the confirmation makes the daily cash sheet, which closes by itself (the mark by hand only for a late one).
 test("hand over from Home, count with a difference, the daily sheet for the accountant", async ({ page, browser, fixtures }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const stamp = `${Date.now() % 100000}${Math.floor(Math.random() * 1000)}`;
@@ -54,7 +54,7 @@ test("hand over from Home, count with a difference, the daily sheet for the acco
   expect(Number(rows[0].counted_amd)).toBe(140000);
   await context.close();
 
-  // accountant: the sheet with its Excel file and the "Recorded in Excel" mark
+  // accountant: the sheet with its Excel file
   const acc = await newIdentityPage(browser);
   await acc.page.setViewportSize({ width: 1440, height: 900 });
   await loginViaUi(acc.page, accountant.email);
@@ -63,6 +63,13 @@ test("hand over from Home, count with a difference, the daily sheet for the acco
   await expect(sheet).toContainText(`SheetRep${stamp}`, { timeout: 10000 });
   await expect(sheet).toContainText("Counted");
   await acc.page.screenshot({ path: `${process.env.GB_SHOTS ?? "/tmp"}/cash-sheets-desk.png` });
+  // the sheet closes by itself when the Excel has its payments: a fresh one offers no mark (owner, 2026-11-23) ...
+  await expect(sheet.locator("[data-sheet-record]")).toHaveCount(0);
+  await expect(sheet).toContainText("Not in Excel yet");
+  // ... one still open after 2 days does: the way out by hand
+  await pool.query("UPDATE cash_sheets SET created_at = now() - interval '3 days' WHERE id = $1", [rows[0].sheet_id]);
+  await acc.page.reload();
+  await expect(sheet.locator("[data-sheet-record]")).toBeVisible({ timeout: 10000 });
   await sheet.locator("[data-sheet-record]").click();
   await expect(acc.page.locator(`.cash-sheet-row[data-sheet="${rows[0].sheet_id}"]`)).toContainText("Recorded in Excel");
   const { rows: rec } = await pool.query("SELECT recorded_by FROM cash_sheets WHERE id = $1", [rows[0].sheet_id]);

@@ -13,7 +13,7 @@ import { api } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, formatDateDMY, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, bindAmdInput, downloadFromUrl, showToast } from "../util.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
-import { validHandoffRecipientRoles, offersHandoffOnBehalf, seesExcelBalance, setsExcelBalanceMode } from "../shared/roles.js";
+import { validHandoffRecipientRoles, offersHandoffOnBehalf, seesExcelBalance, setsExcelBalanceMode, decidesAnyHandoff } from "../shared/roles.js";
 import { deskSelectChip } from "../deskTable.js";
 import { openHandoverSheet, channelBreakdownHtml, groupByDay, sumAmd } from "../handoverSheet.js";
 
@@ -193,10 +193,9 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
         <div class="cash-sheet-actions">
           <button type="button" class="btn btn-sm" data-sheet-xlsx="${s.id}">${t("cash_sheet_excel")}</button>
           ${
-            data.can_record
-              ? `<button type="button" class="btn btn-sm ${s.recorded_at ? "" : "btn-primary"}" data-sheet-record="${s.id}" data-on="${s.recorded_at ? "0" : "1"}">${
-                  s.recorded_at ? t("cash_sheet_unmark") : t("cash_sheet_mark")
-                }</button>`
+            // the sheet closes by itself when the Excel has its payments; the mark by hand is only the way out for one still open after 2 days
+            data.can_record && s.late
+              ? `<button type="button" class="btn btn-sm" data-sheet-record="${s.id}" data-on="1">${t("cash_sheet_mark")}</button>`
               : ""
           }
         </div>
@@ -421,9 +420,9 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
     // strictly first-person, so the picker is hidden for those hops.
     const showSenderPicker = canActForOthers;
     // Declaring a rep's cash on their behalf is only legal into the actor's
-    // OWN custody (server checkOnBehalf; admin may pick anyone), so don't
+    // OWN custody (server checkOnBehalf; admin and the CEO may pick anyone), so don't
     // offer the other receivers -- they would only produce an error.
-    if (actingFor && role !== "admin") data.recipients = data.recipients.filter((r) => r.id === state.user.id);
+    if (actingFor && !decidesAnyHandoff(role)) data.recipients = data.recipients.filter((r) => r.id === state.user.id);
     const canSubmit = data.recipients.length > 0 && data.count > 0;
 
     // Wrapped in a <form> purely so the app's `form label`/`form select`
@@ -582,7 +581,7 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
       return;
     }
 
-    const isRecipient = handoff.to_user_id === state.user.id || state.user.role === "admin";
+    const isRecipient = handoff.to_user_id === state.user.id || decidesAnyHandoff(state.user.role);
     const canDecide = isRecipient && handoff.status === "pending";
     const meta = HANDOFF_STATUS_META[handoff.status] ?? HANDOFF_STATUS_META.pending;
 

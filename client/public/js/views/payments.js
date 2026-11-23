@@ -115,6 +115,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   const canSeeAll = seesAllPayments(state.user.role);
   const canReview = canReviewPayments(state.user.role);
+  // Approve is offered only where the server accepts it (money/cashRoute.js: cash that was not handed over is approved by its hand-over;
+  // admin and the CEO always). An older server sends no can_approve: the role rule alone, as before.
+  const canApprove = (p) => p.status === "pending" && canReview && p.can_approve !== false;
 
   root.innerHTML = `
     <div class="detail-view">
@@ -457,7 +460,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     const chips = `${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${
       p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""
     }${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
-    const approve = p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
+    const approve = canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
     const on = selected.has(p.id);
     return `
       <div class="card list-row pay-row${selectMode ? " pay-row-selecting" : ""}${on ? " pay-row-selected" : ""}" data-payment-id="${p.id}">
@@ -508,7 +511,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
-      <div class="dtl-cell dtl-end">${p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
+      <div class="dtl-cell dtl-end">${canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
       <span></span>
     </div>`;
   }
@@ -585,7 +588,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (selectMode) updateSelectBar();
   }
   const canHandOver = (p) => handable.ids.has(p.id);
-  const fitsApprove = (p) => canReview && p.status === "pending" && !p.pending_handoff_id;
+  const fitsApprove = (p) => canApprove(p) && !p.pending_handoff_id;
   const selectedRows = () => [...selected.keys()].map((id) => selected.get(id));
   function toggleSelected(id) {
     const p = payments.find((r) => r.id === id);
@@ -875,14 +878,20 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 
       const buttons = [];
+      let approveHint = "";
       if (p.status === "pending" && canReview) {
-        buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
+        if (canApprove(p)) buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
+        // one route for cash: not handed over yet = no Approve here, and the reason stands next to the buttons (not only in a toast)
+        else approveHint = `<p class="muted payment-approve-hint">${t(p.pending_handoff_id ? "payment_approve_in_handover" : "payment_approve_by_handover")}</p>`;
         buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
       } else if (p.status !== "pending" && canReview) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }
       if (canDeletePayments(state.user.role)) buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
 
+      // the reason sits above the buttons as its own line (the buttons row lays its children side by side)
+      overlay.querySelector(".payment-approve-hint")?.remove();
+      if (approveHint) actionsEl.insertAdjacentHTML("beforebegin", approveHint);
       actionsEl.innerHTML = buttons
         .map((b) => `<button type="button" class="${b.cls}" data-action="${b.action}">${b.label}</button>`)
         .join("");
