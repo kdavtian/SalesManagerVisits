@@ -32,6 +32,7 @@ import { bullets } from "../../utils/bullets.js";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
 import { CUSTOMER_CLOSED_ERROR } from "../../customers/customerLifecycle.js";
+import { syncOrderPostSoon } from "../orderGroupPost.js";
 import { partnerLinkFor, priceAppOrderLines, promisedDateFor, getAppOrderSettings, firstOverLimit, contactFor } from "../appOrders.js";
 
 export const ordersRouter = Router();
@@ -1239,6 +1240,9 @@ ordersRouter.patch("/:id", async (req, res) => {
 
   const { rows: items2 } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items: items2 });
+  // the accountants' Telegram group: a confirmed order's details at once, a changed one again (orderGroupPost.js decides from the
+  // order's state; the bot posts it). First thing after the answer, apart from the notifications below, so nothing there can skip it.
+  syncOrderPostSoon(order.id, { byId: req.user.id });
 
   // Only the rep who placed the order cares about its fulfillment moving
   // forward, and only when the status actually changed (not a pure
@@ -1318,6 +1322,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
   accountingQueueChanged();
   res.json(updated[0]);
+  syncOrderPostSoon(order.id, { byId: req.user.id }); // another document than the group was told, or a test order: said again
 });
 
 // Moves a request to another condition by hand (pending = back in the queue
@@ -1583,6 +1588,8 @@ ordersRouter.post("/:id/unconfirm", async (req, res) => {
     );
     await client.query("COMMIT");
     res.json(updated[0]);
+    // the accountants were told this order is confirmed: now they are told not to issue it yet (not awaited; never fails the request)
+    syncOrderPostSoon(order.id, { byId: req.user.id, reason });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -1858,6 +1865,7 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   }
   const { rows: items2 } = await pool.query("SELECT oi.*, p.unit AS size FROM order_items oi LEFT JOIN products p ON p.id = oi.product_id WHERE oi.order_id = $1 ORDER BY oi.id", [order.id]);
   res.json({ ...updated, items: items2, corrections: await orderCorrections(order.id) });
+  syncOrderPostSoon(order.id, { byId: req.user.id }); // the accountants' group gets the corrected details (orderGroupPost.js)
 
   // the rep who placed it and the accountants hear about it (not the person who made the change)
   (async () => {
@@ -1969,6 +1977,7 @@ ordersRouter.delete("/:id", async (req, res) => {
       return res.status(409).json({ error: "This order was just approved by management and can no longer be deleted" });
     }
     await client.query("COMMIT");
+    syncOrderPostSoon(orderId, { byId: req.user.id }); // the group had its details: told it is gone (orderGroupPost.js)
   } catch (err) {
     releaseErr = err;
     await client.query("ROLLBACK");

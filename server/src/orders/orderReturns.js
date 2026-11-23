@@ -4,6 +4,7 @@
 //   return: the order was delivered -> approval, then the warehouse manager confirms what came back (good / damaged), then it is done.
 // Money: Excel stays the truth. The return carries a provisional credit (what the customer paid per unit x quantity) that the customer card shows
 // until the negative line arrives from Excel (matchReturnsToErp) or the accountant marks it recorded.
+import { syncOrderPostSoon } from "./orderGroupPost.js";
 import { isDone } from "./orderRecord.js";
 import { canApproveReturns } from "../shared/roles.js";
 import { createOpsTask, usersWithRole } from "../team/opsTasks.js";
@@ -253,6 +254,8 @@ export async function decideReturn(user, id, { approve, note, expectStatus = nul
     }
     await client.query("COMMIT");
     notifyDecisionOf("return", id, { deciderId: user.id, approved: outcome !== "rejected", reason: text, type: "order_status_changed" });
+    // a confirmed order cancelled outright: the accountants' group is told not to issue its document (orderGroupPost.js; not awaited)
+    if (outcome === "done" && ret.kind === "cancel") syncOrderPostSoon(order.id, { byId: user.id, reason: ret.note ?? null });
     if (outcome === "approved_waiting_warehouse") {
       // every warehouse manager and the admin get the push as before; a cancelled packed order also gets a task (not awaited: this
       // transaction's connection is still held here)
@@ -284,6 +287,7 @@ export async function receiveReturn(user, id, body = {}) {
     }
     await client.query("UPDATE order_returns SET status = 'done', received_by = $2, received_at = now(), updated_at = now() WHERE id = $1", [id, user.id]);
     await client.query("COMMIT");
+    if (ret.kind === "cancel") syncOrderPostSoon(order.id, { byId: user.id, reason: ret.note ?? null });
     if (ret.requested_by) notifyUser(ret.requested_by, "order_status_changed", { title: ret.kind === "return" ? "Վերադարձը ստացվել է պահեստում" : "Պատվերը չեղարկվեց", body: "", url: "/#/returns" }).catch(() => {});
     if (ret.kind === "return") notifyRoles(["accountant"], user.id, { title: "Վերադարձ՝ մուտքագրել Excel-ում", body: "", url: "/#/returns" });
     else closePutBackTask(ret.customer_id).catch((err) => console.error("Closing the put-back task failed:", err.message)); // not awaited (connection held)

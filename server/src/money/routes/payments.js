@@ -10,8 +10,12 @@ import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
+import { approvalBlock, approverTakesCash, getAccountantDirectApproval } from "../cashRoute.js";
+import { CASH_PLACE_SELECT, CASH_PLACE_JOINS, CASH_PLACE_SQL, RECEIVED_TODAY_SQL, addCashPlace } from "../cashPlaceSql.js";
+import { CASH_PLACES } from "../../shared/cashPlace.js";
+import { CASH_IN_HAND_SQL } from "../cashCustody.js";
 import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
-import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
+import { IN_EXCEL_SQL, DAYS_OLD_SQL, EXCEL_MISSING_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
 import { photoUpload, uploadDirPath } from "../../shared/upload.js";
 import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
@@ -44,7 +48,7 @@ async function loadPaymentRow(id) {
     `SELECT p.*, sm.name AS current_sales_manager_name, cb.name AS created_by_name,
             ab.name AS approved_by_name, rb.name AS rejected_by_name,
             ch.name AS current_holder_name,
-            pending_to.name AS pending_handoff_to_name,
+            pending_to.name AS pending_handoff_to_name, ${CASH_PLACE_SELECT},
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
             GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
@@ -57,10 +61,11 @@ async function loadPaymentRow(id) {
      LEFT JOIN cash_handoffs h ON h.id = p.pending_handoff_id
      LEFT JOIN users pending_to ON pending_to.id = h.to_user_id
      LEFT JOIN customers c ON c.id = p.customer_id
+     ${CASH_PLACE_JOINS}
      WHERE p.id = $1`,
     [id]
   );
-  return rows[0];
+  return rows[0] ? addCashPlace(rows[0]) : rows[0];
 }
 
 export function canSeePayment(user, payment) {
@@ -349,10 +354,10 @@ paymentsRouter.post("/", proofUpload, async (req, res) => {
     }
   }
 
-  // A payment the accountant or the admin records themselves needs nobody's approval (owner, 2026-11-20: yes, for those two only --
-  // the two roles that may accept any pending payment directly, custodyBlocksReview). It goes through the same approveOnePayment as
-  // the Approve button: approved in their name, the cash lands on their desk, history written. The CEO / operations director still
-  // wait for the cash chain, as their Approve button does. If it cannot be approved, the payment simply stays pending.
+  // A payment the accountant or the admin records themselves needs nobody's approval (owner, 2026-11-20: yes, for those two only).
+  // It goes through the same approveOnePayment as the Approve button: approved in their name, the cash lands in their hands, history
+  // written. The CEO's own entry waits like anybody's (he may approve it with one tap): entered for a rep, the notes are still with
+  // that rep, and approving at once would take them out of his hand-over. If it cannot be approved, the payment simply stays pending.
   if (req.user.role === "admin" || req.user.role === "accountant") {
     try {
       await approveOnePayment(paymentId, req.user, { loadRow: false });
@@ -381,7 +386,7 @@ paymentsRouter.get("/pending-count", async (req, res) => {
 });
 
 paymentsRouter.get("/", async (req, res) => {
-  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel, confirmation } = req.query;
+  const { status, sales_channel, sales_manager_id, customer_id, month, from, to, q, sort, order, offset, excel, confirmation, place, received } = req.query;
 
   const conditions = [];
   const params = [];
@@ -394,6 +399,12 @@ paymentsRouter.get("/", async (req, res) => {
     conditions.push(`p.sales_manager_id = $${params.length}`);
   }
 
+  // place = where the cash is now (the Cash screen's tiles): the three "still on its way" places count what the hand-over lists count
+  if (place) {
+    if (!CASH_PLACES.includes(place)) return res.status(400).json({ error: "Unknown place" });
+    params.push(place);
+    conditions.push(`${CASH_PLACE_SQL} = $${params.length}${place === "office" || place === "rejected" ? "" : ` AND ${CASH_IN_HAND_SQL}`}`);
+  }
   if (status) {
     params.push(status);
     conditions.push(`p.status = $${params.length}`);
@@ -402,9 +413,11 @@ paymentsRouter.get("/", async (req, res) => {
     params.push(sales_channel);
     conditions.push(`p.sales_channel = $${params.length}`);
   }
+  // received=today: the payments whose cash a person received today (the Cash screen's "received at the office today")
+  if (received === "today") conditions.push(RECEIVED_TODAY_SQL);
   // "Not in Excel": recorded in the app, older than the grace days, and the workbook still shows nothing like it.
   if (excel === "missing") {
-    conditions.push(`p.status <> 'rejected' AND p.erp_customer_id_snapshot IS NOT NULL AND ${DAYS_OLD_SQL} >= ${EXCEL_GRACE_DAYS} AND NOT ${IN_EXCEL_SQL}`);
+    conditions.push(EXCEL_MISSING_SQL);
   }
   // How the customer confirmed money collected at a visit (migration 163): signed / photo / none (saved after the warning, unconfirmed).
   if (["signed", "photo", "none"].includes(confirmation)) {
@@ -457,17 +470,24 @@ paymentsRouter.get("/", async (req, res) => {
 
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT p.*, ch.name AS current_holder_name, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
+    `SELECT p.*, ch.name AS current_holder_name, ${CASH_PLACE_SELECT}, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
             GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
      FROM payments p
      LEFT JOIN customers c ON c.id = p.customer_id
      LEFT JOIN users ch ON ch.id = p.current_holder_id
+     ${CASH_PLACE_JOINS}
      ${where}
      ORDER BY ${orderBy}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
+  // can_approve: the screen offers Approve only where the server would accept it (cashRoute.js)
+  const accountantDirect = await getAccountantDirectApproval();
+  for (const row of rows) {
+    row.can_approve = !approvalBlock(row, req.user, { accountantDirect });
+    addCashPlace(row); // where the cash is now: the one mark every screen draws
+  }
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 
@@ -484,46 +504,19 @@ paymentsRouter.get("/:id", async (req, res) => {
      ORDER BY h.changed_at ASC`,
     [req.params.id]
   );
-  res.json({ ...payment, history });
+  const can_approve = !approvalBlock(payment, req.user, { accountantDirect: await getAccountantDirectApproval() });
+  res.json({ ...payment, history, can_approve });
 });
 
-// --- Reconciling the old single-stage review with the cash custody chain ---
-// Before migrations/059 these three endpoints were the ONLY way a payment
-// changed status, and any accountant/CEO/admin could approve any pending
-// payment. Now the terminal accountant confirmation in
-// routes/cashHandoffs.js also flips payments to 'approved'. Two independent
-// paths to the same transition is exactly how money gets double-processed,
-// so they are reconciled here rather than left side by side:
-//
-//   1. A payment that is inside an in-flight handoff is frozen for
-//      EVERYONE, admin included -- the receiver's confirm/reject is the
-//      decision in flight, and approving underneath it would strand the
-//      handoff pointing at already-approved cash.
-//   2. Approving directly requires the cash to have actually reached an
-//      accountant's custody, i.e. the chain already ran. In practice the
-//      handoff confirmation does this for you, so this endpoint becomes a
-//      correction tool (e.g. re-approving after a return-to-pending)
-//      rather than a parallel workflow.
-//   3. admin keeps a manual override on rule 2 only. That follows this
-//      codebase's standing convention (see roles.js: "admin is treated as
-//      a CEO-equivalent superset throughout ... so a technical admin
-//      account can always unblock a stuck workflow") -- if cash is
-//      physically reconciled but the chain was never recorded in the app,
-//      someone has to be able to close it out.
-async function custodyBlocksReview(payment, user) {
-  if (payment.pending_handoff_id) {
-    return "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first";
-  }
-  // The accountant is the person who actually books the money, so they can
-  // accept any pending payment directly, without the cash first passing
-  // through the sales director's confirmation. admin keeps the same override.
-  if (user.role === "admin" || user.role === "accountant") return null;
-  if (!payment.current_holder_id) return "This payment has no recorded cash holder";
-  const { rows } = await pool.query("SELECT role FROM users WHERE id = $1", [payment.current_holder_id]);
-  if (rows[0]?.role !== "accountant") {
-    return "This payment's cash has not reached an accountant yet -- confirm it through the cash handoff chain first";
-  }
-  return null;
+// --- The Approve button and the cash route ---
+// A payment becomes 'approved' when its hand-over reaches the accountant (routes/cashHandoffs.js). Approving here is the other way in, and
+// money/cashRoute.js approvalBlock is the one rule for it (owner, 2026-11-23, one route): never while a hand-over is waiting, admin and
+// the CEO always, the accountant only her own entries (or all, when App configuration switches that back on), anybody who reviews
+// payments once the cash is with an accountant.
+async function holderRoleOf(payment, db = pool) {
+  if (!payment.current_holder_id) return null;
+  const { rows } = await db.query("SELECT role FROM users WHERE id = $1", [payment.current_holder_id]);
+  return rows[0]?.role ?? null;
 }
 
 // Approves ONE pending payment, in its own transaction: the same checks for a single tap and for "approve the selected" (owner,
@@ -543,24 +536,21 @@ async function approveOnePayment(id, user, { loadRow = true } = {}) {
       await client.query("ROLLBACK");
       return { status: 404, error: "Payment not found" };
     }
-    if (payment.status !== "pending") {
-      await client.query("ROLLBACK");
-      return { status: 409, error: "Only a pending payment can be approved" };
-    }
-    const blocked = await custodyBlocksReview(payment, user);
+    payment.holder_role = await holderRoleOf(payment, client);
+    const blocked = approvalBlock(payment, user, { accountantDirect: await getAccountantDirectApproval(client) });
     if (blocked) {
       await client.query("ROLLBACK");
       return { status: 409, error: blocked };
     }
 
-    // Approving directly means the person received the money (payments redesign, release 3): admin or the accountant approving cash
-    // that was never handed over in the app now holds it (it lands on their desk), instead of the rep keeping it on paper forever.
+    // Approving cash that never reached an accountant means the approver received it (payments redesign, release 3): it lands in
+    // their hands, instead of the rep keeping it on paper forever.
     await client.query(
       `UPDATE payments SET status = 'approved', approved_by = $1, approved_at = now(),
               rejected_by = NULL, rejected_at = NULL, rejection_reason = NULL,
               current_holder_id = CASE WHEN $3 THEN $1 ELSE current_holder_id END
        WHERE id = $2`,
-      [user.id, id, user.role === "admin" || user.role === "accountant"]
+      [user.id, id, approverTakesCash(payment, user)]
     );
     await client.query(
       `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)

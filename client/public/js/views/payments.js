@@ -13,6 +13,8 @@ import { deskHeadHtml, wireDeskHead, paintDeskHead } from "../deskTable.js";
 import { periodDates, periodKeyLabel } from "../periodButtons.js";
 import { t } from "../i18n.js";
 import { state } from "../state.js";
+import { CASH_PLACES } from "../shared/cashPlace.js";
+import { cashPlaceChipHtml } from "../cashPlaceChip.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, validHandoffRecipientRoles } from "../shared/roles.js";
 import { loadWithCache } from "../listCache.js";
 import { pickDate } from "../activityDatePicker.js";
@@ -79,10 +81,18 @@ function armedTap(btn, go) {
   }, 4000);
 }
 
+// Where the cash is now: ONE mark (owner, 2026-11-23), from the server's cash_place. It replaces the "awaiting approval / approved" badge
+// and the "From ERP" badge (the Excel has its own mark next to it). An older server sends no cash_place: the old status badge then.
+function placeBadgeHtml(p) {
+  if (p.cash_place) return cashPlaceChipHtml(p.cash_place, { extraClass: "payment-status-badge" });
+  const meta = STATUS_META[p.status] ?? STATUS_META.pending;
+  return `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>`;
+}
+
 // Does the Excel show this payment? Only said when it is worth saying: matched (green), or still missing after the grace days (amber).
 function excelBadgeHtml(p) {
-  if (p.status === "rejected" || p.approved_from_erp || !p.erp_customer_id_snapshot) return "";
-  if (p.in_excel) return ` <span class="badge badge-success">${t("pay_in_excel")}</span>`;
+  if (p.status === "rejected" || !p.erp_customer_id_snapshot) return "";
+  if (p.in_excel || p.approved_from_erp) return ` <span class="badge badge-success">${t("pay_in_excel")}</span>`;
   if (p.days_old >= 3) return ` <span class="badge badge-warning">${t("pay_not_in_excel").replace("{n}", p.days_old)}</span>`;
   return "";
 }
@@ -115,6 +125,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   const canSeeAll = seesAllPayments(state.user.role);
   const canReview = canReviewPayments(state.user.role);
+  // Approve is offered only where the server accepts it (money/cashRoute.js: cash that was not handed over is approved by its hand-over;
+  // admin and the CEO always). An older server sends no can_approve: the role rule alone, as before.
+  const canApprove = (p) => p.status === "pending" && canReview && p.can_approve !== false;
 
   root.innerHTML = `
     <div class="detail-view">
@@ -178,6 +191,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   let managerFilter = initialQuery?.get("sales_manager_id") || "";
   // signed / photo / none (owner, 2026-10-27: unconfirmed payments must be findable)
   let confirmationFilter = CONFIRMATIONS.includes(initialQuery?.get("confirmation")) ? initialQuery.get("confirmation") : "";
+  // where the cash is now (a tile of the Cash screen opens the list on it); cleared with its chip
+  let placeFilter = CASH_PLACES.includes(initialQuery?.get("place")) ? initialQuery.get("place") : "";
+  let receivedToday = initialQuery?.get("received") === "today"; // the Cash screen's "received at the office today"
   // Only ever arrives via a Reports drill-down (no on-page control sets
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
   let periodFilter = PERIOD_KEYS.includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
@@ -231,6 +247,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (channelFilter) params.sales_channel = channelFilter;
     if (managerFilter) params.sales_manager_id = managerFilter;
     if (confirmationFilter) params.confirmation = confirmationFilter;
+    if (placeFilter) params.place = placeFilter;
+    if (receivedToday) params.received = "today";
     if (activeFilter === "pending" || activeFilter === "approved" || activeFilter === "rejected") {
       params.status = activeFilter;
     } else if (activeFilter === "today") {
@@ -270,6 +288,8 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
       chips.push({ label: periodKeyLabel(periodFilter), clear: () => (periodFilter = "") });
     }
+    if (receivedToday) chips.push({ label: t("cash_now_office_today"), clear: () => (receivedToday = false) });
+    if (placeFilter) chips.push({ label: t(`cash_now_${placeFilter === "office" ? "office" : placeFilter}`), clear: () => (placeFilter = "") });
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
     if (confirmationFilter) chips.push({ label: t(`pay_conf_${confirmationFilter}`), clear: () => (confirmationFilter = "") });
     if (managerFilter) {
@@ -451,13 +471,12 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
 
   // The status chip says what the list filter already says when the list is filtered by that status (every row of "Pending" was
   // "Pending" -- the long Armenian label wrapped onto three lines and pushed Approve off the card, owner screenshot 2026-11-13).
-  const statusChipShown = (p) => !(activeFilter && activeFilter === p.status);
+  // The place mark says more than the status filter (with the rep, handed over, counted), so it stays under Pending and Approved; under
+  // Rejected it would only repeat the filter on every row. The old badge of an older server is still hidden under its own filter.
+  const statusChipShown = (p) => (p.cash_place ? !(activeFilter === "rejected" && p.cash_place.place === "rejected") : !(activeFilter && activeFilter === p.status));
   function paymentRowHtml(p) {
-    const meta = STATUS_META[p.status] ?? STATUS_META.pending;
-    const chips = `${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${
-      p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""
-    }${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
-    const approve = p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
+    const chips = `${statusChipShown(p) ? placeBadgeHtml(p) : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}`;
+    const approve = canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : "";
     const on = selected.has(p.id);
     return `
       <div class="card list-row pay-row${selectMode ? " pay-row-selecting" : ""}${on ? " pay-row-selected" : ""}" data-payment-id="${p.id}">
@@ -496,7 +515,6 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     { items: [] },
   ];
   function deskRowHtml(p) {
-    const meta = STATUS_META[p.status] ?? STATUS_META.pending;
     const cell = (main, sub, cls = "") => `<div class="dtl-cell ${cls}"><span class="dtl-main">${main}</span>${sub ? `<span class="dtl-sub muted">${sub}</span>` : ""}</div>`;
     const excel = excelBadgeHtml(p).trim();
     const on = selected.has(p.id);
@@ -505,10 +523,10 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       ${cell(escapeHtml(formatDateDMY(String(p.payment_date))), "")}
       ${cell(`<strong>${escapeHtml(p.customer_name_snapshot)}</strong>`, p.erp_customer_id_snapshot ? `ID ${escapeHtml(p.erp_customer_id_snapshot)}` : "", "dtl-name")}
       ${cell(escapeHtml(p.sales_manager_name_snapshot || ""), p.sales_channel ? escapeHtml(channelDisplayLabel(p.sales_channel)) : "")}
-      ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? `<span class="badge payment-status-badge ${meta.cls}">${t(meta.key)}</span>` : ""}${p.approved_from_erp ? `<span class="badge badge-info">${t("from_erp")}</span>` : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
+      ${cell(`<span class="pay-desk-chips">${statusChipShown(p) ? placeBadgeHtml(p) : ""}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</span>`, "")}
       ${cell(excel || `<span class="muted">&mdash;</span>`, "")}
       ${cell(`<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong>`, "", "dtl-end")}
-      <div class="dtl-cell dtl-end">${p.status === "pending" && canReview && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
+      <div class="dtl-cell dtl-end">${canApprove(p) && !selectMode ? `<button type="button" class="btn btn-primary btn-sm payment-approve-btn" data-approve-id="${p.id}">${t("approve")}</button>` : ""}</div>
       <span></span>
     </div>`;
   }
@@ -585,7 +603,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (selectMode) updateSelectBar();
   }
   const canHandOver = (p) => handable.ids.has(p.id);
-  const fitsApprove = (p) => canReview && p.status === "pending" && !p.pending_handoff_id;
+  const fitsApprove = (p) => canApprove(p) && !p.pending_handoff_id;
   const selectedRows = () => [...selected.keys()].map((id) => selected.get(id));
   function toggleSelected(id) {
     const p = payments.find((r) => r.id === id);
@@ -832,10 +850,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     renderDetail(payment);
 
     function renderDetail(p) {
-      const meta = STATUS_META[p.status] ?? STATUS_META.pending;
       overlay.querySelector(".sheet").innerHTML = `
         <h2>${t("payment_detail_title")}</h2>
-        <p><span class="badge ${meta.cls}">${t(meta.key)}</span>${p.approved_from_erp ? ` <span class="badge badge-info">${t("from_erp")}</span>` : ""}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</p>
+        <p>${placeBadgeHtml(p)}${excelBadgeHtml(p)}${confirmationBadgeHtml(p)}${backdatedBadgeHtml(p)}</p>
         <div class="card-list" style="margin:12px 0;">
           <div class="order-line-row">
             <div class="order-line-top">${customerNameLinkHtml(p.customer_name_snapshot, p.customer_id, "span", "order-line-name")}<strong class="text-amount">${formatAmd(Number(p.amount_amd))}</strong></div>
@@ -844,13 +861,11 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         </div>
         <p class="muted">${t("payment_manager_label")}${labelColon()}${escapeHtml(p.sales_manager_name_snapshot)}${p.sales_channel ? ` · ${escapeHtml(channelDisplayLabel(p.sales_channel))}` : ""}</p>
         ${
-          p.current_holder_name
-            ? `<p class="muted">${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}${
-                p.pending_handoff_to_name
-                  ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}`
-                  : ""
-              }</p>`
-            : ""
+          // under the mark: the approval state in words (a reopened payment at the office still waits for approval) and who holds
+          // the notes right now (the mark of a hand-over names the receiver, "At the office" names nobody)
+          `<p class="muted">${t((STATUS_META[p.status] ?? STATUS_META.pending).key)}${
+            p.current_holder_name && p.status !== "rejected" ? ` · ${t("payment_current_holder_label")}${labelColon()}${escapeHtml(p.current_holder_name)}` : ""
+          }${p.pending_handoff_to_name && !p.cash_place ? ` · ${t("payment_handoff_pending_to").replace("{name}", escapeHtml(p.pending_handoff_to_name))}` : ""}</p>`
         }
         ${p.note ? `<p class="muted">${escapeHtml(p.note)}</p>` : ""}
         ${p.rejection_reason ? `<p class="form-error" style="position:static;">${escapeHtml(p.rejection_reason)}</p>` : ""}
@@ -875,14 +890,21 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
       activateCustomerNameLinks(overlay, (hash) => leaveSheetTo(overlay, navigate, hash));
 
       const buttons = [];
+      let approveHint = "";
       if (p.status === "pending" && canReview) {
-        buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
-        buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
+        if (canApprove(p)) buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
+        // one route for cash: not handed over yet = no Approve here, and the reason stands next to the buttons (not only in a toast)
+        else approveHint = `<p class="muted payment-approve-hint">${t(p.pending_handoff_id ? "payment_approve_in_handover" : "payment_approve_by_handover")}</p>`;
+        // inside a waiting hand-over the server refuses a rejection too: not offered (the hint above says what it waits for)
+        if (!p.pending_handoff_id) buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
       } else if (p.status !== "pending" && canReview) {
         buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
       }
       if (canDeletePayments(state.user.role)) buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
 
+      // the reason sits above the buttons as its own line (the buttons row lays its children side by side)
+      overlay.querySelector(".payment-approve-hint")?.remove();
+      if (approveHint) actionsEl.insertAdjacentHTML("beforebegin", approveHint);
       actionsEl.innerHTML = buttons
         .map((b) => `<button type="button" class="${b.cls}" data-action="${b.action}">${b.label}</button>`)
         .join("");

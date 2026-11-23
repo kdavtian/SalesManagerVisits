@@ -1,4 +1,5 @@
 import { syncExcelBalance } from "../../money/excelBalanceHandoffs.js";
+import { claimGroupPosts, markGroupPost } from "../../orders/orderGroupPost.js";
 import { refuseWhilePaused, getSyncPause, setSyncPause } from "../erpSyncPause.js";
 import { applyExcelPurchases } from "../../products/purchases.js";
 import { canPauseErpSync } from "../../shared/roles.js";
@@ -56,6 +57,26 @@ const syncKeyLimiter = rateLimit({
   skip: (req) =>
     Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) &&
     req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+});
+
+// The bot polls often (every 30 s: "Sync now", the cash sheets, the money board, the group messages, plus one report per thing it
+// posted) with the sync key: its own, roomier limiter. The 20-per-15-minutes one above is for the Excel pushes; a polled route on it
+// used up that budget in a few minutes and then delayed the posts and the sync itself (review, 2026-11-23).
+const pollLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+});
+// One report per message the bot posted: its own budget, so a burst of posts never runs into the polling one (a report refused there left
+// the message unreported and posted it twice).
+const reportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
 });
 
 export function timingSafeEqual(a, b) {
@@ -615,7 +636,7 @@ erpSyncRouter.post("/purchases", syncKeyLimiter, requireSyncKey, refuseWhilePaus
 
 // Daily cash sheets for the CEO bot (cashSheets.js): the bot asks what is waiting, posts each to the accounting Telegram group (the text and
 // the Excel file) and says whether it worked. A sheet that keeps failing stops being offered after 10 tries (it stays in the app's list).
-erpSyncRouter.get("/cash-sheets/pending", syncKeyLimiter, requireSyncKey, async (_req, res) => {
+erpSyncRouter.get("/cash-sheets/pending", pollLimiter, requireSyncKey, async (_req, res) => {
   const { rows } = await pool.query("SELECT id FROM cash_sheets WHERE posted_at IS NULL AND post_attempts < 10 ORDER BY id LIMIT 20");
   const sheets = [];
   for (const { id } of rows) {
@@ -625,7 +646,7 @@ erpSyncRouter.get("/cash-sheets/pending", syncKeyLimiter, requireSyncKey, async 
   res.json({ sheets });
 });
 
-erpSyncRouter.get("/cash-sheets/:id/xlsx", syncKeyLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.get("/cash-sheets/:id/xlsx", pollLimiter, requireSyncKey, async (req, res) => {
   const data = await loadCashSheet(Number(req.params.id));
   if (!data) return res.status(404).json({ error: "Cash sheet not found" });
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -633,7 +654,7 @@ erpSyncRouter.get("/cash-sheets/:id/xlsx", syncKeyLimiter, requireSyncKey, async
   res.send(await cashSheetXlsx(data));
 });
 
-erpSyncRouter.post("/cash-sheets/:id/posted", syncKeyLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.post("/cash-sheets/:id/posted", pollLimiter, requireSyncKey, async (req, res) => {
   const ok = req.body?.ok !== false;
   const { rows } = await pool.query(
     ok
@@ -645,13 +666,27 @@ erpSyncRouter.post("/cash-sheets/:id/posted", syncKeyLimiter, requireSyncKey, as
   res.json({ ok: true });
 });
 
+// Messages for the accounting Telegram group written by the app itself (orders/orderGroupPost.js: a confirmed order's details, "moved
+// back", "cancelled"): the bot asks what is waiting, posts each text to the group of the cash sheets and says whether it worked. A post
+// that keeps failing stops being offered after 10 tries. Any new kind of message needs no bot change.
+erpSyncRouter.get("/group-posts/pending", pollLimiter, requireSyncKey, async (_req, res) => {
+  res.json({ posts: await claimGroupPosts() });
+});
+
+erpSyncRouter.post("/group-posts/:id/posted", reportLimiter, requireSyncKey, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(400).json({ error: "Invalid id" });
+  if (!(await markGroupPost(id, req.body?.ok !== false, req.body?.error))) return res.status(404).json({ error: "Post not found" });
+  res.json({ ok: true });
+});
+
 // The daily money board's evening summary (payments redesign, release 4, owner 2026-11-02): from 20:00 Yerevan the bot gets today's text
 // once, posts it to the same accounting group as the cash sheets and says whether it worked (a failure is offered again, 10 times).
-erpSyncRouter.get("/money-board/pending", syncKeyLimiter, requireSyncKey, async (_req, res) => {
+erpSyncRouter.get("/money-board/pending", pollLimiter, requireSyncKey, async (_req, res) => {
   res.json({ board: await pendingBoardPost(pool) });
 });
 
-erpSyncRouter.post("/money-board/posted", syncKeyLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.post("/money-board/posted", pollLimiter, requireSyncKey, async (req, res) => {
   const day = String(req.body?.day ?? "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: "day is required" });
   await markBoardPosted(pool, day, req.body?.ok !== false, req.body?.error);
@@ -846,15 +881,6 @@ erpSyncRouter.get("/attempts", requireAuth, async (req, res) => {
 
 // ---- Sync status and the admin's "Sync now" (owner, 2026-10-24) ----
 const SYNC_VIEW_ROLES = ["admin", "ceo", "operations_director"];
-
-// The bot polls often (every 30 s) with the sync key: its own, roomier limiter.
-const pollLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
-});
 
 erpSyncRouter.get("/status", requireAuth, async (req, res) => {
   if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });

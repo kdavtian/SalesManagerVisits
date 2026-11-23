@@ -25,6 +25,8 @@ export function wireAdminRows(ctx) {
     const askKadCapSuccess = ctx.root.querySelector("#ask-kad-cap-success");
     const aiCheckToggle = ctx.root.querySelector("#toggle-ai-check");
     const autoPlanToggle = ctx.root.querySelector("#toggle-auto-route-plan");
+    const accountantDirectToggle = ctx.root.querySelector("#toggle-accountant-direct-approval");
+    const orderTelegramToggle = ctx.root.querySelector("#toggle-order-confirm-telegram");
     const usageToggle = ctx.root.querySelector("#toggle-usage-analytics");
     const aiCheckCapForm = ctx.root.querySelector("#ai-check-cap-form");
     const aiCheckCapInput = aiCheckCapForm.querySelector('input[name="usd"]');
@@ -95,6 +97,8 @@ export function wireAdminRows(ctx) {
       askKadCapInput.value = s.ask_kad_monthly_cap_usd ?? 20;
       aiCheckToggle.setAttribute("aria-checked", String(Boolean(s.ai_blank_check_enabled)));
       autoPlanToggle?.setAttribute("aria-checked", String(s.auto_route_plan_new_customers !== false));
+      accountantDirectToggle?.setAttribute("aria-checked", String(s.accountant_direct_approval === true));
+      orderTelegramToggle?.setAttribute("aria-checked", String(s.order_confirm_telegram !== false));
       usageToggle?.setAttribute("aria-checked", String(s.usage_analytics_enabled === true));
       aiCheckCapInput.value = s.ai_blank_check_monthly_cap_usd ?? 10;
       ctx.root.querySelector("#ai-check-no-key").hidden = s.ai_blank_check_configured !== false;
@@ -219,6 +223,32 @@ export function wireAdminRows(ctx) {
         alert(err.message);
       } finally {
         autoPlanToggle.disabled = false;
+      }
+    });
+    // A confirmed order's details to the accounting Telegram group (orders/orderGroupPost.js): ON by default, one tap each way.
+    orderTelegramToggle?.addEventListener("click", async () => {
+      const turningOn = orderTelegramToggle.getAttribute("aria-checked") !== "true";
+      orderTelegramToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ order_confirm_telegram: turningOn });
+        orderTelegramToggle.setAttribute("aria-checked", String(result.order_confirm_telegram));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        orderTelegramToggle.disabled = false;
+      }
+    });
+    // One route for cash (money/cashRoute.js): OFF = the rule; ON brings the accountant's approval without a hand-over back.
+    accountantDirectToggle?.addEventListener("click", async () => {
+      const turningOn = accountantDirectToggle.getAttribute("aria-checked") !== "true";
+      accountantDirectToggle.disabled = true;
+      try {
+        const result = await api.updateSettings({ accountant_direct_approval: turningOn });
+        accountantDirectToggle.setAttribute("aria-checked", String(result.accountant_direct_approval));
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        accountantDirectToggle.disabled = false;
       }
     });
     // Usage analytics (system/usageAnalytics.js): OFF by default, one tap each way.

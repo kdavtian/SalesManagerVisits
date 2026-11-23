@@ -1,5 +1,6 @@
 // Every background job of the server, in one list (docs/architecture-roadmap.md, step 4). Each keeps the cadence its module had when it
 // started its own setInterval; the work itself stays in its module. index.js starts them; Settings > System health shows how they ran.
+import { runOrderGroupPosts } from "../orders/orderGroupPost.js";
 import { syncExcelBalance } from "../money/excelBalanceHandoffs.js";
 import { createScheduler, jobStatus } from "./scheduler.js";
 import { enabled as pushEnabled } from "../shared/push.js";
@@ -55,6 +56,8 @@ export const JOBS = [
   { name: "daily-summary", everyMs: 5 * MINUTE, run: () => checkDailySummary(), ...needsPush },
   { name: "ops-control", everyMs: 30 * MINUTE, run: () => runOpsJobs() },
   { name: "cash-sheets", everyMs: 30 * MINUTE, run: () => runCashSheetJobs() },
+  // confirmed orders for the accounting Telegram group: whatever a route did not say at once (orders/orderGroupPost.js)
+  { name: "order-group-posts", everyMs: MINUTE, run: () => runOrderGroupPosts() },
   { name: "excel-balance", everyMs: 3 * HOUR, run: () => syncExcelBalance() },
   { name: "stale-packed-orders", everyMs: 30 * MINUTE, run: () => checkStalePackedOrders(), ...needsPush },
   { name: "erp-sync-freshness", everyMs: HOUR, run: () => checkErpSyncFreshness(), ...needsPush },

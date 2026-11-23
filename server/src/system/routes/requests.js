@@ -4,7 +4,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesProductCosts } from "../../shared/roles.js";
-import { decidableRequests, isRequestKind, mayDecide, mayView } from "../requests/rules.js";
+import { decidableRequests, isRequestKind, mayDecide, mayApprove, mayView, paymentInHandover } from "../requests/rules.js";
 import { loadRequest } from "../requests/queries.js";
 
 export const requestsRouter = Router();
@@ -24,6 +24,9 @@ requestsRouter.get("/:kind/:id", async (req, res) => {
   if (!mayView(kind, req.user, request)) return res.status(403).json({ error: "Not allowed" });
   const { facts, ...out } = request;
   out.can_decide = out.status === "pending" && mayDecide(kind, req.user, facts);
+  // a payment whose cash was not handed over yet: Deny only (an older app that ignores this gets the server's refusal with the reason)
+  out.can_approve = out.can_decide && mayApprove(kind, req.user, facts);
+  out.in_handover = paymentInHandover(kind, facts);
   // margins and cost floors are for the people who see product costs (same rule as GET /api/orders/:id)
   if (kind === "discount" && !seesProductCosts(req.user.role)) {
     out.details = { ...out.details, margin_pct: null, below_cost: false, below_landing: false, lines: out.details.lines.map((l) => ({ ...l, below_landing: false })) };

@@ -2,6 +2,7 @@
 // stores nothing: approving or denying still goes through each kind's own endpoint, with its own checks (orders.js, editRequests.js,
 // payments.js, cashflow.js, visitPlans.js, teamPerformance.js, bonusRewardClaims.js, orderReturns.js).
 import { orderCostCheck, effectiveDiscountPct } from "../../orders/discountPolicy.js";
+import { getAccountantDirectApproval } from "../../money/cashRoute.js";
 
 const n = (v) => (v === null || v === undefined ? null : Number(v));
 
@@ -21,8 +22,9 @@ const PENDING_SQL = {
                   FROM customer_edit_requests q JOIN customers c ON c.id = q.customer_id LEFT JOIN users u ON u.id = q.requested_by
                   WHERE q.status = 'pending'`,
   payment: `SELECT p.id, p.created_by AS requested_by_id, u.name AS requested_by_name, p.created_at AS requested_at, p.customer_name_snapshot AS customer_name,
-                   p.erp_customer_id_snapshot AS erp_id, p.amount_amd, p.sales_manager_name_snapshot AS extra
-            FROM payments p LEFT JOIN users u ON u.id = p.created_by
+                   p.erp_customer_id_snapshot AS erp_id, p.amount_amd, p.sales_manager_name_snapshot AS extra,
+                   p.status, p.pending_handoff_id, p.created_by, h.role AS holder_role
+            FROM payments p LEFT JOIN users u ON u.id = p.created_by LEFT JOIN users h ON h.id = p.current_holder_id
             WHERE p.status = 'pending'`,
   cashflow: `SELECT r.id, r.requested_by AS requested_by_id, u.name AS requested_by_name, r.requested_at, NULL AS customer_name, NULL AS erp_id,
                     CASE WHEN e.currency = 'USD' THEN NULL ELSE e.amount END AS amount_amd, r.action AS extra
@@ -47,6 +49,17 @@ const PENDING_SQL = {
                      WHERE b.status = 'pending'`,
 };
 
+// A payment: where its cash is decides who may approve it (money/cashRoute.js approvalBlock, one route for cash). The App configuration
+// switch is read once per second at most, not once per row.
+let directSwitch = { at: 0, value: false };
+async function paymentFacts(db, row) {
+  if (Date.now() - directSwitch.at > 1000) directSwitch = { at: Date.now(), value: await getAccountantDirectApproval(db) };
+  return {
+    payment: { status: row.status, pending_handoff_id: row.pending_handoff_id, created_by: row.created_by, holder_role: row.holder_role ?? null },
+    accountantDirect: directSwitch.value,
+  };
+}
+
 // The facts a kind's "who may decide" rule needs (rules.js mayDecide), for a pending row.
 async function factsOf(db, kind, row) {
   if (kind === "discount") {
@@ -57,6 +70,7 @@ async function factsOf(db, kind, row) {
   }
   if (kind === "perf_plan") return { submittedByRole: row.submitted_by_role ?? null };
   if (kind === "bonus_claim") return { claimantId: row.requested_by_id };
+  if (kind === "payment") return paymentFacts(db, row);
   return {};
 }
 
@@ -233,8 +247,9 @@ const LOADERS = {
 
   async payment(db, id) {
     const { rows: [p] } = await db.query(
-      `SELECT p.*, u.name AS requested_by_name, a.name AS approved_by_name, r.name AS rejected_by_name, c.erp_customer_id AS customer_erp_id
+      `SELECT p.*, u.name AS requested_by_name, a.name AS approved_by_name, r.name AS rejected_by_name, c.erp_customer_id AS customer_erp_id, h.role AS holder_role
        FROM payments p LEFT JOIN users u ON u.id = p.created_by LEFT JOIN users a ON a.id = p.approved_by LEFT JOIN users r ON r.id = p.rejected_by
+       LEFT JOIN users h ON h.id = p.current_holder_id
        LEFT JOIN customers c ON c.id = p.customer_id WHERE p.id = $1`,
       [id]
     );
@@ -252,7 +267,7 @@ const LOADERS = {
       customer: { id: p.customer_id, name: p.customer_name_snapshot, erp_id: p.customer_erp_id ?? p.erp_customer_id_snapshot },
       amount_amd: Math.round(Number(p.amount_amd)),
       note: p.note,
-      facts: {},
+      facts: p.status === "pending" ? await paymentFacts(db, p) : {},
       details: { payment_date: p.payment_date, manager_name: p.sales_manager_name_snapshot, sales_channel: p.sales_channel, in_handoff: Boolean(p.pending_handoff_id) },
       source_url: `/#/payments/${p.id}`,
     };

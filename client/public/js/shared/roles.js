@@ -25,6 +25,7 @@ export const APPROVALS = {
   customerEdits: { roles: ["admin", "ceo", "operations_director", "sales_director"], about: "Approve a customer card edit request, tier changes included" },
   // money
   paymentReview: { roles: ["admin", "ceo", "operations_director", "accountant"], about: "Approve / reject / reopen a submitted payment" },
+  cashWithoutHandover: { roles: ["admin", "ceo"], about: "Receive cash without a hand-over (approve the payment directly) and confirm or refuse any hand-over" },
   countedPaymentVoid: { roles: ["admin", "ceo"], about: "Void a payment whose cash was already counted" },
   cashDesks: { roles: ["admin", "ceo"], about: "Set up the cash desks" },
   cashflowManagement: { roles: ["admin", "ceo"], about: "Change any ledger row at any age and decide the change requests" },
@@ -371,29 +372,33 @@ export function seesAllPayments(role) {
 }
 
 // --- Cash custody chain ---------------------------------------------------
-// Physical cash moves hand to hand before anyone reconciles it, and each
-// hop is declared by the sender and confirmed by the receiver (see
-// migrations/059_cash_handoffs.sql). The chain is:
-//   sales_manager -> (sales_director OR accountant) -> ... -> accountant
-//   (a rep may hand cash straight to the accountant, skipping the director)
-// The director gets a real choice of who they hand the accumulated cash to;
-// a CEO who takes it is only an intermediate custodian and has no choice
-// but to pass it on to an accountant, because the accountant -- the person
-// who actually books it -- is always the last stage. Everyone else (and the
-// accountant themselves) can never be the SENDER of a handoff.
+// ONE route (owner, 2026-11-23): rep -> sales director -> accountant, and a rep may hand cash straight to the accountant. Each hop is
+// declared by the sender and confirmed by the receiver (migrations/059_cash_handoffs.sql). The CEO / operations director are no longer a
+// stop on the way: a director's cash goes to the accountant. Cash one of them still holds from before can only go on to the accountant.
+// The accountant (the end of the route) never sends.
 export function validHandoffRecipientRoles(fromRole) {
   if (fromRole === "sales_manager") return ["sales_director", "accountant"];
-  if (fromRole === "sales_director") return ["ceo", "operations_director", "accountant"];
-  if (fromRole === "ceo" || fromRole === "operations_director") return ["accountant"];
+  if (fromRole === "sales_director" || fromRole === "ceo" || fromRole === "operations_director") return ["accountant"];
   return [];
 }
 
 // Reaching an accountant's custody is what completes the journey, so that
 // confirmation -- and only that one -- is what flips the underlying
 // payments to the existing 'approved' status everything downstream already
-// keys off. A CEO confirming mid-chain deliberately leaves them 'pending'.
+// keys off.
 export function isTerminalHandoffRole(role) {
   return role === "accountant";
+}
+
+// The owner's side keeps every right on cash (owner, 2026-11-23: "CEO can do all"): admin and the CEO may take cash without a hand-over
+// (approving the payment = "I received this money") and may confirm or refuse any hand-over, also one addressed to somebody else.
+// Everybody else's cash goes through the route above: the accountant no longer approves a rep's cash that was never handed over
+// (App configuration can switch that back on; her own entries, money paid at the office, she still approves).
+export function receivesCashWithoutHandover(role) {
+  return approves("cashWithoutHandover", role);
+}
+export function decidesAnyHandoff(role) {
+  return approves("cashWithoutHandover", role);
 }
 
 // Who may declare a handoff on someone else's behalf. Same permission (and
@@ -786,11 +791,10 @@ export function approvesOwnOrderChanges(role) {
   return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director";
 }
 
-// The "hand over on behalf of a rep" picker. The server allows canSubmitHandoffForOthers, but the only on-behalf case is the FIRST hop (a
-// sales director declaring "I have received this rep's collections": the actor must be the receiver), so a CEO would only get an error out
-// of it. Admin keeps it as the usual backstop; the accountant receives from reps directly.
+// The "hand over on behalf of a rep" picker. The only on-behalf case is the FIRST hop: a sales director or the accountant declaring "I have
+// received this rep's collections" (the actor must be the receiver). Admin and the CEO may declare it for any receiver (decidesAnyHandoff).
 export function offersHandoffOnBehalf(role) {
-  return role === "admin" || role === "sales_director" || role === "accountant";
+  return role === "sales_director" || role === "accountant" || decidesAnyHandoff(role);
 }
 
 // Settings: the "draw my signature" button for the people who hand over delivery-acceptance acts (anyone may save one).

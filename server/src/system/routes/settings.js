@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { getAutoRoutePlanEnabled, setAutoRoutePlanEnabled } from "../../field/autoRoutePlan.js";
+import { getAccountantDirectApproval, setAccountantDirectApproval } from "../../money/cashRoute.js";
+import { getOrderConfirmTelegram, setOrderConfirmTelegram } from "../../orders/orderGroupPost.js";
 import { getUsageEnabled, setUsageEnabled } from "../usageAnalytics.js";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
@@ -52,6 +54,8 @@ settingsRouter.get("/", async (req, res) => {
     documentTexts,
     visitFrequencyByType,
     autoRoutePlan,
+    accountantDirectApproval,
+    orderConfirmTelegram,
     usageAnalytics,
     demandSettings,
   ] = await Promise.all([
@@ -70,6 +74,8 @@ settingsRouter.get("/", async (req, res) => {
     getDocumentTexts(),
     getVisitFrequencyByType(),
     getAutoRoutePlanEnabled(),
+    getAccountantDirectApproval(),
+    getOrderConfirmTelegram(),
     getUsageEnabled(),
     getDemandSettings(),
   ]);
@@ -83,6 +89,10 @@ settingsRouter.get("/", async (req, res) => {
     demand_service_level_pct: demandSettings.serviceLevelPct,
     // a new customer joins its rep's route plan on the day that holds its area (field/autoRoutePlan.js, ON by default)
     auto_route_plan_new_customers: autoRoutePlan,
+    // one route for cash (money/cashRoute.js, OFF by default): ON = the accountant may again approve cash that was never handed over
+    accountant_direct_approval: accountantDirectApproval,
+    // a confirmed order's details go to the accounting Telegram group (orders/orderGroupPost.js, ON by default)
+    order_confirm_telegram: orderConfirmTelegram,
     // usage analytics switch (system/usageAnalytics.js, OFF by default): the admin turns it on in Settings
     usage_analytics_enabled: usageAnalytics,
     incentive_message: incentiveMessage,
@@ -310,6 +320,18 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
       return res.status(400).json({ error: "auto_route_plan_new_customers must be a boolean" });
     }
     result.auto_route_plan_new_customers = await setAutoRoutePlanEnabled(req.body.auto_route_plan_new_customers);
+  }
+  if (req.body?.order_confirm_telegram !== undefined) {
+    if (typeof req.body.order_confirm_telegram !== "boolean") {
+      return res.status(400).json({ error: "order_confirm_telegram must be a boolean" });
+    }
+    result.order_confirm_telegram = await setOrderConfirmTelegram(req.body.order_confirm_telegram);
+  }
+  if (req.body?.accountant_direct_approval !== undefined) {
+    if (typeof req.body.accountant_direct_approval !== "boolean") {
+      return res.status(400).json({ error: "accountant_direct_approval must be a boolean" });
+    }
+    result.accountant_direct_approval = await setAccountantDirectApproval(req.body.accountant_direct_approval);
   }
   if (req.body?.usage_analytics_enabled !== undefined) {
     if (typeof req.body.usage_analytics_enabled !== "boolean") {

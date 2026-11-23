@@ -164,12 +164,18 @@ export async function cashSheetXlsx({ sheet, payments, sales }) {
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-// After an Excel sync: a sheet whose payments are all in the Excel is recorded (by the sync). Returns the closed sheet ids.
+// A payment of a sheet is "in the Excel" by the exact rule (customer, amount, 3 days) OR by the books rule, which also accepts sums
+// (several payments = one Excel row, one payment = several rows, payments2/matching.js). Since 2026-11-23 the sheets close only by
+// themselves, so a day the accountant booked as one row must close too. `p` = payments.
+export const SHEET_PAYMENT_IN_EXCEL_SQL = `(${IN_EXCEL_SQL} OR EXISTS (SELECT 1 FROM customer_payments cp
+  WHERE cp.legacy_payment_id = p.id AND cp.voided_at IS NULL AND cp.books_state IN ('matched', 'linked')))`;
+
+// After an Excel sync (and with every books run): a sheet whose payments are all in the Excel is recorded (by the sync). Returns the closed sheet ids.
 export async function closeSheetsFoundInExcel(db = pool) {
   const { rows } = await db.query(
     `UPDATE cash_sheets s SET recorded_at = now(), recorded_auto = true
      WHERE s.recorded_at IS NULL AND NOT EXISTS (
-       SELECT 1 FROM cash_handoff_items i JOIN payments p ON p.id = i.payment_id WHERE i.handoff_id = s.handoff_id AND NOT ${IN_EXCEL_SQL})
+       SELECT 1 FROM cash_handoff_items i JOIN payments p ON p.id = i.payment_id WHERE i.handoff_id = s.handoff_id AND NOT ${SHEET_PAYMENT_IN_EXCEL_SQL})
      RETURNING s.id`
   );
   return rows.map((r) => r.id);
@@ -206,6 +212,8 @@ export async function runCashSheetJobs(now = new Date(), db = pool) {
     }
   }
 
+  // the books run (sums) may have found the rows since the last Excel sync: close those sheets before anybody is asked
+  await closeSheetsFoundInExcel(db);
   const { rows: late } = await db.query(
     `SELECT s.id, s.sheet_date, s.total_amd, r.name AS rep_name FROM cash_sheets s LEFT JOIN users r ON r.id = s.rep_id
      WHERE s.recorded_at IS NULL AND s.created_at < now() - make_interval(days => $1) ORDER BY s.id`,

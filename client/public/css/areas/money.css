@@ -1789,6 +1789,11 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .pay-row-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .pay-row-chips .badge, .pay-row .payment-status-badge { white-space: nowrap; }
 .pay-row .payment-row-bottom-line .payment-approve-btn { flex: none; margin-left: auto; min-height: 44px; padding: 0 16px; }
+/* The smallest phones: the "where is the cash" mark (it carries a name) takes its own line, Approve goes under it at the right. */
+@media (max-width: 359px) {
+  .pay-row .payment-row-bottom-line:has(.cash-place-chip) { flex-wrap: wrap; }
+  .pay-row .payment-row-bottom-line:has(.cash-place-chip) .pay-row-chips { flex-basis: 100%; }
+}
 .pay-select-slot { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; margin: -4px -6px -4px -4px; cursor: pointer; }
 .pay-row-selecting { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 /* the day under a direction (or the day itself when sorted by date): count and money at the right */
@@ -1862,3 +1867,32 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 /* Payments header: back, title, Select, + -- on a 320 px phone the title gives way (the + button went off the screen) */
 #payments-select-btn { flex: none; }
 .list-header-row:has(#payments-select-btn) h1 { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The Cash screen (views/money.js, owner 2026-11-23): "Your turn" and "Where is the cash now" as two cards of rows; a row with a
+   destination is a button (44 px and more), the amount stands at the right in one column. */
+.cash-card { padding: 12px 14px; margin: 8px 0 12px; }
+.cash-card-title { font-size: 0.82rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-dim); margin: 0 0 4px; }
+.cash-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 8px 0; background: none; border: 0; border-top: 1px solid var(--border); color: inherit; font: inherit; text-align: left; }
+.cash-card-title + .cash-row { border-top: 0; }
+button.cash-row { cursor: pointer; }
+button.cash-row:active { background: var(--bg-card-pressed); }
+.cash-row-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cash-row-label { font-weight: 600; overflow-wrap: anywhere; }
+.cash-row-sub { font-size: 0.85rem; overflow-wrap: anywhere; }
+.cash-row-amd { flex: none; white-space: nowrap; }
+.cash-row-action { flex: none; min-height: 36px; display: inline-flex; align-items: center; pointer-events: none; }
+.cash-row .chevron { flex: none; font-size: 1.3rem; color: var(--text-dim); }
+.cash-row-zero .cash-row-label, .cash-row-zero .cash-row-amd { color: var(--text-dim); font-weight: 500; }
+.cash-row-danger .cash-row-amd, .cash-row-danger .cash-row-label { color: var(--danger, #c0392b); }
+.cash-row-ok .cash-row-amd { color: var(--success, #1e8e3e); }
+.cash-none { margin: 8px 0 4px; font-weight: 600; }
+/* A row with a button ("Count", "Hand over"): the label and the amount on the first line, the second line and the button under them,
+   so a long name keeps the whole width at every phone size. */
+.cash-row-act { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "text amd" "text act"; column-gap: 10px; row-gap: 4px; align-items: center; padding: 10px 0; }
+.cash-row-act .cash-row-text { grid-area: text; align-self: start; }
+.cash-row-act .cash-row-amd { grid-area: amd; justify-self: end; }
+.cash-row-act .cash-row-action { grid-area: act; justify-self: end; min-height: 40px; padding: 0 16px; }
+@media (min-width: 900px) {
+  #cash-overview { max-width: 760px; }
+  .money-view .money-actions { max-width: 960px; }
+}

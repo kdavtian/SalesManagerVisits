@@ -195,7 +195,7 @@ test("seesAllPayments: mirrors seesAllActivity", () => {
 
 test("validHandoffRecipientRoles: the exact custody chain", () => {
   assert.deepEqual(validHandoffRecipientRoles("sales_manager"), ["sales_director", "accountant"]);
-  assert.deepEqual(validHandoffRecipientRoles("sales_director"), ["ceo", "operations_director", "accountant"]);
+  assert.deepEqual(validHandoffRecipientRoles("sales_director"), ["accountant"], "one route (2026-11-23): the director's cash goes to the accountant, no CEO stop");
   assert.deepEqual(validHandoffRecipientRoles("ceo"), ["accountant"]);
   assert.deepEqual(validHandoffRecipientRoles("operations_director"), ["accountant"]);
   assert.deepEqual(validHandoffRecipientRoles("accountant"), [], "the terminal role is never a sender");
