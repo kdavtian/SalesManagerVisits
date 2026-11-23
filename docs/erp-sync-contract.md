@@ -254,15 +254,20 @@ What the app says (it compares the order as it is now with what the group was la
 |---|---|---|
 | confirmed (or already packed / delivered) | nothing | the details (`order_confirmed`) |
 | the same, but lines, prices, payment method or "test" changed | other details | the details again, marked changed (`order_confirmed`) |
+| confirmed again after "do not issue yet" | "do not issue yet" | the details, marked "confirmed again" or "changed" (whatever the switch says) |
 | back to submitted, or a draft after a stock issue | its details | "do not issue yet" (`order_unconfirmed`) |
 | cancelled or deleted | its details, or "do not issue yet" | "cancelled, do not issue" (`order_cancelled`) |
 
-A message the bot has not taken yet is corrected or withdrawn in place. Only orders confirmed since the switch was last turned on are
-announced. Switched off: nothing new is announced, but an order the group already has is still corrected or taken back.
+Messages the bot has not taken yet are replaced by what the order needs now (a quick move back and re-confirm sends nothing; a correction
+back to what the group has sends nothing). A message nobody could post (10 failed tries, older than 3 days) counts as never seen. "Changed"
+compares only what the order holds (lines, money, document, test): editing the customer or a product later sends nothing. Only orders
+confirmed since the switch was last turned on are announced. Switched off: nothing new is announced, but an order the group already has is
+still corrected, taken back or re-confirmed.
 
-- `GET /api/erp-sync/group-posts/pending` -> `{ posts: [{ id, kind, text }] }`, oldest first, at most 20. Taking a message claims it: it
-  is not offered again for 2 minutes, so two bot processes do not post it twice. Never offered: posted, failed 10 times, older than 3 days.
-- `POST /api/erp-sync/group-posts/:id/posted` `{ ok, error }` -> posted, or one more failed try (offered again after the claim time).
+- `GET /api/erp-sync/group-posts/pending` -> `{ posts: [{ id, kind, text }] }`, oldest first, at most 10. Taking a message claims it: it
+  is not offered again for 10 minutes, so two bot processes do not post it twice. Never offered: posted, failed 10 times, older than 3 days.
+- `POST /api/erp-sync/group-posts/:id/posted` `{ ok, error }` -> posted, or one more failed try (offered again at the next poll). Its own
+  rate limit (120 per minute), so a burst of reports never runs into the polling one.
 
 Both need the sync key and use the polling rate limit (60 per minute), as do the cash-sheet and money-board routes since this change:
 on the Excel push's limit (20 per 15 minutes) the bot's 30-second polling used the budget up and delayed posts and the sync itself.

@@ -11,17 +11,19 @@
 // A message the bot has not taken yet is corrected or withdrawn in place instead of being followed by a second one.
 // Callers: the routes that change an order (right away), and the job "order-group-posts" every minute, which catches every other path
 // and any call that failed. Only orders confirmed since the switch was last turned on are announced (no flood of old orders).
+// "Changed" compares only what the order itself holds (lines, money, document, test): editing the customer or a product later does not
+// re-send an issued document. A cancel of a PACKED order is told when the warehouse takes the goods back (until then it is packed).
 //
 // The texts are frozen in group_posts (migration 222); the CEO bot takes them (erpSync /group-posts) and posts to the group of the daily
 // cash sheets. Switch: app_settings.order_confirm_telegram (App configuration, ON by default). OFF = no new announcements; an order the
-// group already has details of is still corrected or taken back. Nothing here ever throws into the caller.
+// group already has details of is still corrected, taken back or re-confirmed. Nothing here ever throws into the caller.
 import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { effectiveDiscountPct } from "./discountPolicy.js";
 
 // the statuses in which the order's document is (or was) to be issued from these details
 const DOCUMENT_STATUSES = ["confirmed", "packed_stock_out", "delivered", "recorded"];
-const CLAIM_MINUTES = 2; // a message the bot took and did not report is offered again after this
+const CLAIM_MINUTES = 10; // a message the bot took and did not report is offered again after this (a batch takes well under it)
 const OFFER_DAYS = 3; // a message nobody could post for this long is not posted late (an outage does not end in a flood)
 
 const amd = (v) => `${Math.round(Number(v) || 0).toLocaleString("en-US")} դր`;
@@ -106,10 +108,15 @@ export function orderDetailsText(o) {
   return lines.join("\n");
 }
 
-/** The whole message, plain text (the bot sends it as it is). */
-export function orderConfirmedText(o, { changed = false } = {}) {
+const HEADINGS = {
+  first: "✅ Պատվերը հաստատված է",
+  changed: "♻️ Պատվերը ՓՈՓՈԽՎԵԼ է, սա նոր տարբերակն է",
+  again: "🔁 Պատվերը նորից հաստատված է, առանց փոփոխության",
+};
+/** The whole message, plain text (the bot sends it as it is). heading: first | changed | again (`changed: true` = "changed"). */
+export function orderConfirmedText(o, { changed = false, heading = changed ? "changed" : "first" } = {}) {
   return [
-    `${changed ? "♻️ Պատվերը ՓՈՓՈԽՎԵԼ է, սա նոր տարբերակն է" : "✅ Պատվերը հաստատված է"} · ${codeOf(o)}`,
+    `${HEADINGS[heading] ?? HEADINGS.first} · ${codeOf(o)}`,
     orderDetailsText(o),
     "",
     `Պատվիրեց՝ ${o.rep ?? "—"}${o.confirmed_by ? ` · Հաստատեց՝ ${o.confirmed_by}` : ""}`,
@@ -128,6 +135,16 @@ export function orderWithdrawnText({ title, cancelled = false, by = null, reason
 }
 
 const hashOf = (text) => crypto.createHash("sha1").update(text).digest("hex");
+/** What the document is issued from, as the ORDER holds it. Customer and product master data (a rename, an address or TIN filled in by the
+ *  Excel sync, a product unit) are left out: editing them later must not send "changed" for a document already issued. */
+export const contentHashOf = (o) =>
+  hashOf(
+    JSON.stringify([
+      o.payment_method === "invoice" ? "invoice" : "waybill", Boolean(o.is_test), Number(o.total_amd), Number(o.discount_pct || 0), Number(o.discount_amd || 0),
+      Number(o.payment_term_days || 0), Number(o.downpayment_amd || 0), o.promised ?? null, o.note ?? null,
+      o.items.map((it) => [it.product_name, Number(it.quantity), Number(it.unit_price_amd), Number(it.line_total_amd)]),
+    ])
+  );
 const userName = async (db, id) => (id ? (await db.query("SELECT name FROM users WHERE id = $1", [id])).rows[0]?.name ?? null : null);
 
 /**
@@ -136,8 +153,9 @@ const userName = async (db, id) => (id ? (await db.query("SELECT name FROM users
  * "cancelled" | null (nothing to say). Never throws.
  */
 export async function syncOrderPost(orderId, { byId = null, reason = null } = {}, db = pool) {
-  const client = await db.connect();
+  let client;
   try {
+    client = await db.connect();
     await client.query("BEGIN");
     // one order at a time: two calls for the same order (a hook and the job, a quick confirm / move back) decide one after the other
     await client.query("SELECT pg_advisory_xact_lock(7222, $1)", [orderId]);
@@ -145,56 +163,71 @@ export async function syncOrderPost(orderId, { byId = null, reason = null } = {}
     await client.query("COMMIT");
     return did;
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client?.query("ROLLBACK").catch(() => {});
     console.error(`Order ${orderId}: the group message could not be written:`, err.message);
     return null;
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
+// What the group has seen, or will see: the messages posted, and those the bot took and may still post (a claim that ran out is offered
+// again, so it counts too), as long as they can still be offered. A message nobody could post (10 failed tries, older than OFFER_DAYS)
+// was never seen and counts for nothing. Messages nobody has taken yet are this function's to rewrite: they are locked here (the bot's
+// claim skips locked rows) and replaced by what the order needs now, so a quick change never leaves a contradiction behind.
+const SEEN_SQL = `(posted_at IS NOT NULL OR (claimed_at IS NOT NULL AND post_attempts < 10 AND created_at > now() - make_interval(days => ${OFFER_DAYS})))`;
+
 async function decide(db, orderId, { byId, reason }) {
   const { rows: [settings] } = await db.query("SELECT order_confirm_telegram AS on, order_confirm_telegram_since AS since FROM app_settings WHERE id = 1");
-  const { rows: [last] } = await db.query("SELECT id, kind, title, content_hash, posted_at, claimed_at FROM group_posts WHERE ref_id = $1 ORDER BY id DESC LIMIT 1", [orderId]);
+  const switchedOn = settings?.on ?? true; // the same default as the settings screen shows
+  const { rows: waiting } = await db.query(
+    "SELECT id, kind, text, content_hash FROM group_posts WHERE ref_id = $1 AND posted_at IS NULL AND claimed_at IS NULL ORDER BY id FOR UPDATE",
+    [orderId]
+  );
+  const { rows: seen } = await db.query(`SELECT id, kind, title, content_hash FROM group_posts WHERE ref_id = $1 AND ${SEEN_SQL} ORDER BY id`, [orderId]);
+  const view = seen.at(-1) ?? null; // what the group believes now
+  const lastDetails = [...seen].reverse().find((r) => r.kind === "order_confirmed") ?? null;
   const o = await loadFacts(db, orderId);
-  // not taken by the bot yet: it can still be corrected or withdrawn without anybody having read it
-  const untouched = last && !last.posted_at && !last.claimed_at;
-  const insert = (kind, title, text, hash = null) => db.query("INSERT INTO group_posts (kind, ref_id, title, text, content_hash) VALUES ($1, $2, $3, $4, $5)", [kind, orderId, title, text, hash]);
 
+  // what it should be told now: { kind, title, text, hash } or null
+  let want = null;
   const live = o && !o.cancelled_at && DOCUMENT_STATUSES.includes(o.status);
   if (live) {
+    const hash = contentHashOf(o);
     const title = `${codeOf(o)} · ${o.customer}`;
-    const hash = hashOf(orderDetailsText(o));
-    if (last?.kind === "order_confirmed") {
-      if (last.content_hash === hash) return null;
-      if (untouched) {
-        await db.query("UPDATE group_posts SET text = $2, content_hash = $3, title = $4 WHERE id = $1", [last.id, orderConfirmedText(o), hash, title]);
-        return "corrected";
-      }
-      await insert("order_confirmed", title, orderConfirmedText(o, { changed: true }), hash);
-      return "changed";
+    if (view?.kind === "order_confirmed") {
+      if (view.content_hash !== hash) want = { kind: "order_confirmed", heading: "changed" };
+    } else if (view?.kind === "order_unconfirmed") {
+      // told "do not issue yet, a new message will come": it is owed whatever the switch says
+      want = { kind: "order_confirmed", heading: lastDetails?.content_hash === hash ? "again" : "changed" };
+    } else {
+      // a first announcement: only while switched on, and only for an order confirmed since it was switched on
+      const recent = o.confirmed_at && !(settings?.since && new Date(o.confirmed_at) < new Date(settings.since));
+      if (switchedOn && recent) want = { kind: "order_confirmed", heading: lastDetails ? "changed" : "first" };
     }
-    // a first announcement (or one after "moved back"): only while switched on, and only for an order confirmed since it was switched on
-    if (!settings?.on) return null;
-    if (!o.confirmed_at || (settings.since && new Date(o.confirmed_at) < new Date(settings.since))) return null;
-    await insert("order_confirmed", title, orderConfirmedText(o, { changed: Boolean(last) }), hash);
-    return last ? "changed" : "announced";
+    if (want) Object.assign(want, { title, hash, text: orderConfirmedText(o, { heading: want.heading }) });
+  } else if (view && view.kind !== "order_cancelled") {
+    const gone = !o || Boolean(o.cancelled_at);
+    if (view.kind === "order_confirmed" || gone) {
+      const title = o ? `${codeOf(o)} · ${o.customer}` : view.title ?? lastDetails?.title ?? `#${orderId}`;
+      const kind = gone ? "order_cancelled" : "order_unconfirmed";
+      // a waiting message of the same kind keeps its words (the route that wrote it knew who and why; the job does not)
+      const same = waiting.find((w) => w.kind === kind);
+      const text = same?.text ?? orderWithdrawnText({ title, cancelled: gone, by: await userName(db, byId), reason: reason ?? (o?.cancelled_at ? o.cancel_reason : null) });
+      want = { kind, title, text, hash: null };
+    }
   }
 
-  // no document is to be issued any more: moved back, cancelled, or deleted
-  if (!last || last.kind === "order_cancelled") return null;
-  const gone = !o || Boolean(o.cancelled_at);
-  if (last.kind === "order_unconfirmed" && !gone) return null;
-  if (last.kind === "order_confirmed" && untouched) {
-    // its details never left the app: the waiting message is withdrawn; if nothing older reached the group there is nothing to take back
-    await db.query("DELETE FROM group_posts WHERE id = $1 AND posted_at IS NULL AND claimed_at IS NULL", [last.id]);
-    const { rows: [older] } = await db.query("SELECT kind FROM group_posts WHERE ref_id = $1 ORDER BY id DESC LIMIT 1", [orderId]);
-    if (!older || older.kind === "order_cancelled" || (older.kind === "order_unconfirmed" && !gone)) return "withdrawn";
-  }
-  const title = o ? `${codeOf(o)} · ${o.customer}` : last.title ?? `#${orderId}`;
-  const by = await userName(db, byId);
-  await insert(gone ? "order_cancelled" : "order_unconfirmed", title, orderWithdrawnText({ title, cancelled: gone, by, reason: reason ?? (o?.cancelled_at ? o.cancel_reason : null) }));
-  return gone ? "cancelled" : "taken_back";
+  // already waiting exactly so: nothing to do
+  if (want && waiting.length === 1 && waiting[0].kind === want.kind && waiting[0].text === want.text) return null;
+  if (!want && !waiting.length) return null;
+  if (waiting.length) await db.query("DELETE FROM group_posts WHERE id = ANY($1)", [waiting.map((w) => w.id)]);
+  if (!want) return "withdrawn";
+  await db.query("INSERT INTO group_posts (kind, ref_id, title, text, content_hash) VALUES ($1, $2, $3, $4, $5)", [want.kind, orderId, want.title, want.text, want.hash]);
+  if (want.kind === "order_cancelled") return "cancelled";
+  if (want.kind === "order_unconfirmed") return "taken_back";
+  if (waiting.some((w) => w.kind === "order_confirmed")) return "corrected";
+  return { first: "announced", changed: "changed", again: "again" }[want.heading];
 }
 
 /** For a route: after its own answer went out, without waiting and without ever failing it. */
@@ -208,14 +241,12 @@ export function syncOrderPostSoon(orderId, opts) {
  */
 export async function runOrderGroupPosts(db = pool) {
   const { rows } = await db.query(
-    `SELECT o.id FROM orders o
-     WHERE o.updated_at > now() - interval '2 days'
-       AND (o.status = ANY($1) OR EXISTS (SELECT 1 FROM group_posts g WHERE g.ref_id = o.id))
+    `SELECT o.id FROM orders o WHERE o.updated_at > now() - interval '2 days'
      UNION
      SELECT g.ref_id FROM group_posts g
-     WHERE g.created_at > now() - interval '30 days' AND g.ref_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.id = g.ref_id)
-       AND g.id = (SELECT max(g2.id) FROM group_posts g2 WHERE g2.ref_id = g.ref_id) AND g.kind <> 'order_cancelled'`,
-    [DOCUMENT_STATUSES]
+     WHERE g.created_at > now() - interval '30 days' AND g.ref_id IS NOT NULL
+       AND g.id = (SELECT max(g2.id) FROM group_posts g2 WHERE g2.ref_id = g.ref_id) AND g.kind <> 'order_cancelled'
+       AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.id = g.ref_id)`
   );
   const done = {};
   for (const { id } of rows) {
@@ -233,7 +264,7 @@ export async function claimGroupPosts(db = pool) {
      WHERE id IN (SELECT id FROM group_posts
                   WHERE posted_at IS NULL AND post_attempts < 10 AND created_at > now() - make_interval(days => $2)
                     AND (claimed_at IS NULL OR claimed_at < now() - make_interval(mins => $1))
-                  ORDER BY id LIMIT 20 FOR UPDATE SKIP LOCKED)
+                  ORDER BY id LIMIT 10 FOR UPDATE SKIP LOCKED)
      RETURNING id, kind, text`,
     [CLAIM_MINUTES, OFFER_DAYS]
   );
@@ -244,7 +275,8 @@ export async function markGroupPost(id, ok, error = null, db = pool) {
   const { rows } = await db.query(
     ok
       ? "UPDATE group_posts SET posted_at = COALESCE(posted_at, now()), post_attempts = post_attempts + 1, last_post_error = NULL WHERE id = $1 RETURNING id"
-      : "UPDATE group_posts SET post_attempts = post_attempts + 1, last_post_error = $2 WHERE id = $1 RETURNING id",
+      : // a failed post is offered again at the next poll, not after the claim time
+        "UPDATE group_posts SET post_attempts = post_attempts + 1, last_post_error = $2, claimed_at = NULL WHERE id = $1 AND posted_at IS NULL RETURNING id",
     ok ? [id] : [id, String(error ?? "").slice(0, 300) || "failed"]
   );
   return Boolean(rows[0]);

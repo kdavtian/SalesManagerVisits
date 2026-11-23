@@ -69,6 +69,15 @@ const pollLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
 });
+// One report per message the bot posted: its own budget, so a burst of posts never runs into the polling one (a report refused there left
+// the message unreported and posted it twice).
+const reportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => Boolean(process.env.E2E_RATE_LIMIT_BYPASS_TOKEN) && req.get("x-e2e-rate-limit-bypass") === process.env.E2E_RATE_LIMIT_BYPASS_TOKEN,
+});
 
 export function timingSafeEqual(a, b) {
   const bufA = Buffer.from(a);
@@ -664,7 +673,7 @@ erpSyncRouter.get("/group-posts/pending", pollLimiter, requireSyncKey, async (_r
   res.json({ posts: await claimGroupPosts() });
 });
 
-erpSyncRouter.post("/group-posts/:id/posted", pollLimiter, requireSyncKey, async (req, res) => {
+erpSyncRouter.post("/group-posts/:id/posted", reportLimiter, requireSyncKey, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(400).json({ error: "Invalid id" });
   if (!(await markGroupPost(id, req.body?.ok !== false, req.body?.error))) return res.status(404).json({ error: "Post not found" });

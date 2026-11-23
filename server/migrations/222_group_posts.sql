@@ -22,3 +22,5 @@ CREATE INDEX IF NOT EXISTS group_posts_ref_idx ON group_posts (ref_id, id);
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS order_confirm_telegram BOOLEAN NOT NULL DEFAULT true;
 -- Only orders confirmed since the switch was (last) turned on are announced: no flood of old orders on the first deploy.
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS order_confirm_telegram_since TIMESTAMPTZ NOT NULL DEFAULT now();
+-- The job "order-group-posts" reads the orders changed in the last two days every minute.
+CREATE INDEX IF NOT EXISTS orders_updated_at_idx ON orders (updated_at);

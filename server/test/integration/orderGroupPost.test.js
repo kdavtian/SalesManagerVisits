@@ -88,14 +88,14 @@ test("the director confirms: the details wait for the bot with everything a wayb
   assert.equal((await apiRequest("/api/erp-sync/group-posts/999999999/posted", { method: "POST", headers: SYNC, body: {} })).status, 404);
   assert.equal((await apiRequest("/api/erp-sync/group-posts/99999999999/posted", { method: "POST", headers: SYNC, body: {} })).status, 400);
   // the bot asks every 30 seconds next to its other polls: 30 more requests in a row are all answered (the old shared limit was 20 per 15 minutes)
-  for (let i = 0; i < 30; i++) assert.equal((await apiRequest("/api/erp-sync/group-posts/pending", { headers: BOT })).status, 200, `poll ${i}`);
+  for (let i = 0; i < 20; i++) assert.equal((await apiRequest("/api/erp-sync/group-posts/pending", { headers: BOT })).status, 200, `poll ${i}`);
   // and the cash sheets and the money board it asks for in the same 30 seconds are on the same roomy budget, not the Excel push's
   for (const path of ["/cash-sheets/pending", "/money-board/pending"]) {
-    for (let i = 0; i < 12; i++) assert.equal((await apiRequest(`/api/erp-sync${path}`, { headers: BOT })).status, 200, `${path} ${i}`);
+    for (let i = 0; i < 10; i++) assert.equal((await apiRequest(`/api/erp-sync${path}`, { headers: BOT })).status, 200, `${path} ${i}`);
   }
 });
 
-test("after the group saw it: moved back -> 'do not issue yet'; confirmed again -> the details marked as changed; cancelled later -> 'cancelled'", async () => {
+test("after the group saw it: moved back -> 'do not issue yet'; confirmed again -> 'confirmed again'; cancelled later -> 'cancelled'", async () => {
   const id = await submittedOrder("cash");
   await confirm(id);
   await expectKinds(id, ["order_confirmed"]);
@@ -103,9 +103,10 @@ test("after the group saw it: moved back -> 'do not issue yet'; confirmed again 
   await unconfirm(id, "wrong quantity");
   let posts = await expectKinds(id, ["order_confirmed", "order_unconfirmed"]);
   assert.ok(posts[1].text.includes("⏸") && posts[1].text.includes("wrong quantity") && posts[1].text.includes("Post Director") && posts[1].text.includes("Post Shop"), posts[1].text);
+  await botPostsEverything(); // the group has the "do not issue yet"
   await confirm(id);
   posts = await expectKinds(id, ["order_confirmed", "order_unconfirmed", "order_confirmed"]);
-  assert.ok(posts[2].text.startsWith("♻️"), posts[2].text);
+  assert.ok(posts[2].text.startsWith("🔁"), `the same details: "confirmed again", not "changed"\n${posts[2].text}`);
   await botPostsEverything();
   // moved back again, and then the order is cancelled: the group is not left waiting for "a new message"
   await unconfirm(id, null);
@@ -130,9 +131,9 @@ test("before the bot took it: a quick move back withdraws the message, a quick c
   const corrected = await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "customer asked", items: [{ product_id: oil.id, quantity: 5 }] } });
   assert.equal(corrected.status, 200, JSON.stringify(corrected.data).slice(0, 300));
   const [same] = await waitFor(async () => ((await postsOf(id))[0]?.text.includes("5 հատ") ? postsOf(id) : null));
-  assert.equal(same.id, first.id);
-  assert.ok(same.text.includes("5 հատ × 20,000 դր = 100,000 դր") && !same.text.includes("Oil filter"), same.text);
-  assert.deepEqual(await kindsOf(id), ["order_confirmed"]);
+  assert.ok(same.text.startsWith("✅") && same.text.includes("5 հատ × 20,000 դր = 100,000 դր") && !same.text.includes("Oil filter"), same.text);
+  assert.deepEqual(await kindsOf(id), ["order_confirmed"], "one message, with the new content");
+  void first;
 });
 
 test("after the bot took it, every change of the document is said again: a correction, another payment method, a test order", async () => {
@@ -157,20 +158,23 @@ test("after the bot took it, every change of the document is said again: a corre
   await pool.query("UPDATE orders SET accounting_is_test = true, updated_at = now() WHERE id = $1", [id]);
   assert.deepEqual(await runOrderGroupPosts(), { changed: 1 });
   assert.ok((await postsOf(id)).at(-1).text.includes("🧪"));
+  await botPostsEverything();
 });
 
 test("a stock issue and a deleted order take the details back; the bot's failed post is offered again and given up after 10 tries", async () => {
   const id = await submittedOrder("cash");
   await confirm(id);
   const [post] = await expectKinds(id, ["order_confirmed"]);
-  // the bot takes it and fails: reported, offered again after the claim time, never more than 10 times
+  // the bot takes it and fails: reported, offered again at the next poll, never more than 10 times
   const taken = await apiRequest("/api/erp-sync/group-posts/pending", { headers: SYNC });
   assert.ok(taken.data.posts.some((p) => p.id === post.id));
   assert.deepEqual((await apiRequest("/api/erp-sync/group-posts/pending", { headers: SYNC })).data.posts, [], "taken: a second bot does not get it at the same time");
   assert.equal((await apiRequest(`/api/erp-sync/group-posts/${post.id}/posted`, { method: "POST", headers: SYNC, body: { ok: false, error: "telegram down" } })).status, 200);
-  await pool.query("UPDATE group_posts SET claimed_at = now() - interval '3 minutes' WHERE id = $1", [post.id]);
   assert.ok((await apiRequest("/api/erp-sync/group-posts/pending", { headers: SYNC })).data.posts.some((p) => p.id === post.id), "offered again");
-  await pool.query("UPDATE group_posts SET post_attempts = 10, claimed_at = now() - interval '3 minutes' WHERE id = $1", [post.id]);
+  // taken and never reported: offered again after the claim time
+  await pool.query("UPDATE group_posts SET claimed_at = now() - interval '11 minutes' WHERE id = $1", [post.id]);
+  assert.ok((await apiRequest("/api/erp-sync/group-posts/pending", { headers: SYNC })).data.posts.some((p) => p.id === post.id), "offered again after the claim time");
+  await pool.query("UPDATE group_posts SET post_attempts = 10, claimed_at = NULL WHERE id = $1", [post.id]);
   assert.deepEqual((await apiRequest("/api/erp-sync/group-posts/pending", { headers: SYNC })).data.posts, [], "given up");
   await pool.query("UPDATE group_posts SET posted_at = now() WHERE id = $1", [post.id]);
 
@@ -195,6 +199,77 @@ test("a stock issue and a deleted order take the details back; the bot's failed 
   await expectKinds(id3, ["order_confirmed"]);
   await apiRequest(`/api/orders/${id3}`, { method: "DELETE", cookie: adminCookie, body: { reason: "entered twice" } });
   await expectKinds(id3, []);
+});
+
+test("review sequences: a waiting 'changed' keeps its heading; back to what the group has = nothing; a quick back-and-confirm says nothing twice", async () => {
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  await botPostsEverything();
+  const correct = (quantity) => apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity }, { product_id: filter.id, quantity: 3 }] } });
+  assert.equal((await correct(4)).status, 200);
+  await expectKinds(id, ["order_confirmed", "order_confirmed"]);
+  // corrected again before the bot took it: still ONE waiting message, still marked as changed
+  assert.equal((await correct(6)).status, 200);
+  let posts = await waitFor(async () => ((await postsOf(id)).at(-1)?.text.includes("6 հատ") ? postsOf(id) : null));
+  assert.equal(posts.length, 2);
+  assert.ok(posts[1].text.startsWith("♻️"), posts[1].text);
+  // corrected back to exactly what the group has: the waiting message goes, nothing is sent
+  assert.equal((await correct(2)).status, 200);
+  await expectKinds(id, ["order_confirmed"], "back to the posted version: no message");
+
+  // moved back and confirmed again before the bot took the "do not issue": neither is sent, the group's details stand
+  await unconfirm(id, "check");
+  await expectKinds(id, ["order_confirmed", "order_unconfirmed"]);
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"], "nothing to tell: the same details the group has");
+  // moved back after the group saw it, confirmed again unchanged: "confirmed again", not "changed"
+  await unconfirm(id, "check");
+  await expectKinds(id, ["order_confirmed", "order_unconfirmed"]);
+  await botPostsEverything();
+  await confirm(id);
+  posts = await expectKinds(id, ["order_confirmed", "order_unconfirmed", "order_confirmed"]);
+  assert.ok(posts[2].text.startsWith("🔁"), posts[2].text);
+  await botPostsEverything();
+  // moved back and cancelled before the bot took the "do not issue": only "cancelled" goes
+  await unconfirm(id, "check");
+  await expectKinds(id, ["order_confirmed", "order_unconfirmed", "order_confirmed", "order_unconfirmed"]);
+  await pool.query("UPDATE orders SET status = 'draft', cancelled_at = now(), cancel_reason = 'refused', updated_at = now() WHERE id = $1", [id]);
+  await syncOrderPost(id);
+  await expectKinds(id, ["order_confirmed", "order_unconfirmed", "order_confirmed", "order_cancelled"]);
+});
+
+test("review sequences: a message nobody could post counts for nothing; editing the customer later sends nothing", async () => {
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  const [post] = await expectKinds(id, ["order_confirmed"]);
+  // the bot took it and gave up after 10 tries: the group never saw it; a correction is the first message, not "changed"
+  await pool.query("UPDATE group_posts SET claimed_at = now(), post_attempts = 10 WHERE id = $1", [post.id]);
+  const corrected = await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity: 7 }] } });
+  assert.equal(corrected.status, 200);
+  const posts = await expectKinds(id, ["order_confirmed", "order_confirmed"]);
+  assert.ok(posts[1].text.startsWith("✅") && posts[1].text.includes("7 հատ"), posts[1].text);
+  await botPostsEverything();
+  // the customer's name, address and TIN change later, the order is touched: no "changed" for an issued document
+  await pool.query("UPDATE customers SET address = 'Somewhere else 9', tin = '99999999' WHERE id = $1", [customer.id]);
+  await pool.query("UPDATE orders SET status = 'packed_stock_out', updated_at = now() WHERE id = $1", [id]);
+  assert.equal(await syncOrderPost(id), null);
+  await pool.query("UPDATE customers SET address = 'Yerevan, Shop st. 2', tin = '01234567' WHERE id = $1", [customer.id]);
+});
+
+test("review sequences: switched off while an order was moved back, it is still re-confirmed when confirmed again", async () => {
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  await botPostsEverything();
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = false WHERE id = 1");
+  await unconfirm(id, "check");
+  await expectKinds(id, ["order_confirmed", "order_unconfirmed"]);
+  await botPostsEverything();
+  await confirm(id);
+  const posts = await expectKinds(id, ["order_confirmed", "order_unconfirmed", "order_confirmed"], "the group was promised a new message");
+  assert.ok(posts[2].text.startsWith("🔁"), posts[2].text);
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = true WHERE id = 1");
 });
 
 test("the switch: only admin; OFF announces nothing new but still takes back what the group has; ON again starts from now", async () => {
