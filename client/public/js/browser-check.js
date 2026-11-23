@@ -59,7 +59,10 @@
 
   var lang = "hy";
   try {
-    if (localStorage.getItem("fieldvisits_lang") === "en") lang = "en";
+    // as i18n.js getLang: the stored choice, else the site's default (the demo site: English)
+    var storedLang = localStorage.getItem("fieldvisits_lang");
+    var langMeta = document.querySelector('meta[name="default-lang"]');
+    if (storedLang === "en" || (storedLang !== "hy" && langMeta && langMeta.content === "en")) lang = "en";
   } catch (e) {}
   var ua = navigator.userAgent || "";
   var platform = /iPhone|iPad|iPod/.test(ua) ? "ios" : /Android/.test(ua) ? "android" : "other";

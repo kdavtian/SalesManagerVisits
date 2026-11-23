@@ -71,7 +71,9 @@ function bootFailed(reason) {
   } catch {
     // no sessionStorage: show the card
   }
-  const hy = (localStorage.getItem("fieldvisits_lang") || "hy") !== "en";
+  // as i18n.js getLang (not imported: this card must work when the app's own files failed to load)
+  const storedLang = localStorage.getItem("fieldvisits_lang");
+  const hy = storedLang === "hy" || (storedLang !== "en" && document.querySelector('meta[name="default-lang"]')?.content !== "en");
   const text = hy
     ? { title: "Հավելվածը չբացվեց", body: "Ֆայլերից մեկը չբեռնվեց։ «Մաքուր վերաբեռնում»-ը նորից կբեռնի հավելվածը։", clean: "Մաքուր վերաբեռնում", reload: "Վերաբեռնել" }
     : { title: "The app did not open", body: "One of its files did not load. A clean reload downloads the app again.", clean: "Clean reload", reload: "Reload" };

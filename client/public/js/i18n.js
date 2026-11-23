@@ -31,11 +31,33 @@ export const allTextsLoaded = () => allLoaded(getLang());
 // Which areas this page has loaded so far (the tests check the first part is in before a screen is drawn).
 export const loadedTextAreas = (lang = getLang()) => [...(loaded[lang] ?? [])];
 
+// A <meta> the server puts in the page (only the demo site has these: server/src/app.js DEMO_HEAD_META).
+const headMeta = (name) => (typeof document === "undefined" ? null : (document.querySelector(`meta[name="${name}"]`)?.content ?? null));
+const DEFAULT_LANG = headMeta("default-lang") === "en" ? "en" : "hy";
+
 // Armenian by default -- the sales team's working language -- until a user
-// explicitly picks English via the Settings toggle, which stores "en" here
-// and wins from then on.
+// explicitly picks a language via the Settings toggle, which stores it here
+// and wins from then on. The demo site defaults to English instead.
 export function getLang() {
-  return localStorage.getItem(LANG_KEY) === "en" ? "en" : "hy";
+  const stored = localStorage.getItem(LANG_KEY);
+  return stored === "en" || stored === "hy" ? stored : DEFAULT_LANG;
+}
+
+// The demo site shows money in US dollars (its made-up amounts are dollar-sized): every text says USD / դոլար instead of AMD / դրամ.
+// Whole words only, so դրամարկղ (cash desk), դրամական, դրամապանակ and մետաղադրամ (coin) stay as they are. A text that already names USD
+// is about both currencies (the USD/AMD rate in Cashflow, the cost calculator, Ops control) and is left alone: "USD to USD rate" is wrong.
+const USD_SITE = headMeta("site-currency") === "USD";
+const ARM_LETTER = "\u0531-\u0556\u0561-\u0587"; // letters only: the Armenian comma/emphasis marks (U+055A-U+055F) end a word
+const DRAM_WORD = new RegExp(`(^|[^${ARM_LETTER}])դրամ(ով|ից|ի|անոց|անոցը)?(?![${ARM_LETTER}])`, "g");
+const usdTexts = new Map();
+export function inUsd(text) {
+  if (typeof text !== "string" || /\bUSD\b|դոլար/.test(text)) return text;
+  let out = usdTexts.get(text);
+  if (out === undefined) {
+    out = text.replace(/\bAMD\b/g, "USD").replace(DRAM_WORD, (m, before, ending) => `${before}դոլար${ending ?? ""}`);
+    usdTexts.set(text, out);
+  }
+  return out;
 }
 
 await loadAreas(getLang(), typeof location === "undefined" ? TEXT_AREAS : firstTextAreas(location.hash));
@@ -69,7 +91,7 @@ export function hasText(key) {
 export function t(key) {
   // The language can be changed from another tab or window (localStorage is shared): until this page has loaded it, use what it has.
   const dict = dicts[getLang()] ?? Object.values(dicts)[0];
-  if (dict[key] !== undefined) return dict[key];
+  if (dict[key] !== undefined) return USD_SITE ? inUsd(dict[key]) : dict[key];
   if (typeof key === "string" && /^[a-z][a-zA-Z0-9_]*$/.test(key)) needText(key);
   return key;
 }

@@ -45,6 +45,11 @@ const dayAgo = (n, hour = 11, minute = 20) => {
   return d;
 };
 const dateOnly = (d) => d.toISOString().slice(0, 10);
+// The demo shows money in US dollars (owner, 2026-11-22; the page says USD, server/src/app.js DEMO_HEAD_META). The amounts below are written
+// as realistic dram figures and stored divided by this rate, so every price, order, payment, debt and plan is dollar-sized.
+// The columns keep their _amd names: only the demo's numbers and labels change.
+const AMD_PER_USD = 400;
+const usd = (amd) => Math.max(1, Math.round(amd / AMD_PER_USD));
 
 // ---------- the cast ----------
 const REPS = [
@@ -122,7 +127,7 @@ async function seed() {
         `INSERT INTO products (name, brand, family, unit, unit_price_amd, active, bronze_price_amd, silver_price_amd, gold_price_amd, retail_price_amd,
            stock_qty, size_l, landing_cost_amd, net_cost_amd, is_commercial)
          VALUES ($1, $2, $3, 'pcs', $4, true, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING id, name, brand, unit_price_amd`,
-        [name, brand, family, bronze, silver, gold, retail, stock, size, landing, Math.round(landing * 1.04)]
+        [name, brand, family, usd(bronze), usd(silver), usd(gold), usd(retail), stock, size, usd(landing), usd(landing * 1.04)]
       );
       productRows.push(rows[0]);
     }
@@ -157,7 +162,7 @@ async function seed() {
             competitor ? 45 : pick([14, 14, 21, 30]), erpId, rep.region, sub, tier, competitor ? null : rep.channel,
             level, potential ? pick(POTENTIAL_REASON_SETS) : [], potential ? new Date() : null, potential ? repIds[ri] : null,
             level && level >= 3 ? dateOnly(dayAgo(-between(1, 6))) : null, level ? level * 40 : null,
-            competitor || potential ? 45 : pick([14, 30, 45]), tier === "gold" ? 3000000 : tier === "silver" ? 1500000 : tier === "bronze" ? 600000 : null,
+            competitor || potential ? 45 : pick([14, 30, 45]), tier === "gold" ? usd(3000000) : tier === "silver" ? usd(1500000) : tier === "bronze" ? usd(600000) : null,
           ]
         );
         customers.push({ id: rows[0].id, name, tier, erpId, lat, lng, rep: ri, buys: !competitor && !potential });
@@ -242,7 +247,7 @@ async function seed() {
         `INSERT INTO payments (customer_id, customer_name_snapshot, erp_customer_id_snapshot, amount_amd, payment_date, sales_manager_id,
            sales_manager_name_snapshot, sales_channel, note, status, created_by, approved_by, approved_at, current_holder_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Demo', $9, $6, $10, $11, $6)`,
-        [c.id, c.name, c.erpId, between(30, 400) * 1000, at, repIds[c.rep], REPS[c.rep].name, REPS[c.rep].channel, pending ? "pending" : "approved", pending ? null : ceoId, pending ? null : at]
+        [c.id, c.name, c.erpId, usd(between(30, 400) * 1000), at, repIds[c.rep], REPS[c.rep].name, REPS[c.rep].channel, pending ? "pending" : "approved", pending ? null : ceoId, pending ? null : at]
       );
       payments += 1;
     }
@@ -250,7 +255,7 @@ async function seed() {
     // Debt (what the Excel sync would bring): about every third buyer owes something, with real unpaid invoices behind it.
     for (const c of customers.filter((x) => x.buys && x.erpId)) {
       if (rnd() < 0.62) continue;
-      const debt = between(40, 520) * 1000;
+      const debt = usd(between(40, 520) * 1000);
       const bucket = pick(["0-30", "0-30", "31-60", "61-90"]);
       const ages = bucket === "0-30" ? [6, 18] : bucket === "31-60" ? [40, 70] : [95, 120];
       const lastPay = between(5, 80);
@@ -292,7 +297,7 @@ async function seed() {
     const planOf = REPS.map((_, ri) => {
       let total = 0;
       for (const [key, v] of salesByRepMonth) if (key.startsWith(`${ri}|`)) total += v;
-      return Math.max(1000000, Math.round((total / 2.5) * 1.55 / 100000) * 100000);
+      return Math.max(usd(1000000), Math.round((total / 2.5) * 1.55 / 250) * 250);
     });
     for (let m = 0; m < 4; m++) {
       const month = new Date(today.getFullYear(), today.getMonth() - m, 1);

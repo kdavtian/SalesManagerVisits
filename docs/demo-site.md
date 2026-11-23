@@ -12,6 +12,8 @@ A second, **completely separate** copy of the app with made-up data. Give a visi
 | Excel sync, Telegram, web push, AI key, Platform sync, KAD OS link | on | **all off**: none of those settings are passed to the demo, so nothing can go out |
 | Data | real | made up (customers, prices, orders, debt, people) |
 
+The demo opens **in English** (a visitor can still switch to Armenian in Settings) and shows money **in US dollars**: its made-up amounts are dollar-sized (written as dram figures in `demo-site.mjs` and divided by 400) and every text says USD / դոլար instead of AMD / դրամ (owner, 2026-11-22; `DEMO_HEAD_META` in `server/src/app.js`, read by `i18n.js`). A demo filled before 1.586.0 still holds dram-sized amounts: run `./deploy/demo.sh reset` once.
+
 The demo looks different where nobody can miss it: it installs / appears as **"KAD Demo"** with a purple status bar, and it asks search engines not to index it. `demo-site.mjs` refuses to run unless `DEMO_MODE=1` (set only in the demo compose file), and `seed` refuses any database that holds a user whose e-mail does not end in `@kad.demo`.
 
 ## What the demo contains
