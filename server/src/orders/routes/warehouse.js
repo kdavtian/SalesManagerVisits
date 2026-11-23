@@ -5,6 +5,7 @@
 // live-inventory reference panel. See
 // migrations/051_warehouse_delivery_v3.sql for the 5-state status machine
 // this operates on.
+import { syncOrderPostSoon } from "../orderGroupPost.js";
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
@@ -448,6 +449,8 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
     [order.id, note.trim(), req.user.id]
   );
   res.json(updatedRows[0]);
+  // the accountants' group was told this order is confirmed: now it is told not to issue it yet (orders/orderGroupPost.js)
+  syncOrderPostSoon(order.id, { byId: req.user.id, reason: note.trim() });
 
   (async () => {
     try {

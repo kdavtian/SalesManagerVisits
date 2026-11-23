@@ -217,6 +217,8 @@ export const enSettings = {
     auto_route_plan_label: "Add new customers to route plans",
     accountant_direct_approval_help: "Off (the rule): cash goes rep → sales director → accountant, or rep → accountant, and a payment is approved when its hand-over is confirmed. The accountant still approves payments she entered herself. Admin and the CEO can always approve. On: the accountant may also approve a rep's cash that was never handed over in the app.",
     accountant_direct_approval_label: "Accountant approves without a hand-over",
+    order_confirm_telegram_help: "When an order is confirmed, its details go to the accounting Telegram group at once: which document (waybill or invoice), the customer with its ERP ID (for an invoice also the legal name, TIN and legal address), every line with quantity, price and sum, discount, total, payment term, note, who ordered and who confirmed. Confirmed again after a change: a new message marked as changed. Moved back or cancelled: a short \"do not issue\" message.",
+    order_confirm_telegram_label: "Confirmed orders to the accounting Telegram group",
     visit_type_group_channels: "Channels",
     visit_type_group_potential: "Potential customers",
     visit_type_group_tiers: "Levels",

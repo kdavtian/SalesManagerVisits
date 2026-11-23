@@ -34,3 +34,4 @@ test/integration/opsApi.test.js
 test/integration/salesStrategy.test.js
 test/integration/excelBalanceHandoffs.test.js
 test/integration/cashOneRoute.test.js
+test/integration/orderGroupPost.test.js

@@ -225,6 +225,10 @@ export function paintSettingsMarkup(ctx) {
           <p class="muted settings-hint-text" id="accountant-direct-approval-help-text" hidden>${t("accountant_direct_approval_help")}</p>
         </div>
         <div class="card settings-list-group">
+          ${settingsToggleRow({ icon: ICON.bell, label: t("order_confirm_telegram_label"), value: "", id: "toggle-order-confirm-telegram", checked: true, color: "blue", hintBtnId: "order-confirm-telegram-hint", hintTextId: "order-confirm-telegram-help-text" })}
+          <p class="muted settings-hint-text" id="order-confirm-telegram-help-text" hidden>${t("order_confirm_telegram_help")}</p>
+        </div>
+        <div class="card settings-list-group">
           ${settingsToggleRow({ icon: ICON.chart, label: t("usage_toggle_label"), value: "", id: "toggle-usage-analytics", checked: false, color: "blue", hintBtnId: "usage-hint", hintTextId: "usage-help-text" })}
           <p class="muted settings-hint-text" id="usage-help-text" hidden>${t("usage_toggle_help")}</p>
           ${settingsRow({ icon: ICON.chart, label: t("usage_title"), id: "row-usage-report", color: "blue" })}

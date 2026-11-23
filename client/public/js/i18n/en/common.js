@@ -1178,6 +1178,7 @@ export const enCommon = {
     job_daily_summary: "Daily summary (evening)",
     job_ops_control: "Operations control checks",
     job_cash_sheets: "Cash hand-over and sheet checks",
+    job_order_group_posts: "Confirmed orders to the accounting Telegram group",
     job_stale_packed_orders: "Packed orders not delivered",
     job_erp_sync_freshness: "Excel sync is arriving",
     job_excel_file_age: "Excel file age",
