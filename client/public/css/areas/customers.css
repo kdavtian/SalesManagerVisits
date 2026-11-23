@@ -1833,6 +1833,17 @@
   color: var(--text-dim);
   font-weight: 400;
 }
+/* The Excel number beside the free stock shown, only when they differ (views/warehouse.js excelQtyHtml). */
+.inventory-row-excel {
+  margin-top: 2px;
+  text-align: right;
+}
+.inventory-excel-qty {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .inventory-row-prices {
   margin-top: 2px;
   text-align: right;

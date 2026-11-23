@@ -122,18 +122,20 @@ export function computeStockForecast({ stockQty, qty30d, qty90d, lastSaleDate, c
   return { status, dailyDemand, daysOfStock, trend };
 }
 
-// Reorder suggestion (warehouse "To order" tab): how many pieces to buy so that
-// the stock covers TARGET_COVER_DAYS of demand again, counting what open customer
-// orders have already promised (`reservedQty`). Only products that are out of stock
-// (with real sales) or have less than LOW_DAYS_THRESHOLD days left are suggested.
-// Returns null when nothing should be ordered.
+// Reorder suggestion (warehouse "To order" tab): how many pieces to buy so that the stock covers `coverDays` of demand plus the safety stock
+// again, counting what open customer orders already want (`reservedQty`). Only products the demand model (demandModel.js) calls out,
+// critical or low are suggested. Returns null when nothing should be ordered.
+// coverDays / safetyStock (review 2026-11-23): the model calls a product "low" up to lead time + review days + safety stock; a flat 90 days
+// bought too little (a "low" product got nothing, or stayed "low" after the purchase; with a lead time over 90 days even "critical" ones got
+// nothing). warehouse.js passes the admin's lead time + MODEL.reviewDays and the model's safety stock; without them, the old 90 days.
+// (computeStockForecast above is the old model, kept only for its tests: the screens use demandModel.js.)
 export const TARGET_COVER_DAYS = 90;
-export function computeReorderSuggestion({ stockQty, reservedQty = 0, status, dailyDemand, daysOfStock, qty90d }) {
+export function computeReorderSuggestion({ stockQty, reservedQty = 0, status, dailyDemand, daysOfStock, qty90d, coverDays = TARGET_COVER_DAYS, safetyStock = 0 }) {
   if (status !== "out" && status !== "critical" && status !== "low") return null;
   // An out-of-stock product has no demand estimate: fall back to its 90-day sales.
   const demand = dailyDemand ?? (Number(qty90d) || 0) / BASELINE_WINDOW_DAYS;
   if (!(demand > 0)) return null;
-  const need = demand * TARGET_COVER_DAYS + Number(reservedQty) - Number(stockQty || 0);
+  const need = demand * coverDays + (Number(safetyStock) || 0) + Number(reservedQty) - Number(stockQty || 0);
   const suggested = Math.max(0, Math.ceil(need));
   if (!suggested) return null;
   return { urgency: status, suggested_qty: suggested, daily_demand: demand, days_of_stock: daysOfStock };

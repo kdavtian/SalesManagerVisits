@@ -14,7 +14,7 @@ import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { parseImportFile, classifyImportRows, applyImportRows } from "../productImport.js";
 import { normalizeErpText, normalizeErpUnitKey } from "../../erp/erpTransform.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { HOLDS_STOCK_SQL, SUBMITTED_SQL } from "../../orders/appStock.js";
+import { HOLDS_STOCK_SQL, SUBMITTED_SQL, RETURNS_BACK_COND, ARRIVED_NOT_IN_EXCEL_COND } from "../../orders/appStock.js";
 import { canConfirmOrders, canDeliverOrders, canRecordOrders } from "../../shared/roles.js";
 
 // In-memory (not disk) -- an import workbook is parsed and discarded, never
@@ -54,8 +54,8 @@ export async function fetchPricedProducts(where, params, role) {
   // overlap, rather than erroring or picking arbitrarily.
   const { rows } = await pool.query(
     `WITH sel AS (SELECT p.id, p.synced_at FROM products p ${where}),
-     -- Pieces already promised to other orders: in the pipeline (submitted/confirmed/packed)
-     -- or delivered in the app and not found in the Excel yet (orders/appStock.js HOLDS_STOCK_SQL).
+     -- Pieces held by other orders (confirmed, packed and out, delivered in the app and not found in the Excel yet: orders/appStock.js
+     -- HOLDS_STOCK_SQL). Submitted orders are counted apart: they do not hold stock (owner, 2026-11-11).
      -- One grouped join for the whole list: the per-product subquery this replaced took 0.96 s for
      -- 5,000 products with 300,000 order lines (0.14 s then; the delivered-not-in-Excel rule checks updated_at first so its history lookup stays rare).
      rsv AS (
@@ -64,14 +64,31 @@ export async function fetchPricedProducts(where, params, role) {
        FROM sel JOIN order_items oi ON oi.product_id = sel.id JOIN orders o ON o.id = oi.order_id
        WHERE ${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL}
        GROUP BY sel.id
+     ),
+     -- Back on the shelf, not in the Excel stock yet: good returns and purchases received in the app (appStock.js BACK_ON_SHELF_SQL, the
+     -- same conditions, grouped here so the whole list stays one pass).
+     rb AS (
+       SELECT ri.product_id, SUM(ri.quantity) AS qty
+       FROM sel JOIN order_return_items ri ON ri.product_id = sel.id JOIN order_returns r ON r.id = ri.return_id JOIN products p ON p.id = ri.product_id
+       WHERE ${RETURNS_BACK_COND}
+       GROUP BY ri.product_id
+     ),
+     arr AS (
+       SELECT l.product_id, SUM(COALESCE(l.received_qty, l.qty)) AS qty
+       FROM sel JOIN purchase_lines l ON l.product_id = sel.id JOIN purchase_invoices i ON i.id = l.invoice_id JOIN products p ON p.id = l.product_id
+       WHERE ${ARRIVED_NOT_IN_EXCEL_COND}
+       GROUP BY l.product_id
      )
      SELECT p.*,
             COALESCE(rsv.qty, 0)::int AS reserved_qty,
             -- submitted orders do not hold stock, but they already want these pieces: the order screen warns the rep (owner, 2026-11-11)
             COALESCE(rsv.submitted, 0)::int AS submitted_qty,
+            (COALESCE(rb.qty, 0) + COALESCE(arr.qty, 0))::int AS back_on_shelf_qty,
             promo.id AS promo_id, promo.promo_price_amd, promo.starts_on AS promo_starts_on, promo.ends_on AS promo_ends_on
      FROM products p
      LEFT JOIN rsv ON rsv.product_id = p.id
+     LEFT JOIN rb ON rb.product_id = p.id
+     LEFT JOIN arr ON arr.product_id = p.id
      LEFT JOIN LATERAL (
        SELECT id, promo_price_amd, starts_on, ends_on FROM product_promos
        WHERE product_id = p.id AND (now() AT TIME ZONE 'Asia/Yerevan')::date BETWEEN starts_on AND ends_on
@@ -91,7 +108,8 @@ export async function fetchPricedProducts(where, params, role) {
     );
     return {
       ...row,
-      available_qty: row.stock_qty === null || row.stock_qty === undefined ? null : Number(row.stock_qty) - row.reserved_qty,
+      // free stock (appStock.js freeStockSql): Excel stock − held by orders + back on the shelf (returns, purchases received) not in Excel yet
+      available_qty: row.stock_qty === null || row.stock_qty === undefined ? null : Number(row.stock_qty) - row.reserved_qty + row.back_on_shelf_qty,
       effective_standard_amd: pricing.standard,
       effective_special_amd: pricing.special,
       effective_retail_amd: pricing.retail,
@@ -448,7 +466,7 @@ productsRouter.patch("/:id", async (req, res) => {
   values.push(req.params.id);
 
   const { rows } = await pool.query(
-    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now()${updates.every(([key]) => DETAIL_FIELDS.has(key)) ? "" : ", manually_edited_at = now()"} WHERE id = $${values.length} RETURNING *`,
+    `UPDATE products SET ${setClauses.join(", ")}, updated_at = now()${updates.some(([key]) => key === "stock_qty") ? ", stock_changed_at = now()" : ""}${updates.every(([key]) => DETAIL_FIELDS.has(key)) ? "" : ", manually_edited_at = now()"} WHERE id = $${values.length} RETURNING *`,
     values
   );
   const after = rows[0];

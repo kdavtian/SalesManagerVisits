@@ -102,9 +102,11 @@ function parseSpec(name) {
 // numeric liter value, or null if the unit isn't a plain liter size.
 export function parseLiters(unit) {
   if (!unit) return null;
-  const m = String(unit).match(/^\s*([\d.]+)\s*L\s*$/i);
+  // "1,5L" (a decimal comma, as the server's sizeLiters reads it too) is 1.5 L, not "no size" (review 2026-11-23: such units fell out of the
+  // liter totals without a word)
+  const m = String(unit).match(/^\s*(\d+(?:[.,]\d+)?|[.,]\d+)\s*L\s*$/i);
   if (!m) return null;
-  const n = Number(m[1]);
+  const n = Number(m[1].replace(",", "."));
   return Number.isFinite(n) ? n : null;
 }
 

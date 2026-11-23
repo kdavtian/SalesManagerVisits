@@ -1,22 +1,20 @@
-// What the demand model (demandModel.js) needs from the database, for every product in two queries: the weekly sales of the last 26
-// weeks from the Excel order lines (keyed by the ERP product id), and the pieces open orders have already reserved (keyed by product id).
+// What the demand model (demandModel.js) needs from the database: the weekly sales of the last 26 weeks from the Excel order lines (keyed by the
+// ERP product id). What open orders hold or want is NOT here any more (review 2026-11-23: this file had its own "reserved", the fourth meaning
+// of the word): the warehouse routes read it from orders/appStock.js, the one definition.
+//
+// The weeks count back from the Excel's own "today" -- the newest order date it holds -- not from the wall clock: while the upload lags a few
+// days the newest week would otherwise read as a week without sales, carry the highest weight and turn every trend "down" (the same Excel
+// clock as appStock.js EXCEL_NOW_SQL).
 import { MODEL, bucketWeeks } from "./demandModel.js";
 
 export async function loadDemandInputs(db, today) {
-  const [{ rows: weeks }, { rows: reserved }] = await Promise.all([
-    db.query(
-      `SELECT product_id, floor(($1::date - order_date) / 7)::int AS wk, SUM(qty) AS qty
-         FROM erp_order_lines
-        WHERE product_id IS NOT NULL AND order_date <= $1::date AND order_date > $1::date - ($2::int * 7)
-        GROUP BY product_id, wk`,
-      [today, MODEL.weeks]
-    ),
-    db.query(
-      `SELECT oi.product_id, SUM(oi.quantity)::int AS qty
-         FROM order_items oi JOIN orders o ON o.id = oi.order_id
-        WHERE o.status IN ('submitted', 'confirmed', 'packed_stock_out') AND oi.product_id IS NOT NULL
-        GROUP BY oi.product_id`
-    ),
-  ]);
-  return { weekly: bucketWeeks(weeks), reserved: new Map(reserved.map((r) => [r.product_id, Number(r.qty)])) };
+  const { rows: weeks } = await db.query(
+    `WITH anchor AS (SELECT LEAST($1::date, COALESCE((SELECT max(order_date) FROM erp_order_lines), $1::date)) AS d)
+     SELECT product_id, floor((anchor.d - order_date) / 7)::int AS wk, SUM(qty) AS qty
+       FROM erp_order_lines, anchor
+      WHERE product_id IS NOT NULL AND order_date <= anchor.d AND order_date > anchor.d - ($2::int * 7)
+      GROUP BY product_id, wk`,
+    [today, MODEL.weeks]
+  );
+  return { weekly: bucketWeeks(weeks) };
 }

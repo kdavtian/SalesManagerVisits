@@ -6,7 +6,7 @@ import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
 import { loadBlankOrders, previousDebts } from "../orderBlankData.js";
 import { canChangeSignedOrder, SIGNED_ORDER_ERROR } from "../signedActs.js";
-import { outOfStockProducts, outOfStockResponse, shortStockProducts } from "../orderStock.js";
+import { outOfStockProducts, outOfStockResponse, shortStockProducts, lockAndCheckStock } from "../orderStock.js";
 import { DELIVERED_AT } from "../appStock.js";
 import { VAGHINAK_CHECKED_SQL } from "../vaghinakChecked.js";
 import { isDone, recordOrder, unrecordOrder } from "../orderRecord.js";
@@ -1184,6 +1184,18 @@ ordersRouter.patch("/:id", async (req, res) => {
   let updated;
   try {
     await client.query("BEGIN");
+    if (enteringWarehouseQueue) {
+      // the check above again, now with the products locked: two confirmations of the last pieces cannot both pass (orderStock.js)
+      const shortNow = await lockAndCheckStock(client, order.id, { lines: nextLines });
+      if (shortNow.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `Not enough stock to confirm: ${shortNow.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`,
+          code: "short_stock",
+          products: shortNow,
+        });
+      }
+    }
     // Guarding on the status/approval_status this handler's checks above
     // were computed against closes the race with a second concurrent PATCH
     // (or a discount approve/reject) landing between our initial read and
@@ -1810,9 +1822,10 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   }
   // A correction of an order that already holds its pieces (confirmed / packed) may not add pieces the shelf does not have (owner,
   // 2026-11-11: confirming checks the real stock; a correction must not get around it). A quantity kept or lowered always passes.
-  if (order.status === "confirmed" || order.status === "packed_stock_out") {
-    const had = new Map();
-    for (const b of before) had.set(b.product_id, (had.get(b.product_id) ?? 0) + Number(b.quantity));
+  const holdsStock = order.status === "confirmed" || order.status === "packed_stock_out";
+  const had = new Map();
+  for (const b of before) had.set(b.product_id, (had.get(b.product_id) ?? 0) + Number(b.quantity));
+  if (holdsStock) {
     const short = (await shortStockProducts(order.id, { lines })).filter((p) => p.wanted > (had.get(p.id) ?? 0));
     if (short.length) {
       return res.status(409).json({ error: `Not enough stock: ${short.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`, code: "short_stock", products: short });
@@ -1833,6 +1846,14 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   let updated;
   try {
     await client.query("BEGIN");
+    if (holdsStock) {
+      // the check above again with the products locked (orderStock.js lockAndCheckStock)
+      const shortNow = (await lockAndCheckStock(client, order.id, { lines })).filter((p) => p.wanted > (had.get(p.id) ?? 0));
+      if (shortNow.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: `Not enough stock: ${shortNow.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`, code: "short_stock", products: shortNow });
+      }
+    }
     const { rows: up } = await client.query(
       `UPDATE orders SET total_amd = $2, discount_pct = $3, discount_amd = $4, payment_method = $5, payment_term_days = $6, corrected_at = now(), updated_at = now(),
               downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END

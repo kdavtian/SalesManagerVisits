@@ -405,8 +405,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
       // correction an admin made by hand. No extract currently sends this
       // field, so this is a no-op (prodNetCosts is all null) until one does.
       await client.query(
-        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, synced_at)
-         SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, now()
+        `INSERT INTO products (erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, synced_at, stock_changed_at)
+         SELECT erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd, now(), CASE WHEN stock_qty IS NOT NULL THEN now() END
          FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::numeric[], $6::text[], $7::numeric[], $8::numeric[], $9::numeric[], $10::int[], $11::numeric[], $12::numeric[])
            AS t(erp_product_id, name, brand, unit, unit_price_amd, family, bronze_price_amd, silver_price_amd, gold_price_amd, stock_qty, landing_cost_amd, net_cost_amd)
          WHERE NOT (erp_product_id = ANY($13::text[]))
@@ -416,6 +416,8 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
            bronze_price_amd = EXCLUDED.bronze_price_amd, silver_price_amd = EXCLUDED.silver_price_amd,
            gold_price_amd = EXCLUDED.gold_price_amd, stock_qty = COALESCE(EXCLUDED.stock_qty, products.stock_qty),
            net_cost_amd = COALESCE(EXCLUDED.net_cost_amd, products.net_cost_amd),
+           -- stock_changed_at: only when this sync really changes the quantity (migration 223; the step below sees no change once this one wrote it)
+           stock_changed_at = CASE WHEN EXCLUDED.stock_qty IS NOT NULL AND EXCLUDED.stock_qty IS DISTINCT FROM products.stock_qty THEN now() ELSE products.stock_changed_at END,
            synced_at = now(), updated_at = now()
          WHERE products.manually_edited_at IS NULL`,
         [prodErpIds, prodNames, prodBrands, prodUnits, prodPrices, prodFamilies, prodBronzePrices, prodSilverPrices, prodGoldPrices, prodStockQtys, prodLandingCosts, prodNetCosts, prodErpIds.filter((_, i) => prodActives[i] === false)]
@@ -480,7 +482,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
       // showing the quantity of that day while Excel moved on, and the stock count compared the warehouse with a stale number. The workbook is
       // the trusted source; a blank cell (an older bot without stock) never wipes a quantity. synced_at is the moment of this stock.
       await client.query(
-        `UPDATE products p SET stock_qty = t.stock_qty, synced_at = now()
+        `UPDATE products p SET stock_qty = t.stock_qty, synced_at = now(), stock_changed_at = now()
          FROM unnest($1::text[], $2::int[]) AS t(erp_product_id, stock_qty)
          WHERE p.erp_product_id = t.erp_product_id AND t.stock_qty IS NOT NULL AND p.stock_qty IS DISTINCT FROM t.stock_qty`,
         [prodErpIds, prodStockQtys]

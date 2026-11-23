@@ -333,8 +333,13 @@ export async function closeDay(db, day, userId = null, evidence = {}) {
   await savePdf(db, day).catch((err) => console.error("Stock count PDF failed:", err.message));
   const { rows: bosses } = await db.query("SELECT id FROM users WHERE role IN ('ceo', 'admin') AND status = 'active'");
   const lines = diffs.slice(0, 5).map((d) => `${d.name}${d.size ? ` ${d.size}` : ""} ${signed(d.counted_qty - d.expected_qty)}`);
+  // the month's last working day: what is left is NOT carried to a next day (a new month plans every product again) -- say so, the month's
+  // count stays incomplete for those products (review 2026-11-23: the message said "moved to the next day" here too)
+  const monthDays = n.left_over ? await workingDaysOfMonth(db, monthOf(day)).catch(() => []) : [];
+  const lastOfMonth = monthDays.length > 0 && monthDays[monthDays.length - 1] === day;
+  const leftText = !n.left_over ? "" : lastOfMonth ? ` · ${n.left_over}-ը այս ամիս ՉԻ հաշվվել (ամսվա վերջին աշխատանքային օրն էր)` : ` · ${n.left_over}-ը տեղափոխվեց հաջորդ օր (օրը չի ավարտվել)`;
   const body = [
-    `Հաշվվել է ${n.counted}/${n.due}${n.left_over ? ` · ${n.left_over}-ը տեղափոխվեց հաջորդ օր (օրը չի ավարտվել)` : ""}`,
+    `Հաշվվել է ${n.counted}/${n.due}${leftText}`,
     diffs.length ? `Տարբերություններ՝ ${diffs.length}. ${lines.join(", ")}${diffs.length > 5 ? "…" : ""}` : "Տարբերություններ չկան",
   ].join("\n");
   // every accountant is told the result, with or without differences (CEO / admin below: only when something is wrong)

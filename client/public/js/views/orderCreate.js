@@ -60,9 +60,10 @@ function defaultQtyForUnit(unit) {
 function stockWarning(product, requestedQty) {
   const stock = product.stock_qty;
   if (stock === null || stock === undefined) return null;
-  if (stock <= 0) return { level: "danger", text: t("out_of_stock") };
-  // available = stock minus what other open orders already promised (server: available_qty)
+  // available = FREE stock: the Excel stock minus what other orders hold, plus returns and purchases back on the shelf (server: available_qty,
+  // appStock.js freeStockSql) -- the same number the server refuses on, so the screen never offers what saving would reject
   const available = product.available_qty ?? stock;
+  if (available <= 0) return { level: "danger", text: t("out_of_stock") };
   if (requestedQty > available) {
     const reserved = Number(product.reserved_qty) || 0;
     const base = `${t("only_n_available_prefix")}${Math.max(available, 0)}${t("only_n_available_suffix")}`;
@@ -87,12 +88,17 @@ async function openHoldingOrders(productId) {
   const body = overlay.querySelector(".info-popup-body");
   try {
     const rows = await api.getProductHoldingOrders(productId);
+    // Two groups with their own totals (review 2026-11-23): the orders that HOLD the stock -- their sum is the "already in other orders: N" of
+    // the link -- and the submitted ones that only wait. One mixed list added up to more than the link said.
+    const rowHtml = (r) => `<div class="oc-holding-row"><span><strong>${escapeHtml(r.order_code || t("holding_orders_other_rep"))}</strong>${r.customer_name ? `<span class="muted"> · ${escapeHtml(r.customer_name)}</span>` : ""}<span class="muted oc-holding-sub">${escapeHtml(t(`order_status_${r.status}`))} · ${escapeHtml(formatDateDMY(r.since))}</span></span><strong>${Number(r.quantity)}</strong></div>`;
+    const group = (title, list) =>
+      list.length
+        ? `<h3 class="oc-holding-group">${escapeHtml(title)} <span class="muted">${list.reduce((n, r) => n + Number(r.quantity), 0)} ${escapeHtml(t("warehouse_pcs_suffix"))}</span></h3><div class="oc-holding-list">${list.map(rowHtml).join("")}</div>`
+        : "";
+    const waiting = rows.filter((r) => r.status === "submitted");
+    const holding = rows.filter((r) => r.status !== "submitted");
     body.innerHTML = `<h2>${escapeHtml(t("holding_orders_title"))}</h2><p class="muted">${escapeHtml(t("holding_orders_hint"))}</p>${
-      rows.length
-        ? `<div class="oc-holding-list">${rows
-            .map((r) => `<div class="oc-holding-row"><span><strong>${escapeHtml(r.order_code || t("holding_orders_other_rep"))}</strong>${r.customer_name ? `<span class="muted"> · ${escapeHtml(r.customer_name)}</span>` : ""}<span class="muted oc-holding-sub">${escapeHtml(t(`order_status_${r.status}`))} · ${escapeHtml(formatDateDMY(r.since))}</span></span><strong>${Number(r.quantity)}</strong></div>`)
-            .join("")}</div>`
-        : `<p class="muted">${escapeHtml(t("holding_orders_none"))}</p>`
+      rows.length ? `${group(t("holding_orders_held_title"), holding)}${group(t("holding_orders_submitted_title"), waiting)}` : `<p class="muted">${escapeHtml(t("holding_orders_none"))}</p>`
     }`;
   } catch (err) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -451,7 +457,9 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     const qty = line?.quantity ?? 0;
     const price = line?.unit_price_amd ?? basePrice(product);
     const warning = stockWarning(product, qty || defaultQtyForUnit(product.unit));
-    const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && product.stock_qty <= 0;
+    // out of stock = no FREE stock (server outOfStockProducts refuses the same; review 2026-11-23: the raw Excel number let the rep build an
+    // order the server then refused on save)
+    const outOfStock = product.stock_qty !== null && product.stock_qty !== undefined && (product.available_qty ?? product.stock_qty) <= 0;
     const usual = view.chip === "frequent" && !searchQuery.trim() ? usualItemOf(product.id) : null;
     // Two lines: the name, then brand / size on the left and the price on the right. The Add button or stepper
     // sits alone on the right, so the price never crowds it.
