@@ -2,14 +2,15 @@
 //   me          the cash in MY hands, my hand-overs still waiting for their receiver, my open shortfall, whom I hand to next
 //   to_confirm  hand-overs waiting for ME to count (admin and the CEO: everybody's, they may decide any)
 //   company     (everybody who sees all payments) where the company's cash is right now, by place and by person; what reached the
-//               office today; what the Excel does not have yet; open shortfalls; bank lines to check
-// Places are the ones of shared/cashPlace.js. "In hands" follows cashCustody.js, so the sums equal the hand-over lists.
+//               office today; what is not in the Excel after the grace days; open shortfalls; bank lines to check
+// Places are the ones of shared/cashPlace.js; "in hands" follows cashCustody.js, like the hand-over lists (a payment whose holder
+// was deleted has nobody's list: it shows here as "—", so it is seen). Every number here has a list behind it built from the SAME
+// condition (GET /api/payments?place= / received=today / excel=missing), so a tap never opens other payments than the number counted.
 import { pool } from "../db/pool.js";
 import { CASH_IN_HAND_SQL } from "./cashCustody.js";
-import { CASH_PLACE_JOINS, CASH_PLACE_SQL } from "./cashPlaceSql.js";
-import { moneyBoard } from "./payments2/board.js";
+import { CASH_PLACE_JOINS, CASH_PLACE_SQL, RECEIVED_TODAY_SQL } from "./cashPlaceSql.js";
+import { EXCEL_MISSING_SQL } from "./paymentExcelMatch.js";
 import { decidesAnyHandoff, seesAllPayments, validHandoffRecipientRoles, canRecordBankPayments } from "../shared/roles.js";
-import { yerevanToday } from "../utils/yerevanDate.js";
 
 const n = (v) => Math.round(Number(v) || 0);
 
@@ -58,14 +59,19 @@ export async function cashOverview(user, db = pool) {
   };
   if (!seesAllPayments(user.role)) return out;
 
-  const [{ rows: places }, board] = await Promise.all([
+  const sumOf = (sql) => db.query(`SELECT COALESCE(SUM(p.amount_amd), 0)::float8 AS amd, count(*)::int AS n FROM payments p WHERE ${sql}`);
+  const [{ rows: places }, received, missing, shortOpen, toCheck] = await Promise.all([
     db.query(
       `SELECT ${CASH_PLACE_SQL} AS place, cph.id AS user_id, cph.name, SUM(p.amount_amd)::float8 AS amd, count(*)::int AS n
        FROM payments p ${CASH_PLACE_JOINS}
        WHERE ${CASH_IN_HAND_SQL} AND ${CASH_PLACE_SQL} IN ('with_rep', 'on_the_way', 'with_director')
        GROUP BY 1, 2, 3 ORDER BY amd DESC`
     ),
-    moneyBoard(db, yerevanToday()),
+    sumOf(RECEIVED_TODAY_SQL),
+    sumOf(EXCEL_MISSING_SQL),
+    db.query("SELECT COALESCE(SUM(amount_amd), 0)::float8 AS amd, count(*)::int AS n FROM cash_shortfalls WHERE status = 'open'"),
+    // bank lines to check: only for the people who work with them
+    canRecordBankPayments(user.role) ? db.query("SELECT count(*)::int AS n FROM bank_statement_lines WHERE pay_state = 'unspecified'") : { rows: [{ n: null }] },
   ]);
   const of = (place) => {
     const rows = places.filter((r) => r.place === place);
@@ -75,11 +81,10 @@ export async function cashOverview(user, db = pool) {
     with_rep: of("with_rep"),
     on_the_way: of("on_the_way"),
     with_director: of("with_director"),
-    office_today_amd: board.received.amd,
-    not_in_excel: board.not_in_excel,
-    shortfalls_open: { amd: board.shortfalls.open_amd, n: board.shortfalls.open_n },
-    // bank lines to check: only for the people who work with them
-    to_check: canRecordBankPayments(user.role) ? board.to_check : null,
+    office_today: { amd: n(received.rows[0].amd), n: received.rows[0].n },
+    not_in_excel: { amd: n(missing.rows[0].amd), n: missing.rows[0].n },
+    shortfalls_open: { amd: n(shortOpen.rows[0].amd), n: shortOpen.rows[0].n },
+    to_check: toCheck.rows[0].n,
   };
   return out;
 }

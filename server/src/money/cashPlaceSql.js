@@ -29,3 +29,13 @@ export function addCashPlace(row) {
   row.cash_place = cashPlace(row);
   return row;
 }
+
+// "Reached the office today": a person received this payment's cash today (Yerevan) -- the accountant confirmed its hand-over, or
+// somebody approved it directly. NOT the Excel's own approval (the notes did not move). Each payment counts once, whatever happened
+// to it twice. ONE condition for the Cash screen's number and the list a tap opens (GET /api/payments?received=today).
+const TODAY_SQL = (col) => `(${col} AT TIME ZONE 'Asia/Yerevan')::date = (now() AT TIME ZONE 'Asia/Yerevan')::date`;
+export const RECEIVED_TODAY_SQL = `(p.status = 'approved' AND (
+  EXISTS (SELECT 1 FROM cash_handoff_items ri JOIN cash_handoffs rh ON rh.id = ri.handoff_id JOIN users ru ON ru.id = rh.to_user_id
+          WHERE ri.payment_id = p.id AND rh.status = 'confirmed' AND ru.role = 'accountant' AND ${TODAY_SQL("rh.confirmed_at")})
+  OR EXISTS (SELECT 1 FROM payment_status_history rs WHERE rs.payment_id = p.id AND rs.new_status = 'approved' AND rs.reason = 'Approved'
+             AND ${TODAY_SQL("rs.changed_at")})))`;

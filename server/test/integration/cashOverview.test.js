@@ -34,7 +34,7 @@ async function seed(amount, { holder = "sales_manager", status = "pending", appr
   return trackPayment(rows[0].id);
 }
 const overview = async (who) => (await apiRequest("/api/cash/overview", { cookie: cookies[who] })).data;
-const mineOf = (o, place) => o.company[place].people.find((p) => p.name.startsWith("Overview"))?.amd ?? 0;
+const mineOf = (c, place) => c[place].people.find((p) => p.name === users.sales_manager.name)?.amd ?? 0;
 
 test("the rep sees his own cash and whom it goes to; the company part is for the people who see all payments; the warehouse gets 403", async () => {
   const a = await seed(11000);
@@ -67,8 +67,23 @@ test("the rep sees his own cash and whom it goes to; the company part is for the
   assert.equal(after.me.amd, 11000, "counted: now in the director's hands");
   assert.ok(after.company.with_director.people.some((p) => p.name === users.sales_director.name && p.amd === 11000));
   assert.ok(!after.to_confirm.some((x) => x.id === h.data.id));
-  assert.equal(mineOf(after, "with_rep") >= 0, true);
-  void b;
+  // received at the office today: only what a person received today. The Excel approving a payment moves no notes: it stays
+  // "with the rep" and is NOT counted as received; the accountant's confirmed hand-over is, once.
+  const before = (await overview("admin")).company;
+  const excelOnly = await seed(70000, { status: "approved", fromErp: true });
+  await pool.query("INSERT INTO payment_status_history (payment_id, old_status, new_status, reason) VALUES ($1, 'pending', 'approved', 'From ERP (payment found in the workbook)')", [excelOnly]);
+  let now = (await overview("admin")).company;
+  assert.equal(now.office_today.amd, before.office_today.amd, "the Excel's approval is not a receipt");
+  assert.equal(mineOf(now, "with_rep") - mineOf(before, "with_rep"), 70000);
+  const h2 = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager, body: { to_user_id: users.accountant.id, payment_ids: [b] } });
+  trackHandoff(h2.data.id);
+  await apiRequest(`/api/cash-handoffs/${h2.data.id}/confirm`, { method: "POST", cookie: cookies.accountant, body: {} });
+  now = (await overview("admin")).company;
+  assert.equal(now.office_today.amd - before.office_today.amd, 12000);
+  assert.equal(now.office_today.n - before.office_today.n, 1);
+  // ... and the list behind the number is exactly those payments
+  const list = await apiRequest(`/api/payments?customer_id=${customer.id}&received=today`, { cookie: cookies.admin });
+  assert.deepEqual(list.data.rows.map((r) => r.id), [b]);
 });
 
 test("the payments list filters by place, and a rep only ever gets his own", async () => {
@@ -93,6 +108,13 @@ test("the SQL place and the shared rule agree on every payment of this file, in 
   await seed(41000, { status: "approved", fromErp: true }); // the Excel approved it: still with the rep
   await seed(42000, { holder: "ceo", status: "approved", approvedBy: "ceo" }); // taken directly
   await seed(43000, { holder: "admin" });
+  const waiting = await seed(46000); // inside a hand-over nobody confirmed yet
+  const h = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager, body: { to_user_id: users.sales_director.id, payment_ids: [waiting] } });
+  trackHandoff(h.data.id);
+  const reopened = await seed(47000, { holder: "accountant" }); // pending again, but the notes are with the accountant
+  const orphan = await seed(48000); // its holder was deleted
+  await pool.query("UPDATE payments SET current_holder_id = NULL WHERE id = $1", [orphan]);
+  void reopened;
   const archive = await seed(45000, { status: "approved", fromErp: true }); // the Excel approved it before the cut-over: the archive
   await pool.query("UPDATE payments SET payment_date = (SELECT payments_cutover FROM app_settings WHERE id = 1) - interval '20 days' WHERE id = $1", [archive]);
   const bad = await seed(44000);
@@ -104,5 +126,7 @@ test("the SQL place and the shared rule agree on every payment of this file, in 
   );
   assert.ok(rows.length >= 8);
   for (const r of rows) assert.equal(r.sql_place, cashPlace(r).place, `payment ${r.id}: ${JSON.stringify(r)}`);
-  assert.deepEqual([...new Set(rows.map((r) => r.sql_place))].sort(), ["office", "rejected", "with_director", "with_rep"]);
+  assert.deepEqual([...new Set(rows.map((r) => r.sql_place))].sort(), ["office", "on_the_way", "rejected", "with_director", "with_rep"]);
+  assert.equal(rows.find((r) => r.id === orphan).sql_place, "with_rep");
+  assert.equal(rows.find((r) => r.id === reopened).sql_place, "office");
 });

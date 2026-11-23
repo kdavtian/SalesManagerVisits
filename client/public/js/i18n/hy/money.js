@@ -111,7 +111,7 @@ export const hyMoney = {
     cash_sheet_recorded_auto: "Գտնվել է Excel-ում",
     cash_sheet_not_recorded: "Դեռ Excel-ում չէ",
     cash_sheet_excel: "Excel ֆայլ",
-    cash_now_not_in_excel: "Excel-ում դեռ չկա",
+    cash_now_not_in_excel: "3 օր անց Excel-ում չկա",
     cash_now_office: "Գրասենյակում",
     cash_now_office_today: "Այսօր ստացվել է գրասենյակում",
     cash_now_on_the_way: "Հանձնված, դեռ չհաշված",

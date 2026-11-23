@@ -8,3 +8,6 @@ export const IN_EXCEL_SQL = `(p.approved_from_erp OR (p.erp_customer_id_snapshot
     SELECT 1 FROM erp_cashflow_lines cf WHERE cf.erp_customer_id = p.erp_customer_id_snapshot AND cf.amount_amd > 0
       AND ROUND(cf.amount_amd) = ROUND(p.amount_amd) AND cf.cashflow_date BETWEEN ${PAYMENT_DAY} - ${EXCEL_MATCH_DAYS} AND ${PAYMENT_DAY} + ${EXCEL_MATCH_DAYS})))`;
 export const DAYS_OLD_SQL = `((now() AT TIME ZONE 'Asia/Yerevan')::date - ${PAYMENT_DAY})`;
+// "Not in Excel": recorded in the app, older than the grace days, and the workbook still shows nothing like it. ONE condition for the
+// Payments list's filter and the Cash screen's number, so the number and the list a tap opens are the same payments.
+export const EXCEL_MISSING_SQL = `(p.status <> 'rejected' AND p.erp_customer_id_snapshot IS NOT NULL AND ${DAYS_OLD_SQL} >= ${EXCEL_GRACE_DAYS} AND NOT ${IN_EXCEL_SQL})`;

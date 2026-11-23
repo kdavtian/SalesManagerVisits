@@ -193,6 +193,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
   let confirmationFilter = CONFIRMATIONS.includes(initialQuery?.get("confirmation")) ? initialQuery.get("confirmation") : "";
   // where the cash is now (a tile of the Cash screen opens the list on it); cleared with its chip
   let placeFilter = CASH_PLACES.includes(initialQuery?.get("place")) ? initialQuery.get("place") : "";
+  let receivedToday = initialQuery?.get("received") === "today"; // the Cash screen's "received at the office today"
   // Only ever arrives via a Reports drill-down (no on-page control sets
   // this) -- see PERIOD_LABEL_KEY/periodFilterParams above.
   let periodFilter = PERIOD_KEYS.includes(initialQuery?.get("period")) ? initialQuery.get("period") : "";
@@ -247,6 +248,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (managerFilter) params.sales_manager_id = managerFilter;
     if (confirmationFilter) params.confirmation = confirmationFilter;
     if (placeFilter) params.place = placeFilter;
+    if (receivedToday) params.received = "today";
     if (activeFilter === "pending" || activeFilter === "approved" || activeFilter === "rejected") {
       params.status = activeFilter;
     } else if (activeFilter === "today") {
@@ -286,6 +288,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
     if (periodFilter && activeFilter !== "today" && activeFilter !== "this_month") {
       chips.push({ label: periodKeyLabel(periodFilter), clear: () => (periodFilter = "") });
     }
+    if (receivedToday) chips.push({ label: t("cash_now_office_today"), clear: () => (receivedToday = false) });
     if (placeFilter) chips.push({ label: t(`cash_now_${placeFilter === "office" ? "office" : placeFilter}`), clear: () => (placeFilter = "") });
     if (channelFilter) chips.push({ label: channelFilter, clear: () => (channelFilter = "") });
     if (confirmationFilter) chips.push({ label: t(`pay_conf_${confirmationFilter}`), clear: () => (confirmationFilter = "") });

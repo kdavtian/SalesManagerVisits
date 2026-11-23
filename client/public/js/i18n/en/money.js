@@ -111,7 +111,7 @@ export const enMoney = {
     cash_sheet_recorded_auto: "Found in Excel",
     cash_sheet_not_recorded: "Not in Excel yet",
     cash_sheet_excel: "Excel file",
-    cash_now_not_in_excel: "Not in the Excel yet",
+    cash_now_not_in_excel: "Not in the Excel after 3 days",
     cash_now_office: "At the office",
     cash_now_office_today: "Received at the office today",
     cash_now_on_the_way: "Handed over, not counted yet",

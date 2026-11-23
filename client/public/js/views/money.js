@@ -70,8 +70,8 @@ function companyHtml(c) {
     place("with_rep"),
     place("on_the_way"),
     place("with_director"),
-    rowHtml({ label: t("cash_now_office_today"), amd: c.office_today_amd, href: c.office_today_amd ? "#/payments?status=all&place=office" : "", tone: c.office_today_amd ? "ok" : "zero" }),
-    rowHtml({ label: t("cash_now_not_in_excel"), sub: c.not_in_excel.n ? escapeHtml(fill("cash_turn_payments_n", { n: c.not_in_excel.n })) : "", amd: c.not_in_excel.amd, href: c.not_in_excel.n ? "#/payments?status=excel_missing" : "", tone: c.not_in_excel.amd ? "" : "zero" }),
+    rowHtml({ label: t("cash_now_office_today"), sub: c.office_today.n ? escapeHtml(fill("cash_turn_payments_n", { n: c.office_today.n })) : "", amd: c.office_today.amd, href: c.office_today.n ? "#/payments?status=all&received=today" : "", tone: c.office_today.n ? "ok" : "zero" }),
+    rowHtml({ label: t("cash_now_not_in_excel"), sub: c.not_in_excel.n ? escapeHtml(fill("cash_turn_payments_n", { n: c.not_in_excel.n })) : "", amd: c.not_in_excel.amd, href: c.not_in_excel.n ? "#/payments?status=excel_missing" : "", tone: c.not_in_excel.n ? "" : "zero" }),
   ];
   if (c.shortfalls_open.amd > 0) rows.push(rowHtml({ label: t("cash_now_shortfalls"), amd: c.shortfalls_open.amd, href: "#/cash-handoffs", tone: "danger" }));
   if (c.to_check) rows.push(rowHtml({ label: fill("cash_now_to_check", { n: c.to_check }), href: "#/bank-desk" }));
