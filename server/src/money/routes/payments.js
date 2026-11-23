@@ -11,6 +11,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
 import { approvalBlock, approverTakesCash, getAccountantDirectApproval } from "../cashRoute.js";
+import { CASH_PLACE_SELECT, CASH_PLACE_JOINS, addCashPlace } from "../cashPlaceSql.js";
 import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
 import { EXCEL_GRACE_DAYS, IN_EXCEL_SQL, DAYS_OLD_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
@@ -44,8 +45,8 @@ async function loadPaymentRow(id) {
   const { rows } = await pool.query(
     `SELECT p.*, sm.name AS current_sales_manager_name, cb.name AS created_by_name,
             ab.name AS approved_by_name, rb.name AS rejected_by_name,
-            ch.name AS current_holder_name, ch.role AS holder_role,
-            pending_to.name AS pending_handoff_to_name,
+            ch.name AS current_holder_name,
+            pending_to.name AS pending_handoff_to_name, ${CASH_PLACE_SELECT},
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
             GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
@@ -58,10 +59,11 @@ async function loadPaymentRow(id) {
      LEFT JOIN cash_handoffs h ON h.id = p.pending_handoff_id
      LEFT JOIN users pending_to ON pending_to.id = h.to_user_id
      LEFT JOIN customers c ON c.id = p.customer_id
+     ${CASH_PLACE_JOINS}
      WHERE p.id = $1`,
     [id]
   );
-  return rows[0];
+  return rows[0] ? addCashPlace(rows[0]) : rows[0];
 }
 
 export function canSeePayment(user, payment) {
@@ -458,12 +460,13 @@ paymentsRouter.get("/", async (req, res) => {
 
   params.push(PAGE_SIZE + 1, offsetNum);
   const { rows } = await pool.query(
-    `SELECT p.*, ch.name AS current_holder_name, ch.role AS holder_role, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
+    `SELECT p.*, ch.name AS current_holder_name, ${CASH_PLACE_SELECT}, COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
             ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
             GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
      FROM payments p
      LEFT JOIN customers c ON c.id = p.customer_id
      LEFT JOIN users ch ON ch.id = p.current_holder_id
+     ${CASH_PLACE_JOINS}
      ${where}
      ORDER BY ${orderBy}
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
@@ -471,7 +474,10 @@ paymentsRouter.get("/", async (req, res) => {
   );
   // can_approve: the screen offers Approve only where the server would accept it (cashRoute.js)
   const accountantDirect = await getAccountantDirectApproval();
-  for (const row of rows) row.can_approve = !approvalBlock(row, req.user, { accountantDirect });
+  for (const row of rows) {
+    row.can_approve = !approvalBlock(row, req.user, { accountantDirect });
+    addCashPlace(row); // where the cash is now: the one mark every screen draws
+  }
   res.json({ rows: rows.slice(0, PAGE_SIZE), has_more: rows.length > PAGE_SIZE });
 });
 

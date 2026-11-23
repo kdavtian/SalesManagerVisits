@@ -1,4 +1,6 @@
 import { noVisitSql, isNoVisitChannel, RESERVED_CODES } from "../../shared/salesChannelRules.js";
+import { CASH_PLACE_SELECT, CASH_PLACE_JOINS } from "../../money/cashPlaceSql.js";
+import { cashPlace } from "../../shared/cashPlace.js";
 import { VOICE_NOTES_JSON_SQL } from "../../field/voiceNotes.js";
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
@@ -1300,13 +1302,15 @@ customersRouter.get("/:id/payments-received", async (req, res) => {
   let appScope = "";
   if (req.user.role === "sales_manager") {
     appParams.push(req.user.id);
-    appScope = "AND sales_manager_id = $2";
+    appScope = "AND p.sales_manager_id = $2";
   }
   const app = (
     await pool.query(
-      `SELECT to_char(payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date, amount_amd, status, sales_manager_name_snapshot AS manager_name
-       FROM payments WHERE customer_id = $1 AND status IN ('pending', 'approved') ${appScope}
-       ORDER BY payment_date DESC, id DESC`,
+      `SELECT to_char(p.payment_date AT TIME ZONE 'Asia/Yerevan', 'YYYY-MM-DD') AS date, p.amount_amd, p.status, p.sales_manager_name_snapshot AS manager_name,
+              p.approved_by, p.approved_from_erp, p.pending_handoff_id, ${CASH_PLACE_SELECT}
+       FROM payments p ${CASH_PLACE_JOINS}
+       WHERE p.customer_id = $1 AND p.status IN ('pending', 'approved') ${appScope}
+       ORDER BY p.payment_date DESC, p.id DESC`,
       appParams
     )
   ).rows;
@@ -1321,7 +1325,8 @@ customersRouter.get("/:id/payments-received", async (req, res) => {
       hit.used = true;
       continue;
     }
-    appRows.push({ date: p.date, amount_amd: Number(p.amount_amd), source: "app", status: p.status, manager_name: p.manager_name });
+    // cash_place: where this money is now (shared/cashPlace.js), the same mark as on the Payments screen
+    appRows.push({ date: p.date, amount_amd: Number(p.amount_amd), source: "app", status: p.status, manager_name: p.manager_name, cash_place: cashPlace(p) });
   }
   const rows = [...excel.map((r) => ({ date: r.date, amount_amd: Number(r.amount_amd), source: "excel" })), ...appRows].sort(
     (a, b) => String(b.date).localeCompare(String(a.date))

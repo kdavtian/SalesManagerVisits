@@ -11,6 +11,7 @@
 //   Cash desks each desk, who holds it and the cash on it that still waits to be handed over; admin adds and edits desks.
 // "+ Payment" types a bank / card payment by hand (refused when it looks already recorded, until "separate payment"); "Statement"
 // opens the bank statement upload of Cashflow, which now also records the customer payments.
+import { cashPlaceChipHtml, cashPlaceText } from "../cashPlaceChip.js";
 import { api } from "../api.js";
 import { t } from "../i18n.js";
 import { activateDialog, escapeHtml, formatDateDMY, showToast } from "../util.js";
@@ -279,7 +280,8 @@ export async function renderBankDesk(root, navigate, query) {
     const voided = p.voided_at ? `<span class="badge badge-danger">${t("bd_voided")}</span>` : "";
     const cash = p.method === "cash";
     const where = cash ? `${t("bd_m_cash")}${p.account ? ` · ${escapeHtml(p.account)}` : ""}` : `${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""} · ${escapeHtml(howLabel(p))}`;
-    const state = cash && !p.voided_at ? `<span class="badge ${p.cash_state === "received" ? "badge-success" : "badge-warning"}">${escapeHtml(cashLabel(p))}</span>` : "";
+    // where the cash is now: the one mark of every screen (cash_place); the copy's own state only from an older server
+    const state = !cash || p.voided_at ? "" : p.cash_place ? cashPlaceChipHtml(p.cash_place) : `<span class="badge ${p.cash_state === "received" ? "badge-success" : "badge-warning"}">${escapeHtml(cashLabel(p))}</span>`;
     return `<button type="button" class="bk-line bd-pay ${p.voided_at ? "is-voided" : ""}" data-pay="${p.id}">
       <div class="bk-line-main"><div class="bd-line-text"><strong>${escapeHtml(p.customer)}</strong>
         <div class="muted bk-line-sub">${escapeHtml(formatDateDMY(p.day))} · ${where}</div>
@@ -323,7 +325,7 @@ export async function renderBankDesk(root, navigate, query) {
         <dt>${t("bd_f_date")}</dt><dd>${escapeHtml(formatDateDMY(p.day))}</dd>
         ${
           p.method === "cash"
-            ? `<dt>${t("bd_m_cash")}</dt><dd>${escapeHtml(p.voided_at ? "—" : cashLabel(p))}${p.account ? ` · ${escapeHtml(p.account)}` : ""}</dd>`
+            ? `<dt>${t("bd_m_cash")}</dt><dd>${escapeHtml(p.voided_at ? "—" : p.cash_place ? cashPlaceText(p.cash_place) : cashLabel(p))}${p.account ? ` · ${escapeHtml(p.account)}` : ""}</dd>`
             : `<dt>${t("bd_f_account")}</dt><dd>${escapeHtml(p.account || "—")}${p.method === "card" ? ` · ${t("bd_card")}` : ""}</dd>
         <dt>${t("bd_f_found")}</dt><dd>${escapeHtml(howLabel(p))}</dd>`
         }

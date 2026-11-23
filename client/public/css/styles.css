@@ -1234,6 +1234,9 @@ form [aria-invalid="true"] {
   border-radius: 999px;
   white-space: nowrap;
 }
+/* The "where is the cash now" mark (cashPlaceChip.js) carries a person's name: it never pushes out of its row, a long name is cut with "…"
+   (the payment sheet names the holder in words under the mark). */
+.cash-place-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 
 .badge-success {
   background: rgba(48, 209, 88, 0.15);

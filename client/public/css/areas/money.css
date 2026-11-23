@@ -1789,6 +1789,11 @@ button.bk-line { display: block; width: 100%; text-align: left; font: inherit; c
 .pay-row-chips { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .pay-row-chips .badge, .pay-row .payment-status-badge { white-space: nowrap; }
 .pay-row .payment-row-bottom-line .payment-approve-btn { flex: none; margin-left: auto; min-height: 44px; padding: 0 16px; }
+/* The smallest phones: the "where is the cash" mark (it carries a name) takes its own line, Approve goes under it at the right. */
+@media (max-width: 359px) {
+  .pay-row .payment-row-bottom-line:has(.cash-place-chip) { flex-wrap: wrap; }
+  .pay-row .payment-row-bottom-line:has(.cash-place-chip) .pay-row-chips { flex-basis: 100%; }
+}
 .pay-select-slot { flex: none; display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; margin: -4px -6px -4px -4px; cursor: pointer; }
 .pay-row-selecting { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 /* the day under a direction (or the day itself when sorted by date): count and money at the right */

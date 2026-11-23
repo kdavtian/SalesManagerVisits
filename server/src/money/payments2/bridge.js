@@ -12,18 +12,10 @@
 import { pool } from "../../db/pool.js";
 import { addEvent, getCutover } from "./service.js";
 import { deskMap } from "./desks.js";
+import { cashStateOf } from "../../shared/cashPlace.js";
 
-const COUNTED_ROLES = new Set(["sales_director", "ceo", "operations_director", "admin"]);
-
-export function cashStateFromOld(old) {
-  // approved by a person (also an Excel-approved payment whose notes the accountant then received in a hand-over: approved_by is set)
-  if (old.status === "approved" && (old.approved_by || !old.approved_from_erp)) return "received";
-  if (old.holder_role === "accountant") return "received";
-  // on the office desk (a desk an accountant holds, e.g. the CEO who shares it): the company has it (owner, 2026-11-02)
-  if (old.holder_on_office_desk) return "received";
-  if (COUNTED_ROLES.has(old.holder_role)) return "counted";
-  return "collected";
-}
+// The same rule the screens show (shared/cashPlace.js), in the cash track's three words.
+export const cashStateFromOld = (old) => cashStateOf({ ...old, on_office_desk: old.holder_on_office_desk });
 
 export async function runBridge(db = pool) {
   const cutover = await getCutover(db);
