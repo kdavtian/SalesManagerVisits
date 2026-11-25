@@ -18,15 +18,31 @@ function formatLitersCompact(value) {
   return `${rounded.toLocaleString("en-US")}L`;
 }
 
+// FREE stock of an inventory row (owner, 2026-11-23): what can still be sold -- the Excel stock minus what orders hold, plus returns and
+// purchases back on the shelf and not in the Excel yet (server appStock.js freeStockSql, the same number as the product card and the order
+// screen). Never below 0 (an oversold product shows 0, in the warning colour). null = no stock on record.
+function freeQty(p) {
+  if (p.stock_qty == null) return null;
+  return Math.max(0, Number(p.available_qty ?? p.stock_qty) || 0);
+}
+
 // Right-hand side of an inventory row: "21pcs" alone for a non-liter item
 // (filters, brake pads), "21pcs | 4368L" for an oil where p.unit is a
 // parseable container size ("208L") -- total shelf liters, not per-unit.
 function inventoryQtyLabel(p) {
-  if (p.stock_qty == null) return t("warehouse_stock_unknown");
-  const qtyLabel = `${p.stock_qty} ${t("warehouse_pcs_suffix")}`;
+  const free = freeQty(p);
+  if (free == null) return t("warehouse_stock_unknown");
+  const qtyLabel = `${free} ${t("warehouse_pcs_suffix")}`;
   const perUnitLiters = parseLiters(p.unit);
   if (perUnitLiters == null) return qtyLabel;
-  return `${qtyLabel} | ${formatLitersCompact(perUnitLiters * p.stock_qty)}`;
+  return `${qtyLabel} | ${formatLitersCompact(perUnitLiters * free)}`;
+}
+
+// The Excel number, small, only when it differs from the free stock shown: "Excel 40".
+function excelQtyHtml(p) {
+  const free = freeQty(p);
+  if (free == null || Number(p.stock_qty) === free) return "";
+  return `<span class="inventory-excel-qty">${escapeHtml(t("warehouse_excel_short"))} ${Number(p.stock_qty)}</span>`;
 }
 
 export async function renderWarehouse(root, navigate) {
@@ -71,7 +87,7 @@ export async function renderWarehouse(root, navigate) {
   });
 
   // "To order": out-of-stock / low products with how many pieces to buy to be covered
-  // for 90 days again (server: stockForecast.js computeReorderSuggestion).
+  // lead time + review days + safety stock again (server: stockForecast.js computeReorderSuggestion).
   async function loadReorder() {
     const rows = await api.getReorderSuggestions();
     rows.sort((a, b) => ({ out: 0, critical: 1, low: 2 })[a.urgency] - ({ out: 0, critical: 1, low: 2 })[b.urgency] || compareProducts(a, b));
@@ -93,7 +109,7 @@ export async function renderWarehouse(root, navigate) {
               <div><strong>${escapeHtml(r.name)}</strong><br><span class="muted">${[r.brand, normalizeUnitLabel(r.unit)].filter(Boolean).map(escapeHtml).join(" · ")}</span></div>
               <span class="badge ${cls}">${t(key)}</span>
             </div>
-            <p class="muted" style="margin:6px 0 0">${t("warehouse_reorder_stock")}${labelColon()}${r.stock_qty ?? 0}${r.reserved_qty ? ` (${t("warehouse_reorder_reserved")}${labelColon()}${r.reserved_qty})` : ""}${days}</p>
+            <p class="muted" style="margin:6px 0 0">${t("warehouse_free_stock")}${labelColon()}${Math.max(0, r.free_qty ?? r.stock_qty ?? 0)}${r.submitted_qty ? ` (${t("warehouse_reorder_submitted")}${labelColon()}${r.submitted_qty})` : ""}${days}</p>
             <p style="margin:4px 0 0"><strong>${t("warehouse_reorder_buy")}${labelColon()}${r.suggested_qty} ${t("warehouse_pcs_suffix")}</strong>${
               r.pack_kind === "bottle" && r.pack_size > 1 ? ` <span class="muted">(${r.packs} × ${r.pack_size})</span>` : ""
             }</p>${r.incoming_qty > 0 ? `<p class="muted reorder-incoming" style="margin:4px 0 0">+${r.incoming_qty} ${t("warehouse_pcs_suffix")} ${t("pu_on_the_way")}</p>` : ""}
@@ -420,8 +436,9 @@ export async function renderWarehouse(root, navigate) {
               <span class="inventory-row-name">${escapeHtml(p.name)}</span>
               ${sizeLabel ? `<span class="inventory-row-size-chip">${escapeHtml(sizeLabel)}</span>` : ""}
             </span>
-            <span class="inventory-row-qty ${p.stock_qty == null ? "inventory-row-qty-unknown" : p.stock_qty > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
+            <span class="inventory-row-qty ${freeQty(p) == null ? "inventory-row-qty-unknown" : freeQty(p) > 0 ? "inventory-row-qty-ok" : "inventory-row-qty-zero"}">${inventoryQtyLabel(p)}</span>
           </div>
+          ${excelQtyHtml(p) ? `<div class="inventory-row-excel">${excelQtyHtml(p)}</div>` : ""}
           ${daysLeftRowHtml(p)}
           ${pricesRowHtml(p)}
         </div>`;
@@ -457,7 +474,7 @@ export async function renderWarehouse(root, navigate) {
     };
     const TREND_ARROW = { up: " ↑", down: " ↓" };
     // Days-of-stock-left badge for one product row/variant (see
-    // ../../../server/src/products/stockForecast.js for the model behind
+    // ../../../server/src/products/demandModel.js for the model behind
     // stock_status/days_of_stock/demand_trend). Nothing to show for 'out'
     // (the zero-qty styling already says that) or 'unknown' (no stock_qty
     // on record to estimate from at all).
@@ -486,8 +503,9 @@ export async function renderWarehouse(root, navigate) {
     // toggled on independently) stacked below since they differ per size
     // just like the qty does.
     function variantPillHtml(p) {
-      const qtyKnown = p.stock_qty != null;
-      const zero = qtyKnown && p.stock_qty === 0;
+      const free = freeQty(p);
+      const qtyKnown = free != null;
+      const zero = qtyKnown && free === 0;
       const days = daysLeftBadgeHtml(p);
       const priceLineHtml = priceLines(p)
         .map((line) => `<span class="inventory-variant-pill-price">${line}</span>`)
@@ -496,8 +514,9 @@ export async function renderWarehouse(root, navigate) {
         <span class="inventory-variant-pill product-open-card" data-open-product="${p.id}" role="button" tabindex="0">
           <span class="inventory-variant-pill-top">
             ${p.unit ? `<span class="inventory-variant-pill-size">${escapeHtml(normalizeUnitLabel(p.unit))}</span>` : ""}
-            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${p.stock_qty} ${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
+            <span class="inventory-variant-pill-qty ${zero ? "inventory-variant-pill-qty-zero" : ""}">${qtyKnown ? `${free} ${t("warehouse_pcs_suffix")}` : t("warehouse_stock_unknown")}</span>
           </span>
+          ${excelQtyHtml(p)}
           ${days}
           ${priceLineHtml}
         </span>`;
@@ -544,7 +563,7 @@ export async function renderWarehouse(root, navigate) {
     }
 
     // "570pcs | 7,090L" -- a group's own stock summed across every product
-    // in it (stock_qty null counts as 0, same as the qty each row already
+    // in it (free stock; unknown counts as 0, same as the qty each row already
     // shows individually), liters only appended when at least one product
     // in the group has a parseable per-unit liter size.
     function groupQtyLabel(totals) {
@@ -585,7 +604,7 @@ export async function renderWarehouse(root, navigate) {
     // sizes) and the grand-total row (every currently loaded row), so all
     // four levels of subtotal are computed the exact same way.
     function sumRowIntoTotals(totals, p) {
-      const pcs = p.stock_qty ?? 0;
+      const pcs = freeQty(p) ?? 0; // free stock, the number each row shows
       totals.pcs += pcs;
       const perUnitLiters = parseLiters(p.unit);
       if (perUnitLiters != null) totals.liters += perUnitLiters * pcs;

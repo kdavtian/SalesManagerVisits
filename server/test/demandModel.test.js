@@ -103,3 +103,14 @@ test("the lead time moves the reorder point; the service level moves the safety 
   const same = computeDemandForecast({ ...base, weeklyQty: lumpy, stockQty: 500, leadTimeDays: 45, serviceZ: 1.65 });
   assert.deepEqual(same, a, "the defaults are the model's own 45 days and z = 1.65");
 });
+
+// Review 2026-11-23: an out-of-stock product keeps its demand (To order sizes the purchase from it), dead / never sold stays without one.
+test("out of stock still carries its demand; a dead or never-sold one does not", () => {
+  const f = computeDemandForecast({ ...base, weeklyQty: steady(14), stockQty: 0 });
+  assert.equal(f.status, "out");
+  assert.ok(Math.abs(f.dailyDemand - 2) < 1e-9, "2 a day from the history");
+  assert.equal(f.daysOfStock, 0);
+  assert.equal(f.freeStock, 0);
+  assert.equal(computeDemandForecast({ today, lastSaleDate: "2026-01-01", createdAt: "2025-01-01", weeklyQty: [], stockQty: 0 }).dailyDemand, 0);
+  assert.equal(computeDemandForecast({ today, lastSaleDate: null, createdAt: "2025-01-01", weeklyQty: [], stockQty: 0 }).dailyDemand, null);
+});

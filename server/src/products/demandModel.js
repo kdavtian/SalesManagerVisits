@@ -106,16 +106,20 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
   const none = { dailyDemand: null, daysOfStock: null, trend: null, method: null, safetyStock: null, reorderPoint: null, freeStock: null, daysToReorder: null, variability: null };
   if (stockQty == null) return { status: "unknown", ...none };
   const stock = Number(stockQty);
-  if (stock <= 0) return { status: "out", ...none, daysOfStock: 0, freeStock: 0 };
+  // Out of stock still gets its demand from the sales history (review 2026-11-23): To order needs it to size the purchase. It used to stop here
+  // and To order fell back to a plain 90-day average, which bought nothing for a product whose last sale was 3-6 months ago.
+  const out = stock <= 0;
+  const outOf = (extra = {}) => ({ status: "out", ...none, daysOfStock: 0, freeStock: 0, ...extra });
 
   const series = Array.from({ length: MODEL.weeks }, (_, i) => Math.max(0, Number(weeklyQty[i]) || 0));
   const anySale = series.some((x) => x > 0);
   if (!lastSaleDate && !anySale) {
     const age = createdAt ? daysBetween(createdAt, today) : Infinity;
+    if (out) return outOf();
     return age > MODEL.newProductGraceDays ? { status: "dead", ...none, dailyDemand: 0 } : { status: "new", ...none };
   }
-  if (lastSaleDate && daysBetween(lastSaleDate, today) > MODEL.deadAfterDays) return { status: "dead", ...none, dailyDemand: 0 };
-  if (!anySale) return { status: "slow", ...none, dailyDemand: 0 };
+  if (lastSaleDate && daysBetween(lastSaleDate, today) > MODEL.deadAfterDays) return out ? outOf({ dailyDemand: 0 }) : { status: "dead", ...none, dailyDemand: 0 };
+  if (!anySale) return out ? outOf({ dailyDemand: 0 }) : { status: "slow", ...none, dailyDemand: 0 };
 
   // Only the weeks since the product started selling count (weeks before its first sale are not weeks of "no demand", the product was not
   // there), but never fewer than a quarter: one sale a few days ago must not read as steady daily demand.
@@ -128,7 +132,7 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
   const { mean, sd } = weightedStats(clean);
   const weekly = intermittent ? crostonWeekly(clean) : mean;
   const dailyDemand = weekly / 7;
-  if (!(dailyDemand > 0)) return { status: "slow", ...none, dailyDemand: 0 };
+  if (!(dailyDemand > 0)) return out ? outOf({ dailyDemand: 0 }) : { status: "slow", ...none, dailyDemand: 0 };
 
   const sdDaily = sd / Math.sqrt(7);
   const safetyStock = Math.max(0, Math.ceil(serviceZ * sdDaily * Math.sqrt(leadTimeDays) - 1e-9));
@@ -150,7 +154,8 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
   const variability = intermittent ? "Z" : cv < 0.5 ? "X" : cv < 1 ? "Y" : "Z"; // XYZ: steady, variable, erratic
 
   let status;
-  if (freeStock <= reorderPoint) status = "critical";
+  if (out) status = "out";
+  else if (freeStock <= reorderPoint) status = "critical";
   else if (freeStock <= dailyDemand * (leadTimeDays + MODEL.reviewDays) + safetyStock) status = "low";
   else status = "ok";
 

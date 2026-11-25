@@ -22,7 +22,8 @@ import { displayNetCost } from "../discountPolicy.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
-import { HOLDS_STOCK_SQL, SUBMITTED_SQL } from "../appStock.js";
+import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
+import { MODEL } from "../../products/demandModel.js";
 
 
 export const warehouseRouter = Router();
@@ -54,13 +55,16 @@ warehouseRouter.get("/home", async (req, res) => {
   const [{ list }, count, { rows: shortage }, { rows: [unrouted] }, { rows: [stops] }, { rows: [stale] }, { rows: [tasks] }, { rows: [returns] }] = await Promise.all([
     orderWaiting(),
     stockCountToday(pool, today).catch((err) => (console.error("Stock count numbers failed:", err.message), null)),
+    // confirmed orders to pack against what is on the SHELF (appStock.js APP_STOCK_SQL: the Excel stock minus what was packed out or delivered
+    // and is not in the Excel yet, plus returns and purchases back on the shelf) -- the raw Excel number still counted goods already gone
     pool.query(
-      `SELECT oi.product_name, oi.brand, SUM(oi.quantity)::int AS need, p.stock_qty AS have, COUNT(DISTINCT oi.order_id)::int AS orders
-       FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
-       WHERE o.status = 'confirmed' AND p.stock_qty IS NOT NULL
-       GROUP BY oi.product_id, oi.product_name, oi.brand, p.stock_qty
-       HAVING SUM(oi.quantity) > p.stock_qty
-       ORDER BY SUM(oi.quantity) - p.stock_qty DESC`
+      `SELECT x.product_name, x.brand, x.need, x.have, x.orders FROM (
+         SELECT oi.product_name, oi.brand, SUM(oi.quantity)::int AS need, ${APP_STOCK_SQL}::int AS have, COUNT(DISTINCT oi.order_id)::int AS orders
+         FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id
+         WHERE o.status = 'confirmed' AND o.cancelled_at IS NULL AND p.stock_qty IS NOT NULL
+         GROUP BY p.id, oi.product_name, oi.brand) x
+       WHERE x.need > x.have
+       ORDER BY x.need - x.have DESC`
     ),
     pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
     pool.query(
@@ -95,15 +99,16 @@ warehouseRouter.get("/home", async (req, res) => {
 // right now", not one order at a time.
 warehouseRouter.get("/pick-list", async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT oi.product_id, oi.product_name, oi.brand, p.unit AS size, p.family,
+    `SELECT oi.product_id, oi.product_name, oi.brand, pr.unit AS size, pr.family,
             SUM(oi.quantity)::int AS total_quantity,
             COUNT(DISTINCT oi.order_id)::int AS order_count,
-            p.stock_qty
+            -- on the shelf now (appStock.js APP_STOCK_SQL), not the raw Excel number: what the WM can actually pick
+            (SELECT ${APP_STOCK_SQL} FROM products p WHERE p.id = oi.product_id)::int AS stock_qty
      FROM order_items oi
      JOIN orders o ON o.id = oi.order_id
-     LEFT JOIN products p ON p.id = oi.product_id
-     WHERE o.status = 'confirmed'
-     GROUP BY oi.product_id, oi.product_name, oi.brand, p.unit, p.family, p.stock_qty
+     LEFT JOIN products pr ON pr.id = oi.product_id
+     WHERE o.status = 'confirmed' AND o.cancelled_at IS NULL
+     GROUP BY oi.product_id, oi.product_name, oi.brand, pr.unit, pr.family
      ORDER BY oi.brand NULLS LAST, oi.product_name`
   );
   res.json(rows);
@@ -160,7 +165,7 @@ warehouseRouter.get("/packed-list", async (req, res) => {
 // we have" so a WM can sanity-check before flagging a stock issue.
 //
 // Each row is also annotated with a "days of stock left" estimate (see
-// ../stockForecast.js for the model) built from the product's real ERP
+// ../../products/demandModel.js for the model) built from the product's real ERP
 // sales history in erp_order_lines -- the actual invoiced sales record,
 // not just in-app draft orders, which only cover a slice of real demand.
 // stock_status buckets that into 'out' | 'dead' | 'new' | 'slow' |
@@ -206,7 +211,9 @@ warehouseRouter.get("/inventory", async (req, res) => {
   // (e.g. "pc", "set") that doesn't end in a number+"L" -- avoided by
   // just ordering on the raw text.
   const { rows } = await pool.query(
-    `WITH demand AS (
+    `WITH sel AS (SELECT p.id FROM products p ${where}),
+     ${stockFigureCtes("sel")},
+     demand AS (
        SELECT product_id,
               SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 30) AS qty_30d,
               SUM(qty) FILTER (WHERE order_date >= $${todayParamIndex}::date - 90) AS qty_90d,
@@ -218,8 +225,10 @@ warehouseRouter.get("/inventory", async (req, res) => {
      SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.stock_qty, p.bronze_price_amd, p.silver_price_amd,
             COALESCE(NULLIF(p.silver_price_amd, 0), NULLIF(p.bronze_price_amd, 0)) AS wholesale_price_amd,
             p.landing_cost_amd, p.net_cost_amd, p.created_at,
+            ${STOCK_FIGURE_COLUMNS},
             d.qty_30d, d.qty_90d, d.last_sale_date
      FROM products p
+     ${STOCK_FIGURE_JOINS}
      LEFT JOIN demand d ON d.product_id = p.erp_product_id
      ${where}
      ORDER BY p.brand NULLS LAST, p.family NULLS LAST, p.name`,
@@ -242,20 +251,23 @@ warehouseRouter.get("/inventory", async (req, res) => {
   const annotated = [];
   // the company's demand model (products/demandModel.js; the method is on the Products and Documents pages): weighted weekly sales,
   // outliers damped, lumpy sales by Croston, safety stock and reorder point, stock already promised to open orders left out
-  const [{ weekly, reserved }, demandSettings] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool)]);
+  // Owner, 2026-11-23: the list shows FREE stock (appStock.js freeStockSql: what can still be sold), the Excel number beside it. The days-left
+  // model starts from the same free stock and, being planning, also leaves out what submitted orders already want.
+  const [{ weekly }, demandSettings] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool)]);
   for (const row of rows) {
+    row.available_qty = row.stock_qty == null ? null : Number(row.stock_qty) - row.held_qty + row.back_on_shelf_qty;
     const forecast = computeDemandForecast({
       leadTimeDays: demandSettings.leadTimeDays,
       serviceZ: demandSettings.serviceZ,
       weeklyQty: weekly.get(row.erp_product_id) ?? [],
-      stockQty: row.stock_qty,
-      reservedQty: reserved.get(row.id) ?? 0,
+      stockQty: row.available_qty,
+      reservedQty: row.submitted_qty,
       lastSaleDate: row.last_sale_date,
       createdAt: row.created_at,
       today,
     });
     if (bucketMatches && !bucketMatches(forecast.status)) continue;
-    const { qty_30d, qty_90d, last_sale_date, erp_product_id, ...rest } = row;
+    const { qty_30d, qty_90d, last_sale_date, erp_product_id, back_on_shelf_qty, ...rest } = row;
     // Net cost per pack at the wholesale price (the workbook's own number is off for packs over 1 L): discountPolicy.js
     if (rest.net_cost_amd != null) rest.net_cost_amd = Math.round(displayNetCost({ ...rest, unit_price_amd: rest.bronze_price_amd }));
     annotated.push({
@@ -281,11 +293,13 @@ warehouseRouter.get("/inventory", async (req, res) => {
 });
 
 // "To order" list for the owner/warehouse: products that are out or running low,
-// with how many pieces to buy to be covered for 90 days again (stockForecast.js).
+// with how many pieces to buy to cover lead time + review days + safety stock again (stockForecast.js computeReorderSuggestion).
 warehouseRouter.get("/reorder-suggestions", async (req, res) => {
   const today = yerevanToday();
   const { rows } = await pool.query(
-    `WITH demand AS (
+    `WITH sel AS (SELECT p.id FROM products p WHERE p.active),
+     ${stockFigureCtes("sel")},
+     demand AS (
        SELECT product_id,
               SUM(qty) FILTER (WHERE order_date >= $1::date - 30) AS qty_30d,
               SUM(qty) FILTER (WHERE order_date >= $1::date - 90) AS qty_90d,
@@ -293,9 +307,8 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
      SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at, d.qty_30d, d.qty_90d, d.last_sale_date,
-            COALESCE((SELECT SUM(oi.quantity) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-                      WHERE oi.product_id = p.id AND (${HOLDS_STOCK_SQL} OR ${SUBMITTED_SQL})), 0)::int AS reserved_qty
-     FROM products p LEFT JOIN demand d ON d.product_id = p.erp_product_id
+            ${STOCK_FIGURE_COLUMNS}
+     FROM products p ${STOCK_FIGURE_JOINS} LEFT JOIN demand d ON d.product_id = p.erp_product_id
      WHERE p.active`,
     [today]
   );
@@ -304,16 +317,20 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
   for (const row of rows) {
     // pieces already Ordered / On the way (Purchases P5, owner 2026-11-20): what is coming is not suggested again
     const coming = incoming.get(row.id) ?? 0;
-    const stockWithComing = (Number(row.stock_qty) || 0) + coming;
-    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.reserved_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    // free stock (appStock.js: Excel − held + back on the shelf) + what is ordered / on the way; submitted orders wanted on top (planning)
+    const free = (Number(row.stock_qty) || 0) - row.held_qty + row.back_on_shelf_qty;
+    const stockWithComing = free + coming;
+    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.submitted_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
     const suggestion = computeReorderSuggestion({
-      stockQty: stockWithComing, reservedQty: row.reserved_qty, status: forecast.status,
+      stockQty: stockWithComing, reservedQty: row.submitted_qty, status: forecast.status,
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
+      // the horizon the model's "low" looks at: lead time + review days, plus its safety stock (stockForecast.js)
+      coverDays: demandSettings.leadTimeDays + MODEL.reviewDays, safetyStock: forecast.safetyStock ?? 0,
     });
     if (!suggestion) continue;
     // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
     const packs = roundToPacks(suggestion.suggested_qty, row);
-    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, reserved_qty: row.reserved_qty, incoming_qty: coming, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
+    out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, free_qty: free, reserved_qty: row.held_qty + row.submitted_qty, submitted_qty: row.submitted_qty, incoming_qty: coming, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
   }
   const rank = { out: 0, critical: 1, low: 2 };
   out.sort((a, b) => rank[a.urgency] - rank[b.urgency] || (a.days_of_stock ?? 0) - (b.days_of_stock ?? 0));

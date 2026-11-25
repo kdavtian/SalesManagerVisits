@@ -278,14 +278,14 @@ export async function receivePurchase(id, body, user, db = pool) {
   }
 }
 
-// Pieces already Ordered / On the way per product: Warehouse > To order subtracts them (owner decision P5)
+// Pieces already Ordered / On the way per product: Warehouse > To order subtracts them (owner decision P5). Purchases RECEIVED but not in the
+// Excel yet are not here any more: they are on the shelf, so every free-stock number adds them (orders/appStock.js ARRIVED_NOT_IN_EXCEL_SQL,
+// review 2026-11-23; counted here as well they would be counted twice).
 export async function incomingQtyByProduct(db = pool) {
   const { rows } = await db.query(
-    `SELECT l.product_id, sum(CASE WHEN i.status = 'arrived' THEN COALESCE(l.received_qty, l.qty) ELSE l.qty END)::float8 AS qty
-       FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id JOIN products p ON p.id = l.product_id
+    `SELECT l.product_id, sum(l.qty)::float8 AS qty
+       FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id
       WHERE i.status IN ('ordered', 'in_transit')
-         -- arrived after the shelf stock was last read from the Excel: on the shelf, not in stock_qty yet (review 2026-11-20)
-         OR (i.status = 'arrived' AND i.arrived_at IS NOT NULL AND i.arrived_at > COALESCE(p.synced_at, '-infinity'::timestamptz) AND i.arrived_at > now() - interval '14 days')
       GROUP BY l.product_id`
   );
   return new Map(rows.map((r) => [r.product_id, r.qty]));

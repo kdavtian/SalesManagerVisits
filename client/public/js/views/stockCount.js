@@ -53,6 +53,7 @@ function whyHtml(item) {
     ${p.packed_out ? line(t("stock_count_why_packed"), `−${p.packed_out}`) : ""}
     ${p.delivered_not_in_excel ? line(t("stock_count_why_delivered"), `−${p.delivered_not_in_excel}`) : ""}
     ${p.returns_back ? line(t("stock_count_why_returns"), `+${p.returns_back}`) : ""}
+    ${p.arrived_not_in_excel ? line(t("stock_count_why_arrived"), `+${p.arrived_not_in_excel}`) : ""}
     ${line(t("stock_count_excel"), item.expected_qty ?? "–")}
   </ul>
   ${p.older_not_in_excel ? `<p class="sc-why-older"><strong>${p.older_not_in_excel}</strong> ${escapeHtml(t("stock_count_why_older"))}</p>` : ""}

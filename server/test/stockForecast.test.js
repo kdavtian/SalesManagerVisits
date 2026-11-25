@@ -92,3 +92,14 @@ test("computeStockForecast: dailyDemand is a straight 0.6/0.4 blend of the two w
   assert.ok(Math.abs(r.dailyDemand - expected) < 1e-9);
   assert.ok(Math.abs(r.daysOfStock - 1000 / expected) < 1e-9);
 });
+
+// Review 2026-11-23: To order buys up to the horizon the model's "low" looks at (lead time + review days) plus the safety stock, not a flat 90 days.
+import { computeReorderSuggestion } from "../src/products/stockForecast.js";
+test("computeReorderSuggestion: buys to lead time + review days + safety stock; without them the old 90 days", () => {
+  const args = { stockQty: 100, reservedQty: 10, status: "low", dailyDemand: 2, daysOfStock: 45 };
+  assert.equal(computeReorderSuggestion(args).suggested_qty, 2 * 90 + 10 - 100);
+  assert.equal(computeReorderSuggestion({ ...args, coverDays: 105, safetyStock: 12 }).suggested_qty, 2 * 105 + 12 + 10 - 100);
+  // a "low" product whose free stock already covers 90 days but not the safety stock used to get nothing
+  assert.equal(computeReorderSuggestion({ ...args, stockQty: 190, reservedQty: 0 }), null);
+  assert.equal(computeReorderSuggestion({ ...args, stockQty: 190, reservedQty: 0, coverDays: 90, safetyStock: 12 }).suggested_qty, 2);
+});
