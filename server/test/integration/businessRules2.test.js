@@ -180,5 +180,7 @@ test("warehouse 'To order' list suggests pieces for low products", async () => {
   const row = res.data.find((r) => r.id === product.id);
   assert.ok(row, "the low product is listed");
   assert.equal(row.urgency, "critical");
-  assert.ok(row.suggested_qty > 100);
+  // the 5 last 2 days, the goods come in 45: what is bought must last the 45 days after the arrival (review 2026-11-25: the empty days
+  // before are lost sales, not bought back) -- 15 a week ~ 2.14 a day x 45 = 97 (steady sales: no safety stock)
+  assert.ok(row.suggested_qty >= 96 && row.suggested_qty <= 110, `about 45 days of sales: ${row.suggested_qty}`);
 });
