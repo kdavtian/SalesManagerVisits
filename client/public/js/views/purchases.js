@@ -48,7 +48,7 @@ const monthTitle = (iso) => {
   return d.toLocaleDateString(document.documentElement.lang === "hy" ? "hy-AM" : "en-US", { month: "long", year: "numeric" });
 };
 
-export function renderPurchases(root) {
+export function renderPurchases(root, navigate) {
   let period = "3m";
   let status = "";
   let supplier = ""; // lower-case supplier name; "" = all
@@ -60,6 +60,7 @@ export function renderPurchases(root) {
       <div class="pu-head">
         <h1 class="pu-title">${t("pu_title")}<button type="button" class="settings-hint-icon" id="pu-hint" aria-label="${t("more_info")}">!</button></h1>
         <div class="pu-head-actions">
+          <button type="button" class="btn pu-suggest-btn" id="pu-suggest">${icons.cart}<span>${t("ps_open")}</span></button>
           <button type="button" class="btn pu-import-btn" id="pu-import"><span class="pu-icon-up" aria-hidden="true">${icons.download}</span><span>${t("pu_import")}</span></button>
           <button type="button" class="btn btn-primary pu-new-btn" id="pu-new">${icons.plus}<span>${t("pu_new")}</span></button>
         </div>
@@ -75,6 +76,8 @@ export function renderPurchases(root) {
       <div class="card-list" id="pu-list"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   const listEl = root.querySelector("#pu-list");
+  // smart purchase suggestions per supplier (owner, 2026-11-25): views/purchaseSuggestions.js
+  root.querySelector("#pu-suggest").addEventListener("click", () => (navigate ? navigate("#/purchases/suggestions") : (location.hash = "#/purchases/suggestions")));
   // every line of the period's invoices, app and Excel-only, as an Excel file (owner plan P3, 2026-11-20)
   root.querySelector("#pu-export").addEventListener("click", async (e) => {
     const btn = e.currentTarget;

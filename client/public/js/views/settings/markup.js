@@ -208,6 +208,10 @@ export function paintSettingsMarkup(ctx) {
               <input type="number" name="lead" min="1" max="365" step="1" inputmode="numeric" required />
             </label>
             <label>
+              <span class="settings-form-label">${ICON.calendar}${t("demand_cover_label")}</span>
+              <input type="number" name="cover" min="1" max="365" step="1" inputmode="numeric" required />
+            </label>
+            <label>
               <span class="settings-form-label">${ICON.calendar}${t("demand_service_label")}</span>
               <input type="number" name="level" min="50" max="99" step="1" inputmode="numeric" required />
             </label>

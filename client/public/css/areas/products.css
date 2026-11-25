@@ -446,3 +446,28 @@
 .incoming-card .incoming-head .badge { flex: none; }
 .incoming-late { margin: 6px 0 0; color: var(--danger); font-weight: 600; }
 .incoming-diffs { margin: 6px 0 0; padding-left: 18px; color: var(--danger); font-size: 0.85rem; }
+
+/* Purchases > Suggestions (views/purchaseSuggestions.js) */
+.ps-sub { margin: 0 0 12px; }
+.ps-hint { margin: 0 0 8px; white-space: pre-line; }
+.ps-supplier { margin: 0 0 14px; padding: 12px; }
+.ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
+.ps-supplier-head p { margin: 2px 0 8px; font-size: 0.82rem; }
+.ps-line { border-top: 1px solid var(--border); padding: 10px 0; }
+.ps-line-off { opacity: 0.6; }
+.ps-line-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.ps-name { font-weight: 600; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.ps-rate { margin: 2px 0 0; font-size: 0.78rem; }
+.ps-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ps-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.ps-grid > div { display: flex; flex-direction: column; min-width: 0; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.ps-grid strong { font-size: 0.95rem; }
+.ps-k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
+.ps-order { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.ps-step { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 1.3rem; font-weight: 700; }
+.ps-step:disabled { opacity: 0.4; }
+.ps-qty { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; font-variant-numeric: tabular-nums; }
+.ps-reset { margin-top: 6px; border: 0; background: none; color: var(--accent); font-size: 0.8rem; padding: 6px 0; }
+.ps-move { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
+.ps-move select { flex: 1; min-width: 0; min-height: 40px; }
+.ps-create { margin-top: 10px; }

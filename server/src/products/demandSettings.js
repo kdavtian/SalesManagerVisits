@@ -4,6 +4,7 @@ import { pool } from "../db/pool.js";
 import { MODEL } from "./demandModel.js";
 
 export const DEMAND_LEAD_TIME_RANGE = [1, 365];
+export const DEMAND_COVER_DAYS_RANGE = [1, 365];
 export const DEMAND_SERVICE_LEVEL_RANGE = [50, 99];
 
 // z for a service level in percent (the number of standard deviations of safety stock). The usual levels are the textbook values; 95 % is
@@ -25,18 +26,21 @@ function inverseNormal(p) {
 }
 
 export async function getDemandSettings(db = pool) {
-  const { rows } = await db.query("SELECT demand_lead_time_days, demand_service_level_pct FROM app_settings WHERE id = 1");
+  const { rows } = await db.query("SELECT demand_lead_time_days, demand_service_level_pct, demand_cover_days FROM app_settings WHERE id = 1");
   const leadTimeDays = rows[0]?.demand_lead_time_days ?? MODEL.leadTimeDays;
   const serviceLevelPct = rows[0]?.demand_service_level_pct ?? 95;
-  return { leadTimeDays, serviceLevelPct, serviceZ: zForServiceLevel(serviceLevelPct) };
+  // cover days: how long the stock should last after a purchase arrives (migration 224; the model's review days before it)
+  const coverDays = rows[0]?.demand_cover_days ?? MODEL.reviewDays;
+  return { leadTimeDays, serviceLevelPct, serviceZ: zForServiceLevel(serviceLevelPct), coverDays };
 }
 
-export async function setDemandSettings({ leadTimeDays, serviceLevelPct }, db = pool) {
+export async function setDemandSettings({ leadTimeDays, serviceLevelPct, coverDays }, db = pool) {
   await db.query(
-    `INSERT INTO app_settings (id, demand_lead_time_days, demand_service_level_pct) VALUES (1, COALESCE($1, 45), COALESCE($2, 95))
+    `INSERT INTO app_settings (id, demand_lead_time_days, demand_service_level_pct, demand_cover_days) VALUES (1, COALESCE($1, 45), COALESCE($2, 95), COALESCE($3, 45))
      ON CONFLICT (id) DO UPDATE SET demand_lead_time_days = COALESCE($1, app_settings.demand_lead_time_days),
-                                    demand_service_level_pct = COALESCE($2, app_settings.demand_service_level_pct)`,
-    [leadTimeDays ?? null, serviceLevelPct ?? null]
+                                    demand_service_level_pct = COALESCE($2, app_settings.demand_service_level_pct),
+                                    demand_cover_days = COALESCE($3, app_settings.demand_cover_days)`,
+    [leadTimeDays ?? null, serviceLevelPct ?? null, coverDays ?? null]
   );
   return getDemandSettings(db);
 }

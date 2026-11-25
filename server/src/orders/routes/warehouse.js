@@ -23,7 +23,6 @@ import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
 import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
-import { MODEL } from "../../products/demandModel.js";
 
 
 export const warehouseRouter = Router();
@@ -258,7 +257,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
     row.available_qty = row.stock_qty == null ? null : Number(row.stock_qty) - row.held_qty + row.back_on_shelf_qty;
     const forecast = computeDemandForecast({
       leadTimeDays: demandSettings.leadTimeDays,
-      serviceZ: demandSettings.serviceZ,
+      serviceZ: demandSettings.serviceZ, reviewDays: demandSettings.coverDays,
       weeklyQty: weekly.get(row.erp_product_id) ?? [],
       stockQty: row.available_qty,
       reservedQty: row.submitted_qty,
@@ -320,12 +319,12 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     // free stock (appStock.js: Excel − held + back on the shelf) + what is ordered / on the way; submitted orders wanted on top (planning)
     const free = (Number(row.stock_qty) || 0) - row.held_qty + row.back_on_shelf_qty;
     const stockWithComing = free + coming;
-    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.submitted_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, reviewDays: demandSettings.coverDays, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.submitted_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
     const suggestion = computeReorderSuggestion({
       stockQty: stockWithComing, reservedQty: row.submitted_qty, status: forecast.status,
       dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
       // the horizon the model's "low" looks at: lead time + review days, plus its safety stock (stockForecast.js)
-      coverDays: demandSettings.leadTimeDays + MODEL.reviewDays, safetyStock: forecast.safetyStock ?? 0,
+      coverDays: demandSettings.leadTimeDays + demandSettings.coverDays, safetyStock: forecast.safetyStock ?? 0,
     });
     if (!suggestion) continue;
     // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
