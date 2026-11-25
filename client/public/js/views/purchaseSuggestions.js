@@ -62,10 +62,17 @@ export async function renderPurchaseSuggestions(root, navigate) {
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
   const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier })));
-  const names = [...new Set([...data.suppliers.map((g) => g.supplier).filter(Boolean), ...suppliers])].sort((a, b) => a.localeCompare(b));
+  // every supplier once, however its name was typed (the cards are grouped the same way on the server)
+  const byKey = new Map();
+  for (const n of [...data.suppliers.map((g) => g.supplier).filter(Boolean), ...suppliers]) {
+    const key = String(n).replace(/\s+/g, " ").trim().toLowerCase();
+    if (key && !byKey.has(key)) byKey.set(key, n);
+  }
+  const names = [...byKey.values()].sort((a, b) => a.localeCompare(b));
 
   const recompute = (l) =>
-    Object.assign(l, purchaseLine({ stockNow: l.stock_now, coming: l.coming, wanted: l.wanted, daily: l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, order: l.order }));
+    // from the server's exact inputs (not the rounded numbers shown), so the phone and the server agree to the piece
+    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, order: l.order }));
 
   function qtyLabel(l) {
     if (l.kind === "pack" && l.pack_size > 1) return `${l.order / l.pack_size} ${t("ps_boxes")} · ${l.order} ${t("warehouse_pcs_suffix")}`;
@@ -98,9 +105,16 @@ export async function renderPurchaseSuggestions(root, navigate) {
       </div>
       ${l.order !== l.suggested ? `<button type="button" class="ps-reset" data-reset="${l.product_id}">${t("ps_suggested")}: ${l.suggested} ${t("warehouse_pcs_suffix")}</button>` : ""}
       <label class="ps-move"><span class="muted">${t("ps_supplier")}</span>
-        <select data-move="${l.product_id}">${["", ...names].map((n) => `<option value="${escapeHtml(n)}" ${n === l.group ? "selected" : ""}>${escapeHtml(n || t("ps_no_supplier"))}</option>`).join("")}</select>
+        <select data-move="${l.product_id}"><option value="${escapeHtml(l.group)}" selected>${escapeHtml(l.group || t("ps_no_supplier"))}</option></select>
       </label>
     </div>`;
+  }
+  // the supplier list is put into a line's select only when it is opened: hundreds of lines x every supplier on each redraw was slow on phones
+  function fillSelect(sel) {
+    if (sel.dataset.filled) return;
+    const l = lines.find((x) => x.product_id === Number(sel.dataset.move));
+    sel.innerHTML = ["", ...names].map((n) => `<option value="${escapeHtml(n)}" ${n === l?.group ? "selected" : ""}>${escapeHtml(n || t("ps_no_supplier"))}</option>`).join("");
+    sel.dataset.filled = "1";
   }
   function totals(list) {
     const on = list.filter((l) => l.order > 0);
@@ -111,6 +125,18 @@ export async function renderPurchaseSuggestions(root, navigate) {
       usd: on.reduce((a, l) => a + (l.cost_usd ?? 0) * l.order, 0),
       unpriced: on.filter((l) => l.cost_usd == null).length,
     };
+  }
+  const totalsHtml = (tot) =>
+    `${tot.products} ${t("warehouse_reorder_products")} · ${tot.pieces} ${t("warehouse_pcs_suffix")} · ${num(tot.liters)} L · <strong>${usd(tot.usd)}</strong>${tot.unpriced ? ` · ${tot.unpriced} ${t("ps_unpriced")}` : ""}`;
+  // − / + redraws only that line and its card's totals (the whole list was rebuilt on every tap)
+  function redrawLine(l) {
+    const el = body.querySelector(`[data-line="${l.product_id}"]`);
+    if (el) el.outerHTML = lineHtml(l);
+    const card = [...body.querySelectorAll(".ps-supplier")].find((c) => c.dataset.group === l.group);
+    if (!card) return;
+    const tot = totals(lines.filter((x) => x.group === l.group));
+    card.querySelector(".ps-totals").innerHTML = totalsHtml(tot);
+    card.querySelector(".ps-create").disabled = !tot.products;
   }
   function render() {
     const groups = new Map();
@@ -126,10 +152,10 @@ export async function renderPurchaseSuggestions(root, navigate) {
     }
     body.innerHTML = order
       .map(
-        ({ g, list, tot }, k) => `<section class="card ps-supplier">
+        ({ g, list, tot }, k) => `<section class="card ps-supplier" data-group="${escapeHtml(g)}">
           <div class="ps-supplier-head">
             <h2>${escapeHtml(g || t("ps_no_supplier"))}</h2>
-            <p class="muted">${tot.products} ${t("warehouse_reorder_products")} · ${tot.pieces} ${t("warehouse_pcs_suffix")} · ${num(tot.liters)} L · <strong>${usd(tot.usd)}</strong>${tot.unpriced ? ` · ${tot.unpriced} ${t("ps_unpriced")}` : ""}</p>
+            <p class="muted ps-totals">${totalsHtml(tot)}</p>
           </div>
           ${list.map(lineHtml).join("")}
           <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-block btn-has-icon ps-create" data-create="${escapeHtml(g)}" ${tot.products ? "" : "disabled"}>${icons.plus}${escapeHtml(t("ps_create"))}</button>
@@ -150,7 +176,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
       if (!l) return;
       l.order = reset ? l.suggested : Math.max(0, l.order + (plus ? l.step_pieces : -l.step_pieces));
       recompute(l);
-      render();
+      redrawLine(l);
       body.querySelector(`[data-line="${l.product_id}"] ${plus ? "[data-plus]" : "[data-minus]"}`)?.focus();
       return;
     }
@@ -163,12 +189,21 @@ export async function renderPurchaseSuggestions(root, navigate) {
           supplier,
           status: "ordered",
           expected_date: data.arrival_date,
-          draft_tag: `suggest:${supplier.toLowerCase()}`,
+          // a draft per supplier and DAY: yesterday's draft never replaces today's suggestion (review 2026-11-25)
+          draft_tag: `suggest:${supplier.toLowerCase()}:${data.today}`,
           lines: list.map((l) => ({ product_id: l.product_id, product_name: l.name, brand: l.brand, size_l: l.liters_per_piece, qty: l.order, cost_usd: l.cost_usd })),
         },
         { onSaved: () => renderPurchaseSuggestions(root, navigate) }
       );
     }
+  });
+  body.addEventListener("focusin", (e) => {
+    const sel = e.target.closest("[data-move]");
+    if (sel) fillSelect(sel);
+  });
+  body.addEventListener("pointerdown", (e) => {
+    const sel = e.target.closest("[data-move]");
+    if (sel) fillSelect(sel);
   });
   body.addEventListener("change", (e) => {
     const sel = e.target.closest("[data-move]");

@@ -39,16 +39,26 @@ test("roundUpToStep: nothing needed -> 0, otherwise whole steps up", () => {
 });
 
 test("purchaseLine: stock now, at arrival, order, after receiving, days left", () => {
-  // 2 a day, 40 free, nothing coming, lead 45, cover 45, safety 10: need = 2 x 90 + 10 - 40 = 150 -> 3 steps of 60 = 180
+  // 2 a day, 40 free, nothing coming, lead 45, cover 45, safety 10: 40 last 20 days, nothing is left when the goods come after 45, and the
+  // 25 empty days are lost sales (the customer buys elsewhere): need = 2 x 45 + 10 - 0 = 100 -> 2 steps of 60 = 120, lasting 60 days
   const l = purchaseLine({ stockNow: 40, daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 10, stepPieces: 60 });
-  assert.equal(l.need, 150);
-  assert.equal(l.suggested, 180);
-  assert.equal(l.order, 180);
+  assert.equal(l.need, 100);
+  assert.equal(l.suggested, 120);
+  assert.equal(l.order, 120);
   assert.equal(l.days_now, 20);
-  assert.equal(l.stock_at_arrival, 0, "40 last 20 days, the goods come after 45");
+  assert.equal(l.stock_at_arrival, 0);
   assert.equal(l.runs_out_before_arrival, true);
-  assert.equal(l.after_receiving, 180);
-  assert.equal(l.days_after_receiving, 90);
+  assert.equal(l.after_receiving, 120);
+  assert.equal(l.days_after_receiving, 60);
+  // review 2026-11-25: nothing in stock, 1 a day -> buy 45 days (the cover), not 90 (it used to add the 45 days without stock)
+  const empty = purchaseLine({ stockNow: 0, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 });
+  assert.equal(empty.order, 45);
+  assert.equal(empty.days_after_receiving, 45);
+  // oversold by 30 (confirmed orders hold more than the Excel has) and 50 wanted by submitted orders: those 80 pieces are owed -- bought on
+  // top of the 45 days after the arrival; after receiving, 45 are left for the shelf
+  const owed = purchaseLine({ stockNow: -30, wanted: 50, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 });
+  assert.equal(owed.order, 125);
+  assert.equal(owed.after_receiving, 45);
   // on the way and submitted orders count; the owner lowers the order to 120
   const m = purchaseLine({ stockNow: 100, coming: 60, wanted: 10, daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 0, stepPieces: 60, order: 120 });
   assert.equal(m.stock_at_arrival, 60, "100 + 60 - 10 - 90");
@@ -65,3 +75,22 @@ test("purchaseLine: stock now, at arrival, order, after receiving, days left", (
 });
 
 const pick = (r) => [r.packs, r.pieces];
+
+// Review 2026-11-25: goods already ordered join the shelf on their expected day, not today; empty days are lost sales.
+import { stockAtArrival } from "../src/products/purchaseSuggestion.js";
+test("stockAtArrival: lots come on their day, empty days are lost, submitted orders are served first", () => {
+  // empty shelf, 100 expected in 10 days, 2 a day, lead 45: 10 days lost, then 100 - 2 x 35 = 30 left
+  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 100, inDays: 10 }], daily: 2, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true });
+  // ordered today with no date: it comes with the new order at the end of the lead time and is not "sold" before
+  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 90, inDays: null }], daily: 2, leadTimeDays: 45 }), { atArrival: 90, backlog: 0, ranOut: true });
+  // 10 free, submitted orders want 30: 20 owed, the 50 coming on day 5 serve them first
+  assert.deepEqual(stockAtArrival({ stockNow: 10, wanted: 30, comingLots: [{ qty: 50, inDays: 5 }], daily: 0, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true });
+  // late (expected after the lead time) counts at the end; a past date counts as today
+  assert.equal(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 40, inDays: 90 }], daily: 1, leadTimeDays: 45 }).atArrival, 40);
+  assert.equal(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 40, inDays: -3 }], daily: 1, leadTimeDays: 45 }).atArrival, 0);
+  // a purchase already ordered for the whole need: nothing more is suggested (it used to be "sold" before it came and suggested again)
+  const again = purchaseLine({ stockNow: 0, comingLots: [{ qty: 100, inDays: null }], daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 10, stepPieces: 20 });
+  assert.equal(again.order, 0);
+  // what is still owed to submitted orders at the arrival is bought on top
+  assert.equal(purchaseLine({ stockNow: 0, wanted: 15, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).order, 60);
+});

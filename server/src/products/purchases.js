@@ -291,6 +291,23 @@ export async function incomingQtyByProduct(db = pool) {
   return new Map(rows.map((r) => [r.product_id, r.qty]));
 }
 
+// The same goods by invoice, with the days until each is expected (null: no date yet): the purchase suggestions put them on the shelf on
+// that day, not today (shared/purchaseSuggestion.js stockAtArrival). Map product_id -> [{ qty, inDays }].
+export async function incomingLotsByProduct(db = pool) {
+  const { rows } = await db.query(
+    `SELECT l.product_id, sum(l.qty)::float8 AS qty, (i.expected_date - (now() AT TIME ZONE 'Asia/Yerevan')::date) AS in_days
+       FROM purchase_lines l JOIN purchase_invoices i ON i.id = l.invoice_id
+      WHERE i.status IN ('ordered', 'in_transit') AND l.product_id IS NOT NULL
+      GROUP BY l.product_id, i.id, i.expected_date`
+  );
+  const out = new Map();
+  for (const r of rows) {
+    if (!out.has(r.product_id)) out.set(r.product_id, []);
+    out.get(r.product_id).push({ qty: r.qty, inDays: r.in_days == null ? null : Number(r.in_days) });
+  }
+  return out;
+}
+
 // ---- export (owner plan P3): every line of the period, app and Excel-only invoices, one row each ---------------------------------------
 export async function exportPurchaseRows({ from = null, to = null } = {}, db = pool) {
   const invoices = await listPurchases({ from, to }, db);

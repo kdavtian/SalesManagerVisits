@@ -31,7 +31,7 @@ test("the admin sets the lead time and the service level; others read them, cann
   const saved = await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { demand_lead_time_days: 60, demand_service_level_pct: 90 } });
   assert.equal(saved.status, 200);
   assert.equal(saved.data.demand_lead_time_days, 60);
-  assert.deepEqual(await getDemandSettings(pool), { leadTimeDays: 60, serviceLevelPct: 90, serviceZ: 1.28 });
+  assert.deepEqual(await getDemandSettings(pool), { leadTimeDays: 60, serviceLevelPct: 90, serviceZ: 1.28, coverDays: 45 });
   assert.equal((await apiRequest("/api/settings", { cookie: repCookie })).data.demand_lead_time_days, 60);
   assert.equal((await apiRequest("/api/settings", { method: "PATCH", cookie: repCookie, body: { demand_lead_time_days: 10 } })).status, 403);
   for (const body of [{ demand_lead_time_days: 0 }, { demand_lead_time_days: 400 }, { demand_lead_time_days: 12.5 }, { demand_service_level_pct: 49 }, { demand_service_level_pct: 100 }]) {
@@ -39,5 +39,5 @@ test("the admin sets the lead time and the service level; others read them, cann
   }
   // one value alone leaves the other as it was
   await apiRequest("/api/settings", { method: "PATCH", cookie: adminCookie, body: { demand_lead_time_days: 30 } });
-  assert.deepEqual(await getDemandSettings(pool), { leadTimeDays: 30, serviceLevelPct: 90, serviceZ: 1.28 });
+  assert.deepEqual(await getDemandSettings(pool), { leadTimeDays: 30, serviceLevelPct: 90, serviceZ: 1.28, coverDays: 45 });
 });

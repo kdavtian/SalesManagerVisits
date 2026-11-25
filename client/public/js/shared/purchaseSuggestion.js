@@ -17,12 +17,15 @@
 //   coming               = already Ordered / On the way to us (purchases.js incomingQtyByProduct)
 //   wanted               = submitted orders not confirmed yet (planning takes them as sold)
 //   days left now        = stock now / daily
-//   stock at arrival     = max(0, stock now + coming − wanted − daily × lead time)
-//   need                 = daily × (lead time + cover days) + safety stock + wanted − (stock now + coming)
+//   stock at arrival     = the days walked in order (stockAtArrival): the free stock sells, goods on the way join the shelf on their
+//                          expected day, a day with an empty shelf is a lost sale (review 2026-11-25: the customer buys elsewhere, so
+//                          those days are not bought for; and goods ordered earlier are not "sold" before they come)
+//   need                 = daily × cover days + safety stock + still owed to submitted orders − stock at arrival
+//                          (while the stock lasts until the arrival: daily × (lead + cover) + safety + wanted − (stock now + coming))
 //   order                = need rounded UP to the step (nothing when need <= 0)
-//   after receiving      = stock at arrival + order
+//   after receiving      = stock at arrival + order − still owed
 //   days after receiving = after receiving / daily   (counted from the day the goods arrive: today + lead time)
-//   runs out before arrival: stock now + coming − wanted < daily × lead time
+//   runs out before arrival: the shelf is empty (or owes submitted orders) on some day before the goods come
 /** Litres in one piece: the Excel size when known, else read from the unit ("4 L", "208L", "1,5L"). Also used by stockForecast.js. */
 export function sizeLiters(product) {
   const direct = Number(product?.size_l);
@@ -64,18 +67,61 @@ export function roundUpToStep(pieces, stepPieces) {
 const round1 = (n) => Math.round(n * 10) / 10;
 
 /**
- * One product's suggestion. `order` overrides the suggested quantity (the screen's − / +); it is NOT rounded here (the screen only moves it
- * by whole steps). Returns the numbers the screen shows; days are null when there is no demand.
+ * What is left on the shelf the day a purchase ordered today arrives (after leadTimeDays), walking the days in order:
+ *   - the free stock sells first; submitted orders (`wanted`) take their pieces before anyone else, and what the stock cannot give them
+ *     stays owed (`backlog`) -- the next goods to come serve them first;
+ *   - goods already ordered (`comingLots`: [{ qty, inDays }]) are on the shelf only from the day they are expected (no date: at the end of the
+ *     lead time, the latest they can be); a lot expected after the lead time counts as coming at the end of it;
+ *   - a day with nothing on the shelf is a lost sale (the customer buys elsewhere): it is not bought back later.
+ * Returns { atArrival, backlog, ranOut }. ranOut = the shelf is empty (or owes pieces) at some point before the arrival.
  */
-export function purchaseLine({ stockNow, coming = 0, wanted = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, order = null }) {
+export function stockAtArrival({ stockNow, comingLots = [], wanted = 0, daily, leadTimeDays }) {
+  const d = Number(daily) > 0 ? Number(daily) : 0;
+  const lead = Math.max(0, Number(leadTimeDays) || 0);
+  let s = (Number(stockNow) || 0) - (Number(wanted) || 0);
+  let backlog = Math.max(0, -s);
+  s = Math.max(0, s);
+  let ranOut = backlog > 0;
+  const lots = (comingLots ?? [])
+    .map((l) => ({ qty: Math.max(0, Number(l?.qty) || 0), at: Math.min(lead, Math.max(0, l?.inDays == null ? lead : Number(l.inDays) || 0)) }))
+    .filter((l) => l.qty > 0)
+    .sort((a, b) => a.at - b.at);
+  let t = 0;
+  for (const lot of lots) {
+    s -= d * (lot.at - t);
+    if (s < 0) {
+      ranOut = true;
+      s = 0;
+    }
+    t = lot.at;
+    const owed = Math.min(backlog, lot.qty);
+    backlog -= owed;
+    s += lot.qty - owed;
+  }
+  s -= d * (lead - t);
+  if (s < 0) {
+    ranOut = true;
+    s = 0;
+  }
+  return { atArrival: s, backlog, ranOut };
+}
+
+/**
+ * One product's suggestion. `order` overrides the suggested quantity (the screen's − / +); it is NOT rounded here (the screen only moves it
+ * by whole steps). `comingLots` = goods already ordered with the days until each is expected; `coming` (a plain number) = the same, all
+ * expected at the end of the lead time. Returns the numbers the screen shows; days are null when there is no demand.
+ *   need = daily × cover days + safety stock + still owed to submitted orders − stock at arrival
+ *   after receiving = stock at arrival + order − still owed
+ */
+export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, order = null }) {
   const free = Number(stockNow) || 0;
   const d = Number(daily) > 0 ? Number(daily) : 0;
-  const onHandAndComing = free + (Number(coming) || 0) - (Number(wanted) || 0);
-  const need = d * (leadTimeDays + coverDays) + (Number(safetyStock) || 0) + (Number(wanted) || 0) - (free + (Number(coming) || 0));
+  const lots = comingLots ?? (Number(coming) > 0 ? [{ qty: Number(coming), inDays: null }] : []);
+  const { atArrival, backlog, ranOut } = stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays });
+  const need = d * coverDays + (Number(safetyStock) || 0) + backlog - atArrival;
   const suggested = roundUpToStep(need, stepPieces);
   const qty = order == null ? suggested : Math.max(0, Number(order) || 0);
-  const atArrival = Math.max(0, onHandAndComing - d * leadTimeDays);
-  const after = atArrival + qty;
+  const after = Math.max(0, atArrival + qty - backlog);
   return {
     need: Math.max(0, Math.ceil(need)),
     suggested,
@@ -84,6 +130,6 @@ export function purchaseLine({ stockNow, coming = 0, wanted = 0, daily, leadTime
     after_receiving: Math.round(after),
     days_now: d > 0 ? round1(Math.max(0, free) / d) : null,
     days_after_receiving: d > 0 ? round1(after / d) : null,
-    runs_out_before_arrival: d > 0 && onHandAndComing < d * leadTimeDays,
+    runs_out_before_arrival: d > 0 && ranOut,
   };
 }

@@ -11,7 +11,7 @@ import { stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../or
 import { computeDemandForecast } from "./demandModel.js";
 import { getDemandSettings } from "./demandSettings.js";
 import { loadDemandInputs } from "./demandInputs.js";
-import { incomingQtyByProduct, productHistory } from "./purchases.js";
+import { incomingLotsByProduct, productHistory } from "./purchases.js";
 import { orderStep, purchaseLine, sizeLiters } from "./purchaseSuggestion.js";
 import { yerevanToday } from "../utils/yerevanDate.js";
 
@@ -36,14 +36,15 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
      WHERE p.active AND p.stock_qty IS NOT NULL`,
     [today]
   );
-  const [demand, settings, incoming] = await Promise.all([loadDemandInputs(db, today), getDemandSettings(db), incomingQtyByProduct(db)]);
+  const [demand, settings, incoming] = await Promise.all([loadDemandInputs(db, today), getDemandSettings(db), incomingLotsByProduct(db)]);
   const lead = settings.leadTimeDays;
   const cover = settings.coverDays;
 
   const lines = [];
   for (const row of rows) {
     const free = Number(row.stock_qty) - row.held_qty + row.back_on_shelf_qty;
-    const coming = incoming.get(row.id) ?? 0;
+    const lots = incoming.get(row.id) ?? [];
+    const coming = lots.reduce((a, l) => a + l.qty, 0);
     const forecast = computeDemandForecast({
       leadTimeDays: lead, serviceZ: settings.serviceZ, reviewDays: cover,
       weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: free + coming, reservedQty: row.submitted_qty,
@@ -52,12 +53,14 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
     if (!(daily > 0)) continue;
     const step = orderStep(row);
-    const line = purchaseLine({ stockNow: free, coming, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces });
+    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces });
     if (!(line.suggested > 0)) continue;
     lines.push({
       product_id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit,
       liters_per_piece: sizeLiters(row), kind: step.kind, pack_size: step.packSize, step_pieces: step.stepPieces, pack_size_guessed: step.packSizeGuessed,
       stock_now: Math.max(0, Math.round(free)), coming: Math.round(coming), wanted: row.submitted_qty, daily_demand: Math.round(daily * 100) / 100,
+      // the exact inputs: the phone recomputes a line after − / + from these, so it agrees with this suggestion to the piece (review 2026-11-25)
+      free_raw: free, coming_lots: lots, daily_raw: daily,
       safety_stock: forecast.safetyStock ?? 0, trend: forecast.trend, status: forecast.status,
       ...line,
     });
@@ -66,11 +69,18 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   // the supplier each product was last bought from, and its last price per piece (100 products a call: productHistory's limit)
   const history = {};
   const ids = lines.map((l) => l.product_id);
-  for (let i = 0; i < ids.length; i += 100) Object.assign(history, await productHistory(ids.slice(i, i + 100), {}, db));
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+  for (const part of await Promise.all(chunks.map((c) => productHistory(c, {}, db)))) Object.assign(history, part);
+  // one card per supplier however its name was typed ("Total Oil" / "TOTAL OIL "): the first spelling met is shown (review 2026-11-25)
   const bySupplier = new Map();
+  const shown = new Map();
   for (const l of lines) {
     const last = history[l.product_id]?.last ?? null;
-    l.supplier = last?.supplier ?? "";
+    const raw = String(last?.supplier ?? "").replace(/\s+/g, " ").trim();
+    const key = raw.toLowerCase();
+    if (!shown.has(key)) shown.set(key, raw);
+    l.supplier = shown.get(key);
     l.cost_usd = last?.cost_usd ?? null;
     l.last_bought = last?.day ?? null;
     if (!bySupplier.has(l.supplier)) bySupplier.set(l.supplier, []);

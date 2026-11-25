@@ -103,3 +103,4 @@ test("computeReorderSuggestion: buys to lead time + review days + safety stock; 
   assert.equal(computeReorderSuggestion({ ...args, stockQty: 190, reservedQty: 0 }), null);
   assert.equal(computeReorderSuggestion({ ...args, stockQty: 190, reservedQty: 0, coverDays: 90, safetyStock: 12 }).suggested_qty, 2);
 });
+
