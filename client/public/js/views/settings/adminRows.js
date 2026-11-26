@@ -53,6 +53,7 @@ export function wireAdminRows(ctx) {
     const planSkipSuccess = ctx.root.querySelector("#plan-skip-success");
     const demandForm = ctx.root.querySelector("#demand-form");
     const demandLeadInput = demandForm.querySelector('input[name="lead"]');
+    const demandCoverInput = demandForm.querySelector('input[name="cover"]');
     const demandLevelInput = demandForm.querySelector('input[name="level"]');
     const demandSuccess = ctx.root.querySelector("#demand-success");
     const incentiveForm = ctx.root.querySelector("#incentive-message-form");
@@ -87,6 +88,7 @@ export function wireAdminRows(ctx) {
       frequencyInput.value = s.default_visit_frequency_days;
       planSkipInput.value = s.plan_skip_recent_visit_days ?? 4;
       demandLeadInput.value = s.demand_lead_time_days ?? 45;
+      demandCoverInput.value = s.demand_cover_days ?? 45;
       demandLevelInput.value = s.demand_service_level_pct ?? 95;
       incentiveInput.value = s.incentive_message || "";
       askKadToggle.setAttribute("aria-checked", String(s.ask_kad_enabled !== false));
@@ -398,7 +400,7 @@ export function wireAdminRows(ctx) {
       const submitBtn = demandForm.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       try {
-        await api.updateSettings({ demand_lead_time_days: Number(demandLeadInput.value), demand_service_level_pct: Number(demandLevelInput.value) });
+        await api.updateSettings({ demand_lead_time_days: Number(demandLeadInput.value), demand_cover_days: Number(demandCoverInput.value), demand_service_level_pct: Number(demandLevelInput.value) });
         demandSuccess.hidden = false;
       } finally {
         submitBtn.disabled = false;

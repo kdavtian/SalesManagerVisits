@@ -12,8 +12,9 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canManageWarehouse } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
-import { computeReorderSuggestion, roundToPacks } from "../../products/stockForecast.js";
-import { incomingQtyByProduct } from "../../products/purchases.js";
+import { roundToPacks } from "../../products/stockForecast.js";
+import { incomingLotsByProduct } from "../../products/purchases.js";
+import { purchaseLine } from "../../products/purchaseSuggestion.js";
 import { computeDemandForecast } from "../../products/demandModel.js";
 import { getDemandSettings } from "../../products/demandSettings.js";
 import { loadDemandInputs } from "../../products/demandInputs.js";
@@ -23,7 +24,6 @@ import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
 import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
-import { MODEL } from "../../products/demandModel.js";
 
 
 export const warehouseRouter = Router();
@@ -258,7 +258,7 @@ warehouseRouter.get("/inventory", async (req, res) => {
     row.available_qty = row.stock_qty == null ? null : Number(row.stock_qty) - row.held_qty + row.back_on_shelf_qty;
     const forecast = computeDemandForecast({
       leadTimeDays: demandSettings.leadTimeDays,
-      serviceZ: demandSettings.serviceZ,
+      serviceZ: demandSettings.serviceZ, reviewDays: demandSettings.coverDays,
       weeklyQty: weekly.get(row.erp_product_id) ?? [],
       stockQty: row.available_qty,
       reservedQty: row.submitted_qty,
@@ -313,21 +313,23 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     [today]
   );
   const out = [];
-  const [demand, demandSettings, incoming] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool), incomingQtyByProduct()]);
+  const [demand, demandSettings, incoming] = await Promise.all([loadDemandInputs(pool, today), getDemandSettings(pool), incomingLotsByProduct()]);
   for (const row of rows) {
     // pieces already Ordered / On the way (Purchases P5, owner 2026-11-20): what is coming is not suggested again
-    const coming = incoming.get(row.id) ?? 0;
+    const lots = incoming.get(row.id) ?? [];
+    const coming = lots.reduce((a, l) => a + l.qty, 0);
     // free stock (appStock.js: Excel − held + back on the shelf) + what is ordered / on the way; submitted orders wanted on top (planning)
     const free = (Number(row.stock_qty) || 0) - row.held_qty + row.back_on_shelf_qty;
     const stockWithComing = free + coming;
-    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.submitted_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
-    const suggestion = computeReorderSuggestion({
-      stockQty: stockWithComing, reservedQty: row.submitted_qty, status: forecast.status,
-      dailyDemand: forecast.dailyDemand, daysOfStock: forecast.daysOfStock, qty90d: row.qty_90d,
-      // the horizon the model's "low" looks at: lead time + review days, plus its safety stock (stockForecast.js)
-      coverDays: demandSettings.leadTimeDays + MODEL.reviewDays, safetyStock: forecast.safetyStock ?? 0,
-    });
-    if (!suggestion) continue;
+    const forecast = computeDemandForecast({ leadTimeDays: demandSettings.leadTimeDays, serviceZ: demandSettings.serviceZ, reviewDays: demandSettings.coverDays, weeklyQty: demand.weekly.get(row.erp_product_id) ?? [], stockQty: stockWithComing, reservedQty: row.submitted_qty, lastSaleDate: row.last_sale_date, createdAt: row.created_at, today });
+    // out / critical / low only; how much: the purchase suggestions' own calculation (shared/purchaseSuggestion.js purchaseLine: what must
+    // last the cover days after the arrival, the goods on the way joining the shelf on their expected day, empty days lost)
+    if (!["out", "critical", "low"].includes(forecast.status)) continue;
+    const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
+    if (!(daily > 0)) continue;
+    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: demandSettings.leadTimeDays, coverDays: demandSettings.coverDays, safetyStock: forecast.safetyStock ?? 0, stepPieces: 1 });
+    if (!(line.need > 0)) continue;
+    const suggestion = { urgency: forecast.status, suggested_qty: line.need, daily_demand: daily, days_of_stock: forecast.daysOfStock };
     // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
     const packs = roundToPacks(suggestion.suggested_qty, row);
     out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, free_qty: free, reserved_qty: row.held_qty + row.submitted_qty, submitted_qty: row.submitted_qty, incoming_qty: coming, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });

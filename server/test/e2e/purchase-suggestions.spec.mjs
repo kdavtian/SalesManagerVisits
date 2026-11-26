@@ -1,0 +1,50 @@
+import { test, expect, loginViaUi, pool } from "./fixtures.mjs";
+
+// Owner, 2026-11-25: smart purchase suggestions per supplier -- stock now, the order in whole steps (+ / − by 5 boxes), stock and days left
+// after receiving; "Create purchase" opens the purchase form filled (Ordered, the supplier, the products and quantities).
+test("@iphone purchase suggestions: a step up recomputes the line, Create purchase fills the form", async ({ page, fixtures }) => {
+  const admin = await fixtures.createUser("admin");
+  const tag = `PSE${Date.now().toString(36)}`;
+  const oil = await fixtures.createProduct({ name: `${tag} Edge 5W-30 1L` });
+  const erpId = `${tag}-ERP`;
+  await pool.query("UPDATE products SET erp_product_id = $2, unit = '1L', items_per_pack = 12, stock_qty = 40, brand = 'Castrol', created_at = now() - interval '2 years' WHERE id = $1", [oil.id, erpId]);
+  for (let w = 0; w < 26; w += 1) {
+    await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, $2, CURRENT_DATE - $3::int, $4, 14, 1)", [tag, `${tag}-${w}`, w * 7 + 1, erpId]);
+  }
+  const supplier = `${tag} Supplier`;
+  const { rows: [s] } = await pool.query("INSERT INTO suppliers (name) VALUES ($1) RETURNING id", [supplier]);
+  const { rows: [inv] } = await pool.query("INSERT INTO purchase_invoices (invoice_no, invoice_date, supplier_id, usd_rate, status, arrived_at) VALUES ($1, CURRENT_DATE - 100, $2, 400, 'arrived', now() - interval '100 days') RETURNING id", [`${tag}-INV`, s.id]);
+  await pool.query("INSERT INTO purchase_lines (invoice_id, product_id, product_name, qty, cost_usd) VALUES ($1, $2, 'x', 60, 3.5)", [inv.id, oil.id]);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginViaUi(page, admin.email);
+    await page.goto("/#/purchases");
+    await page.locator("#pu-suggest").click();
+    await expect(page).toHaveURL(/#\/purchases\/suggestions/);
+    const line = page.locator(`.ps-line[data-line="${oil.id}"]`);
+    await expect(line).toBeVisible();
+    await expect(line).toContainText("40 pcs");
+    await expect(line).toContainText("Runs out before arrival");
+    const qty = line.locator(".ps-qty strong");
+    const before = await qty.textContent();
+    const boxes = Number(before.match(/^(\d+) boxes/)[1]);
+    expect(boxes % 5).toBe(0);
+    await line.locator("[data-plus]").click();
+    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
+    await expect(line.locator("[data-reset]")).toBeVisible();
+    // the supplier's card makes the purchase
+    const card = page.locator(".ps-supplier", { hasText: supplier });
+    await card.locator(".ps-create").click();
+    const form = page.locator(".pu-form-sheet");
+    await expect(form).toBeVisible();
+    await expect(form).toContainText(supplier);
+    await expect(form).toContainText(oil.name);
+    // the pieces chosen on the screen and the last price per piece are in the form's line
+    await expect(form.locator('input[data-f="qty"]').first()).toHaveValue(String((boxes + 5) * 12));
+    await expect(form.locator('input[data-f="cost_usd"]').first()).toHaveValue("3.5");
+  } finally {
+    await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [tag]);
+    await pool.query("DELETE FROM purchase_invoices WHERE supplier_id = $1", [s.id]);
+    await pool.query("DELETE FROM suppliers WHERE id = $1", [s.id]);
+  }
+});

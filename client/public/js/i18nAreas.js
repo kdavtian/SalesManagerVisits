@@ -14,6 +14,7 @@ export const ROUTE_TEXT_AREAS = {
   "#/driver-home": [],
   "#/cashflow": ["money"],
   "#/purchases": ["products"],
+  "#/purchases/suggestions": ["orders", "products"],
   "#/bank-desk": ["money", "settings"],
   "#/returns": ["orders"],
   "#/requests": ["customers"],

@@ -119,7 +119,12 @@ export async function renderWarehouse(root, navigate) {
       </div>
       <div id="reorder-purchase"></div>
       <button type="button" class="btn btn-block" id="reorder-copy" style="margin-top:12px">${t("warehouse_reorder_copy")}</button>`;
-    if (canManagePurchases(state.user?.role)) paintReorderPurchase(rows);
+    if (canManagePurchases(state.user?.role)) {
+      paintReorderPurchase(rows);
+      // the full picture per supplier (stock after receiving, days left, whole steps): Purchases > Suggestions (owner, 2026-11-25)
+      contentEl.querySelector("#reorder-purchase")?.insertAdjacentHTML("beforebegin", `<button type="button" class="btn btn-block" id="reorder-smart" style="margin-top:12px">${t("ps_open")}</button>`);
+      contentEl.querySelector("#reorder-smart")?.addEventListener("click", () => navigate("#/purchases/suggestions"));
+    }
     contentEl.querySelector("#reorder-copy").addEventListener("click", async () => {
       const text = rows.map((r) => `${r.name} ${normalizeUnitLabel(r.unit)} — ${r.suggested_qty} ${t("warehouse_pcs_suffix")}${r.pack_kind === "bottle" && r.pack_size > 1 ? ` (${r.packs} × ${r.pack_size})` : ""}`).join("\n");
       try {

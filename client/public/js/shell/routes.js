@@ -126,7 +126,7 @@ export async function renderRoute(ctx) {
     return;
   }
   // Purchases hold the supplier costs: admin, CEO, operations director and the accountant (server: canManagePurchases)
-  if (/^#\/purchases(\?|$)/.test(location.hash) && !canManagePurchases(state.user.role)) {
+  if (/^#\/purchases(\/suggestions)?(\?|$)/.test(location.hash) && !canManagePurchases(state.user.role)) {
     location.replace("#/dashboard");
     return;
   }
@@ -332,6 +332,8 @@ export async function renderRoute(ctx) {
     ctx.currentCleanup = await (await fresh(import("../views/driverHome.js"))).renderDriverHome(ctx.app, ctx.navigate);
   } else if (path === "#/purchases") {
     (await fresh(import("../views/purchases.js"))).renderPurchases(ctx.app, ctx.navigate);
+  } else if (path === "#/purchases/suggestions") {
+    (await fresh(import("../views/purchaseSuggestions.js"))).renderPurchaseSuggestions(ctx.app, ctx.navigate);
   } else if (path === "#/cashflow") {
     (await fresh(import("../views/cashflow.js"))).renderCashflow(ctx.app, ctx.navigate);
   } else if (path === "#/requests") {

@@ -14,6 +14,7 @@ import { canManagePurchases, canDeletePurchases } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
 import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoice, excelStatus, productHistory, applyExcelPurchases, PurchaseError, invoiceFacts, logPurchase, exportPurchaseRows } from "../purchases.js";
 import { parsePurchaseWorkbook } from "../purchaseExcel.js";
+import { buildPurchaseSuggestions } from "../purchaseSuggestionsData.js";
 
 export const purchasesRouter = Router();
 purchasesRouter.use(requireAuth);
@@ -200,6 +201,12 @@ purchasesRouter.post("/suppliers", async (req, res) => {
     [name.slice(0, 120), req.body?.brands ? String(req.body.brands).slice(0, 200) : null]
   );
   res.status(201).json(rows[0]);
+});
+
+// Smart purchase suggestions (owner, 2026-11-25): what to order from each supplier, in whole steps, with stock now / after receiving and
+// the days each lasts (products/purchaseSuggestionsData.js; the rules: client/public/js/shared/purchaseSuggestion.js).
+purchasesRouter.get("/suggestions", async (_req, res) => {
+  res.json(await buildPurchaseSuggestions());
 });
 
 // What the Excel copy holds and when it arrived (the screen says so, and offers the file import while it is empty).

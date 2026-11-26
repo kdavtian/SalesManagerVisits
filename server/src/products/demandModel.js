@@ -102,7 +102,7 @@ function crostonWeekly(series) {
  * Returns { status, dailyDemand, daysOfStock, trend, method, safetyStock, reorderPoint, freeStock, daysToReorder, variability }
  *   status: 'unknown' | 'out' | 'new' | 'dead' | 'slow' | 'critical' | 'low' | 'ok'  (the same words the old model used)
  */
-export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 0, lastSaleDate = null, createdAt = null, today, leadTimeDays = MODEL.leadTimeDays, serviceZ = MODEL.serviceZ }) {
+export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 0, lastSaleDate = null, createdAt = null, today, leadTimeDays = MODEL.leadTimeDays, serviceZ = MODEL.serviceZ, reviewDays = MODEL.reviewDays }) {
   const none = { dailyDemand: null, daysOfStock: null, trend: null, method: null, safetyStock: null, reorderPoint: null, freeStock: null, daysToReorder: null, variability: null };
   if (stockQty == null) return { status: "unknown", ...none };
   const stock = Number(stockQty);
@@ -156,7 +156,7 @@ export function computeDemandForecast({ weeklyQty = [], stockQty, reservedQty = 
   let status;
   if (out) status = "out";
   else if (freeStock <= reorderPoint) status = "critical";
-  else if (freeStock <= dailyDemand * (leadTimeDays + MODEL.reviewDays) + safetyStock) status = "low";
+  else if (freeStock <= dailyDemand * (leadTimeDays + reviewDays) + safetyStock) status = "low"; // reviewDays: the cover-days setting (migration 224)
   else status = "ok";
 
   return { status, dailyDemand, daysOfStock, trend, method: intermittent ? "croston" : "ewma", safetyStock, reorderPoint, freeStock, daysToReorder, variability };

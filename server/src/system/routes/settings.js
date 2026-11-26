@@ -30,7 +30,7 @@ import { ROLES } from "../../shared/roles.js";
 import { pool } from "../../db/pool.js";
 import { buildAdminCounts } from "../adminCounts.js";
 import { getPlanSkipRecentVisitDays, setPlanSkipRecentVisitDays } from "../../utils/planSkipRecent.js";
-import { getDemandSettings, setDemandSettings, DEMAND_LEAD_TIME_RANGE, DEMAND_SERVICE_LEVEL_RANGE } from "../../products/demandSettings.js";
+import { getDemandSettings, setDemandSettings, DEMAND_LEAD_TIME_RANGE, DEMAND_SERVICE_LEVEL_RANGE, DEMAND_COVER_DAYS_RANGE } from "../../products/demandSettings.js";
 import { getDocumentTexts, setDocumentTexts, DOCUMENT_TEXT_DEFAULTS, getVisitFrequencyByType, setVisitFrequencyByType, recomputeDefaultVisitFrequencies } from "../../shared/documentTexts.js";
 
 export const settingsRouter = Router();
@@ -86,6 +86,7 @@ settingsRouter.get("/", async (req, res) => {
     plan_skip_recent_visit_days: planSkipRecentVisitDays,
     // the demand model's knobs (products/demandSettings.js): the supplier lead time in days and the service level in percent
     demand_lead_time_days: demandSettings.leadTimeDays,
+    demand_cover_days: demandSettings.coverDays,
     demand_service_level_pct: demandSettings.serviceLevelPct,
     // a new customer joins its rep's route plan on the day that holds its area (field/autoRoutePlan.js, ON by default)
     auto_route_plan_new_customers: autoRoutePlan,
@@ -188,17 +189,22 @@ settingsRouter.patch("/", requireAdmin, async (req, res) => {
     result.plan_skip_recent_visit_days = await setPlanSkipRecentVisitDays(Math.round(days));
   }
 
-  if (req.body?.demand_lead_time_days !== undefined || req.body?.demand_service_level_pct !== undefined) {
+  if (req.body?.demand_lead_time_days !== undefined || req.body?.demand_service_level_pct !== undefined || req.body?.demand_cover_days !== undefined) {
     const lead = req.body.demand_lead_time_days === undefined ? null : Number(req.body.demand_lead_time_days);
     const level = req.body.demand_service_level_pct === undefined ? null : Number(req.body.demand_service_level_pct);
+    const cover = req.body.demand_cover_days === undefined ? null : Number(req.body.demand_cover_days);
+    if (cover !== null && !(Number.isInteger(cover) && cover >= DEMAND_COVER_DAYS_RANGE[0] && cover <= DEMAND_COVER_DAYS_RANGE[1])) {
+      return res.status(400).json({ error: `demand_cover_days must be a whole number between ${DEMAND_COVER_DAYS_RANGE[0]} and ${DEMAND_COVER_DAYS_RANGE[1]}` });
+    }
     if (lead !== null && !(Number.isInteger(lead) && lead >= DEMAND_LEAD_TIME_RANGE[0] && lead <= DEMAND_LEAD_TIME_RANGE[1])) {
       return res.status(400).json({ error: `demand_lead_time_days must be a whole number between ${DEMAND_LEAD_TIME_RANGE[0]} and ${DEMAND_LEAD_TIME_RANGE[1]}` });
     }
     if (level !== null && !(Number.isInteger(level) && level >= DEMAND_SERVICE_LEVEL_RANGE[0] && level <= DEMAND_SERVICE_LEVEL_RANGE[1])) {
       return res.status(400).json({ error: `demand_service_level_pct must be a whole number between ${DEMAND_SERVICE_LEVEL_RANGE[0]} and ${DEMAND_SERVICE_LEVEL_RANGE[1]}` });
     }
-    const saved = await setDemandSettings({ leadTimeDays: lead, serviceLevelPct: level });
+    const saved = await setDemandSettings({ leadTimeDays: lead, serviceLevelPct: level, coverDays: cover });
     result.demand_lead_time_days = saved.leadTimeDays;
+    result.demand_cover_days = saved.coverDays;
     result.demand_service_level_pct = saved.serviceLevelPct;
   }
 
