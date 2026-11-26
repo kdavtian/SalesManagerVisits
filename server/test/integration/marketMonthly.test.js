@@ -24,4 +24,8 @@ test("not before 10:00 on the 1st; then once, with the month in the title", asyn
   assert.match(rows[0].body, /^• /);
   assert.equal(rows[0].url, "/#/reports?r=market_shelf");
   assert.equal(await checkMonthlyMarketReport(new Date("2025-06-01T09:00:00Z")), 0, "once a month");
+  // a deploy mid-month sends nothing for the month before
+  assert.equal(await checkMonthlyMarketReport(new Date("2025-07-26T09:00:00Z")), 0);
+  const { rowCount } = await pool.query("SELECT 1 FROM notifications WHERE user_id = $1 AND type = 'market_monthly' AND title LIKE '%(2025-06)%'", [admin.id]);
+  assert.equal(rowCount, 0);
 });

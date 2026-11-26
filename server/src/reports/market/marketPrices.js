@@ -37,8 +37,10 @@ export async function loadPriceEntries({ since = null, until = null, lineCode = 
 // price, price entries, flagged entries, score. Only field reps (visitCount.js: a director dropping by is no visit), and not the office
 // "check-in for all" places; the counts, the flagged list and the freshness line all rest on that same set (independent review).
 // -> { reps: [...], totals: {...}, flagged: [latest flagged entries of the period], meta: { latest_at, shops, entries } }
-export async function marketQuality({ days = 30, db = pool, flaggedLimit = 200 } = {}) {
-  const since = new Date(Date.now() - days * 86400000);
+// until: the end of the window (default now); the monthly report passes the month's own start and end.
+export async function marketQuality({ days = 30, until = null, since: from = null, db = pool, flaggedLimit = 200 } = {}) {
+  const end = until ?? new Date();
+  const since = from ?? new Date(end.getTime() - days * 86400000);
   const [{ rows: visits }, entries] = await Promise.all([
     db.query(
       `SELECT ch.user_id, COALESCE(u.name_hy, u.name) AS rep_name,
@@ -49,13 +51,13 @@ export async function marketQuality({ days = 30, db = pool, flaggedLimit = 200 }
        FROM checkins ch
        JOIN users u ON u.id = ch.user_id AND u.role = $2
        JOIN customers c ON c.id = ch.customer_id AND NOT c.checkin_for_all
-       WHERE ch.timestamp >= $1
+       WHERE ch.timestamp >= $1 AND ch.timestamp < $3
        GROUP BY ch.user_id, u.name_hy, u.name`,
-      [since, FIELD_REP_ROLE]
+      [since, FIELD_REP_ROLE, end]
     ),
-    loadPriceEntries({ db }),
+    loadPriceEntries({ until: end, db }),
   ]);
-  const inPeriod = entries.filter((e) => new Date(e.recorded_at) >= since && e.user_role === FIELD_REP_ROLE && !e.office);
+  const inPeriod = entries.filter((e) => new Date(e.recorded_at) >= since && new Date(e.recorded_at) < end && e.user_role === FIELD_REP_ROLE && !e.office);
   const byRep = new Map();
   for (const e of inPeriod) {
     const r = byRep.get(e.user_id) ?? { price_entries: 0, flagged_entries: 0 };

@@ -66,6 +66,9 @@ test("fake or grey Castrol on the shelf -> replace_grey at any stage (counterfei
   assert.deepEqual([grey.kind, grey.params], ["replace_grey", { fake: false }]);
   assert.equal(stepOf({ stage: 1, potential_level: null }, { castrolGrey: "fake" }, now).params.fake, true);
   assert.equal(stepOf({ stage: 2, progress: 10 }, { castrolGrey: "fake", counterfeit: true }, now), null);
+  // a step worth more stays: a High-potential first order, a customer whose litres fell
+  assert.equal(stepOf({ stage: 1, potential_level: 4, progress: 100 }, { castrolGrey: "grey" }, now).kind, "first_order");
+  assert.equal(stepOf({ stage: 4, progress: 100, litres_month: 60 }, { castrolGrey: "grey", litresBefore: 100 }, now).kind, "keep_loyal");
   assert.match(taskTitleOf({ ...grey, customer: { name: "Shop" } }), /օրիգինալ Castrol՝ Shop \(դարակում՝ գորշ ներմուծված Castrol\)/);
 });
 

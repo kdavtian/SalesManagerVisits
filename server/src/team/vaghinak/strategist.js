@@ -16,6 +16,13 @@ import { minuteOfDay, isWorkingDay } from "./engine.js";
 import { loadNameBook, maskText, unmaskText, customerCode, repCode } from "../askKad/anonymize.js";
 
 const API_URL = "https://api.openai.com/v1/chat/completions";
+// The market pitch of a step carries our prices and margins: internal, never sent to the AI (only counts and codes go out, review 2026-11-26)
+const withoutPitch = (params) => {
+  if (!params?.pitch) return params ?? {};
+  const { pitch: _pitch, ...rest } = params;
+  return rest;
+};
+
 export const STRATEGY_MODEL = process.env.OPENAI_STRATEGY_MODEL || "gpt-5";
 export const isStrategistConfigured = () => Boolean(process.env.OPENAI_API_KEY);
 const MAX_NOTES = 80;
@@ -157,7 +164,7 @@ export async function buildStrategyInput({ db = pool, now = new Date(), book } =
       this_week_picks: picks.map((p) => {
         const c = byId.get(p.customer_id);
         // the step as it was picked (kind and details together), not the customer's step of today
-        return { rep: repCode(p.rep_id), customer: codeOfId(p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: p.params ?? {}, region: c?.region ?? null, tier: c?.tier ?? null };
+        return { rep: repCode(p.rep_id), customer: codeOfId(p.customer_id), stage: c?.stage ?? null, step: p.kind, step_details: withoutPitch(p.params), region: c?.region ?? null, tier: c?.tier ?? null };
       }),
       field_notes_7_days: fieldNotes,
     },

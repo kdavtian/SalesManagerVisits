@@ -28,7 +28,7 @@ The rep only confirms or corrects them. Goal: more and better market data (Repor
 - `confidence` per row (0-1). Rows below 0.7 are not proposed.
 
 ## Cost per photo (estimate)
-Prices are from the app's own price table (`server/src/customers/aiBlankCheck.js` / `askKad/engine.js`). Check them against the current
+Prices are from the app's own price table (`server/src/customers/aiBlankCheck.js` / `server/src/team/askKad/engine.js`). Check them against the current
 Anthropic list before building.
 
 The photo is resized to about 1,600 px on the long edge, about 2,500 image tokens. Add about 1,500 prompt tokens (brand list, line codes)

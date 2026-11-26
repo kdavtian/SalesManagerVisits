@@ -9,6 +9,8 @@ import { priceDrops, monthOf, addMonth, marketLines } from "./priceIndex.js";
 import { competitorNameHy } from "./names.js";
 
 const SEND_HOUR = 10;
+// sent on the 1st; a server that was down then catches up until this day, never later in the month (a mid-month deploy sends nothing)
+const LAST_DAY = 3;
 const signed = (n) => (n == null ? "" : n > 0 ? ` (+${n})` : n < 0 ? ` (${n})` : " (0)");
 const pctOf = (d, key) => d?.brands?.find((b) => b.key === key)?.numeric_pct ?? (d?.shops ? 0 : null);
 
@@ -21,7 +23,8 @@ export function summaryBullets({ share, mover, drops, flagged, quality }) {
     const n = share.now;
     const b = share.before;
     const d = (k) => (b?.shops && n[k] != null && b[k] != null ? n[k] - b[k] : null);
-    lines.push(`Castrol դարակում՝ ${n.castrol_pct ?? 0}%${signed(d("castrol_pct"))} խանութների, ${n.castrol_weighted_pct ?? 0}%${signed(d("castrol_weighted_pct"))} ըստ լիտրի (${n.shops} խանութ)`);
+    const weighted = n.castrol_weighted_pct != null ? `, ${n.castrol_weighted_pct}%${signed(d("castrol_weighted_pct"))} ըստ լիտրի` : "";
+    lines.push(`Castrol դարակում՝ ${n.castrol_pct ?? 0}%${signed(d("castrol_pct"))} խանութների${weighted} (${n.shops} խանութ)`);
   } else {
     lines.push("Դարակի թարմ տվյալ չկա");
   }
@@ -63,7 +66,7 @@ export async function monthlyMarketFacts({ now = new Date(), db = pool } = {}) {
     shelfShare({ now: prevEnd, db }),
     loadPriceEntries({ since: new Date(end.getTime() - FLAG_WINDOW_DAYS * 86400000), until: end, db }),
     marketLines(db),
-    marketQuality({ days: 30, db, flaggedLimit: 0 }),
+    marketQuality({ since: prevEnd, until: end, db, flaggedLimit: 0 }),
     db.query("SELECT key, name FROM competitor_brands"),
   ]);
   const brandName = new Map(names.map((n) => [n.key, n.name]));
@@ -84,7 +87,12 @@ export async function checkMonthlyMarketReport(now = new Date(), db = pool) {
   const month = monthOf(now);
   if (doneMonth === month) return 0;
   const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", hour: "2-digit", hourCycle: "h23" }).format(now));
-  if (hour < SEND_HOUR) return 0;
+  const day = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Yerevan", day: "numeric" }).format(now));
+  if (day > LAST_DAY) {
+    doneMonth = month;
+    return 0;
+  }
+  if (day === 1 && hour < SEND_HOUR) return 0;
   const last = addMonth(month, -1);
   const { rows: people } = await db.query(
     `SELECT u.id FROM users u WHERE u.role IN ('admin', 'ceo') AND u.status = 'active'

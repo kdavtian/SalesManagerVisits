@@ -26,6 +26,7 @@ import { mondayOf } from "./digest.js";
 import { hyCommon } from "../../../../client/public/js/i18n/hy/common.js";
 import { minuteOfDay, isWorkingDay } from "./engine.js";
 import { priceIndex } from "../../reports/market/priceIndex.js";
+import { SHELF_FRESH_DAYS } from "../../field/shelfData.js";
 
 export const PICKS_PER_REP = 5;
 const REASSESS_DAYS = 60;
@@ -35,10 +36,15 @@ const DROP_SHARE = 0.3;
 //   extra: { counterfeit, potentialUpdatedAt, missingGroup, competitor, litresBefore }
 export function stepOf(c, extra = {}, now = Date.now()) {
   if (extra.counterfeit) return null;
-  if (extra.castrolGrey) {
-    const size0 = Math.min(Number(c.expected_volume_l) || Number(c.litres_month) || 0, 2000) / 2000;
-    return { kind: "replace_grey", params: { fake: extra.castrolGrey === "fake" }, value: Math.round((1.35 + (c.progress == null ? 0.5 : c.progress / 100) + size0) * 100) };
-  }
+  const base = baseStep(c, extra, now);
+  if (!extra.castrolGrey) return base;
+  // fake / grey Castrol on a fresh shelf: offered unless the funnel step is worth more (a High-potential first order, a falling customer)
+  const size0 = Math.min(Number(c.expected_volume_l) || Number(c.litres_month) || 0, 2000) / 2000;
+  const grey = { kind: "replace_grey", params: { fake: extra.castrolGrey === "fake" }, value: Math.round((1.35 + (c.progress == null ? 0.5 : c.progress / 100) + size0) * 100) };
+  return base && base.value > grey.value ? base : grey;
+}
+
+function baseStep(c, extra, now) {
   const size = Math.min(Number(c.expected_volume_l) || Number(c.litres_month) || 0, 2000) / 2000; // 0..1, a bigger shop counts more
   const near = c.progress == null ? 0.5 : c.progress / 100; // closer to the next stage counts more
   const value = (kindWeight) => Math.round((kindWeight + near + size) * 100);
@@ -79,7 +85,8 @@ export function pitchesByBrand(index) {
     const ref = g.ours.find((p) => p.id === g.reference_id);
     if (!ref) continue;
     for (const b of g.brands) {
-      if (b.gap_wholesale_pct == null && b.margin == null) continue;
+      // a candidate must say something: a gap, or both margins (else pitchHy would print nothing)
+      if (b.gap_wholesale_pct == null && (b.margin == null || ref.margin_bronze == null)) continue;
       const cur = out.get(b.brand_key);
       if (cur && cur.shops >= b.meta.shops) continue;
       out.set(b.brand_key, {
@@ -95,6 +102,20 @@ export function pitchesByBrand(index) {
     }
   }
   return out;
+}
+
+// The pitches by brand, from the price index read on the pool (never inside the weekly picks' transaction: a failed market query there
+// would abort it, review) and kept 10 minutes (the funnel screen and the picks ask often; prices change daily at most).
+let pitchCache = null;
+export async function marketPitches(now = new Date()) {
+  if (pitchCache && Date.now() - pitchCache.at < 10 * 60 * 1000) return pitchCache.map;
+  try {
+    const map = pitchesByBrand(await priceIndex({ db: pool, now }));
+    pitchCache = { at: Date.now(), map };
+    return map;
+  } catch {
+    return new Map();
+  }
 }
 
 // "Similar shops buy this" (pure, unit-tested): the 2 products of a group most shops of the same tier buy (all tiers when no shop of the
@@ -165,11 +186,12 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
     db.query(
       `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'castrol' AS castrol
        FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'castrol') = 'array'
+         AND timestamp > now() - make_interval(days => $2::int)  -- fresh shelf only (SHELF_FRESH_DAYS), as the shelf reports
        ORDER BY customer_id, timestamp DESC, id DESC`,
-      [ids]
+      [ids, SHELF_FRESH_DAYS]
     ),
-    // the market facts to pitch (a failure here never stops the steps)
-    priceIndex({ db, now }).catch(() => null),
+    // the market facts to pitch: read outside the caller's transaction and cached (a failure here never stops the steps)
+    marketPitches(now),
   ]);
   const greyOf = new Map(
     castrolShelves.map((s) => {
@@ -177,7 +199,7 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
       return [s.customer_id, v.includes("fake") ? "fake" : v.some((x) => String(x).startsWith("imported_")) ? "grey" : null];
     })
   );
-  const pitches = pitchesByBrand(index);
+  const pitches = index ?? new Map();
   const factOf = new Map(facts.map((f) => [f.id, f]));
   const shelfOf = new Map(shelves.map((s) => [s.customer_id, s.brands]));
   const brandNameOf = new Map(shelves.map((s) => [s.customer_id, s.first_brand_name]));
