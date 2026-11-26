@@ -61,7 +61,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
   hintText.textContent = fill(t("ps_hint"));
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
-  const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier })));
+  const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier, group_original: g.supplier })));
   // a transporter's goods are grouped under the real supplier (owner, 2026-11-26: Sole Trans brings Castrol): the card says "via ...",
   // from the lines the card holds now (a line moved to another card takes its transporter along; review 2026-11-26)
   const viaOf = (list) => [...new Set(list.map((l) => l.via).filter(Boolean))];
@@ -218,7 +218,11 @@ export async function renderPurchaseSuggestions(root, navigate) {
     if (!sel) return;
     const l = find(sel.dataset.move);
     if (!l) return;
+    // a line moved by hand is bought from the supplier chosen: its transporter (via) no longer names the invoice (Codex review 2026-11-26);
+    // moved back to the card it came from, it is the transporter's again
+    if (l.via_original === undefined) l.via_original = l.via ?? null;
     l.group = sel.value;
+    l.via = l.group === l.group_original ? l.via_original : null;
     render();
   });
 }
