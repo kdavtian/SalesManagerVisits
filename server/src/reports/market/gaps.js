@@ -117,11 +117,10 @@ export async function createGapTasks({ customerIds, lineCode = null, user, isReq
      WHERE c.id = ANY($1::int[]) AND c.closed_at IS NULL ORDER BY c.id`,
     [ids, FIELD_REP_ROLE]
   );
+  // who may be tasked is settled BEFORE a connection is held for the transaction: those checks use the pool, and requests holding a
+  // connection while waiting for another could starve the pool (Codex review)
   const allowed = new Map();
-  const mayTask = async (repId) => {
-    if (!allowed.has(repId)) allowed.set(repId, await assigneeAllowed(user, repId));
-    return allowed.get(repId);
-  };
+  for (const repId of new Set(shops.map((s) => s.rep_id).filter(Boolean))) allowed.set(repId, await assigneeAllowed(user, repId));
   const made = new Map();
   const client = db === pool ? await pool.connect() : db;
   try {
@@ -131,7 +130,7 @@ export async function createGapTasks({ customerIds, lineCode = null, user, isReq
         result.no_rep += 1;
         continue;
       }
-      if (!(await mayTask(s.rep_id))) {
+      if (!allowed.get(s.rep_id)) {
         result.not_allowed += 1;
         continue;
       }

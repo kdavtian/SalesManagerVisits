@@ -105,7 +105,9 @@ export async function renderMarketGaps(root, navigate) {
     if (e.target.closest("#mkt-pick-all")) {
       // "Pick all": at most as many as one tap may create (the server's limit)
       const allOn = pickableNow.every((s) => picked.has(s.customer_id));
-      pickableNow.forEach((s) => (allOn ? picked.delete(s.customer_id) : picked.add(s.customer_id)));
+      if (allOn) pickableNow.forEach((s) => picked.delete(s.customer_id));
+      // never past the limit, counting shops picked before (Codex review)
+      else for (const s of pickableNow) if (picked.size < data.max_tasks) picked.add(s.customer_id);
       shown = Math.max(shown, Math.min(data.shops.length, pickableNow.length ? data.shops.indexOf(pickableNow.at(-1)) + 1 : shown));
       render();
     }
@@ -150,6 +152,7 @@ export async function renderMarketGaps(root, navigate) {
           t("mkt_g_made").replace("{n}", String(r.created)).replace("{o}", String(r.already_open)),
           r.no_rep ? t("mkt_g_made_no_rep").replace("{n}", String(r.no_rep)) : "",
           r.not_allowed ? t("mkt_g_made_not_allowed").replace("{n}", String(r.not_allowed)) : "",
+          r.over_limit ? t("mkt_g_limit").replace("{n}", String(data.max_tasks)) : "",
         ]
           .filter(Boolean)
           .join(" · "),
