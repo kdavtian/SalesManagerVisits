@@ -33,7 +33,7 @@ const farFrom = (value, mid) => (value === null || value === undefined || !(mid 
 
 // entries: [{ brand_key, line_code, volume, unit, wholesale_amd, retail_amd, ... }] -> the same entries (new objects) plus
 // wholesale_per_unit, retail_per_unit, flags (array of FLAGS, empty = clean). The medians are taken over the entries given (the caller
-// chooses the window), the entry itself included.
+// chooses the window), the entry itself included, entries with retail below wholesale left out.
 export function flagEntries(entries) {
   const groups = new Map();
   for (const e of entries) {
@@ -41,17 +41,21 @@ export function flagEntries(entries) {
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(e);
   }
+  // an entry wrong on its own (retail below wholesale) is no yardstick for the others (Codex review): left out before the medians
+  const inverted = (e) => e.wholesale_amd != null && e.retail_amd != null && Number(e.retail_amd) < Number(e.wholesale_amd);
   const mids = new Map();
-  for (const [k, list] of groups) {
-    mids.set(k, {
-      wholesale: list.filter((e) => e.wholesale_amd != null).length >= MIN_GROUP ? median(list.map((e) => e.wholesale_amd)) : null,
-      retail: list.filter((e) => e.retail_amd != null).length >= MIN_GROUP ? median(list.map((e) => e.retail_amd)) : null,
-    });
+  for (const [k, all] of groups) {
+    const list = all.filter((e) => !inverted(e));
+    const mid = (field) => {
+      const vals = list.map((e) => e[field]).filter((v) => v != null);
+      return vals.length >= MIN_GROUP ? median(vals) : null;
+    };
+    mids.set(k, { wholesale: mid("wholesale_amd"), retail: mid("retail_amd") });
   }
   return entries.map((e) => {
     const mid = mids.get(groupKey(e));
     const flags = [];
-    if (e.wholesale_amd != null && e.retail_amd != null && Number(e.retail_amd) < Number(e.wholesale_amd)) flags.push("retail_below_wholesale");
+    if (inverted(e)) flags.push("retail_below_wholesale");
     const w = farFrom(e.wholesale_amd == null ? null : Number(e.wholesale_amd), mid.wholesale);
     if (w) flags.push(`wholesale_${w}`);
     const r = farFrom(e.retail_amd == null ? null : Number(e.retail_amd), mid.retail);

@@ -45,6 +45,14 @@ test("3x off the median of the same brand / line / volume, only with 3+ prices",
   assert.ok(edge.every(isClean));
 });
 
+test("prices wrong on their own (retail < wholesale) do not move the medians of the others (Codex review)", () => {
+  const ok = [1, 2, 3].map(() => e({ wholesale_amd: 10000, retail_amd: 12000 }));
+  const bad = [1, 2, 3].map(() => e({ wholesale_amd: 100000, retail_amd: 1000 }));
+  const rows = flagEntries([...ok, ...bad]);
+  assert.ok(rows.slice(0, 3).every(isClean), "the valid prices are not flagged");
+  assert.ok(rows.slice(3).every((r) => r.flags.includes("retail_below_wholesale") && r.flags.includes("wholesale_high")));
+});
+
 test("another brand or line is never the yardstick", () => {
   const rows = flagEntries([e({ wholesale_amd: 10000 }), e({ wholesale_amd: 10000 }), e({ wholesale_amd: 10000 }), e({ brand_key: "shell", wholesale_amd: 90000 }), e({ line_code: "atf", wholesale_amd: 90000 })]);
   assert.ok(rows.every(isClean));
