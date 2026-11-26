@@ -457,6 +457,7 @@
 .ps-supplier { margin: 0 0 14px; padding: 12px; }
 .ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
 .ps-supplier-head p { margin: 2px 0 8px; font-size: 0.82rem; }
+.ps-supplier-head .ps-via { margin-bottom: 0; }
 .ps-line { border-top: 1px solid var(--border); padding: 10px 0; }
 .ps-line-off { opacity: 0.6; }
 .ps-line-head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }

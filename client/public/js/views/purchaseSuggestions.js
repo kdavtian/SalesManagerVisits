@@ -61,7 +61,10 @@ export async function renderPurchaseSuggestions(root, navigate) {
   hintText.textContent = fill(t("ps_hint"));
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
-  const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier })));
+  const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier, group_original: g.supplier })));
+  // a transporter's goods are grouped under the real supplier (owner, 2026-11-26: Sole Trans brings Castrol): the card says "via ...",
+  // from the lines the card holds now (a line moved to another card takes its transporter along; review 2026-11-26)
+  const viaOf = (list) => [...new Set(list.map((l) => l.via).filter(Boolean))];
   // every supplier once, however its name was typed (the cards are grouped the same way on the server)
   const byKey = new Map();
   for (const n of [...data.suppliers.map((g) => g.supplier).filter(Boolean), ...suppliers]) {
@@ -156,6 +159,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
         ({ g, list, tot }, k) => `<section class="card ps-supplier" data-group="${escapeHtml(g)}">
           <div class="ps-supplier-head">
             <h2>${escapeHtml(g || t("ps_no_supplier"))}</h2>
+            ${viaOf(list).length ? `<p class="muted ps-via">${escapeHtml(t("ps_via").replace("{names}", viaOf(list).join(", ")))}</p>` : ""}
             <p class="muted ps-totals">${totalsHtml(tot)}</p>
           </div>
           ${list.map(lineHtml).join("")}
@@ -184,10 +188,13 @@ export async function renderPurchaseSuggestions(root, navigate) {
     if (create) {
       const supplier = create.dataset.create;
       const list = lines.filter((l) => l.group === supplier && l.order > 0);
+      // every product ordered comes via one transporter: the invoice is written under it, as the Excel writes it (so the two match)
+      const via = viaOf(list);
+      const invoiceSupplier = via.length === 1 && list.every((l) => l.via) ? via[0] : supplier;
       const { openPurchaseForm } = await import("./purchases/form.js");
       openPurchaseForm(
         {
-          supplier,
+          supplier: invoiceSupplier,
           status: "ordered",
           expected_date: data.arrival_date,
           // a draft per supplier and DAY: yesterday's draft never replaces today's suggestion (review 2026-11-25)
@@ -211,7 +218,11 @@ export async function renderPurchaseSuggestions(root, navigate) {
     if (!sel) return;
     const l = find(sel.dataset.move);
     if (!l) return;
+    // a line moved by hand is bought from the supplier chosen: its transporter (via) no longer names the invoice (Codex review 2026-11-26);
+    // moved back to the card it came from, it is the transporter's again
+    if (l.via_original === undefined) l.via_original = l.via ?? null;
     l.group = sel.value;
+    l.via = l.group === l.group_original ? l.via_original : null;
     render();
   });
 }

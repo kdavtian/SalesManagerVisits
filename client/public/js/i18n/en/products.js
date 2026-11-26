@@ -223,6 +223,7 @@ export const enProducts = {
     ps_trend_up: "Sales ↑",
     ps_too_much: "Too much: {days} days",
     ps_too_much_step: "Smallest step lasts {days} days",
+    ps_via: "via {names} (transporter)",
     ps_trend_down: "Sales ↓",
     pu_hint: "Supplier invoices, typed here with the columns of the Excel Purchase_IN sheet. Every invoice is compared with the Excel: same number and date, the same packs and the same USD total = matches. The Excel stays the source of stock until the Purchases module is switched over.",
     pu_new: "New purchase",

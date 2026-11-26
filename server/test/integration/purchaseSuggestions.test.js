@@ -97,3 +97,24 @@ test("enough stock or already on the way: no suggestion", async () => {
   assert.equal(all.find((l) => l.product_id === full.id), undefined, "1000 last far beyond 90 days");
   assert.equal(all.find((l) => l.product_id === coming.id), undefined, "400 already ordered cover 1 a day for 90 days");
 });
+
+// Owner, 2026-11-26: "Sole Trans is the transporter. Real company: Castrol" -- a transporter's goods are suggested under the real supplier,
+// the card naming the transporter (via); the migration marks Sole Trans as bringing Castrol.
+test("suggestions: a transporter's products are under the real supplier, via the transporter", async () => {
+  const { rows: [sole] } = await pool.query("SELECT goods_from FROM suppliers WHERE lower(name) = 'sole trans'");
+  assert.equal(sole?.goods_from, "Castrol", "migration 226 marks Sole Trans");
+  const transporter = `ITEST-PS Trans ${stamp}`;
+  const real = `ITEST-PS Real ${stamp}`;
+  const oil = await selling("ITEST-PS Via 1L", "1L", 14, { itemsPerPack: 12, stock: 0 });
+  await boughtFrom(oil, transporter, 3);
+  await pool.query("UPDATE suppliers SET goods_from = $2 WHERE lower(name) = lower($1)", [transporter, real]);
+  const res = await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin });
+  assert.equal(res.status, 200);
+  assert.ok(!res.data.suppliers.some((g) => g.supplier === transporter), "no card for the transporter");
+  const card = res.data.suppliers.find((g) => g.supplier === real);
+  assert.ok(card, JSON.stringify(res.data.suppliers.map((g) => g.supplier)));
+  assert.deepEqual(card.via, [transporter]);
+  const line = card.lines.find((l) => l.product_id === oil.id);
+  assert.equal(line.via, transporter);
+  assert.equal(line.supplier, real);
+});
