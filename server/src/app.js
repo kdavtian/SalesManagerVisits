@@ -30,6 +30,7 @@ import { editRequestsRouter } from "./customers/routes/editRequests.js";
 import { requestsRouter } from "./system/routes/requests.js";
 import { pinReviewRouter } from "./customers/routes/pinReview.js";
 import { volumeReportRouter } from "./reports/routes/volumeReport.js";
+import { marketRouter } from "./reports/routes/market.js";
 import { locationsRouter } from "./field/routes/locations.js";
 import { integrationRouter } from "./erp/routes/integration.js";
 import { integrationAdminRouter } from "./erp/routes/integrationAdmin.js";
@@ -228,6 +229,8 @@ app.use("/api/settings", express.json(), settingsRouter);
 app.use("/api/edit-requests", express.json(), editRequestsRouter);
 app.use("/api/pin-review", express.json(), pinReviewRouter);
 app.use("/api/volume-report", volumeReportRouter);
+// the Market reports (shelf, competitor prices, data quality): reports/market/
+app.use("/api/market", express.json(), marketRouter);
 app.use("/api/locations", express.json(), locationsRouter);
 // A signed PDF from Lily arrives as the raw request body (<= 15 MB).
 app.use("/api/integration/v1", express.raw({ type: "application/pdf", limit: "15mb" }), express.json({ limit: "2mb" }), integrationRouter);

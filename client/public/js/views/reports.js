@@ -67,6 +67,7 @@ export async function renderReports(root, navigate, reportKey, { inPane = false 
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "product_wishes") return renderProductWishesReport(root, navigate);
+  if (reportKey === "market_quality") return (await import("./marketQuality.js")).renderMarketQuality(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   // Payments (Excel) now lives on the Sales page as its Payments tab.
   if (reportKey === "erp_payments") return navigate("#/sales?tab=payments");
@@ -198,6 +199,7 @@ const REPORT_GROUPS = [
   { id: "management", keys: ["pivot", "daily_management", "weekly_scorecard", "sales_budget", "product_liters", "volume_opportunities", "brand_volume"] },
   { id: "money", keys: ["customer_debt", "unpaid_invoices", "payments", "cash_custody", "cash_reconciliation"] },
   { id: "orders", keys: ["orders_pipeline", "delivery_speed", "customer_pipeline", "new_customers", "brand_availability", "product_wishes"] },
+  { id: "market", keys: ["market_quality"] },
   { id: "team", keys: ["checkins", "fuel_allowance"] },
   { id: "documents", keys: ["documents"] },
 ];
@@ -233,6 +235,7 @@ const REPORT_ICONS = {
   orders_pipeline: icons.cart,
   brand_availability: icons.store,
   product_wishes: icons.sparkles,
+  market_quality: icons.clipboardCheck,
   payments: icons.payment,
   erp_payments: icons.wallet,
   cash_custody: icons.wallet,

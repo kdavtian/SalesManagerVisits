@@ -425,6 +425,8 @@ export const hyCommon = {
     reports_group_money: "Գումար և պարտքեր",
     reports_group_orders: "Պատվերներ և հաճախորդներ",
     reports_group_team: "Թիմի աշխատանք",
+    reports_group_market: "Շուկա",
+    report_market_quality_description: "Որքան օգտագործելի են ներկայացուցչի շուկայի տվյալները՝ դարակ, մրցակցի գներ, կասկածելի գրառումներ։",
     reports_group_documents: "Փաստաթղթեր",
     reports_group_other: "Այլ",
     report_new_customers_description: "Ով է ավելացրել նոր հաճախորդներ, և երբ։",

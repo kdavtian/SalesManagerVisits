@@ -53,6 +53,14 @@ export const REPORTS = [
     descriptionKey: "report_product_wishes_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Market (owner, 2026-11-26): the shelf and competitor prices reps record, cleaned (reports/market/). Data quality: each rep's share of
+  // visits with shelf data and prices, and the price entries flagged as outliers.
+  {
+    key: "market_quality",
+    nameKey: "report_market_quality_name",
+    descriptionKey: "report_market_quality_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -213,6 +221,7 @@ const REPORT_DISPLAY_ORDER = [
   "brand_volume",
   "brand_availability",
   "product_wishes",
+  "market_quality",
   "cash_custody",
   "cash_reconciliation",
   "documents",

@@ -67,6 +67,8 @@ export const reportsApi = {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/brand-availability${qs ? `?${qs}` : ""}`);
   },
+  // the Market reports (server reports/routes/market.js)
+  getMarketQuality: (params = {}) => request(`/market/quality?${new URLSearchParams(params)}`),
   getProductWishesReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/reports/product-wishes${qs ? `?${qs}` : ""}`);

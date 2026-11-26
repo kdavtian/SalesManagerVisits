@@ -425,6 +425,8 @@ export const enCommon = {
     reports_group_money: "Money and debts",
     reports_group_orders: "Orders and customers",
     reports_group_team: "Team work",
+    reports_group_market: "Market",
+    report_market_quality_description: "How usable each rep's market data is: shelf, competitor prices, flagged entries.",
     reports_group_documents: "Documents",
     reports_group_other: "Other",
     report_new_customers_description: "Who added new customers, and when.",
