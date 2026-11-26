@@ -13,6 +13,7 @@ import { getProductCatalog } from "../../productCatalog.js";
 import { searchProducts } from "../../productSearch.js";
 import { compareProducts, sortedBrands } from "../../productSort.js";
 import { nextInvoiceNo, parseAmount, priceChangePct } from "../../purchaseNumbers.js";
+import { orderStep } from "../../shared/purchaseSuggestion.js";
 
 const DRAFT_KEY = "fv_pu_draft";
 const DRAFT_MAX_AGE_MS = 7 * 86400000;
@@ -110,6 +111,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         <p class="pu-draft" id="pu-draft" hidden><span>${t("pu_draft_restored")}</span><button type="button" class="pu-link-btn" id="pu-draft-discard">${t("pu_draft_discard")}</button></p>
         <fieldset class="pu-block">
           <legend>${t("pu_supplier")}</legend>
+          <input type="search" id="pu-supplier-find" class="pu-supplier-find" placeholder="${t("pu_supplier_find")}" aria-label="${t("pu_supplier_find")}" autocomplete="off" hidden />
           <div class="pu-supplier-pick" id="pu-supplier-chips" role="radiogroup" aria-label="${t("pu_supplier")}"></div>
           <div id="pu-new-supplier" hidden><input name="supplier_new" maxlength="120" value="${escapeHtml(source.supplier_new ?? "")}" placeholder="${t("pu_supplier_new")}" aria-label="${t("pu_supplier_new")}" /></div>
           <p class="pu-field-err" id="err-supplier" role="alert" hidden></p>
@@ -122,9 +124,12 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           <div class="pu-field pu-expected" id="pu-expected-wrap" ${status === "arrived" ? "hidden" : ""}>
             <label for="pu-expected">${t("pu_expected")}</label>
             <button type="button" class="btn pu-date-btn" id="pu-expected">${expected ? escapeHtml(formatDateDMY(expected)) : t("pu_expected_none")}</button>
+            <p class="muted pu-expected-hint" id="pu-expected-hint" hidden></p>
           </div>
           <p class="muted pu-status-hint" id="pu-status-hint" ${status === "ordered" ? "" : "hidden"}>${t("pu_ordered_hint")}</p>
         </fieldset>
+        <details class="pu-invoice" id="pu-invoice" ${status !== "ordered" || source.invoice_no || source.usd_rate || source.rate ? "open" : ""}>
+        <summary>${t("pu_invoice_section")}</summary>
         <div class="pu-grid3">
           <div class="pu-field">
             <label for="pu-no">${t("pu_invoice_no")}</label>
@@ -143,6 +148,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
             <p class="pu-field-err" id="err-rate" role="alert" hidden></p>
           </div>
         </div>
+        </details>
         <div class="pu-dup" id="pu-dup" role="alert" hidden>
           <span id="pu-dup-text"></span>
           <span class="pu-dup-actions"><button type="button" class="btn" id="pu-dup-open">${t("pu_dup_open")}</button><button type="button" class="btn" id="pu-dup-anyway">${t("pu_dup_anyway")}</button></span>
@@ -152,6 +158,8 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           <input type="search" id="pu-search" placeholder="${t("pu_search_hint")}" aria-label="${t("pu_search_product")}" autocomplete="off" />
           <div id="pu-results" class="pu-results" role="listbox"></div>
         </div>
+        <button type="button" class="btn btn-block pu-from-suggest" id="pu-from-suggest" hidden>${icons.cart}<span>${t("pu_from_suggestions")}</span></button>
+        <p class="muted pu-from-suggest-msg" id="pu-from-suggest-msg" role="status" hidden></p>
         <input type="search" id="pu-lines-filter" class="pu-lines-filter" placeholder="${t("pu_lines_filter")}" aria-label="${t("pu_lines_filter")}" autocomplete="off" hidden />
         <div id="pu-lines" class="pu-flines"></div>
         <p class="pu-field-err" id="err-lines" role="alert" hidden></p>
@@ -163,6 +171,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       </div>
       <div class="pu-bar">
         <div class="pu-bar-totals" id="pu-total"></div>
+        <p class="muted pu-save-why" id="pu-save-why" role="status" hidden></p>
         <div class="pu-bar-btns">
           <button type="button" class="btn" id="pu-cancel">${t("cancel")}</button>
           <button type="submit" class="btn btn-primary" id="pu-save">${t("pu_save")}</button>
@@ -203,14 +212,27 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   });
 
   // ---- supplier chips, number and rate hints -------------------------------------------------------------------------------------------
+  const findEl = $("#pu-supplier-find");
+  findEl.hidden = known.length <= 6; // a long list gets a search box (the chosen supplier always stays in view)
+  findEl.addEventListener("input", () => paintSupplier());
+  // Enter in the search never saves the form (review 2026-11-26): it picks the supplier when exactly one matches
+  findEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const shown = [...$("#pu-supplier-chips").querySelectorAll("[data-supplier]")].filter((b) => b.dataset.supplier !== "__new");
+    if (shown.length === 1) shown[0].click();
+  });
   function paintSupplier() {
-    const chips = known.map((s) => {
+    const q = findEl.value.trim().toLowerCase();
+    const chips = known.filter((s) => !q || s.name.toLowerCase().includes(q) || s.name.toLowerCase() === supplierName.toLowerCase()).map((s) => {
       const on = s.name.toLowerCase() === supplierName.toLowerCase();
       return `<button type="button" class="pu-chip ${on ? "pu-chip-on" : ""}" role="radio" aria-checked="${on}" data-supplier="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong>${s.brands ? `<span class="muted">${escapeHtml(s.brands)}</span>` : ""}</button>`;
     });
     chips.push(`<button type="button" class="pu-chip pu-chip-add ${supplierName === "__new" ? "pu-chip-on" : ""}" role="radio" aria-checked="${supplierName === "__new"}" data-supplier="__new"><strong>${t("pu_supplier_add")}</strong></button>`);
     $("#pu-supplier-chips").innerHTML = chips.join("");
     $("#pu-new-supplier").hidden = supplierName !== "__new";
+    paintSaveState();
+    paintFromSuggest();
     $("#pu-supplier-chips").querySelectorAll("[data-supplier]").forEach((b) =>
       b.addEventListener("click", () => {
         supplierName = b.dataset.supplier;
@@ -220,8 +242,9 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         offerNumber();
         checkDuplicate();
         scheduleDraft();
+        $("#pu-from-suggest-msg").hidden = true;
         if (supplierName === "__new") $("#pu-new-supplier input").focus();
-        else if (!noInput.value) noInput.focus();
+        else if (!noInput.value && $("#pu-invoice").open) noInput.focus();
       })
     );
   }
@@ -249,7 +272,79 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     }
     $("#pu-rate-hints").innerHTML = last ? `<span class="muted">${escapeHtml(t("pu_rate_last").replace("{rate}", groupDigits(last)))}</span>` : "";
   }
-  $("#pu-new-supplier input").addEventListener("input", scheduleDraft);
+  $("#pu-new-supplier input").addEventListener("input", () => {
+    scheduleDraft();
+    paintSaveState();
+  });
+
+  // ---- Save state: dimmed until a supplier and a product are there, the reason shown beside it ---------------------------------------
+  function paintSaveState() {
+    const name = supplierName === "__new" ? String($("#pu-new-supplier input")?.value || "").trim() : supplierName;
+    const why = !name ? t("pu_save_need_supplier") : !lines.length ? t("pu_save_need_lines") : "";
+    const saveBtn = $("#pu-save");
+    if (!saveBtn) return;
+    // dimmed, not disabled: a tap still shows what is missing next to each field (the form's own rule, purchases.spec "an empty form says")
+    saveBtn.classList.toggle("pu-save-pending", Boolean(why));
+    if (why) saveBtn.setAttribute("aria-describedby", "pu-save-why");
+    else saveBtn.removeAttribute("aria-describedby");
+    $("#pu-save-why").textContent = why;
+    $("#pu-save-why").hidden = !why;
+  }
+
+  // ---- the supplier's smart suggestions (Purchases > Smart suggestions) into this purchase ----------------------------------------------
+  function paintFromSuggest() {
+    const btn = $("#pu-from-suggest");
+    if (!btn) return;
+    btn.hidden = !(supplierName && supplierName !== "__new" && status !== "arrived");
+  }
+  $("#pu-from-suggest").addEventListener("click", async () => {
+    const btn = $("#pu-from-suggest");
+    const msg = $("#pu-from-suggest-msg");
+    btn.disabled = true;
+    try {
+      const data = await api.getPurchaseSuggestions();
+      const key = (n) => String(n ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+      const group = data.suppliers.find((g) => key(g.supplier) === key(supplierName));
+      const have = new Set(lines.map((l) => l.product_id));
+      const fresh = (group?.lines ?? []).filter((l) => l.order > 0 && !have.has(l.product_id));
+      for (const l of fresh) lines.push({ product_id: l.product_id, product_name: l.name, brand: l.brand ?? null, size_l: l.liters_per_piece ?? null, qty: l.order, cost_usd: l.cost_usd });
+      if (fresh.length) {
+        fieldErr("lines", "");
+        paintLines();
+        scheduleDraft();
+        loadHistory(fresh.map((l) => l.product_id));
+      }
+      msg.textContent = fresh.length ? t("pu_suggest_added").replace("{n}", fresh.length) : t("pu_suggest_none");
+      msg.hidden = false;
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---- the expected date: today + the lead time (Settings) when nothing is set yet -----------------------------------------------
+  let leadDays = null;
+  const plusDays = (day, n) => {
+    const d = new Date(`${day}T00:00:00`);
+    d.setDate(d.getDate() + n);
+    return isoDay(d);
+  };
+  function defaultExpected() {
+    if (editing || expected || status === "arrived" || !leadDays) return; // an edited invoice keeps what it has
+    expected = plusDays(isoDay(new Date()), leadDays);
+    $("#pu-expected").textContent = formatDateDMY(expected);
+    $("#pu-expected-hint").textContent = t("pu_expected_default").replace("{n}", leadDays);
+    $("#pu-expected-hint").hidden = false;
+  }
+  api
+    .getSettings()
+    .then((s) => {
+      leadDays = Number(s?.demand_lead_time_days) || null;
+      defaultExpected();
+    })
+    .catch(() => {});
 
   // ---- duplicate ---------------------------------------------------------------------------------------------------------------------
   function showDuplicate(id) {
@@ -301,6 +396,11 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       });
       $("#pu-expected-wrap").hidden = status === "arrived";
       $("#pu-status-hint").hidden = status !== "ordered";
+      if (status !== "ordered") $("#pu-invoice").open = true; // on the way / arrived: the invoice is there to type
+      else if (!noInput.value.trim()) $("#pu-invoice").open = false; // Ordered with no invoice yet: out of the way until it comes
+      defaultExpected();
+      paintFromSuggest();
+      paintLines(); // the order-step hints are shown only while Ordered
       if (status === "ordered") {
         fieldErr("no", "");
         fieldErr("rate", "");
@@ -314,6 +414,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     if (picked) {
       expected = picked;
       button.textContent = formatDateDMY(expected);
+      $("#pu-expected-hint").hidden = true;
       scheduleDraft();
     }
   });
@@ -428,6 +529,18 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     });
   }
   filterEl.addEventListener("input", applyLineFilter);
+  // While a purchase is Ordered, each line says the supplier's order step (owner, 2026-11-25: bottles 5 boxes, 20 L 5 pieces, above 20 L
+  // by 1) and offers to round a quantity that is not a whole step. Not forced: an invoice typed from paper says what really came.
+  function stepHtml(l) {
+    const p = byId.get(l.product_id);
+    if (status !== "ordered" || !p) return "";
+    const step = orderStep(p);
+    if (step.stepPieces <= 1) return "";
+    const what = step.kind === "pack" && step.packSize > 1 ? `${step.stepPieces / step.packSize} ${t("ps_boxes")} = ${step.stepPieces}` : String(step.stepPieces);
+    const qty = Number(l.qty) || 0;
+    const up = qty > 0 && qty % step.stepPieces ? Math.ceil(qty / step.stepPieces) * step.stepPieces : null;
+    return `<span class="${up ? "pu-step-off" : "muted"}">${escapeHtml(t("pu_step_hint").replace("{step}", what))}</span>${up ? ` <button type="button" class="pu-hint-chip" data-round="${up}">${escapeHtml(t("pu_step_round").replace("{n}", up))}</button>` : ""}`;
+  }
   function lineHtml(l, i) {
             const p = byId.get(l.product_id);
             const h = history.get(l.product_id);
@@ -438,6 +551,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
               <div class="pu-fl-main">
                 <span class="pu-fl-name">${escapeHtml(name)}</span>
                 <span class="pu-fl-hist">${h ? histText(h) : ""}</span>
+                <span class="pu-fl-step" data-step>${stepHtml(l)}</span>
               </div>
               <label class="pu-fl-num"><input data-f="qty" inputmode="decimal" aria-label="${t("pu_packs")}" placeholder="${t("pu_packs")}" value="${l.qty || ""}" /></label>
               <label class="pu-fl-num"><input data-f="cost_usd" inputmode="decimal" aria-label="${t("pu_cost_usd")}" placeholder="$" value="${l.cost_usd === null || l.cost_usd === undefined ? "" : l.cost_usd}" />
@@ -475,6 +589,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
           fieldErr("lines", "");
           // the line total, the change chip and the bar follow without redrawing the inputs (focus stays)
           row.querySelector(".pu-fl-sum strong").textContent = usd((Number(lines[i].qty) || 0) * (Number(lines[i].cost_usd) || 0));
+          if (input.dataset.f === "qty") row.querySelector("[data-step]").innerHTML = stepHtml(lines[i]);
           updateDelta(row, i);
           paintBrandFacts();
           paintTotal();
@@ -498,9 +613,18 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         paintLines();
         scheduleDraft();
       });
+      row.querySelector("[data-step]").addEventListener("click", (e) => {
+        const b = e.target.closest("[data-round]");
+        if (!b) return;
+        lines[i].qty = Number(b.dataset.round);
+        const qtyInput = row.querySelector('[data-f="qty"]');
+        qtyInput.value = String(lines[i].qty);
+        qtyInput.dispatchEvent(new Event("input"));
+      });
     });
     applyLineFilter();
     paintTotal();
+    paintSaveState();
   }
 
   // ---- product search ----------------------------------------------------------------------------------------------------------------
@@ -568,6 +692,9 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       bad(supplierName === "__new" ? $("#pu-new-supplier input") : $("#pu-supplier-chips button"));
     }
     const paperNeeded = status !== "ordered"; // an Ordered purchase has no invoice yet (P5)
+    if (paperNeeded) $("#pu-invoice").open = true;
+    const rateTyped = rateInput.value.trim();
+    if (rateTyped && !(Number.isFinite(parseAmount(rateTyped)) && parseAmount(rateTyped) > 0)) $("#pu-invoice").open = true; // a bad rate is never hidden in the folded section
     if (paperNeeded && !noInput.value.trim()) {
       fieldErr("no", t("pu_need_no"));
       flag(noInput, true);
