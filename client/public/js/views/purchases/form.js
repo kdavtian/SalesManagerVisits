@@ -215,6 +215,13 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const findEl = $("#pu-supplier-find");
   findEl.hidden = known.length <= 6; // a long list gets a search box (the chosen supplier always stays in view)
   findEl.addEventListener("input", () => paintSupplier());
+  // Enter in the search never saves the form (review 2026-11-26): it picks the supplier when exactly one matches
+  findEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const shown = [...$("#pu-supplier-chips").querySelectorAll("[data-supplier]")].filter((b) => b.dataset.supplier !== "__new");
+    if (shown.length === 1) shown[0].click();
+  });
   function paintSupplier() {
     const q = findEl.value.trim().toLowerCase();
     const chips = known.filter((s) => !q || s.name.toLowerCase().includes(q) || s.name.toLowerCase() === supplierName.toLowerCase()).map((s) => {
@@ -235,8 +242,9 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         offerNumber();
         checkDuplicate();
         scheduleDraft();
+        $("#pu-from-suggest-msg").hidden = true;
         if (supplierName === "__new") $("#pu-new-supplier input").focus();
-        else if (!noInput.value) noInput.focus();
+        else if (!noInput.value && $("#pu-invoice").open) noInput.focus();
       })
     );
   }
@@ -277,7 +285,8 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     if (!saveBtn) return;
     // dimmed, not disabled: a tap still shows what is missing next to each field (the form's own rule, purchases.spec "an empty form says")
     saveBtn.classList.toggle("pu-save-pending", Boolean(why));
-    saveBtn.setAttribute("aria-describedby", why ? "pu-save-why" : "");
+    if (why) saveBtn.setAttribute("aria-describedby", "pu-save-why");
+    else saveBtn.removeAttribute("aria-describedby");
     $("#pu-save-why").textContent = why;
     $("#pu-save-why").hidden = !why;
   }
@@ -298,7 +307,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
       const group = data.suppliers.find((g) => key(g.supplier) === key(supplierName));
       const have = new Set(lines.map((l) => l.product_id));
       const fresh = (group?.lines ?? []).filter((l) => l.order > 0 && !have.has(l.product_id));
-      for (const l of fresh) lines.push({ product_id: l.product_id, qty: l.order, cost_usd: l.cost_usd });
+      for (const l of fresh) lines.push({ product_id: l.product_id, product_name: l.name, brand: l.brand ?? null, size_l: l.liters_per_piece ?? null, qty: l.order, cost_usd: l.cost_usd });
       if (fresh.length) {
         fieldErr("lines", "");
         paintLines();
@@ -323,7 +332,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     return isoDay(d);
   };
   function defaultExpected() {
-    if (expected || status === "arrived" || !leadDays) return;
+    if (editing || expected || status === "arrived" || !leadDays) return; // an edited invoice keeps what it has
     expected = plusDays(isoDay(new Date()), leadDays);
     $("#pu-expected").textContent = formatDateDMY(expected);
     $("#pu-expected-hint").textContent = t("pu_expected_default").replace("{n}", leadDays);
@@ -333,7 +342,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     .getSettings()
     .then((s) => {
       leadDays = Number(s?.demand_lead_time_days) || null;
-      if (!editing) defaultExpected();
+      defaultExpected();
     })
     .catch(() => {});
 
@@ -684,6 +693,8 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     }
     const paperNeeded = status !== "ordered"; // an Ordered purchase has no invoice yet (P5)
     if (paperNeeded) $("#pu-invoice").open = true;
+    const rateTyped = rateInput.value.trim();
+    if (rateTyped && !(Number.isFinite(parseAmount(rateTyped)) && parseAmount(rateTyped) > 0)) $("#pu-invoice").open = true; // a bad rate is never hidden in the folded section
     if (paperNeeded && !noInput.value.trim()) {
       fieldErr("no", t("pu_need_no"));
       flag(noInput, true);

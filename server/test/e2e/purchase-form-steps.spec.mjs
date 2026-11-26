@@ -42,6 +42,15 @@ test("purchase form: Ordered folds the invoice, expected = today + lead time, su
     await form.locator("[data-round]").click();
     await expect(qty).toHaveValue("120");
     await expect(form.locator("[data-round]")).toHaveCount(0);
+    // a bad rate typed while Ordered: Save opens the folded invoice section so the error is seen (review 2026-11-26)
+    await form.locator("#pu-invoice > summary").click();
+    await form.locator("#pu-rate").fill("abc");
+    await form.locator("#pu-invoice > summary").click();
+    await expect(form.locator("#pu-invoice")).not.toHaveAttribute("open", "");
+    await form.locator("#pu-save").click();
+    await expect(form.locator("#pu-invoice")).toHaveAttribute("open", "");
+    await expect(form.locator("#err-rate")).toBeVisible();
+    await form.locator("#pu-rate").fill("400");
     // received: the invoice fields open, the step hint goes
     await form.locator('[data-status="arrived"]').click();
     await expect(form.locator("#pu-invoice")).toHaveAttribute("open", "");
