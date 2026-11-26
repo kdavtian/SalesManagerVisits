@@ -68,6 +68,13 @@ export const REPORTS = [
     descriptionKey: "report_market_prices_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Shelf share: % of visited shops carrying Castrol / each competitor, weighted by litres potential, trend, fake / grey spots (shelfShare.js)
+  {
+    key: "market_shelf",
+    nameKey: "report_market_shelf_name",
+    descriptionKey: "report_market_shelf_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -228,6 +235,7 @@ const REPORT_DISPLAY_ORDER = [
   "brand_volume",
   "brand_availability",
   "product_wishes",
+  "market_shelf",
   "market_prices",
   "market_quality",
   "cash_custody",

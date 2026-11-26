@@ -5,6 +5,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canAccessReport } from "../reports.js";
 import { marketQuality } from "../market/marketPrices.js";
 import { priceIndex } from "../market/priceIndex.js";
+import { shelfShare } from "../market/shelfShare.js";
 
 export const marketRouter = Router();
 marketRouter.use(requireAuth);
@@ -20,4 +21,10 @@ marketRouter.get("/quality", requireReport("market_quality"), async (req, res) =
 // GET /api/market/prices -> per line and volume: competitor medians (90 days, clean), our Castrol tiers, gaps, margins, 6-month trend, drops
 marketRouter.get("/prices", requireReport("market_prices"), async (req, res) => {
   res.json(await priceIndex());
+});
+
+// GET /api/market/shelf?region=&channel= -> numeric / weighted distribution per brand, by region and channel, 6-month trend, fake / grey spots
+marketRouter.get("/shelf", requireReport("market_shelf"), async (req, res) => {
+  const pick = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 100) : null);
+  res.json(await shelfShare({ region: pick(req.query.region), channel: pick(req.query.channel) }));
 });
