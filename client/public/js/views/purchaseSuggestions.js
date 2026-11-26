@@ -16,7 +16,17 @@ import { icons } from "../icons.js";
 import { normalizeUnitLabel, compareProducts } from "../productSort.js";
 import { purchaseLine } from "../shared/purchaseSuggestion.js";
 
-const usd = (n) => `$${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+// dollars as the owner writes them: 4,500$ (whole) and 12.7$ (a piece's price, up to 2 decimals)
+const usd = (n) => `${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}$`;
+const usdPiece = (n) => `${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })}$`;
+// the size is on its chip: it is taken out of the name ("Edge 0W-30 1L" + chip "1 L" -> "Edge 0W-30" + chip; owner 2026-11-26: no duplication)
+function nameWithoutSize(name, unit) {
+  const m = String(unit ?? "").replace(",", ".").match(/(\d+(?:\.\d+)?)\s*l/i);
+  if (!m) return name;
+  const n = m[1].replace(".", "[.,]");
+  const cut = String(name).replace(new RegExp(`(^|\\s)${n}\\s*(l|լ|ltr|litre|liter)(?=\\s|$)`, "i"), " ").replace(/\s+/g, " ").trim();
+  return cut || name;
+}
 const whole = (n) => Math.round(Number(n || 0)).toLocaleString("en-US");
 const num = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 1 });
 const addDays = (day, n) => {
@@ -164,11 +174,12 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   const pcs = t("warehouse_pcs_suffix");
   const d = t("ps_d");
+  // the − / + section (owner 2026-11-26): boxes (or pieces) on top, the line's money under it
   function qtyHtml(l) {
     const boxes = l.kind === "pack" && l.pack_size > 1;
     const big = boxes ? `${l.order / l.pack_size} ${t("ps_boxes")}` : `${l.order} ${pcs}`;
-    const small = [boxes ? `${l.order} ${pcs}` : "", l.cost_usd != null && l.order ? usd(l.cost_usd * l.order) : ""].filter(Boolean).join(" · ");
-    return `<strong>${big}</strong>${small ? `<span class="muted">${small}</span>` : ""}`;
+    const money = l.cost_usd != null ? usd(l.cost_usd * l.order) : "—";
+    return `<strong>${big}</strong><span class="muted">${money}</span>`;
   }
   function lineHtml(l) {
     const size = l.unit ? normalizeUnitLabel(l.unit) : "";
@@ -181,27 +192,33 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       l.trend === "up" ? `<span class="badge badge-info">${t("ps_trend_up")}</span>` : l.trend === "down" ? `<span class="badge badge-neutral">${t("ps_trend_down")}</span>` : "",
     ].join("");
     const until = l.days_after_receiving != null ? shortDate(addDays(data.arrival_date, l.days_after_receiving)) : "";
-    const now = out ? `<span class="ps-out">${t("ps_out")}</span>` : `${t("ps_now")} ${whole(l.stock_now)} ${pcs}${l.days_now != null ? ` · ${whole(l.days_now)} ${d}` : ""}`;
-    const after = l.order && l.days_after_receiving != null ? ` → ${whole(l.days_after_receiving)} ${d}` : "";
+    // row 2 (owner 2026-11-26): "Առկա 4 հատ • 23 օր → 43 հատ • 143 օր" -- after receiving = what is left on the arrival day (the free stock
+    // minus the sales of the delivery days) + the order, and how long that lasts from the arrival day
+    const days = (n) => (n != null ? ` • ${whole(n)} ${d}` : "");
+    const now = `<span class="${out ? "ps-out" : ""}">${t("ps_have")} ${whole(l.stock_now)} ${pcs}${days(l.days_now)}</span>`;
+    const after = l.order ? ` <span aria-hidden="true">→</span><span class="visually-hidden">${t("ps_after")}</span> ${whole(l.after_receiving)} ${pcs}${days(l.days_after_receiving)}` : "";
+    // row 3: the order in pieces x the last price of a piece
+    const price = `${whole(l.order)} ${pcs}${l.cost_usd != null ? ` x ${usdPiece(l.cost_usd)}` : ""}`;
     const isOpen = open.has(l.product_id);
     return `<div class="ps-line ${l.order ? "" : "ps-line-off"}" data-line="${l.product_id}">
       <button type="button" class="ps-row" data-toggle="${l.product_id}" aria-expanded="${isOpen}">
-        <span class="ps-row-name">${escapeHtml(l.name)}${size ? ` <span class="inventory-row-size-chip">${escapeHtml(size)}</span>` : ""}</span>
+        <span class="ps-row-name">${escapeHtml(size ? nameWithoutSize(l.name, l.unit) : l.name)}${size ? ` <span class="inventory-row-size-chip">${escapeHtml(size)}</span>` : ""}</span>
         <span class="ps-row-sub">${now}${after}</span>
         ${flags ? `<span class="ps-flags">${flags}</span>` : ""}
       </button>
+      <span class="ps-price">${price}</span>
       <div class="ps-order">
         <button type="button" class="ps-step" data-minus="${l.product_id}" aria-label="${t("ps_less")}" ${l.order ? "" : "disabled"}>−</button>
         <span class="ps-qty" aria-live="polite">${qtyHtml(l)}</span>
         <button type="button" class="ps-step" data-plus="${l.product_id}" aria-label="${t("ps_more")}">+</button>
       </div>
       <div class="ps-details" ${isOpen ? "" : "hidden"}>
-        <div class="ps-grid">
-          <div><span class="ps-k">${t("ps_now")}</span><strong>${whole(l.stock_now)} ${pcs}</strong><span class="muted">${l.days_now != null ? `${whole(l.days_now)} ${d}` : "—"}</span></div>
-          ${l.coming ? `<div><span class="ps-k">${t("ps_coming")}</span><strong>${whole(l.coming)} ${pcs}</strong></div>` : ""}
-          <div><span class="ps-k">${t("ps_after")}</span><strong>${whole(l.after_receiving)} ${pcs}</strong><span class="muted">${l.days_after_receiving != null ? `${whole(l.days_after_receiving)} ${d}${until ? ` · ${until}` : ""}` : "—"}</span></div>
-        </div>
-        <p class="muted ps-rate">${num(l.daily_demand)} ${pcs} ${t("ps_per_day")}</p>
+        <p class="muted ps-rate">${[
+          `${num(l.daily_demand)} ${pcs} ${t("ps_per_day")}`,
+          l.coming ? `${t("ps_coming")}: ${whole(l.coming)} ${pcs}` : "",
+          `${t("ps_at_arrival")}: ${whole(l.stock_at_arrival)} ${pcs}`,
+          until ? `${t("ps_lasts_until")} ${until}` : "",
+        ].filter(Boolean).join(" · ")}</p>
         <div class="ps-detail-actions">
           ${l.order !== l.suggested ? `<button type="button" class="ps-reset" data-reset="${l.product_id}">${t("ps_suggested")}: ${l.suggested} ${pcs}</button>` : ""}
           <a class="ps-open" href="#/product/${l.product_id}">${t("ps_open_product")}</a>

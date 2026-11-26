@@ -23,7 +23,7 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await expect(page).toHaveURL(/#\/purchases\/suggestions/);
     const line = page.locator(`.ps-line[data-line="${oil.id}"]`);
     await expect(line).toBeVisible();
-    await expect(line).toContainText("40 pcs");
+    await expect(line).toContainText("In stock 40 pcs");
     await expect(line).toContainText("Runs out before arrival");
     const qty = line.locator(".ps-qty strong");
     const before = await qty.textContent();
