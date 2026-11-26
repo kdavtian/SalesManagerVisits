@@ -4,7 +4,8 @@
 -- Additive: the invoices keep the name they were written with.
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS goods_from TEXT;
 
-INSERT INTO suppliers (name, brands) VALUES ('Castrol', 'Castrol') ON CONFLICT (lower(name)) DO NOTHING;
+INSERT INTO suppliers (name, brands) SELECT 'Castrol', 'Castrol'
+ WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE lower(regexp_replace(trim(name), '\s+', ' ', 'g')) = 'castrol');
 -- the transporter is in the list even when only the Excel has used it so far
 INSERT INTO suppliers (name) SELECT 'Sole Trans'
  WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE lower(regexp_replace(trim(name), '\s+', ' ', 'g')) = 'sole trans');
