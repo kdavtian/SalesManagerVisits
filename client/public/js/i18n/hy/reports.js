@@ -584,4 +584,10 @@ export const hyReports = {
     mkt_g_limit: "Մեկ անգամից առավելագույնը {n} խանութ",
     mkt_g_made_no_rep: "առանց ներկայացուցչի՝ {n}",
     mkt_g_made_not_allowed: "ձեր թիմից չէ՝ {n}",
+    fn_step_replace_grey: "Առաջարկել օրիգինալ Castrol՝ դարակում {fake} է",
+    fn_grey_castrol: "գորշ ներմուծված Castrol",
+    fn_pitch_cheaper: "մենք {pct}%-ով էժան ենք",
+    fn_pitch_dearer: "մենք {pct}%-ով թանկ ենք",
+    fn_pitch_same: "գինը նույնն է",
+    fn_pitch_margin: "խանութի մարժան մեզ հետ {ours} / նրանց հետ {theirs} դր",
 };

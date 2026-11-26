@@ -1,7 +1,7 @@
 // Vaghinak - Sales Expert, step 1 (owner, 2026-11-15): the sales funnel. Four stages, how many customers stand on each, this month's moves,
 // per rep and per region, and the list of a stage's customers closest to the next stage first. Rules and numbers: server/src/team/vaghinak/funnel.js.
 import { api } from "../api.js";
-import { t, hasText } from "../i18n.js";
+import { t, hasText, getLang } from "../i18n.js";
 import { competitorName } from "../brandChips.js";
 import { state } from "../state.js";
 import { editsVaghinakSettings } from "../shared/roles.js";
@@ -108,13 +108,24 @@ export async function renderFunnel(root, navigate) {
       });
     }
     return fill(`fn_step_${step.kind}`, {
+      fake: p.fake ? t("chip_castrol_fake") : t("fn_grey_castrol"),
       group: p.group ? t(`fn_group_${String(p.group).toLowerCase().replace(/\s+/g, "_")}`) : "",
       // a brand a rep added has no translation: the name it was added with (review, 2026-11-19)
       brand: p.brand ? (hasText(`competitor_${p.brand}`) ? t(`competitor_${p.brand}`) : p.brand_name || competitorName(p.brand)) : "",
       share: p.share ?? 0,
       before: p.before ?? 0,
       now: p.now ?? 0,
-    });
+    }) + pitchText(p.pitch);
+  }
+  // the market facts Vaghinak gives against that brand (server nextSteps.pitchesByBrand): our gap and the shop's margin with us vs them
+  function pitchText(pitch) {
+    if (!pitch) return "";
+    const parts = [];
+    if (pitch.gap_pct != null) parts.push(fill(pitch.gap_pct < 0 ? "fn_pitch_cheaper" : pitch.gap_pct > 0 ? "fn_pitch_dearer" : "fn_pitch_same", { pct: Math.abs(pitch.gap_pct) }));
+    if (pitch.margin_ours != null && pitch.margin_theirs != null) parts.push(fill("fn_pitch_margin", { ours: nf(pitch.margin_ours), theirs: nf(pitch.margin_theirs) }));
+    if (!parts.length) return "";
+    const line = getLang() === "hy" ? pitch.line_hy : pitch.line_en;
+    return ` · ${line} ${Number(pitch.volume).toLocaleString("en-US", { maximumFractionDigits: 3 })} ${pitch.unit === "kg" ? t("mkt_kg") : t("mkt_l")}: ${parts.join(", ")}`;
   }
   const days = (since) => (since ? Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 86400000)) : null);
   const STUCK_DAYS = 60;
