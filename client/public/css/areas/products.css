@@ -423,8 +423,12 @@
 .pu-log-what { overflow-wrap: anywhere; }
 
 /* Purchases P5 (owner, 2026-11-20): Ordered / On the way / Arrived, the expected date, the count on arrival */
-.pu-status-pick { display: flex; flex-wrap: wrap; gap: 8px; }
-.pu-expected { margin-top: 10px; max-width: 260px; }
+/* one row of three equal choices, even at 320 px (owner screenshot 2026-11-25: "Received" wrapped alone) */
+.pu-status-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pu-status-pick .pu-chip { align-items: center; justify-content: center; text-align: center; padding: 6px 2px; font-size: 0.86rem; word-break: keep-all; overflow-wrap: normal; min-width: 0; }
+@media (max-width: 360px) { .pu-status-pick .pu-chip { font-size: 0.72rem; } .pu-status-pick .pu-chip strong { font-weight: 600; } }
+.pu-expected { margin-top: 10px; }
+.pu-expected-hint { margin: 4px 0 0; font-size: 0.78rem; }
 .pu-status-hint { margin: 8px 0 0; font-size: 0.8rem; }
 .pu-flow { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .pu-flow .badge, .pu-sheet-status .badge { white-space: normal; }
@@ -471,3 +475,15 @@
 .ps-move { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 0.8rem; }
 .ps-move select { flex: 1; min-width: 0; min-height: 40px; }
 .ps-create { margin-top: 10px; }
+
+/* Purchase form (owner screenshots 2026-11-25) */
+.pu-supplier-find { width: 100%; margin: 0 0 8px; }
+.pu-invoice { margin: 4px 0 12px; border: 1px solid var(--border); border-radius: 12px; padding: 0 12px; }
+.pu-invoice > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.pu-invoice[open] { padding-bottom: 12px; }
+.pu-from-suggest { margin: 8px 0 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.pu-from-suggest-msg { margin: 6px 0 0; font-size: 0.82rem; }
+.pu-fl-step { display: block; font-size: 0.75rem; margin-top: 2px; }
+.pu-step-off { color: var(--warning); }
+.pu-save-why { margin: 0 0 6px; font-size: 0.8rem; }
+.pu-save-pending { opacity: 0.55; }
