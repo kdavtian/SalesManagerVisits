@@ -62,6 +62,8 @@ export async function renderPurchaseSuggestions(root, navigate) {
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
   const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier })));
+  // a transporter's goods are grouped under the real supplier (owner, 2026-11-26: Sole Trans brings Castrol): the card says "via ..."
+  const viaOf = new Map(data.suppliers.map((g) => [g.supplier, g.via ?? []]));
   // every supplier once, however its name was typed (the cards are grouped the same way on the server)
   const byKey = new Map();
   for (const n of [...data.suppliers.map((g) => g.supplier).filter(Boolean), ...suppliers]) {
@@ -156,6 +158,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
         ({ g, list, tot }, k) => `<section class="card ps-supplier" data-group="${escapeHtml(g)}">
           <div class="ps-supplier-head">
             <h2>${escapeHtml(g || t("ps_no_supplier"))}</h2>
+            ${viaOf.get(g)?.length ? `<p class="muted ps-via">${escapeHtml(t("ps_via").replace("{names}", viaOf.get(g).join(", ")))}</p>` : ""}
             <p class="muted ps-totals">${totalsHtml(tot)}</p>
           </div>
           ${list.map(lineHtml).join("")}

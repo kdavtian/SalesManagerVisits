@@ -304,7 +304,8 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     try {
       const data = await api.getPurchaseSuggestions();
       const key = (n) => String(n ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-      const group = data.suppliers.find((g) => key(g.supplier) === key(supplierName));
+      // the transporter picked (Sole Trans): its goods are under the real supplier's card (Castrol), "via" the transporter
+      const group = data.suppliers.find((g) => key(g.supplier) === key(supplierName)) ?? data.suppliers.find((g) => (g.via ?? []).some((v) => key(v) === key(supplierName)));
       const have = new Set(lines.map((l) => l.product_id));
       const fresh = (group?.lines ?? []).filter((l) => l.order > 0 && !have.has(l.product_id));
       for (const l of fresh) lines.push({ product_id: l.product_id, product_name: l.name, brand: l.brand ?? null, size_l: l.liters_per_piece ?? null, qty: l.order, cost_usd: l.cost_usd });

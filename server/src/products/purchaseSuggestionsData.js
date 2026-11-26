@@ -36,7 +36,12 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
      WHERE p.active AND p.stock_qty IS NOT NULL`,
     [today]
   );
-  const [demand, settings, incoming] = await Promise.all([loadDemandInputs(db, today), getDemandSettings(db), incomingLotsByProduct(db)]);
+  const [demand, settings, incoming, { rows: transporters }] = await Promise.all([
+    loadDemandInputs(db, today), getDemandSettings(db), incomingLotsByProduct(db),
+    db.query("SELECT name, goods_from FROM suppliers WHERE goods_from IS NOT NULL AND trim(goods_from) <> ''"),
+  ]);
+  // a transporter's invoices are the real supplier's goods (owner, 2026-11-26: Sole Trans brings Castrol): grouped under the real supplier
+  const goodsFrom = new Map(transporters.map((r) => [String(r.name).replace(/\s+/g, " ").trim().toLowerCase(), String(r.goods_from).replace(/\s+/g, " ").trim()]));
   const lead = settings.leadTimeDays;
   const cover = settings.coverDays;
 
@@ -72,13 +77,22 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   const chunks = [];
   for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
   for (const part of await Promise.all(chunks.map((c) => productHistory(c, {}, db)))) Object.assign(history, part);
-  // one card per supplier however its name was typed ("Total Oil" / "TOTAL OIL "): the first spelling met is shown (review 2026-11-25)
+  // one card per supplier however its name was typed ("Total Oil" / "TOTAL OIL "): the first spelling met is shown (review 2026-11-25);
+  // a transporter's lines go to the company the goods come from, the transporter kept as `via`
   const bySupplier = new Map();
   const shown = new Map();
+  const viaOf = new Map();
   for (const l of lines) {
     const last = history[l.product_id]?.last ?? null;
-    const raw = String(last?.supplier ?? "").replace(/\s+/g, " ").trim();
+    const written = String(last?.supplier ?? "").replace(/\s+/g, " ").trim();
+    const real = goodsFrom.get(written.toLowerCase());
+    const raw = real ?? written;
     const key = raw.toLowerCase();
+    if (real) {
+      l.via = written;
+      if (!viaOf.has(key)) viaOf.set(key, new Set());
+      viaOf.get(key).add(written);
+    }
     if (!shown.has(key)) shown.set(key, raw);
     l.supplier = shown.get(key);
     l.cost_usd = last?.cost_usd ?? null;
@@ -89,7 +103,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   const suppliers = [...bySupplier.entries()].map(([supplier, list]) => {
     // the most urgent first: runs out before the goods could come, then the fewest days left
     list.sort((a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? 0) - (b.days_now ?? 0));
-    return { supplier, lines: list, totals: supplierTotals(list) };
+    return { supplier, via: [...(viaOf.get(String(supplier ?? "").toLowerCase()) ?? [])], lines: list, totals: supplierTotals(list) };
   });
   // suppliers by money, the products with no known supplier last
   suppliers.sort((a, b) => (a.supplier ? 0 : 1) - (b.supplier ? 0 : 1) || b.totals.usd - a.totals.usd);
