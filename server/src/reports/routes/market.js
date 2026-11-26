@@ -35,7 +35,8 @@ const lineParam = (v) => (typeof v === "string" && /^[a-z0-9_]{1,40}$/.test(v) ?
 
 // GET /api/market/gaps?line=pcmo_5w30 -> litres potential vs what we sell per line; shops with potential and no Castrol on a fresh shelf
 marketRouter.get("/gaps", requireReport("market_gaps"), async (req, res) => {
-  res.json(await marketGaps({ lineCode: lineParam(req.query.line) }));
+  // a sales manager (when management gives them this report) sees only their own customers
+  res.json(await marketGaps({ lineCode: lineParam(req.query.line), scopeUserId: req.user.role === "sales_manager" ? req.user.id : null }));
 });
 
 // POST /api/market/gap-tasks { customer_ids, line } -> a visit task per shop for its rep (management taps it; never automatic)

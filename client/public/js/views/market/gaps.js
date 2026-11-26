@@ -7,9 +7,12 @@ import { t, getLang } from "../../i18n.js";
 import { escapeHtml, formatDateDMY, regionLabelHy, showToast } from "../../util.js";
 import { nf, marketHeaderHtml, wireMarketHeader } from "./common.js";
 
+const PAGE = 100;
+
 export async function renderMarketGaps(root, navigate) {
   let line = "";
   let data = null;
+  let shown = PAGE; // rows drawn; more on "Show more" (a 3 GB phone never draws thousands at once)
   const picked = new Set();
   let seq = 0;
   root.innerHTML = `
@@ -29,6 +32,7 @@ export async function renderMarketGaps(root, navigate) {
 
   const paintAction = () => {
     bar.hidden = picked.size === 0;
+    root.querySelector(".mkt-view").classList.toggle("mkt-has-action", picked.size > 0);
     makeBtn.textContent = t("mkt_g_make_tasks").replace("{n}", String(picked.size));
   };
 
@@ -49,12 +53,12 @@ export async function renderMarketGaps(root, navigate) {
           s.open_task ? `<span class="badge badge-accent">${escapeHtml(t("mkt_g_task_open"))}</span>` : ""
         }${(s.castrol.length ? s.castrol : ["none"]).map((v) => `<span class="badge ${v === "fake" ? "badge-danger" : "badge-warning"}">${escapeHtml(v === "none" ? t("mkt_g_castrol_none") : t(`chip_castrol_${v}`))}</span>`).join("")}</span>
       </span>
-      <span class="mkt-num">${nf(s.potential)}<small class="muted">${escapeHtml(t("mkt_g_month_unit"))}</small></span>
+      <span class="mkt-num">${nf(s.potential)}<small class="muted">${escapeHtml(t("mkt_g_gap_unit").replace("{u}", unit(data.line?.unit)))}</small></span>
       <button type="button" class="icon-btn mkt-open" data-cid="${s.customer_id}" aria-label="${escapeHtml(t("mkt_g_open_customer"))}">›</button>
     </label>`;
 
   function render() {
-    const pickable = data.shops.filter((s) => !s.open_task && s.rep_id);
+    const pickable = data.shops.filter((s) => !s.open_task && s.rep_id).slice(0, data.max_tasks);
     body.innerHTML = `
       <div class="card opp-totals">
         <div><span class="muted">${escapeHtml(t("opp_k_potential"))}</span><strong>${nf(data.totals.potential)}</strong></div>
@@ -70,37 +74,56 @@ export async function renderMarketGaps(root, navigate) {
         ${pickable.length ? `<button type="button" class="btn btn-sm" id="mkt-pick-all">${escapeHtml(t(pickable.every((s) => picked.has(s.customer_id)) ? "mkt_g_pick_none" : "mkt_g_pick_all"))}</button>` : ""}
       </div>
       ${data.shops_without_shelf ? `<p class="muted mkt-fresh">${escapeHtml(t("mkt_g_unknown").replace("{n}", nf(data.shops_without_shelf)).replace("{d}", String(data.fresh_days)))}</p>` : ""}
-      ${data.shops.length ? `<div class="card mkt-list">${data.shops.map(shopRow).join("")}</div>` : `<p class="empty-state">${escapeHtml(t("mkt_g_no_shops"))}</p>`}`;
-    body.querySelectorAll("[data-line]").forEach((b) =>
-      b.addEventListener("click", () => {
-        line = line === b.dataset.line ? "" : b.dataset.line;
-        picked.clear();
-        load();
-      })
-    );
-    body.querySelectorAll("[data-pick]").forEach((c) =>
-      c.addEventListener("change", () => {
-        const id = Number(c.dataset.pick);
-        if (c.checked) picked.add(id);
-        else picked.delete(id);
-        paintAction();
-        const all = body.querySelector("#mkt-pick-all");
-        if (all) all.textContent = t(pickable.every((s) => picked.has(s.customer_id)) ? "mkt_g_pick_none" : "mkt_g_pick_all");
-      })
-    );
-    body.querySelector("#mkt-pick-all")?.addEventListener("click", () => {
-      const allOn = pickable.every((s) => picked.has(s.customer_id));
-      pickable.forEach((s) => (allOn ? picked.delete(s.customer_id) : picked.add(s.customer_id)));
-      render();
-    });
-    body.querySelectorAll("[data-cid]").forEach((b) =>
-      b.addEventListener("click", (e) => {
-        e.preventDefault();
-        navigate(`#/customers/${b.dataset.cid}`);
-      })
-    );
+      ${data.shops.length ? `<div class="card mkt-list">${data.shops.slice(0, shown).map(shopRow).join("")}</div>` : `<p class="empty-state">${escapeHtml(t("mkt_g_no_shops"))}</p>`}
+      ${data.shops.length > shown ? `<button type="button" class="btn btn-block" id="mkt-more">${escapeHtml(t("mkt_g_more").replace("{n}", nf(data.shops.length - shown)))}</button>` : ""}`;
+    pickableNow = pickable;
     paintAction();
   }
+  let pickableNow = [];
+  const syncPickAll = () => {
+    const all = body.querySelector("#mkt-pick-all");
+    if (all) all.textContent = t(pickableNow.every((s) => picked.has(s.customer_id)) ? "mkt_g_pick_none" : "mkt_g_pick_all");
+  };
+  // one listener for the whole list (rows are drawn again on every change)
+  body.addEventListener("click", (e) => {
+    const open = e.target.closest("[data-cid]");
+    if (open) {
+      e.preventDefault();
+      return navigate(`#/customers/${open.dataset.cid}`);
+    }
+    const lineBtn = e.target.closest("[data-line]");
+    if (lineBtn) {
+      line = line === lineBtn.dataset.line ? "" : lineBtn.dataset.line;
+      picked.clear();
+      shown = PAGE;
+      return load();
+    }
+    if (e.target.closest("#mkt-more")) {
+      shown += PAGE;
+      return render();
+    }
+    if (e.target.closest("#mkt-pick-all")) {
+      // "Pick all": at most as many as one tap may create (the server's limit)
+      const allOn = pickableNow.every((s) => picked.has(s.customer_id));
+      pickableNow.forEach((s) => (allOn ? picked.delete(s.customer_id) : picked.add(s.customer_id)));
+      shown = Math.max(shown, Math.min(data.shops.length, pickableNow.length ? data.shops.indexOf(pickableNow.at(-1)) + 1 : shown));
+      render();
+    }
+  });
+  body.addEventListener("change", (e) => {
+    const c = e.target.closest("[data-pick]");
+    if (!c) return;
+    const id = Number(c.dataset.pick);
+    if (c.checked) {
+      if (picked.size >= data.max_tasks) {
+        c.checked = false;
+        return showToast(t("mkt_g_limit").replace("{n}", String(data.max_tasks)));
+      }
+      picked.add(id);
+    } else picked.delete(id);
+    paintAction();
+    syncPickAll();
+  });
 
   async function load() {
     const my = ++seq;
@@ -122,7 +145,16 @@ export async function renderMarketGaps(root, navigate) {
     makeBtn.disabled = true;
     try {
       const r = await api.createMarketGapTasks({ customer_ids: [...picked], line: line || null });
-      showToast(t("mkt_g_made").replace("{n}", String(r.created)).replace("{o}", String(r.already_open)));
+      showToast(
+        [
+          t("mkt_g_made").replace("{n}", String(r.created)).replace("{o}", String(r.already_open)),
+          r.no_rep ? t("mkt_g_made_no_rep").replace("{n}", String(r.no_rep)) : "",
+          r.not_allowed ? t("mkt_g_made_not_allowed").replace("{n}", String(r.not_allowed)) : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        { ms: 5000 }
+      );
       picked.clear();
       await load();
     } catch (err) {

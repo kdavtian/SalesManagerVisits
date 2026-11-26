@@ -566,7 +566,6 @@ export const hyReports = {
     mkt_g_info_4: "Ընտրեք խանութները և սեղմեք «Ստեղծել առաջադրանք»՝ ամեն ներկայացուցիչ ստանում է մեկ «Առաջարկիր Castrol» առաջադրանք հաջորդ այցի համար. բաց առաջադրանքի դեպքում երկրորդը չի ստեղծվում։",
     mkt_g_line_meta: "Գնել է {a}՝ {p} {u}-ից ({pct}%) · {n} խանութ",
     mkt_g_gap_unit: "{u}/ամիս",
-    mkt_g_month_unit: "լ/ամիս",
     mkt_g_by_line: "Ըստ ապրանքային գծի",
     mkt_g_shops: "Ներուժ կա, դարակում Castrol չկա",
     mkt_g_shops_line: "{line}՝ դարակում Castrol չկա",
@@ -581,4 +580,8 @@ export const hyReports = {
     mkt_g_make_tasks: "Ստեղծել առաջադրանք ({n})",
     mkt_g_made: "Ստեղծված առաջադրանքներ՝ {n}. արդեն բաց՝ {o}",
     mkt_g_open_customer: "Բացել հաճախորդին",
+    mkt_g_more: "Ցույց տալ ավելին ({n})",
+    mkt_g_limit: "Մեկ անգամից առավելագույնը {n} խանութ",
+    mkt_g_made_no_rep: "առանց ներկայացուցչի՝ {n}",
+    mkt_g_made_not_allowed: "ձեր թիմից չէ՝ {n}",
 };

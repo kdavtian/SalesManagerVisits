@@ -566,7 +566,6 @@ export const enReports = {
     mkt_g_info_4: "Pick shops and tap Create visit tasks: each rep gets one \"Offer Castrol\" task for the next visit; never a second one while one is open.",
     mkt_g_line_meta: "Bought {a} of {p} {u} ({pct}%) · {n} shops",
     mkt_g_gap_unit: "{u}/month",
-    mkt_g_month_unit: "L/month",
     mkt_g_by_line: "By product line",
     mkt_g_shops: "Potential, no Castrol on the shelf",
     mkt_g_shops_line: "{line}: no Castrol on the shelf",
@@ -581,4 +580,8 @@ export const enReports = {
     mkt_g_make_tasks: "Create visit tasks ({n})",
     mkt_g_made: "Tasks created: {n}; already open: {o}",
     mkt_g_open_customer: "Open the customer",
+    mkt_g_more: "Show more ({n})",
+    mkt_g_limit: "At most {n} shops at a time",
+    mkt_g_made_no_rep: "no rep: {n}",
+    mkt_g_made_not_allowed: "not your team: {n}",
 };
