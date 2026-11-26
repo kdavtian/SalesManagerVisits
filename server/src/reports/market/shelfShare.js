@@ -27,7 +27,7 @@ export function brandsOn(state) {
 }
 
 // Pure: every shop's shelf state on `asOf`: per group, the latest record in (asOf - fresh days, asOf]. records: [{ customer_id, at, group,
-// values }] -> Map(customer_id -> { state, at (latest record used) })
+// values }] -> Map(customer_id -> { state, at (latest record used), groupAt: { group: time } })
 export function shelfStateAt(records, asOf, freshDays = SHELF_FRESH_DAYS) {
   const end = new Date(asOf).getTime();
   const start = end - freshDays * DAY;
@@ -41,8 +41,9 @@ export function shelfStateAt(records, asOf, freshDays = SHELF_FRESH_DAYS) {
   }
   const shops = new Map();
   for (const { t, r } of best.values()) {
-    const s = shops.get(r.customer_id) ?? { state: {}, at: 0 };
+    const s = shops.get(r.customer_id) ?? { state: {}, at: 0, groupAt: {} };
     s.state[r.group] = r.values;
+    s.groupAt[r.group] = t; // when THIS group was seen (a fake Castrol spot is dated by its Castrol record, Codex review)
     s.at = Math.max(s.at, t);
     shops.set(r.customer_id, s);
   }
@@ -81,7 +82,7 @@ export function buildShelfShare(records, shopInfo, { now = new Date(), filter = 
   const rowsAt = (asOf) =>
     [...shelfStateAt(records, asOf)]
       .filter(([id]) => keep(id))
-      .map(([id, s]) => ({ customer_id: id, at: s.at, state: s.state, potential: shopInfo.get(id).potential, brands: brandsOn(s.state) }));
+      .map(([id, s]) => ({ customer_id: id, at: s.at, castrolAt: s.groupAt.castrol ?? s.at, state: s.state, potential: shopInfo.get(id).potential, brands: brandsOn(s.state) }));
   const current = rowsAt(now);
   const total = distribution(current);
   const groupBy = (field) => {
@@ -112,7 +113,7 @@ export function buildShelfShare(records, shopInfo, { now = new Date(), filter = 
     .filter((r) => r.brands.has(CASTROL_FAKE) || r.brands.has(CASTROL_GREY))
     .map((r) => {
       const s = shopInfo.get(r.customer_id);
-      return { customer_id: r.customer_id, name: s.name, region: s.region, rep_name: s.rep_name, at: new Date(r.at).toISOString(), fake: r.brands.has(CASTROL_FAKE), values: (r.state.castrol ?? []).filter((v) => v === "fake" || GREY.has(v)) };
+      return { customer_id: r.customer_id, name: s.name, region: s.region, rep_name: s.rep_name, at: new Date(r.castrolAt).toISOString(), fake: r.brands.has(CASTROL_FAKE), values: (r.state.castrol ?? []).filter((v) => v === "fake" || GREY.has(v)) };
     })
     .sort((a, b) => Number(b.fake) - Number(a.fake) || b.at.localeCompare(a.at));
   const latest = current.reduce((m, r) => Math.max(m, r.at), 0);

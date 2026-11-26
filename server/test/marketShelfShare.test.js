@@ -51,6 +51,7 @@ test("the report: filters, by region / channel, trend at month ends, fake and gr
     rec(2, "castrol", ["imported_dubai"], 3),
     rec(3, "castrol", ["fake", "available"], 40),
     rec(1, "castrol", ["unavailable"], 25), // October: shop 1 had none
+    rec(3, "competitors", ["shell"], 2), // a later visit that looked at the competitors only
   ];
   const r = buildShelfShare(records, info, { now, names: new Map([["mobil", "Mobil"]]) });
   assert.equal(r.totals.shops, 3);
@@ -60,6 +61,7 @@ test("the report: filters, by region / channel, trend at month ends, fake and gr
   assert.deepEqual(r.by_region.map((g) => [g.key, g.shops, g.castrol_pct, g.fake_grey]), [["yerevan", 2, 50, 1], ["shirak", 1, 100, 1]]);
   assert.equal(r.by_region[0].top_competitor.key, "mobil");
   assert.deepEqual(r.flagged.map((f) => [f.customer_id, f.fake, f.values]), [[3, true, ["fake"]], [2, false, ["imported_dubai"]]]);
+  assert.equal(r.flagged[0].at, ago(40), "dated by its Castrol record, not by the later competitors-only visit");
   assert.equal(r.trend.length, 6);
   const oct = r.trend.find((m) => m.month === "2026-10");
   assert.deepEqual([oct.shops, oct.castrol_pct], [2, 50], "at 31 Oct: shop 1 without Castrol, shop 3 with");
