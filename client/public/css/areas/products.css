@@ -453,6 +453,11 @@
 
 /* Purchases > Suggestions (views/purchaseSuggestions.js): compact rows, the supplier head pinned (owner 2026-11-26) */
 .ps-hint { margin: 0 0 8px; white-space: pre-line; }
+/* title, Share and "!" on one row: the title wraps instead of pushing the buttons down (owner screenshot check 2026-11-26) */
+.ps-view .detail-header { flex-wrap: nowrap; }
+.ps-view .detail-header-title { flex: 1; }
+.ps-view .detail-header-title h1 { white-space: normal; overflow-wrap: anywhere; font-size: 1.2rem; }
+.ps-view .detail-header-actions { align-items: center; }
 .ps-plan { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 10px; }
 .ps-plan-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .ps-plan-trying { border-color: var(--warning, #b7791f); background: color-mix(in srgb, var(--warning, #b7791f) 12%, var(--bg-card)); }
@@ -463,6 +468,9 @@
 .ps-plan-edit input { min-height: 44px; font-size: 1rem; text-align: right; font-variant-numeric: tabular-nums; }
 .ps-plan-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
 .ps-plan-actions .btn { flex: 1; }
+.ps-sort { margin: 0 0 10px; }
+.ps-share-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+.ps-share-pick p { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
 .ps-supplier { margin: 0 0 14px; padding: 0 12px 4px; }
 .ps-supplier:active { transform: none; opacity: 1; }
 .ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }

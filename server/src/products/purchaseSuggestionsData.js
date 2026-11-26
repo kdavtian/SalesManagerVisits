@@ -31,7 +31,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
        SELECT product_id, SUM(qty) FILTER (WHERE order_date >= $1::date - 90) AS qty_90d, MAX(order_date) AS last_sale_date
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
-     SELECT p.id, p.erp_product_id, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at,
+     SELECT p.id, p.erp_product_id, p.sku, p.name, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at,
             d.qty_90d, d.last_sale_date, ${STOCK_FIGURE_COLUMNS}
      FROM products p ${STOCK_FIGURE_JOINS} LEFT JOIN demand d ON d.product_id = p.erp_product_id
      WHERE p.active AND p.stock_qty IS NOT NULL`,
@@ -63,7 +63,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend });
     if (!(line.suggested > 0)) continue;
     lines.push({
-      product_id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit,
+      product_id: row.id, sku: row.sku || row.erp_product_id || null, name: row.name, brand: row.brand, family: row.family, unit: row.unit,
       liters_per_piece: sizeLiters(row), kind: step.kind, pack_size: step.packSize, step_pieces: step.stepPieces, pack_size_guessed: step.packSizeGuessed,
       stock_now: Math.max(0, Math.round(free)), coming: Math.round(coming), wanted: row.submitted_qty, daily_demand: Math.round(daily * 100) / 100,
       // the exact inputs: the phone recomputes a line after − / + from these, so it agrees with this suggestion to the piece (review 2026-11-25)

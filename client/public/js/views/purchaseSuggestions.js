@@ -11,9 +11,9 @@
 // recomputes a line here when its quantity changes, so the screen and the server can never disagree.
 import { api } from "../api.js";
 import { t } from "../i18n.js";
-import { escapeHtml } from "../util.js";
+import { escapeHtml, saveBlob } from "../util.js";
 import { icons } from "../icons.js";
-import { normalizeUnitLabel } from "../productSort.js";
+import { normalizeUnitLabel, compareProducts } from "../productSort.js";
 import { purchaseLine } from "../shared/purchaseSuggestion.js";
 
 const usd = (n) => `$${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -35,10 +35,17 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><h1>${t("ps_title")}</h1></div>
-        <div class="detail-header-actions"><button type="button" class="settings-hint-icon" id="ps-hint" aria-label="${t("more_info")}" aria-expanded="false">!</button></div>
+        <div class="detail-header-actions">
+          <button type="button" class="icon-btn" id="ps-share" aria-label="${t("ps_share")}" disabled>${icons.share}</button>
+          <button type="button" class="settings-hint-icon" id="ps-hint" aria-label="${t("more_info")}" aria-expanded="false">!</button>
+        </div>
       </div>
       <p class="muted ps-hint" id="ps-hint-text" hidden></p>
       <div class="ps-plan" id="ps-plan"></div>
+      <div class="ps-share-pick" id="ps-share-pick" hidden></div>
+      <div class="segmented ps-sort" id="ps-sort" role="group" aria-label="${t("ps_sort")}">
+        ${["products", "urgency", "price"].map((k) => `<button type="button" class="chip" data-sort="${k}">${t(`ps_sort_${k}`)}</button>`).join("")}
+      </div>
       <div id="ps-body"><p class="loading-state" role="status">${t("loading")}</p></div>
     </div>`;
   root.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/purchases"));
@@ -102,7 +109,43 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
   plan.querySelector("#ps-plan-reset")?.addEventListener("click", () => renderPurchaseSuggestions(root, navigate));
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
-  const lines = data.suppliers.flatMap((g) => g.lines.map((l) => ({ ...l, group: g.supplier, group_original: g.supplier })));
+  // urgency_rank = the server's order inside a card (runs out before the goods come first, then the fewest days left)
+  const lines = data.suppliers.flatMap((g) => g.lines.map((l, i) => ({ ...l, group: g.supplier, group_original: g.supplier, urgency_rank: i })));
+
+  // ---- sort (owner, 2026-11-26): by products (as in Stock), by urgency, by price; products by default, remembered on this phone --------
+  const SORT_KEY = "fieldvisits_ps_sort";
+  let sortBy = "products";
+  try {
+    const saved = localStorage.getItem(SORT_KEY);
+    if (["products", "urgency", "price"].includes(saved)) sortBy = saved;
+  } catch {
+    // private mode: the default
+  }
+  const SORTS = {
+    products: compareProducts,
+    urgency: (a, b) => a.urgency_rank - b.urgency_rank,
+    // the most money first; products without a last price after the priced ones
+    price: (a, b) => (b.cost_usd != null) - (a.cost_usd != null) || (b.cost_usd ?? 0) * b.order - (a.cost_usd ?? 0) * a.order || compareProducts(a, b),
+  };
+  const sortBar = root.querySelector("#ps-sort");
+  const paintSort = () =>
+    sortBar.querySelectorAll("[data-sort]").forEach((b) => {
+      b.classList.toggle("chip-active", b.dataset.sort === sortBy);
+      b.setAttribute("aria-pressed", String(b.dataset.sort === sortBy));
+    });
+  paintSort();
+  sortBar.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-sort]");
+    if (!b || b.dataset.sort === sortBy) return;
+    sortBy = b.dataset.sort;
+    try {
+      localStorage.setItem(SORT_KEY, sortBy);
+    } catch {
+      // not remembered: fine
+    }
+    paintSort();
+    render();
+  });
   // a transporter's goods are grouped under the real supplier (owner, 2026-11-26: Sole Trans brings Castrol): the card says "via ...",
   // from the lines the card holds now (a line moved to another card takes its transporter along; review 2026-11-26)
   const viaOf = (list) => [...new Set(list.map((l) => l.via).filter(Boolean))];
@@ -224,7 +267,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
             </div>
             <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
           </div>
-          ${list.map(lineHtml).join("")}
+          ${[...list].sort(SORTS[sortBy]).map(lineHtml).join("")}
         </section>`
       )
       .join("");
@@ -296,5 +339,64 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     l.group = sel.value;
     l.via = l.group === l.group_original ? l.via_original : null;
     render();
+  });
+
+  // ---- share as Excel (owner, 2026-11-26): SKU, product name, packs -- one supplier's order, in the order shown ----------------------
+  const shareBtn = root.querySelector("#ps-share");
+  const pick = root.querySelector("#ps-share-pick");
+  const ordered = () => {
+    const groups = new Map();
+    for (const l of lines.filter((x) => x.order > 0)) {
+      if (!groups.has(l.group)) groups.set(l.group, []);
+      groups.get(l.group).push(l);
+    }
+    return groups;
+  };
+  shareBtn.disabled = false;
+  async function shareSupplier(supplier) {
+    const list = [...(ordered().get(supplier) ?? [])].sort(SORTS[sortBy]);
+    if (!list.length) return;
+    const packs = (l) => (l.kind === "pack" && l.pack_size > 1 ? l.order / l.pack_size : l.order);
+    const nameOf = (l) => {
+      const size = l.unit ? normalizeUnitLabel(l.unit) : "";
+      // the size goes with the name when the name does not say it ("Edge 0W-30" + "1 L")
+      return size && !String(l.name).replace(/\s+/g, "").toLowerCase().includes(size.replace(/\s+/g, "").toLowerCase()) ? `${l.name} ${size}` : l.name;
+    };
+    const columns = [
+      { header: t("ps_x_sku"), width: 16 },
+      { header: t("ps_x_product"), width: 40 },
+      { header: t("ps_x_packs"), type: "number", width: 12 },
+    ];
+    const rows = list.map((l) => [l.sku ?? "", nameOf(l), packs(l)]);
+    const safe = String(supplier || "order").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 40) || "order";
+    const filename = `purchase-${safe}-${data.today}`;
+    shareBtn.disabled = true;
+    try {
+      await saveBlob(await api.buildXlsx({ filename, sheet: String(supplier || t("ps_no_supplier")).slice(0, 31), columns, rows }), `${filename}.xlsx`);
+    } catch (err) {
+      pick.hidden = false;
+      pick.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    } finally {
+      shareBtn.disabled = false;
+    }
+  }
+  shareBtn.addEventListener("click", () => {
+    const groups = [...ordered().keys()];
+    if (groups.length === 1) {
+      pick.hidden = true;
+      shareSupplier(groups[0]);
+      return;
+    }
+    // several suppliers with something to order: which one goes to the file (one supplier = one order)
+    pick.hidden = !pick.hidden;
+    pick.innerHTML = groups.length
+      ? `<p class="muted">${escapeHtml(t("ps_share_pick"))}</p>${groups.map((g) => `<button type="button" class="chip" data-share="${escapeHtml(g)}">${escapeHtml(g || t("ps_no_supplier"))}</button>`).join("")}`
+      : `<p class="muted">${escapeHtml(t("ps_share_none"))}</p>`;
+  });
+  pick.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-share]");
+    if (!b) return;
+    pick.hidden = true;
+    shareSupplier(b.dataset.share);
   });
 }
