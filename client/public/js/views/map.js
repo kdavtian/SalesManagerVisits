@@ -152,6 +152,13 @@ function saveMapView(map) {
 }
 
 function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = false, startInPlanMode = false, focusCustomerId = null) {
+  // #/map?brands=castrol:fake,castrol:imported_us opens with those Brands chips picked and fits the matching pins once their data is in
+  // (Reports > Shelf share: "Show on map", 2026-11-26)
+  const deepLinkChips = (new URLSearchParams(location.hash.split("?")[1] || "").get("brands") || "")
+    .split(",")
+    .filter((id) => /^[a-z]+:[\p{L}\p{N}_]+$/u.test(id))
+    .slice(0, 40);
+  let brandFitPending = deepLinkChips.length > 0;
   // The screen's variables, for its parts in other files (read and written through getters / setters, so they always see the current value).
   const ctx = {
     get advanceProvider() { return advanceProvider; },
@@ -232,6 +239,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     get brandAvailabilityIcon() { return brandAvailabilityIcon; },
     get brandAvailabilityStatus() { return brandAvailabilityStatus; },
     get brandChipIds() { return brandChipIds; }, set brandChipIds(v) { brandChipIds = v; },
+    get brandFitPending() { return brandFitPending; }, set brandFitPending(v) { brandFitPending = v; },
     get brandStatusByCustomer() { return brandStatusByCustomer; }, set brandStatusByCustomer(v) { brandStatusByCustomer = v; },
     get brandStatusLoaded() { return brandStatusLoaded; }, set brandStatusLoaded(v) { brandStatusLoaded = v; },
     get brandSummary() { return brandSummary; }, set brandSummary(v) { brandSummary = v; },
@@ -357,7 +365,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
     set startInAddMode(v) { startInAddMode = v; },
     get syncAddHint() { return syncAddHint; },
   };
-  const plainBrowse = !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null;
+  const plainBrowse = !relocateCustomerId && !startInAddMode && !startInPlanMode && focusCustomerId == null && !deepLinkChips.length;
   const restoredView = plainBrowse ? loadMapView() : null;
   // Pin-popup facts (last visit / debt / planned date), cached per customer
   // for the session so a re-tap is instant; prefetched on touch-down.
@@ -876,13 +884,7 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // the Customers tab (brandChips.js). brandChipIds are "group:value" ids;
   // empty = no filter. brandSummary is customer id -> { current, ever },
   // loaded once in the background; the filter button appears when it lands.
-  // #/map?brands=castrol:fake,castrol:imported_us opens with those chips picked (Reports > Shelf share: "Show on map", 2026-11-26)
-  let brandChipIds = new Set(
-    (new URLSearchParams(location.hash.split("?")[1] || "").get("brands") || "")
-      .split(",")
-      .filter((id) => /^[a-z]+:[\p{L}\p{N}_]+$/u.test(id))
-      .slice(0, 40)
-  );
+  let brandChipIds = new Set(deepLinkChips);
   let brandSummary = new Map();
   let categoryFilters = new Set();
   let brandStatusByCustomer = null;
@@ -936,7 +938,8 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // already visible) over the default "fit every customer" behavior, which
   // zooms out to the whole territory and makes people zoom back in
   // manually just to see what's around them.
-  let initialViewApplied = Boolean(restoredView);
+  // a deep link to Brands chips fits the matching pins instead of centring on the user (filters.loadBrandSummary)
+  let initialViewApplied = Boolean(restoredView) || deepLinkChips.length > 0;
   // Set on the first finger/mouse down on the map canvas: from then on no
   // automatic recentre (late GPS fix, fallback fit) may move the camera.
   let userTouchedMap = false;

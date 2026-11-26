@@ -143,7 +143,7 @@ export async function shelfShare({ now = new Date(), region = null, channel = nu
               COALESCE(NULLIF(c.expected_volume_l, 0),
                        (SELECT sum(a.amount_month) FROM volume_potential_amounts a JOIN volume_potential_lines l ON l.id = a.line_id AND l.unit = 'L' WHERE a.customer_id = c.id))::float8 AS potential
        FROM customers c LEFT JOIN users u ON u.id = c.assigned_manager_id
-       WHERE NOT c.checkin_for_all AND c.id IN (SELECT DISTINCT customer_id FROM checkins WHERE brand_status IS NOT NULL AND timestamp >= $1)`,
+       WHERE NOT c.checkin_for_all AND c.closed_at IS NULL AND c.id IN (SELECT DISTINCT customer_id FROM checkins WHERE brand_status IS NOT NULL AND timestamp >= $1)`,
       [since]
     ),
     db.query("SELECT key, name FROM competitor_brands"),

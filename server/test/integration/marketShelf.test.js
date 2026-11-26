@@ -24,6 +24,10 @@ test.before(async () => {
   await visit(a, { castrol: ["available"], competitors: ["motul"] }, 2);
   await visit(b, { castrol: ["fake"], competitors: ["motul"] }, 3);
   await visit(b, { castrol: ["available"] }, 90); // too old
+  // a closed shop is not counted
+  const closed = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  await pool.query("UPDATE customers SET region = $1, closed_at = now() WHERE id = $2", [region, closed.id]);
+  await visit(closed, { castrol: ["fake"] }, 1);
 });
 test.after(async () => {
   await cleanupAll();

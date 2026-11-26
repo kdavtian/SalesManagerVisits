@@ -4,7 +4,7 @@
 // Castrol, with "Show on map" (the map's Brands filter, picked). Server: reports/market/shelfShare.js.
 import { api } from "../../api.js";
 import { t } from "../../i18n.js";
-import { escapeHtml, formatDateDMY, regionLabelHy } from "../../util.js";
+import { escapeHtml, formatDateDMY, regionLabelHy, channelDisplayLabel } from "../../util.js";
 import { selectHtml } from "../reports/common.js";
 import { competitorName } from "../../brandChips.js";
 import { nf, pctText, freshnessHtml, marketHeaderHtml, wireMarketHeader } from "./common.js";
@@ -76,7 +76,7 @@ export async function renderMarketShelf(root, navigate) {
   function renderFilters(d) {
     form.innerHTML = `
       ${selectHtml("region", [{ value: "", label: t("region") }, ...d.regions.map((r) => ({ value: r, label: regionLabelHy(r) }))], filter.region)}
-      ${selectHtml("channel", [{ value: "", label: t("mkt_s_channel") }, ...d.channels.map((c) => ({ value: c, label: c }))], filter.channel)}`;
+      ${selectHtml("channel", [{ value: "", label: t("mkt_s_channel") }, ...d.channels.map((c) => ({ value: c, label: channelDisplayLabel(c) }))], filter.channel)}`;
   }
 
   async function load() {
@@ -104,7 +104,7 @@ export async function renderMarketShelf(root, navigate) {
         <h2 class="section-title">${escapeHtml(t("mkt_s_by_region"))}</h2>
         ${groupRows(d.by_region, (k) => (k ? regionLabelHy(k) : t("mkt_s_no_region")))}
         <h2 class="section-title">${escapeHtml(t("mkt_s_by_channel"))}</h2>
-        ${groupRows(d.by_channel, (k) => k || t("mkt_s_no_channel"))}
+        ${groupRows(d.by_channel, (k) => (k ? channelDisplayLabel(k) : t("mkt_s_no_channel")))}
         <div class="mkt-section-head"><h2 class="section-title">${escapeHtml(t("mkt_s_fake_grey"))} <small class="muted">${nf(d.flagged.length)}</small></h2>
           ${d.flagged.length ? `<button type="button" class="btn btn-sm" id="mkt-map">${escapeHtml(t("mkt_s_on_map"))}</button>` : ""}</div>
         ${d.flagged.length ? `<div class="mkt-flag-list">${d.flagged.map(flaggedRow).join("")}</div>` : `<p class="empty-state">${escapeHtml(t("mkt_s_no_fake"))}</p>`}`;
