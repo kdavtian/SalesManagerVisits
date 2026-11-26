@@ -10,6 +10,7 @@ import { seesTierPrices } from "../shared/roles.js";
 import { icons } from "../icons.js";
 import { openCostCalculator } from "../costCalculator.js";
 import { parseLiters, normalizeUnitLabel } from "../productSort.js";
+import { productMarketSection } from "./market/productCard.js";
 
 const KIND_LABEL = { front: "photo_front", back: "photo_back", other: "photo_other" };
 
@@ -56,6 +57,8 @@ export async function renderProductDetail(root, navigate, productId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
+  // the Market section (shelf, competitors, wishes, potential): requested beside the product, painted into its own slot when it lands
+  const market = productMarketSection(productId, state.user?.role);
   let product;
   try {
     product = await api.getProduct(productId);
@@ -144,6 +147,8 @@ export async function renderProductDetail(root, navigate, productId) {
         ${priceRow(t("price_retail"), p.effective_retail_amd, { strong: !seesTierPrices(state.user?.role) })}
       </div>
 
+      <div id="pd-market">${market.html()}</div>
+
       ${
         costs
           ? `<div class="card pd-card">
@@ -178,6 +183,7 @@ export async function renderProductDetail(root, navigate, productId) {
       }
     `;
 
+    market.wire(container);
     container.querySelector("#back-btn").addEventListener("click", () => navigate.goBack("#/pricelist"));
     container.querySelectorAll("[data-image-id]").forEach((btn) =>
       btn.addEventListener("click", () => {
@@ -409,5 +415,12 @@ export async function renderProductDetail(root, navigate, productId) {
   }
 
   render();
+  // only the Market slot is painted when its data lands: the rest of the card (photos, focus, scroll) stays as it is
+  market.load(() => {
+    const slot = container.querySelector("#pd-market");
+    if (!slot) return;
+    slot.innerHTML = market.html();
+    market.wire(container);
+  });
   void state;
 }

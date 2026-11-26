@@ -27,12 +27,14 @@ const volKey = (v) => Number(v).toFixed(3);
 
 // Our Castrol products placed on a line and a volume: management's own mapping (volume_potential_sku_map) first, else the line rules of
 // volumeActuals.js; the volume from the mapping, the product's size or its unit text. -> [{ id, name, line_code, volume, bronze, silver, gold, retail }]
-export async function ourProducts(db = pool) {
+// productId: that one product only, whatever its brand (the product card's Market section).
+export async function ourProducts(db = pool, { productId = null } = {}) {
   const [{ rows: products }, { rows: lines }, { rows: decided }] = await Promise.all([
     db.query(
       `SELECT id, name, brand, family, unit, size_l::float8 AS size_l, lower(erp_product_id) AS sku_key,
               bronze_price_amd, silver_price_amd, unit_price_amd, retail_price_amd::float8 AS retail
-       FROM products WHERE active AND lower(trim(brand)) = 'castrol'`
+       FROM products WHERE ${productId ? "id = $1" : "active AND lower(trim(brand)) = 'castrol'"}`,
+      productId ? [productId] : []
     ),
     db.query("SELECT id, code FROM volume_potential_lines"),
     db.query("SELECT sku_key, line_id, not_a_line, litres_per_unit::float8 AS litres_per_unit FROM volume_potential_sku_map"),

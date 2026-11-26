@@ -496,3 +496,13 @@
 .pu-sc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
 .pu-sc-sub { grid-column: 1 / -1; font-size: 0.75rem; }
 .pu-sc-hint { margin: 8px 0 0; font-size: 0.75rem; }
+
+/* The product card's Market section (views/market/productCard.js) */
+.pm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pm-alert { margin: 6px 0 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--text); font-size: 13px; }
+.pm-alert ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 2px; }
+.pm-sub { margin: 10px 0 2px; font-size: 12px; }
+.pm-comp { display: grid; grid-template-columns: minmax(0, 1fr) 72px 72px; align-items: center; gap: 8px; min-height: 40px; }
+.pm-comp + .pm-comp { border-top: 1px solid var(--border); }
+.pm-comp-head { min-height: 0; font-size: 11px; text-align: right; }
+.pm-comp > span:first-child { min-width: 0; overflow-wrap: anywhere; }

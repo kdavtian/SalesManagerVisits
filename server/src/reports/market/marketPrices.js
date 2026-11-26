@@ -11,7 +11,8 @@ export const FLAG_WINDOW_DAYS = 365;
 // Every competitor price entry recorded since `since` (default FLAG_WINDOW_DAYS), flagged against the same window.
 // -> [{ id, checkin_id, customer_id, customer_name, region, sales_channel, user_id, rep_name, brand_key, brand_name, line_code,
 //       line_name_en, line_name_hy, volume, unit, wholesale_amd, retail_amd, recorded_at, wholesale_per_unit, retail_per_unit, flags }]
-export async function loadPriceEntries({ since = null, until = null, db = pool } = {}) {
+// lineCode: that product line only (flags are per brand / line / volume, so one line is flagged the same as with every line loaded)
+export async function loadPriceEntries({ since = null, until = null, lineCode = null, db = pool } = {}) {
   const to = until ?? new Date();
   const from = since ?? new Date(to.getTime() - FLAG_WINDOW_DAYS * 86400000);
   const { rows } = await db.query(
@@ -25,9 +26,9 @@ export async function loadPriceEntries({ since = null, until = null, db = pool }
      LEFT JOIN users u ON u.id = p.user_id
      LEFT JOIN competitor_brands b ON b.key = p.brand_key
      LEFT JOIN volume_potential_lines l ON l.code = p.line_code
-     WHERE p.recorded_at >= $1 AND p.recorded_at <= $2
+     WHERE p.recorded_at >= $1 AND p.recorded_at <= $2 AND ($3::text IS NULL OR p.line_code = $3)
      ORDER BY p.recorded_at DESC, p.id DESC`,
-    [from, to]
+    [from, to, lineCode]
   );
   return flagEntries(rows);
 }
