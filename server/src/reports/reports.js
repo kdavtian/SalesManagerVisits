@@ -75,6 +75,13 @@ export const REPORTS = [
     descriptionKey: "report_market_shelf_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Gaps and targets: litres potential minus what we sell per line; shops with potential and no Castrol on the shelf -> visit tasks (gaps.js)
+  {
+    key: "market_gaps",
+    nameKey: "report_market_gaps_name",
+    descriptionKey: "report_market_gaps_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -235,6 +242,7 @@ const REPORT_DISPLAY_ORDER = [
   "brand_volume",
   "brand_availability",
   "product_wishes",
+  "market_gaps",
   "market_shelf",
   "market_prices",
   "market_quality",

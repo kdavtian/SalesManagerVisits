@@ -70,6 +70,8 @@ export const reportsApi = {
   // the Market reports (server reports/routes/market.js)
   getMarketQuality: (params = {}) => request(`/market/quality?${new URLSearchParams(params)}`),
   getMarketPrices: () => request("/market/prices"),
+  getMarketGaps: (params = {}) => request(`/market/gaps?${new URLSearchParams(params)}`),
+  createMarketGapTasks: (body) => json("/market/gap-tasks", "POST", body),
   getMarketShelf: (params = {}) => request(`/market/shelf?${new URLSearchParams(params)}`),
   getProductWishesReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString();

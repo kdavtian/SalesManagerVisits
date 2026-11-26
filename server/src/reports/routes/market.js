@@ -6,6 +6,8 @@ import { canAccessReport } from "../reports.js";
 import { marketQuality } from "../market/marketPrices.js";
 import { priceIndex } from "../market/priceIndex.js";
 import { shelfShare } from "../market/shelfShare.js";
+import { marketGaps, createGapTasks } from "../market/gaps.js";
+import { canCreateTasks, sendsRequests } from "../../shared/roles.js";
 
 export const marketRouter = Router();
 marketRouter.use(requireAuth);
@@ -27,4 +29,19 @@ marketRouter.get("/prices", requireReport("market_prices"), async (req, res) => 
 marketRouter.get("/shelf", requireReport("market_shelf"), async (req, res) => {
   const pick = (v) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 100) : null);
   res.json(await shelfShare({ region: pick(req.query.region), channel: pick(req.query.channel) }));
+});
+
+const lineParam = (v) => (typeof v === "string" && /^[a-z0-9_]{1,40}$/.test(v) ? v : null);
+
+// GET /api/market/gaps?line=pcmo_5w30 -> litres potential vs what we sell per line; shops with potential and no Castrol on a fresh shelf
+marketRouter.get("/gaps", requireReport("market_gaps"), async (req, res) => {
+  res.json(await marketGaps({ lineCode: lineParam(req.query.line) }));
+});
+
+// POST /api/market/gap-tasks { customer_ids, line } -> a visit task per shop for its rep (management taps it; never automatic)
+marketRouter.post("/gap-tasks", requireReport("market_gaps"), async (req, res) => {
+  if (!canCreateTasks(req.user.role)) return res.status(403).json({ error: "Only management can create tasks" });
+  const ids = req.body?.customer_ids;
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "Choose the shops" });
+  res.json(await createGapTasks({ customerIds: ids, lineCode: lineParam(req.body?.line), user: req.user, isRequest: sendsRequests(req.user.role) }));
 });
