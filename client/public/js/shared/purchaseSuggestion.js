@@ -139,7 +139,8 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
   let rounding = suggested > 0 ? "up" : null;
   const smaller = suggested - step;
   if (smaller > 0 && smaller >= baseNeed) rounding = "down_covers";
-  else if (smaller > 0 && trend === "down") rounding = "down_trend";
+  // falling sales: the rounding up is undone, never more (an order that is already exactly the need stays; review 2026-11-26)
+  else if (smaller > 0 && trend === "down" && suggested - need > 1e-9) rounding = "down_trend";
   if (rounding === "down_covers" || rounding === "down_trend") suggested = smaller;
   const qty = order == null ? suggested : Math.max(0, Number(order) || 0);
   const after = Math.max(0, atArrival + qty - backlog);

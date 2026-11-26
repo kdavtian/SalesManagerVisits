@@ -117,6 +117,9 @@ test("purchaseLine: safety capped, one step less when it covers, falling sales n
   assert.equal(purchaseLine({ ...flat, trend: "down" }).suggested, 60);
   assert.equal(purchaseLine({ ...flat, trend: "down" }).rounding, "down_trend");
   assert.equal(purchaseLine({ ...flat, trend: "up" }).suggested, 120);
+  // falling sales with a need that is already whole steps: nothing was rounded up, so nothing is taken off (review 2026-11-26)
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0.5, leadTimeDays: 45, coverDays: 40, stepPieces: 5, trend: "down" }).suggested, 20);
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0.5, leadTimeDays: 45, coverDays: 40, stepPieces: 1, trend: "down" }).suggested, 20);
   // never below one step when something is needed, falling or not
   assert.equal(purchaseLine({ stockNow: 0, daily: 0.1, leadTimeDays: 45, coverDays: 45, stepPieces: 60, trend: "down" }).suggested, 60);
   // a slow product: one step lasts 600 days -> too much (the screen says it is the smallest step)
