@@ -876,7 +876,13 @@ function renderMapInner(root, navigate, relocateCustomerId, startInAddMode = fal
   // the Customers tab (brandChips.js). brandChipIds are "group:value" ids;
   // empty = no filter. brandSummary is customer id -> { current, ever },
   // loaded once in the background; the filter button appears when it lands.
-  let brandChipIds = new Set();
+  // #/map?brands=castrol:fake,castrol:imported_us opens with those chips picked (Reports > Shelf share: "Show on map", 2026-11-26)
+  let brandChipIds = new Set(
+    (new URLSearchParams(location.hash.split("?")[1] || "").get("brands") || "")
+      .split(",")
+      .filter((id) => /^[a-z]+:[\p{L}\p{N}_]+$/u.test(id))
+      .slice(0, 40)
+  );
   let brandSummary = new Map();
   let categoryFilters = new Set();
   let brandStatusByCustomer = null;
