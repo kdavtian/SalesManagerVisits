@@ -23,7 +23,7 @@ export class PurchaseError extends Error {
 // The same invoice number the Excel copy is compared by: case and extra spaces ignored (SQL form of keyOf)
 const SQL_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
 // supplierKey in SQL: tabs, new lines and no-break spaces count as spaces too, the same as JavaScript's \s (review, 2026-11-20)
-const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
+export const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
 
 function cleanLines(lines) {
   if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");
@@ -126,7 +126,9 @@ export async function savePurchase(body, userId, id = null, db = pool) {
                 status = $8, expected_date = $9,
                 arrived_at = CASE WHEN $10 THEN now() ELSE arrived_at END, arrived_by = CASE WHEN $10 THEN $7::int ELSE arrived_by END
           WHERE id = $1`,
-        [id, invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId, status, status === "arrived" ? null : keepExpected ? current.expected_date : expected, becomesArrived]
+        // a received purchase keeps the date it was expected on (review 2026-11-26: the supplier scorecard's "on time" and "average delivery"
+        // read it; it used to be wiped whenever the form saved an arrived purchase -- the number or rate typed later, a price fixed)
+        [id, invoiceNo || null, date, supplierId, rate, body?.note ? String(body.note).slice(0, 1000) : null, userId, status, status === "arrived" ? current.expected_date : keepExpected ? current.expected_date : expected, becomesArrived]
       );
       if (!rowCount) throw new PurchaseError("Purchase not found");
       await client.query("DELETE FROM purchase_lines WHERE invoice_id = $1", [id]);

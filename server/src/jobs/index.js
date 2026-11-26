@@ -32,6 +32,7 @@ import { runWeeklyRoutePlanAnalysis } from "../field/routePlanAnalysisJob.js";
 import { deleteOldUsage } from "../system/usageAnalytics.js";
 import { deleteOldNavTimings } from "../system/navTimings.js";
 import { remindOverdueDocuments } from "../orders/partnerDocuments.js";
+import { checkLatePurchases } from "../products/purchaseFollowUp.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -51,6 +52,8 @@ export const JOBS = [
   { name: "weekly-debt-digest", everyMs: MINUTE, run: (now) => sendWeeklyDebtDigest(now) },
   { name: "auto-tasks", everyMs: MINUTE, run: (now) => runAutoTasksOnceADay(now) },
   { name: "stock-count-close", everyMs: 15 * MINUTE, run: (now) => closeOpenDays(now) },
+  // an Ordered / On the way purchase past its expected date: a task to ask the supplier (products/purchaseFollowUp.js)
+  { name: "purchase-late", everyMs: HOUR, run: (now) => checkLatePurchases(now) },
   // the redesigned payments: copy what the old module recorded since the cutover, then match with the Excel (money/payments2)
   { name: "payments-v2", everyMs: 10 * MINUTE, run: async () => ({ bridge: await runBridge(), bank: await recordBankLines(), books: await runBooks() }) },
   { name: "daily-summary", everyMs: 5 * MINUTE, run: () => checkDailySummary(), ...needsPush },

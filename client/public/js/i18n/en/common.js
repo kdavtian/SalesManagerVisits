@@ -1607,6 +1607,7 @@ export const enCommon = {
     notification_type_stock_count_diff: "Stock count differences",
     job_payments_v2: "Payments: copy and match with Excel (every 10 min)",
     job_stock_count_close: "Stock count: close the day (20:00)",
+    job_purchase_late: "Purchases: a task when an ordered purchase is late",
   desk_cols_hint: "Tick to show. Drag a row, or use the arrows, to change the order.",
   desk_cols_move_up: "Move earlier",
   desk_cols_move_down: "Move later",

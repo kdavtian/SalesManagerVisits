@@ -69,6 +69,7 @@ export function renderPurchases(root, navigate) {
       <div class="pu-chips" id="pu-periods" role="group">${PERIODS.map((p) => `<button type="button" class="map-filter-chip ${p === period ? "chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(`pu_period_${p}`)}</button>`).join("")}<button type="button" class="map-filter-chip pu-export-btn" id="pu-export"><span aria-hidden="true">${icons.download}</span>${t("pu_export")}</button></div>
       <div class="pu-kpis" id="pu-kpis"></div>
       <div class="pu-suppliers" id="pu-suppliers"></div>
+      <div id="pu-scorecard"></div>
       <div class="pu-toolbar">
         <div class="pu-search"><input type="search" id="pu-list-search" placeholder="${t("pu_search_list")}" aria-label="${t("pu_search_list")}" autocomplete="off" /></div>
         <div class="pu-chips pu-chips-inline" id="pu-statuses" role="group"></div>
@@ -139,6 +140,28 @@ export function renderPurchases(root, navigate) {
     el.innerHTML = `<p class="pu-excel-line muted">${escapeHtml(text)}</p>`;
   }
 
+  // the suppliers' scorecard of the last 12 months (server products/purchaseFollowUp.js): a line on each card, the whole card when one is picked
+  let scorecard = {};
+  let scorecardAsked = false;
+  const scoreKey = (k) => String(k ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  const pct = (n) => (n == null ? "—" : `${n}%`);
+  function scoreLine(sc) {
+    if (!sc || (!sc.tracked && sc.price_change_pct == null)) return "";
+    const bits = [];
+    if (sc.tracked) bits.push(`${t("pu_sc_on_time")} ${pct(sc.on_time_pct)}`, `${sc.avg_lead_days} ${t("ps_days")}`);
+    if (sc.price_change_pct != null) bits.push(`${t("pu_sc_price")} ${sc.price_change_pct > 0 ? "+" : ""}${sc.price_change_pct}%`);
+    return `<span class="pu-supplier-score">${escapeHtml(bits.join(" · "))}</span>`;
+  }
+  function scorePanel(name, sc) {
+    if (!sc) return `<div class="card pu-scorecard"><h3>${escapeHtml(name)}</h3><p class="muted">${t("pu_sc_none")}</p></div>`;
+    const row = (label, value, sub = "") => `<div class="pu-sc-row"><span class="muted">${label}</span><strong>${value}</strong>${sub ? `<span class="muted pu-sc-sub">${sub}</span>` : ""}</div>`;
+    return `<div class="card pu-scorecard"><h3>${escapeHtml(name)} · ${t("pu_sc_title")}</h3>
+      ${row(t("pu_sc_on_time"), pct(sc.on_time_pct), sc.tracked ? t("pu_sc_of").replace("{n}", sc.tracked) : t("pu_sc_no_dates"))}
+      ${row(t("pu_sc_lead"), sc.avg_lead_days == null ? "—" : `${sc.avg_lead_days} ${t("ps_days")}`)}
+      ${row(t("pu_sc_diff"), pct(sc.diff_pct), sc.received ? t("pu_sc_of").replace("{n}", sc.received) : "")}
+      ${row(t("pu_sc_price"), sc.price_change_pct == null ? "—" : `${sc.price_change_pct > 0 ? "+" : ""}${sc.price_change_pct}%`, sc.price_products ? t("pu_sc_products").replace("{n}", sc.price_products) : "")}
+      <p class="muted pu-sc-hint">${t("pu_sc_hint")}</p></div>`;
+  }
   const bySupplier = (list) => {
     const map = new Map();
     for (const r of list) {
@@ -201,10 +224,13 @@ export function renderPurchases(root, navigate) {
                 <span class="pu-supplier-usd">${usd0(g.usd)}</span>
                 <span class="pu-supplier-bar" aria-hidden="true"><i style="width:${Math.max(3, Math.round((g.usd / topUsd) * 100))}%"></i></span>
                 <span class="pu-supplier-meta muted">${Math.round((g.usd / topUsd) * 100)}% · ${liters(g.liters)}${g.liters > 0 ? ` · ${usd(g.liquid / g.liters)}/L` : ""}</span>
+                ${scoreLine(scorecard[scoreKey(g.key)])}
               </button>`
             )
             .join("")
         : "";
+    const picked = supplier ? groups.find((g) => g.key === supplier) : null;
+    root.querySelector("#pu-scorecard").innerHTML = picked ? scorePanel(picked.name, scorecard[scoreKey(picked.key)]) : "";
     root.querySelectorAll("[data-supplier]").forEach((b) =>
       b.addEventListener("click", () => {
         supplier = supplier === b.dataset.supplier ? "" : b.dataset.supplier;
@@ -261,6 +287,19 @@ export function renderPurchases(root, navigate) {
       excel = st;
       paintExcel();
       paint();
+      // the scorecard follows (12 months, whatever the period): fetched once per screen, the list never waits for it
+      if (!scorecardAsked) {
+        scorecardAsked = true;
+        api
+          .getSupplierScorecard()
+          .then((sc) => {
+            scorecard = sc ?? {};
+            if (root.isConnected) paint();
+          })
+          .catch(() => {
+            scorecardAsked = false;
+          });
+      }
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }

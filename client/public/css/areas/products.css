@@ -487,3 +487,11 @@
 .pu-step-off { color: var(--warning); }
 .pu-save-why { margin: 0 0 6px; font-size: 0.8rem; }
 .pu-save-pending { opacity: 0.55; }
+
+/* Purchases: the supplier scorecard (server products/purchaseFollowUp.js) */
+.pu-supplier-score { display: block; margin-top: 2px; font-size: 0.72rem; color: var(--text-dim); }
+.pu-scorecard { margin: 0 0 12px; padding: 12px; }
+.pu-scorecard h3 { margin: 0 0 6px; font-size: 0.95rem; }
+.pu-sc-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.pu-sc-sub { grid-column: 1 / -1; font-size: 0.75rem; }
+.pu-sc-hint { margin: 8px 0 0; font-size: 0.75rem; }
