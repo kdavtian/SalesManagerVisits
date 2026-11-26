@@ -15,6 +15,7 @@ test.before(async () => {
   warehouse = await createUser("warehouse_manager");
   for (const [k, u] of Object.entries({ rep, director, warehouse })) cookies[k] = await loginAs(u.email);
   shop = await createCustomer({ created_by: rep.id, assigned_manager_id: rep.id, lat: 40.18, lng: 44.51 });
+  await pool.query("UPDATE customers SET erp_customer_id = $2 WHERE id = $1", [shop.id, erpCustomer]);
   product = await createProduct({ name: `Castrol MAGNATEC 10W-40 ${tag}`, unit: "4L" });
   await pool.query("UPDATE products SET brand = 'Castrol', size_l = 4, erp_product_id = $2, stock_qty = 0, stock_changed_at = now(), bronze_price_amd = 20000, retail_price_amd = 25000 WHERE id = $1", [product.id, tag]);
   const { rows: [ch] } = await pool.query(
@@ -57,7 +58,12 @@ test("in stock at shops, competitors of the line and volume, wishes, sales, out 
   const mine = await apiRequest(`/api/market/product/${product.id}`, { cookie: cookies.rep });
   assert.equal(mine.status, 200);
   assert.deepEqual([mine.data.shelf, mine.data.wishes, mine.data.line.competitors.length], [null, null, 0]);
-  assert.equal(mine.data.sales.monthly_qty, 12);
+  assert.equal(mine.data.sales.monthly_qty, 12, "the rep's own customer");
+  // another rep: their own customers only, so none of these sales (Codex review)
+  const other = await createUser("sales_manager");
+  const otherCookie = await loginAs(other.email);
+  const theirs = await apiRequest(`/api/market/product/${product.id}`, { cookie: otherCookie });
+  assert.equal(theirs.data.sales.monthly_qty, 0);
   assert.equal((await apiRequest(`/api/market/product/${product.id}`, { cookie: cookies.warehouse })).status, 403);
   assert.equal((await apiRequest("/api/market/product/99999999", { cookie: cookies.rep })).status, 404);
 });

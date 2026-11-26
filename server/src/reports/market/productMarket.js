@@ -17,7 +17,8 @@ const SALES_MONTHS = 3;
 // role: each part follows the report that shows the same data (Reports > Market and the others), so a per-role report switch also hides it
 // on the product card (review): shelf -> market_shelf, competitors -> market_prices, wishes -> product_wishes, line potential ->
 // volume_opportunities, sales / out of stock -> product_liters.
-export async function productMarket(productId, { role = "admin", now = new Date(), db = pool } = {}) {
+// scopeUserId: a sales manager's sales and line potential count only their own customers, as their reports do (Codex review).
+export async function productMarket(productId, { role = "admin", scopeUserId = null, now = new Date(), db = pool } = {}) {
   const { rows: [p] } = await db.query(
     // free stock, the number the card and every selling screen show (orders/appStock.js), not the Excel's raw stock
     `SELECT p.id, p.name, p.brand, p.erp_product_id, p.stock_qty, ${freeStockSql()}::int AS free_qty, p.stock_changed_at FROM products p WHERE p.id = $1`,
@@ -45,7 +46,10 @@ export async function productMarket(productId, { role = "admin", now = new Date(
   const wishSince = new Date(now.getTime() - WISH_DAYS * 86400000);
   const outNow = p.stock_qty != null && Number(p.free_qty) <= 0;
   // sales a month: the 3 whole months before it ran out (a product out since August sold nothing since), else the last 3 whole months
-  const salesEnd = outNow && p.stock_changed_at ? new Date(p.stock_changed_at) : now;
+  // the Excel stock itself ran out: its last change is when, and the months before it are the usual sales. Out only because orders hold
+  // the rest: no such date, the last 3 months (Codex review)
+  const rawOut = outNow && Number(p.stock_qty) <= 0 && p.stock_changed_at;
+  const salesEnd = rawOut ? new Date(p.stock_changed_at) : now;
   const none = { rows: [null] };
   const [shelf, wishes, sales, potential, competitors] = await Promise.all([
     // per shop the latest visit that ticked its usual products in stock; does that list name this product
@@ -68,9 +72,10 @@ export async function productMarket(productId, { role = "admin", now = new Date(
           `SELECT COALESCE(sum(qty), 0)::float8 AS qty, count(DISTINCT erp_customer_id)::int AS customers
            FROM erp_order_lines
            WHERE lower(trim(product_id)) = lower(trim($1)) AND erp_customer_id <> '10000'
+             AND ($3::int IS NULL OR erp_customer_id IN (SELECT erp_customer_id FROM customers WHERE assigned_manager_id = $3 AND erp_customer_id IS NOT NULL))
              AND order_date >= (date_trunc('month', ($2::timestamptz AT TIME ZONE 'Asia/Yerevan')) - interval '${SALES_MONTHS} months')::date
              AND order_date < date_trunc('month', ($2::timestamptz AT TIME ZONE 'Asia/Yerevan'))::date`,
-          [p.erp_product_id, salesEnd]
+          [p.erp_product_id, salesEnd, scopeUserId]
         )
       : { rows: [{ qty: 0, customers: 0 }] },
     mine && seePotential
@@ -78,8 +83,8 @@ export async function productMarket(productId, { role = "admin", now = new Date(
           `SELECT COALESCE(sum(a.amount_month), 0)::float8 AS litres, count(DISTINCT a.customer_id)::int AS customers
            FROM volume_potential_amounts a JOIN volume_potential_lines l ON l.id = a.line_id
            JOIN customers c ON c.id = a.customer_id AND c.closed_at IS NULL
-           WHERE l.code = $1 AND a.amount_month > 0`,
-          [mine.line_code]
+           WHERE l.code = $1 AND a.amount_month > 0 AND ($2::int IS NULL OR c.assigned_manager_id = $2)`,
+          [mine.line_code, scopeUserId]
         )
       : { rows: [null] },
     mine && seePrices ? Promise.all([loadPriceEntries({ until: now, lineCode: mine.line_code, db }), marketLines(db)]) : null,
@@ -112,7 +117,7 @@ export async function productMarket(productId, { role = "admin", now = new Date(
     // since = when its stock last changed (approximate: an Excel sync or a hand edit also moves it)
     out_of_stock:
       outNow && seeSales
-        ? { since: p.stock_changed_at, monthly_qty: monthly, quantity: monthly ? Math.round(monthly * (line?.volume ?? mine?.volume ?? 0)) || null : null, unit: line?.unit ?? "L", wish_customers: w?.customers ?? null }
+        ? { since: rawOut ? p.stock_changed_at : null, monthly_qty: monthly, quantity: monthly ? Math.round(monthly * (line?.volume ?? mine?.volume ?? 0)) || null : null, unit: line?.unit ?? "L", wish_customers: w?.customers ?? null }
         : null,
   };
 }
