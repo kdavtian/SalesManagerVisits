@@ -39,3 +39,5 @@ test/integration/orderGroupPost.test.js
 test/integration/marketPrices.test.js
 # changes report access and a user status other files read
 test/integration/marketGaps.test.js
+# the monthly market report notifies every admin / CEO in the database
+test/integration/marketMonthly.test.js

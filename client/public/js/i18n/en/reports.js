@@ -584,4 +584,10 @@ export const enReports = {
     mkt_g_limit: "At most {n} shops at a time",
     mkt_g_made_no_rep: "no rep: {n}",
     mkt_g_made_not_allowed: "not your team: {n}",
+    fn_step_replace_grey: "Offer original Castrol: {fake} on the shelf",
+    fn_grey_castrol: "grey-imported Castrol",
+    fn_pitch_cheaper: "we are {pct}% cheaper",
+    fn_pitch_dearer: "we are {pct}% dearer",
+    fn_pitch_same: "same price",
+    fn_pitch_margin: "shop margin with us {ours} / with them {theirs} AMD",
 };
