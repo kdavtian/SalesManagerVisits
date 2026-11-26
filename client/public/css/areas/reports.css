@@ -484,3 +484,20 @@
 .mkt-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .mkt-flag-row { flex-direction: column; align-items: stretch; }
 .mkt-flag-row .mkt-nums { flex-direction: row; justify-content: flex-start; gap: 14px; }
+.mkt-drops { padding: 10px 12px; margin-bottom: 8px; border-color: var(--warning); }
+.mkt-drops ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.mkt-gap-up { color: var(--danger); }
+.mkt-gap-down { color: var(--success); }
+.mkt-group { padding: 10px 12px; margin-bottom: 10px; }
+.mkt-group h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.mkt-group .mkt-fresh { margin: 2px 0 6px; }
+.mkt-none { font-size: 12px; margin: 0 0 6px; }
+.mkt-ours { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; margin-bottom: 6px; border-radius: 10px; background: var(--accent-soft, rgba(0, 122, 77, 0.08)); }
+.mkt-brand { display: grid; grid-template-columns: minmax(0, 1fr) 40px 64px 64px; align-items: center; gap: 8px; min-height: 44px; padding: 6px 0; }
+.mkt-brand + .mkt-brand { border-top: 1px solid var(--border); }
+.mkt-brand-head { min-height: 0; font-size: 11px; padding: 2px 0; }
+.mkt-num { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.mkt-num small { font-size: 11px; font-weight: 500; }
+.mkt-spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+@media (max-width: 340px) { .mkt-brand { grid-template-columns: minmax(0, 1fr) 58px 58px; } .mkt-brand .mkt-spark { display: none; } }
+@media (max-width: 340px) { .mkt-brand-head > span:nth-child(2) { display: none; } }

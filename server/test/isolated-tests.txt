@@ -35,3 +35,5 @@ test/integration/salesStrategy.test.js
 test/integration/excelBalanceHandoffs.test.js
 test/integration/cashOneRoute.test.js
 test/integration/orderGroupPost.test.js
+# the monthly competitor price alert notifies every admin / CEO in the database
+test/integration/marketPrices.test.js
