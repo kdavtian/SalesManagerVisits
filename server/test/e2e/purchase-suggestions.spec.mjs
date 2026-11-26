@@ -30,7 +30,11 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     const boxes = Number(before.match(/^(\d+) boxes/)[1]);
     expect(boxes % 5).toBe(0);
     await line.locator("[data-plus]").click();
-    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
+    await expect(qty).toHaveText(`${boxes + 5} boxes`);
+    // compact row (owner 2026-11-26): the details open on a tap on the row: the numbers, back to the suggestion, the supplier
+    await expect(line.locator(".ps-details")).toBeHidden();
+    await line.locator("[data-toggle]").click();
+    await expect(line.locator(".ps-details")).toBeVisible();
     await expect(line.locator("[data-reset]")).toBeVisible();
     // owner 2026-11-26: more than twice the cover days after receiving is flagged "Too much" (2 a day: 2 more steps = well over 90 days)
     await expect(line.locator(".badge-warning")).toHaveCount(0);
@@ -39,7 +43,21 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await expect(line.locator(".badge-warning")).toContainText(/Too much: \d+ days/);
     await line.locator("[data-minus]").click();
     await line.locator("[data-minus]").click();
-    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
+    await expect(qty).toHaveText(`${boxes + 5} boxes`);
+    // the details stay open through − / +
+    await expect(line.locator(".ps-details")).toBeVisible();
+    // "what if": another cover for this screen only, the chip says so; back to the settings
+    await page.locator("#ps-plan-chip").click();
+    await page.locator('#ps-plan-edit input[name="cover"]').fill("90");
+    await page.locator('#ps-plan-edit button[type="submit"]').click();
+    await expect(page.locator("#ps-plan-chip")).toContainText("90");
+    await expect(page.locator(".ps-plan-note")).toBeVisible();
+    await page.locator("#ps-plan-chip").click();
+    await page.locator("#ps-plan-reset").click();
+    await expect(page.locator("#ps-plan-chip")).toContainText("45");
+    await expect(page.locator(".ps-plan-note")).toHaveCount(0);
+    await expect(line).toBeVisible();
+    await line.locator("[data-plus]").click();
     // the supplier's card makes the purchase
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator(".ps-create").click();
