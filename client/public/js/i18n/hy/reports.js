@@ -520,7 +520,6 @@ export const hyReports = {
     mkt_p_info_5: "Ապրանքանիշը, որի մեդիանը ամսում իջել է 5%-ից ավելի, ցուցադրվում է վերևում և ամսի 1-ին ուղարկվում ադմինին և CEO-ին։",
     mkt_tier_bronze: "Բր",
     mkt_tier_silver: "Արծ",
-    mkt_tier_gold: "Ոսկի",
     mkt_p_our_margin: "Խանութի մարժան մեզ հետ՝ {amd} ({pct}%)",
     mkt_p_margin: "Մարժա {amd} ({pct}%)",
     mkt_p_shops: "{n} խանութ",

@@ -62,8 +62,7 @@ export async function renderMarketPrices(root, navigate) {
           <small class="muted">${escapeHtml(
             [
               [t("mkt_tier_bronze"), p.bronze],
-              [t("mkt_tier_silver"), p.silver],
-              [t("mkt_tier_gold"), p.gold],
+              [t("mkt_tier_silver"), p.silver], // Gold pays the Silver list (tierPricing.js): not shown twice
             ]
               .filter(([, v]) => v != null)
               .map(([k, v]) => `${k} ${nf(per(v, g.volume))}`)

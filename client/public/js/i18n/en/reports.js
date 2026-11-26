@@ -520,7 +520,6 @@ export const enReports = {
     mkt_p_info_5: "A brand whose median falls > 5% in a month is listed on top and sent to admin and CEO on the 1st.",
     mkt_tier_bronze: "Br",
     mkt_tier_silver: "Sil",
-    mkt_tier_gold: "Gold",
     mkt_p_our_margin: "Shop margin with us: {amd} ({pct}%)",
     mkt_p_margin: "Margin {amd} ({pct}%)",
     mkt_p_shops: "{n} shops",

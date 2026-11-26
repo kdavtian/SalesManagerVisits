@@ -5,6 +5,7 @@ import { pool } from "../../db/pool.js";
 import { autoLineCode, sizeOf } from "../../customers/volumeActuals.js";
 import { loadPriceEntries } from "./marketPrices.js";
 import { median, isClean, aggregateMeta } from "./priceRules.js";
+import { tierListPrice } from "../../products/tierPricing.js";
 
 export const INDEX_DAYS = 90;
 export const TREND_MONTHS = 6;
@@ -30,7 +31,7 @@ export async function ourProducts(db = pool) {
   const [{ rows: products }, { rows: lines }, { rows: decided }] = await Promise.all([
     db.query(
       `SELECT id, name, brand, family, unit, size_l::float8 AS size_l, lower(erp_product_id) AS sku_key,
-              bronze_price_amd::float8 AS bronze, silver_price_amd::float8 AS silver, gold_price_amd::float8 AS gold, retail_price_amd::float8 AS retail
+              bronze_price_amd, silver_price_amd, unit_price_amd, retail_price_amd::float8 AS retail
        FROM products WHERE active AND lower(trim(brand)) = 'castrol'`
     ),
     db.query("SELECT id, code FROM volume_potential_lines"),
@@ -46,8 +47,10 @@ export async function ourProducts(db = pool) {
     const code = m?.line_id ? codeOf.get(m.line_id) : autoLineCode(p).code;
     const volume = m?.litres_per_unit ?? (p.size_l > 0 ? p.size_l : sizeOf(p.unit));
     if (!code || !known.has(code) || !volume) continue;
-    const round = (v) => (v == null ? null : Math.round(v));
-    out.push({ id: p.id, name: p.name, line_code: code, volume, bronze: round(p.bronze), silver: round(p.silver), gold: round(p.gold), retail: round(p.retail) });
+    // what each tier really pays, as orders price it (tierPricing.js: 0 = not set, Bronze falls back to the base / Silver price, Gold
+    // pays the Silver list) -- Codex review
+    const tier = (k) => Math.round(tierListPrice(p, k)) || null;
+    out.push({ id: p.id, name: p.name, line_code: code, volume, bronze: tier("bronze"), silver: tier("silver"), gold: tier("gold"), retail: p.retail > 0 ? Math.round(p.retail) : null });
   }
   return out;
 }

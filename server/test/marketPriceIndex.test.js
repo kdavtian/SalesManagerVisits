@@ -94,3 +94,17 @@ test("the alert lists at most MAX_LINES brands and says how many more", () => {
   assert.equal(text.split("\n").length, MAX_LINES + 1);
   assert.match(text, /և ևս 3$/);
 });
+
+test("our products: tier prices as orders price them (0 = not set, Bronze falls back, Gold pays Silver) (Codex review)", async () => {
+  const { ourProducts } = await import("../src/reports/market/priceIndex.js");
+  const db = {
+    query: async (sql) =>
+      sql.includes("FROM products")
+        ? { rows: [{ id: 7, name: "Castrol GTX 10W-40 4L", brand: "Castrol", family: "GTX", unit: "4L", size_l: 4, sku_key: null, bronze_price_amd: 0, silver_price_amd: "9000", unit_price_amd: null, retail_price_amd: 0 }] }
+        : sql.includes("volume_potential_lines")
+          ? { rows: [{ id: 1, code: "pcmo_10w40" }] }
+          : { rows: [] },
+  };
+  const [p] = await ourProducts(db);
+  assert.deepEqual([p.line_code, p.bronze, p.silver, p.gold, p.retail], ["pcmo_10w40", 9000, 9000, 9000, null]);
+});
