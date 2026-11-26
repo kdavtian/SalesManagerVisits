@@ -7,7 +7,8 @@ import { marketQuality } from "../market/marketPrices.js";
 import { priceIndex } from "../market/priceIndex.js";
 import { shelfShare } from "../market/shelfShare.js";
 import { marketGaps, createGapTasks } from "../market/gaps.js";
-import { canCreateTasks, sendsRequests } from "../../shared/roles.js";
+import { canCreateTasks, sendsRequests, seesProductMarket } from "../../shared/roles.js";
+import { productMarket } from "../market/productMarket.js";
 
 export const marketRouter = Router();
 marketRouter.use(requireAuth);
@@ -45,4 +46,14 @@ marketRouter.post("/gap-tasks", requireReport("market_gaps"), async (req, res) =
   const ids = req.body?.customer_ids;
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "Choose the shops" });
   res.json(await createGapTasks({ customerIds: ids, lineCode: lineParam(req.body?.line), user: req.user, isRequest: sendsRequests(req.user.role) }));
+});
+
+// GET /api/market/product/:id -> the product card's Market section (shelf, competitor equivalents, wishes, line potential, lost sales)
+marketRouter.get("/product/:id", async (req, res) => {
+  if (!seesProductMarket(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(404).json({ error: "Product not found" });
+  const data = await productMarket(id);
+  if (!data) return res.status(404).json({ error: "Product not found" });
+  res.json(data);
 });
