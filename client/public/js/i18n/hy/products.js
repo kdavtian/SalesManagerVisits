@@ -423,7 +423,7 @@ export const hyProducts = {
     pm_potential: "Ներուժ, {line}",
     pm_competitors: "Մրցակիցներ, նույն գիծ և ծավալ",
     pm_out: "Պահեստում չկա",
-    pm_out_since: "Պահեստում չկա {date}-ից",
+    pm_out_since: "Պահեստում չկա մոտ {date}-ից",
     pm_out_sales: "Սովորաբար վաճառվում է {n} հատ{l} ամսական՝ վտանգված վաճառք",
     pm_out_wishes: "{n} հաճախորդ ուզել է",
 };

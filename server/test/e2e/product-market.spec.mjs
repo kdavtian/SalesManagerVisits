@@ -13,7 +13,8 @@ test("product card: Market section in Armenian at 390 and 320 px", async ({ page
 
   await page.addInitScript(() => localStorage.setItem("fieldvisits_lang", "hy"));
   await page.setViewportSize({ width: 390, height: 844 });
-  await loginViaUi(page, rep.email);
+  const director = await fixtures.createUser("sales_director");
+  await loginViaUi(page, director.email);
   await page.goto(`/#/product/${product.id}`);
   const card = page.locator(".pm-card");
   await expect(card).toBeVisible({ timeout: 15000 });

@@ -53,7 +53,7 @@ marketRouter.get("/product/:id", async (req, res) => {
   if (!seesProductMarket(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) return res.status(404).json({ error: "Product not found" });
-  const data = await productMarket(id);
+  const data = await productMarket(id, { role: req.user.role });
   if (!data) return res.status(404).json({ error: "Product not found" });
   res.json(data);
 });

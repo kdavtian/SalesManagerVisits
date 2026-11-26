@@ -20,17 +20,18 @@ export function productMarketHtml(d) {
     const o = d.out_of_stock;
     const lines = [
       o.since ? t("pm_out_since").replace("{date}", formatDateDMY(o.since)) : t("pm_out"),
-      o.monthly_qty > 0 ? t("pm_out_sales").replace("{n}", nf(o.monthly_qty)).replace("{l}", o.litres ? ` (${nf(o.litres)} ${t("mkt_l")})` : "") : "",
+      o.monthly_qty > 0 ? t("pm_out_sales").replace("{n}", nf(o.monthly_qty)).replace("{l}", o.quantity ? ` (${nf(o.quantity)} ${o.unit === "kg" ? t("mkt_kg") : t("mkt_l")})` : "") : "",
       o.wish_customers ? t("pm_out_wishes").replace("{n}", nf(o.wish_customers)) : "",
     ].filter(Boolean);
     parts.push(`<div class="pm-alert" role="note"><ul>${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul></div>`);
   }
-  parts.push(row(t("pm_shelf"), d.shelf.on_shelf ? t("pm_shops_n").replace("{n}", nf(d.shelf.on_shelf)) : "—"));
-  parts.push(row(t("pm_wishes"), d.wishes.customers ? t("pm_wishes_n").replace("{c}", nf(d.wishes.customers)).replace("{q}", nf(d.wishes.quantity)) : "—"));
-  if (d.sales.monthly_qty > 0) parts.push(row(t("pm_sales"), t("pm_per_month").replace("{n}", nf(d.sales.monthly_qty))));
+  // a part is null when the viewer's role does not see the report with the same data
+  if (d.shelf) parts.push(row(t("pm_shelf"), d.shelf.on_shelf ? t("pm_shops_n").replace("{n}", nf(d.shelf.on_shelf)) : "—"));
+  if (d.wishes) parts.push(row(t("pm_wishes"), d.wishes.customers ? t("pm_wishes_n").replace("{c}", nf(d.wishes.customers)).replace("{q}", nf(d.wishes.quantity)) : "—"));
+  if (d.sales?.monthly_qty > 0) parts.push(row(t("pm_sales"), t("pm_per_month").replace("{n}", nf(d.sales.monthly_qty))));
   if (d.line) {
     const l = d.line;
-    parts.push(row(t("pm_potential").replace("{line}", hy ? l.name_hy : l.name_en), l.potential_litres ? `${nf(l.potential_litres)} ${l.unit === "kg" ? t("mkt_kg") : t("mkt_l")}` : "—"));
+    if (l.potential_litres != null) parts.push(row(t("pm_potential").replace("{line}", hy ? l.name_hy : l.name_en), l.potential_litres ? `${nf(l.potential_litres)} ${l.unit === "kg" ? t("mkt_kg") : t("mkt_l")}` : "—"));
     if (l.competitors.length) {
       parts.push(`<p class="pm-sub muted">${escapeHtml(t("pm_competitors"))}</p>
         <div class="pm-comp pm-comp-head muted"><span></span><span>${escapeHtml(t("mkt_wholesale_short"))}</span><span>${escapeHtml(t("mkt_retail_short"))}</span></div>
@@ -43,25 +44,24 @@ export function productMarketHtml(d) {
           .join("")}`);
     }
   }
+  if (!parts.length) return "";
   return `<div class="card pd-card pm-card">
       <div class="pm-head"><h3 class="pd-card-title">${escapeHtml(t("pm_title"))}</h3><button type="button" class="settings-hint-icon" id="pm-info" aria-label="${escapeHtml(t("more_info"))}">!</button></div>
       ${parts.join("")}
     </div>`;
 }
 
-// Fetch and keep the section; paint() is called whenever the card is drawn again. -> { html(), load(paint) }
+// Starts the request at once (beside the product's own request, not after it) and keeps the answer; paint() runs when it lands.
+// -> { html(), load(paint), wire(container) }
 export function productMarketSection(productId, role) {
   let data = null;
+  const request = seesProductMarket(role) ? api.getProductMarket(productId).catch(() => null) : Promise.resolve(null);
   return {
     html: () => productMarketHtml(data),
     async load(paint) {
-      if (!seesProductMarket(role)) return;
-      try {
-        data = await api.getProductMarket(productId);
-        paint();
-      } catch {
-        // the section is extra: the card stays as it is
-      }
+      // the section is extra: on an error the card stays as it is
+      data = await request;
+      if (data) paint();
     },
     wire(container) {
       container.querySelector("#pm-info")?.addEventListener("click", () =>

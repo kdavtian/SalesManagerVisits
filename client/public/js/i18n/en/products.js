@@ -423,7 +423,7 @@ export const enProducts = {
     pm_potential: "Potential, {line}",
     pm_competitors: "Competitors, same line and volume",
     pm_out: "Out of stock",
-    pm_out_since: "Out of stock since {date}",
+    pm_out_since: "Out of stock since ~{date}",
     pm_out_sales: "Usually sells {n} pcs{l} a month: sales at risk",
     pm_out_wishes: "{n} customers asked for it",
 };

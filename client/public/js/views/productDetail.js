@@ -57,6 +57,8 @@ export async function renderProductDetail(root, navigate, productId) {
   root.innerHTML = `<div class="detail-view"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   const container = root.querySelector(".detail-view");
 
+  // the Market section (shelf, competitors, wishes, potential): requested beside the product, painted into its own slot when it lands
+  const market = productMarketSection(productId, state.user?.role);
   let product;
   try {
     product = await api.getProduct(productId);
@@ -73,8 +75,6 @@ export async function renderProductDetail(root, navigate, productId) {
   let activeImageId = product.images[0]?.id ?? null;
   let stockOn = readPref(STOCK_ON_KEY, "1") === "1";
   let stockUnit = readPref(STOCK_UNIT_KEY, "pcs") === "l" ? "l" : "pcs";
-  // the Market section (shelf, competitors, wishes, potential): fetched after the card is drawn, painted into its own slot
-  const market = productMarketSection(product.id, state.user?.role);
 
   function render() {
     const p = product;
