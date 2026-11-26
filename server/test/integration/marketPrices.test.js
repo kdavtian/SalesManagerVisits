@@ -66,7 +66,7 @@ test("the monthly alert: admin gets the drop once", async () => {
   const { rows } = await pool.query("SELECT title, body, url FROM notifications WHERE user_id = $1 AND type = 'market_price_drop'", [admin.id]);
   assert.equal(rows.length, 1);
   assert.match(rows[0].title, /\(2025-03\)/);
-  assert.match(rows[0].body, new RegExp(`Zt ${brand} .* 4 լ: մեծ\\. 10,000 → 9,000 դր \\(-10%\\)`));
+  assert.match(rows[0].body, new RegExp(`Zt ${brand} .* 4 լ: մեծ\\. 10,000 → 9,000 դր \\(-10%, 2 խանութ\\)`));
   assert.equal(rows[0].url, "/#/reports?r=market_prices");
   assert.equal(await checkPriceDrops(new Date("2025-04-03T08:00:00Z")), 0, "once a month");
 });

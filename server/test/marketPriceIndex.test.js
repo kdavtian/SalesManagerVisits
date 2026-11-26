@@ -53,7 +53,7 @@ test("index: medians per brand, flagged and old prices left out, reference = our
   assert.equal(mobil.trend.find((m) => m.month === "2026-07").wholesale, 4000, "the old price sits in its month");
 });
 
-test("drops: > 5 % month on month with 2+ prices in both months; wholesale first; rises and thin months ignored", () => {
+test("drops: > 5 % month on month with 2+ shops in both months; wholesale first; rises and thin months ignored", () => {
   const oct = (d) => `2026-10-${String(d).padStart(2, "0")}T09:00:00Z`;
   const nov = (d) => `2026-11-${String(d).padStart(2, "0")}T09:00:00Z`;
   const entries = flagEntries([
@@ -65,6 +65,11 @@ test("drops: > 5 % month on month with 2+ prices in both months; wholesale first
     e({ brand_key: "shell", brand_name: "Shell", wholesale_amd: 15000, recorded_at: oct(3) }),
     e({ brand_key: "shell", brand_name: "Shell", wholesale_amd: 9000, recorded_at: nov(3) }),
     e({ brand_key: "shell", brand_name: "Shell", wholesale_amd: 9000, recorded_at: nov(5) }),
+    // Zic: two prices each month, but one shop -> not "the market"
+    e({ brand_key: "zic", brand_name: "Zic", customer_id: 9001, wholesale_amd: 10000, recorded_at: oct(3) }),
+    e({ brand_key: "zic", brand_name: "Zic", customer_id: 9001, wholesale_amd: 10000, recorded_at: oct(5) }),
+    e({ brand_key: "zic", brand_name: "Zic", customer_id: 9001, wholesale_amd: 8000, recorded_at: nov(3) }),
+    e({ brand_key: "zic", brand_name: "Zic", customer_id: 9001, wholesale_amd: 8000, recorded_at: nov(5) }),
     // Motul: a rise
     e({ brand_key: "motul", brand_name: "Motul", retail_amd: 10000, recorded_at: oct(3) }),
     e({ brand_key: "motul", brand_name: "Motul", retail_amd: 10000, recorded_at: oct(4) }),
@@ -74,7 +79,13 @@ test("drops: > 5 % month on month with 2+ prices in both months; wholesale first
   const d = priceDrops(entries, "2026-11", { lines });
   assert.equal(d.length, 1);
   assert.deepEqual([d[0].brand_key, d[0].kind, d[0].before, d[0].after, d[0].change_pct], ["mobil", "wholesale", 10000, 9100, -9]);
-  assert.match(dropBullets(d), /^• Mobil Մարդատար 5W-30 4 լ: մեծ\. 10,000 → 9,100 դր \(-9%\)$/);
+  assert.match(dropBullets(d), /^• Mobil Մարդատար 5W-30 4 լ: մեծ\. 10,000 → 9,100 դր \(-9%, 4 խանութ\)$/);
+});
+
+test("margin % from the same entries as the margin (both prices)", () => {
+  const idx = buildIndex(flagEntries([e({ wholesale_amd: 10000 }), e({ retail_amd: 20000 }), e({ wholesale_amd: 15000, retail_amd: 16000 })]), [], { now, lines });
+  const b = idx.groups[0].brands[0];
+  assert.deepEqual([b.margin, b.margin_pct], [1000, 7]);
 });
 
 test("the alert lists at most MAX_LINES brands and says how many more", () => {

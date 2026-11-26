@@ -8,9 +8,10 @@ import { median, isClean, aggregateMeta } from "./priceRules.js";
 
 export const INDEX_DAYS = 90;
 export const TREND_MONTHS = 6;
-// an alert: a brand's monthly median fell by more than this share, both months resting on at least DROP_MIN_ENTRIES clean prices
+// an alert: a brand's monthly median fell by more than this share, each month resting on clean prices of at least DROP_MIN_SHOPS shops
+// (one shop seen twice is not "the market", independent review)
 export const DROP_PCT = 5;
-export const DROP_MIN_ENTRIES = 2;
+export const DROP_MIN_SHOPS = 2;
 
 const yerevanMonth = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Yerevan", year: "numeric", month: "2-digit" });
 // "2026-11" (Yerevan calendar)
@@ -92,7 +93,10 @@ export function buildIndex(entries, ours, { now = new Date(), days = INDEX_DAYS,
     const brands = [...g.brands.values()].map((b) => {
       const wholesale = median(b.entries.map((e) => e.wholesale_amd));
       const retail = median(b.entries.map((e) => e.retail_amd));
-      const margin = median(b.entries.filter((e) => e.wholesale_amd != null && e.retail_amd != null).map((e) => e.retail_amd - e.wholesale_amd));
+      // margin and its % from the same entries: those with both prices (independent review)
+      const paired = b.entries.filter((e) => e.wholesale_amd != null && e.retail_amd != null && e.wholesale_amd > 0);
+      const margin = median(paired.map((e) => e.retail_amd - e.wholesale_amd));
+      const marginPct = median(paired.map((e) => ((e.retail_amd - e.wholesale_amd) / e.wholesale_amd) * 100));
       const trend = months.map((m) => {
         const list = monthly.get(`${g.line_code}|${volKey(g.volume)}|${b.brand_key}|${m}`) ?? [];
         return { month: m, wholesale: median(list.map((e) => e.wholesale_amd)), retail: median(list.map((e) => e.retail_amd)), entries: list.length };
@@ -103,7 +107,7 @@ export function buildIndex(entries, ours, { now = new Date(), days = INDEX_DAYS,
         wholesale,
         retail,
         margin,
-        margin_pct: pctDiff(retail, wholesale),
+        margin_pct: marginPct,
         // our cheapest matching product (Bronze) against this brand: + = we are dearer
         gap_wholesale_pct: reference ? pctDiff(reference.bronze, wholesale) : null,
         gap_retail_pct: reference ? pctDiff(reference.retail, retail) : null,
@@ -134,7 +138,7 @@ export function buildIndex(entries, ours, { now = new Date(), days = INDEX_DAYS,
 }
 
 // Pure: brands whose monthly median (per unit; wholesale, else retail) fell more than DROP_PCT from `month - 1` to `month`.
-// -> [{ brand_key, brand_name, line_code, line_name_hy, volume, unit, kind, before, after, change_pct, entries }]
+// -> [{ brand_key, brand_name, line_code, line_name_en, line_name_hy, volume, unit, kind, before, after, change_pct, entries, shops }]
 export function priceDrops(entries, month, { lines = [] } = {}) {
   const prev = addMonth(month, -1);
   const byKey = new Map();
@@ -145,18 +149,34 @@ export function priceDrops(entries, month, { lines = [] } = {}) {
     if (!byKey.has(k)) byKey.set(k, { e, [month]: [], [prev]: [] });
     byKey.get(k)[m].push(e);
   }
-  const name = new Map(lines.map((l) => [l.code, l.name_hy]));
+  const info = new Map(lines.map((l) => [l.code, l]));
+  const shopsOf = (list) => new Set(list.map((e) => e.customer_id)).size;
   const out = [];
   for (const g of byKey.values()) {
     for (const kind of ["wholesale", "retail"]) {
       const a = g[prev].filter((e) => e[`${kind}_amd`] != null);
       const b = g[month].filter((e) => e[`${kind}_amd`] != null);
-      if (a.length < DROP_MIN_ENTRIES || b.length < DROP_MIN_ENTRIES) continue;
+      if (shopsOf(a) < DROP_MIN_SHOPS || shopsOf(b) < DROP_MIN_SHOPS) continue;
       const before = median(a.map((e) => e[`${kind}_amd`]));
       const after = median(b.map((e) => e[`${kind}_amd`]));
       const change = ((after - before) / before) * 100;
       if (change < -DROP_PCT) {
-        out.push({ brand_key: g.e.brand_key, brand_name: g.e.brand_name, line_code: g.e.line_code, line_name_hy: name.get(g.e.line_code) ?? g.e.line_code, volume: Number(g.e.volume), unit: g.e.unit, kind, before, after, change_pct: Math.round(change), entries: a.length + b.length });
+        const l = info.get(g.e.line_code);
+        out.push({
+          brand_key: g.e.brand_key,
+          brand_name: g.e.brand_name,
+          line_code: g.e.line_code,
+          line_name_en: l?.name_en ?? g.e.line_code,
+          line_name_hy: l?.name_hy ?? g.e.line_code,
+          volume: Number(g.e.volume),
+          unit: g.e.unit,
+          kind,
+          before,
+          after,
+          change_pct: Math.round(change),
+          entries: a.length + b.length,
+          shops: new Set([...a, ...b].map((e) => e.customer_id)).size,
+        });
         break; // one line per brand / line / volume: wholesale first
       }
     }
@@ -169,9 +189,9 @@ export async function marketLines(db = pool) {
 }
 
 export async function priceIndex({ days = INDEX_DAYS, now = new Date(), db = pool } = {}) {
-  const [entries, ours, lines] = await Promise.all([loadPriceEntries({ db }), ourProducts(db), marketLines(db)]);
+  const [entries, ours, lines] = await Promise.all([loadPriceEntries({ until: now, db }), ourProducts(db), marketLines(db)]);
   const index = buildIndex(entries, ours, { now, days, lines });
   const month = monthOf(now);
-  // the drops of the last whole month (what the alert sent) and of the month so far
+  // the drops of the last whole month (what the alert sends, same window) and of the month so far
   return { ...index, drops: { last_month: priceDrops(entries, addMonth(month, -1), { lines }), this_month: priceDrops(entries, month, { lines }) } };
 }

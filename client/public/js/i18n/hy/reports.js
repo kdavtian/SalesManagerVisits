@@ -536,5 +536,5 @@ export const hyReports = {
     mkt_group_ev: "EV",
     mkt_group_coolant: "Հակասառիչ",
     mkt_group_brake: "Արգելակ",
-    mkt_group_grease: "Քսուք",
+    mkt_group_grease: "Քսուք", mkt_group_other: "Այլ",
 };

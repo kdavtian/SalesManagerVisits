@@ -536,5 +536,5 @@ export const enReports = {
     mkt_group_ev: "EV",
     mkt_group_coolant: "Coolant",
     mkt_group_brake: "Brake",
-    mkt_group_grease: "Grease",
+    mkt_group_grease: "Grease", mkt_group_other: "Other",
 };

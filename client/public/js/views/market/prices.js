@@ -3,7 +3,7 @@
 // brand), the shop's margin per brand vs the margin our recommended retail leaves, a 6-month trend line, and the brands whose price fell
 // > 5 % in a month (the list admin / CEO also get as a notification). Server: reports/market/priceIndex.js.
 import { api } from "../../api.js";
-import { t, getLang } from "../../i18n.js";
+import { t, getLang, hasText } from "../../i18n.js";
 import { escapeHtml } from "../../util.js";
 import { nf, volumeLabel, freshnessHtml, marketHeaderHtml, wireMarketHeader } from "./common.js";
 
@@ -48,7 +48,7 @@ export async function renderMarketPrices(root, navigate) {
       ? `<div class="card mkt-drops"><strong>${escapeHtml(t(titleKey))}</strong><ul>${list
           .map(
             (d) =>
-              `<li>${escapeHtml(`${d.brand_name} · ${hy ? d.line_name_hy : d.line_code} · ${volumeLabel(d.volume, d.unit)}: ${t(d.kind === "wholesale" ? "mkt_wholesale_short" : "mkt_retail_short")} ${nf(d.before)} → ${nf(d.after)}`)} <span class="mkt-gap-down">${d.change_pct}%</span></li>`
+              `<li>${escapeHtml(`${d.brand_name} · ${hy ? d.line_name_hy : d.line_name_en} · ${volumeLabel(d.volume, d.unit)}: ${t(d.kind === "wholesale" ? "mkt_wholesale_short" : "mkt_retail_short")} ${nf(d.before)} → ${nf(d.after)}`)} <span class="mkt-gap-down">${d.change_pct}%</span></li>`
           )
           .join("")}</ul></div>`
       : "";
@@ -101,7 +101,7 @@ export async function renderMarketPrices(root, navigate) {
     const groups = [...new Set(data.groups.map((g) => g.group_key).filter(Boolean))];
     chips.innerHTML =
       groups.length > 1
-        ? [["", t("mkt_all")], ...groups.map((k) => [k, t(`mkt_group_${k}`)])]
+        ? [["", t("mkt_all")], ...groups.map((k) => [k, hasText(`mkt_group_${k}`) ? t(`mkt_group_${k}`) : hasText(`vp_group_${k}`) ? t(`vp_group_${k}`) : k])]
             .map(([k, label]) => `<button type="button" class="map-filter-chip ${group === k ? "chip-active" : ""}" data-g="${k}" aria-pressed="${group === k}">${escapeHtml(label)}</button>`)
             .join("")
         : "";
