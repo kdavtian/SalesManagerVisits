@@ -454,7 +454,7 @@
 /* Purchases > Suggestions (views/purchaseSuggestions.js): compact rows, the supplier head pinned (owner 2026-11-26) */
 .ps-hint { margin: 0 0 8px; white-space: pre-line; }
 .ps-plan { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 10px; }
-.ps-plan-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.ps-plan-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .ps-plan-trying { border-color: var(--warning, #b7791f); background: color-mix(in srgb, var(--warning, #b7791f) 12%, var(--bg-card)); }
 .ps-plan-pen { color: var(--text-dim); }
 .ps-plan-note { font-size: 0.78rem; color: var(--text-dim); }
@@ -464,11 +464,12 @@
 .ps-plan-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
 .ps-plan-actions .btn { flex: 1; }
 .ps-supplier { margin: 0 0 14px; padding: 0 12px 4px; }
-.ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: inherit; }
+.ps-supplier:active { transform: none; opacity: 1; }
+.ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }
 .ps-supplier-title { flex: 1; min-width: 0; }
 .ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
 .ps-supplier-head p { margin: 1px 0 0; font-size: 0.78rem; overflow-wrap: anywhere; }
-.ps-create { flex: none; min-height: 40px; padding: 6px 12px; }
+.ps-create { flex: none; min-height: 44px; padding: 6px 12px; }
 .ps-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; align-items: center; border-top: 1px solid var(--border); padding: 8px 0; }
 .ps-supplier-head + .ps-line { border-top: 0; }
 .ps-line-off .ps-row, .ps-line-off .ps-qty { opacity: 0.55; }
@@ -480,7 +481,7 @@
 .ps-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .ps-flags .badge { font-size: 0.7rem; }
 .ps-order { display: flex; align-items: center; gap: 4px; }
-.ps-step { flex: none; width: 40px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 1.2rem; font-weight: 700; }
+.ps-step { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-size: 1.2rem; font-weight: 700; }
 .ps-step:disabled { opacity: 0.4; }
 .ps-qty { min-width: 64px; display: flex; flex-direction: column; align-items: center; text-align: center; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .ps-qty strong { font-size: 0.92rem; white-space: nowrap; }
@@ -492,9 +493,9 @@
 .ps-k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
 .ps-rate { margin: 6px 0 0; font-size: 0.78rem; }
 .ps-detail-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
-.ps-reset, .ps-open { display: inline-flex; align-items: center; min-height: 40px; border: 0; background: none; color: var(--accent); font-size: 0.82rem; padding: 0; text-decoration: none; }
+.ps-reset, .ps-open { display: inline-flex; align-items: center; min-height: 44px; border: 0; background: none; color: var(--accent); font-size: 0.82rem; padding: 0; text-decoration: none; }
 .ps-move { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 0.8rem; }
-.ps-move select { flex: 1; min-width: 0; min-height: 40px; }
+.ps-move select { flex: 1; min-width: 0; min-height: 44px; }
 
 /* Purchase form (owner screenshots 2026-11-25) */
 .pu-supplier-find { width: 100%; margin: 0 0 8px; }

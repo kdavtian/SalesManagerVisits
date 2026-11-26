@@ -229,7 +229,7 @@ export const hyProducts = {
     ps_open_product: "Բացել ապրանքը",
     ps_create_short: "Ստեղծել",
     ps_plan_chip: "Կգա {date} · բավարարի {cover} օր",
-    ps_plan_trying: "Փորձարկում․ չի պահվում, Կարգավորումները նույնն են",
+    ps_plan_trying: "Փորձարկում․ Կարգավորումները նույնն են",
     ps_plan_lead: "Առաքման ժամկետ, օր",
     ps_plan_cover: "Բավարարի գալուց հետո, օր",
     ps_plan_apply: "Ցույց տալ",

@@ -204,7 +204,11 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       if (!groups.has(l.group)) groups.set(l.group, []);
       groups.get(l.group).push(l);
     }
-    const order = [...groups.entries()].map(([g, list]) => ({ g, list, tot: totals(list) }));
+    // the server's supplier order (by money) stays; a card a line was moved to comes after them, "no supplier" last (review 2026-11-26)
+    const rank = new Map(data.suppliers.map((s, i) => [s.supplier, i]));
+    const order = [...groups.entries()]
+      .map(([g, list]) => ({ g, list, tot: totals(list) }))
+      .sort((a, b) => (a.g ? 0 : 1) - (b.g ? 0 : 1) || (rank.get(a.g) ?? 1e6) - (rank.get(b.g) ?? 1e6));
     if (!order.length) {
       body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>`;
       return;
@@ -218,7 +222,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
               ${viaOf(list).length ? `<p class="muted ps-via">${escapeHtml(t("ps_via").replace("{names}", viaOf(list).join(", ")))}</p>` : ""}
               <p class="muted ps-totals">${totalsHtml(tot)}</p>
             </div>
-            <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
+            <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
           </div>
           ${list.map(lineHtml).join("")}
         </section>`
@@ -248,7 +252,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       l.order = reset ? l.suggested : Math.max(0, l.order + (plus ? l.step_pieces : -l.step_pieces));
       recompute(l);
       redrawLine(l);
-      body.querySelector(`[data-line="${l.product_id}"] ${plus ? "[data-plus]" : reset ? "[data-toggle]" : "[data-minus]"}`)?.focus();
+      // focus stays on the button pressed; − at 0 is disabled, so focus goes to + (review 2026-11-26)
+      body.querySelector(`[data-line="${l.product_id}"] ${plus || (minus && !l.order) ? "[data-plus]" : reset ? "[data-toggle]" : "[data-minus]"}`)?.focus();
       return;
     }
     if (create) {
@@ -264,7 +269,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           status: "ordered",
           expected_date: data.arrival_date,
           // a draft per supplier and DAY: yesterday's draft never replaces today's suggestion (review 2026-11-25)
-          draft_tag: `suggest:${supplier.toLowerCase()}:${data.today}`,
+          // a what-if keeps its own draft: it never replaces the day's draft made from the settings (review 2026-11-26)
+          draft_tag: `suggest:${supplier.toLowerCase()}:${data.today}${trying ? `:w${lead}-${cover}` : ""}`,
           lines: list.map((l) => ({ product_id: l.product_id, product_name: l.name, brand: l.brand, size_l: l.liters_per_piece, qty: l.order, cost_usd: l.cost_usd })),
         },
         { onSaved: () => renderPurchaseSuggestions(root, navigate, what) }

@@ -229,7 +229,7 @@ export const enProducts = {
     ps_open_product: "Open product",
     ps_create_short: "Create",
     ps_plan_chip: "Arrives {date} · lasts {cover} d",
-    ps_plan_trying: "What if: not saved, Settings unchanged",
+    ps_plan_trying: "What if: Settings unchanged",
     ps_plan_lead: "Delivery time, days",
     ps_plan_cover: "Last after arrival, days",
     ps_plan_apply: "Show",
