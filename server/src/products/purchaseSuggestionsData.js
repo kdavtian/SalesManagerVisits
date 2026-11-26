@@ -53,7 +53,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
     if (!(daily > 0)) continue;
     const step = orderStep(row);
-    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces });
+    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend });
     if (!(line.suggested > 0)) continue;
     lines.push({
       product_id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit,
