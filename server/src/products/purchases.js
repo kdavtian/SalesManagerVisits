@@ -23,7 +23,7 @@ export class PurchaseError extends Error {
 // The same invoice number the Excel copy is compared by: case and extra spaces ignored (SQL form of keyOf)
 const SQL_KEY = (col) => `lower(regexp_replace(trim(${col}), '\\s+', ' ', 'g'))`;
 // supplierKey in SQL: tabs, new lines and no-break spaces count as spaces too, the same as JavaScript's \s (review, 2026-11-20)
-const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
+export const SQL_SUPPLIER_KEY = (col) => `lower(btrim(regexp_replace(COALESCE(${col}, ''), '[[:space:]' || chr(160) || ']+', ' ', 'g')))`;
 
 function cleanLines(lines) {
   if (!Array.isArray(lines) || !lines.length) throw new PurchaseError("At least one line is required");

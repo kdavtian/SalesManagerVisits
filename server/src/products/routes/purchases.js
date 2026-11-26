@@ -15,6 +15,7 @@ import { pool } from "../../db/pool.js";
 import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoice, excelStatus, productHistory, applyExcelPurchases, PurchaseError, invoiceFacts, logPurchase, exportPurchaseRows } from "../purchases.js";
 import { parsePurchaseWorkbook } from "../purchaseExcel.js";
 import { buildPurchaseSuggestions } from "../purchaseSuggestionsData.js";
+import { supplierScorecard } from "../purchaseFollowUp.js";
 
 export const purchasesRouter = Router();
 purchasesRouter.use(requireAuth);
@@ -201,6 +202,11 @@ purchasesRouter.post("/suppliers", async (req, res) => {
     [name.slice(0, 120), req.body?.brands ? String(req.body.brands).slice(0, 200) : null]
   );
   res.status(201).json(rows[0]);
+});
+
+// The suppliers' scorecard of the last 12 months: on time, lead days, differences, price change (products/purchaseFollowUp.js).
+purchasesRouter.get("/scorecard", async (_req, res) => {
+  res.json(await supplierScorecard());
 });
 
 // Smart purchase suggestions (owner, 2026-11-25): what to order from each supplier, in whole steps, with stock now / after receiving and

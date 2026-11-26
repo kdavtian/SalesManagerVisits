@@ -18,6 +18,7 @@ export const productsApi = {
   deletePurchase: (id) => request(`/purchases/${id}`, { method: "DELETE" }),
   listSuppliers: () => request("/purchases/suppliers", { fresh: true }),
   getPurchaseSuggestions: () => request("/purchases/suggestions", { fresh: true }),
+  getSupplierScorecard: () => request("/purchases/scorecard", { fresh: true }),
   getPurchasesStatus: () => request("/purchases/status", { fresh: true }),
   getPurchaseHistory: (ids, exclude = {}) => request(`/purchases/product-history?${new URLSearchParams({ ids: ids.join(","), ...(exclude.no && exclude.date ? { exclude_no: exclude.no, exclude_date: exclude.date } : {}) }).toString()}`, { fresh: true }),
   // the paper of an invoice (photos / a PDF) and the export of the period (owner plan P3, 2026-11-20)
