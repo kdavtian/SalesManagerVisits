@@ -112,6 +112,10 @@ forecast, "needs attention" recommendations. Route plans: recurring rules + day 
 - 2026-10-28 (document flow answers): Mane fills the Castrol Excel **Cashflow and Sales sheets**; the director counts **per rep**; the daily
   cash sheet is posted to the **existing accounting Telegram group by the bot**; paper slips are kept for a **transition month**, then dropped.
   Build: V1 + V2 of `references/cash-collection-flow.md`.
+- 2026-11-23 (cash simplification): ONE route for cash, rep -> sales director -> accountant (or rep -> accountant); the CEO is not a stop
+  but keeps every right (approves directly, confirms or refuses any hand-over, never one he sent himself); the accountant approves a rep's
+  cash only through its hand-over (her own entries stay; switch in App configuration brings the old way back); every payment shows ONE
+  status = where its cash is now; daily cash sheets close by themselves. Detail: `references/cash-collection-flow.md` "Simplification".
 - 2026-11-03: a new customer joins its rep's route plan by itself: the weekday that already holds most of the rep's customers of the
   same subregion (else region), after the nearest one; a day planning the whole area already includes it; the rep is told (notification
   "route_plan_added"), the person who added it sees it on screen; never for KF/CAS/CVO/PCO/OEM or the office. Switch in App

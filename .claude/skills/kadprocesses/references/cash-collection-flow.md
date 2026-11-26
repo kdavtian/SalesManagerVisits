@@ -144,3 +144,31 @@ the app or bank, not in Excel yet"); the reorder follow-up checks the live overd
 Bank & cash desks closes the customer's "collect the debt" task like a rep's collection; "paid" = nothing left on the live debt.
 Still on the Excel figure: the customer's debt statement PDF and the order blank's "previous debt" (customer-facing documents, owner
 decision pending) and KAD OS partner data.
+
+## Simplification (owner, 2026-11-23: "it is too complicated"; "status must be clear where is cash right now"; "CEO can do all, keep CEO rights")
+Analysis: 5 ways cash became "received", 2 payment tables, 4 sets of statuses on one payment, 5 app-to-Excel matching rules, 6 screens. Root
+cause: every payment is typed twice (rep in the app, accountant in Excel), and each redesign release added without removing.
+Owner's answers: all of it felt too complicated (rep steps, director / accountant steps, screens and statuses); the CEO stop on the way can
+go; the accountant's approval without a hand-over can go; no measurement first; but the CEO keeps every right.
+S1 (1.582.0, migration 221) ONE ROUTE: rep -> sales director -> accountant, or rep -> accountant. A director's cash goes to the accountant
+only (the CEO / operations director are not a stop; cash one of them still holds goes on to the accountant). A rep's cash is approved when
+its hand-over is confirmed: the accountant no longer approves cash that was never handed over (she still approves her own entries, money
+paid at the office, and may refuse a wrong record). Admin and the CEO approve directly (the cash lands in their hands) and confirm or refuse
+any hand-over, but nobody confirms a hand-over they sent or declared themselves. One rule: server/src/money/cashRoute.js approvalBlock (the
+Approve routes, can_approve on each payment, the request card). Way back: App configuration "Accountant approves without a hand-over" (OFF).
+Daily cash sheets close only by themselves, also when the Excel booked the day as a sum (the books rule); "Recorded in Excel" by hand is
+offered only for a sheet still open after 2 days (accountant, admin, CEO).
+S2 (1.583.0) ONE STATUS = where the cash is now: with {name} / handed to {name}, waiting / counted, {name} / at the office (taken directly:
+received, {name}) / rejected. client/public/js/shared/cashPlace.js is the rule (server and app), the server sends cash_place on every
+payment, cashPlaceChip.js draws it on the Payments list and sheet, the customer's payments and the money ledger. It replaced the "awaiting
+approval / approved" and "From ERP" badges; the Excel keeps its own mark. An Excel-approved payment is still with its holder until handed
+over, except the archive from before the cut-over (at the office).
+S3 (1.584.0, PR #678, shown to the owner before merge) ONE CASH SCREEN: the Money page ("Payments & expenses") answers two questions
+before its doors to the full lists. "Your turn": hand-overs waiting for me to count, the cash in my hands with the person it goes to
+next, what I handed over and is not counted yet, my shortfall, or "nothing to do". "Where is the cash now" (everybody who sees all
+payments): with the reps by person, handed over and waiting, counted with the director, received at the office today (only cash a person
+received, each payment once), not in the Excel after 3 days, open shortfalls, bank lines to check. Every number opens the list built from
+the same condition (GET /api/payments?place= / received=today / excel=missing). One answer: GET /api/cash/overview (money/cashOverview.js).
+S4 (one payment table: stop keeping `payments` and its copy in `customer_payments`) is NOT built: it changes nothing a person sees and
+rewrites how every payment is stored; recommended with the January 2027 cash switch-over of the Excel-off plan, after backups are proven
+(owner's decision pending, asked 2026-11-23).
