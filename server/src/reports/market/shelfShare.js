@@ -128,17 +128,24 @@ export function buildShelfShare(records, shopInfo, { now = new Date(), filter = 
   };
 }
 
+// One row per visit and brand group recorded between since and until (optionally of some customers only): { id, customer_id, at, group, values }
+export async function loadShelfRecords({ since, until = new Date(), customerIds = null, db = pool }) {
+  const { rows } = await db.query(
+    `SELECT ch.id, ch.customer_id, ch.timestamp AS at, g.key AS "group", ARRAY(SELECT jsonb_array_elements_text(g.value)) AS values
+     FROM checkins ch CROSS JOIN LATERAL jsonb_each(ch.brand_status) g
+     WHERE ch.brand_status IS NOT NULL AND ch.timestamp >= $1 AND ch.timestamp <= $2 AND g.key = ANY($3::text[]) AND jsonb_typeof(g.value) = 'array'
+       AND ($4::int[] IS NULL OR ch.customer_id = ANY($4::int[]))`,
+    [since, until, SHELF_GROUPS, customerIds]
+  );
+  return rows;
+}
+
 // The shelf records (one per visit and brand group) from TREND_MONTHS + fresh days ago, the shops with their potential (the total monthly
 // need, else the sum of the litre lines, as volumeActuals.walletOf), and the competitor names.
 export async function shelfShare({ now = new Date(), region = null, channel = null, db = pool } = {}) {
   const since = new Date(now.getTime() - ((TREND_MONTHS + 1) * 31 + SHELF_FRESH_DAYS) * DAY);
-  const [{ rows: records }, { rows: shops }, { rows: brands }] = await Promise.all([
-    db.query(
-      `SELECT ch.id, ch.customer_id, ch.timestamp AS at, g.key AS "group", ARRAY(SELECT jsonb_array_elements_text(g.value)) AS values
-       FROM checkins ch CROSS JOIN LATERAL jsonb_each(ch.brand_status) g
-       WHERE ch.brand_status IS NOT NULL AND ch.timestamp >= $1 AND ch.timestamp <= $2 AND g.key = ANY($3::text[]) AND jsonb_typeof(g.value) = 'array'`,
-      [since, now, SHELF_GROUPS]
-    ),
+  const [records, { rows: shops }, { rows: brands }] = await Promise.all([
+    loadShelfRecords({ since, until: now, db }),
     db.query(
       `SELECT c.id, c.name, c.region, c.sales_channel, COALESCE(u.name_hy, u.name) AS rep_name,
               COALESCE(NULLIF(c.expected_volume_l, 0),

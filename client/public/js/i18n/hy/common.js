@@ -427,6 +427,7 @@ export const hyCommon = {
     reports_group_orders: "Պատվերներ և հաճախորդներ",
     reports_group_team: "Թիմի աշխատանք",
     reports_group_market: "Շուկա",
+    report_market_gaps_description: "Լիտրային ներուժը հանած մեր վաճառքը՝ ըստ գծի. ներուժով և առանց Castrol-ի դարակով խանութներ -> այցի առաջադրանքներ։",
     report_market_shelf_description: "Այցելած խանութների քանի տոկոսն ունի Castrol և ամեն մրցակից, կշռված լիտրային ներուժով. կեղծ և գորշ Castrol-ի կետեր։",
     report_market_prices_description: "Մրցակից ապրանքանիշերի մեդիան գները ըստ գծի և ծավալի՝ մեր գների կողքին. տարբերություն, խանութի մարժա, միտում։",
     report_market_quality_description: "Որքան օգտագործելի են ներկայացուցչի շուկայի տվյալները՝ դարակ, մրցակցի գներ, կասկածելի գրառումներ։",

@@ -37,3 +37,5 @@ test/integration/cashOneRoute.test.js
 test/integration/orderGroupPost.test.js
 # the monthly competitor price alert notifies every admin / CEO in the database
 test/integration/marketPrices.test.js
+# changes report access and a user status other files read
+test/integration/marketGaps.test.js

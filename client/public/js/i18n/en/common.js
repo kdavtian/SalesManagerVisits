@@ -427,6 +427,7 @@ export const enCommon = {
     reports_group_orders: "Orders and customers",
     reports_group_team: "Team work",
     reports_group_market: "Market",
+    report_market_gaps_description: "Litres potential minus what we sell, per product line; shops with potential and no Castrol on the shelf -> visit tasks.",
     report_market_shelf_description: "Share of visited shops carrying Castrol vs each competitor, weighted by litres potential; fake and grey Castrol spots.",
     report_market_prices_description: "Competitor brands' median prices per line and volume beside our tiers: gap, shop margin, trend.",
     report_market_quality_description: "How usable each rep's market data is: shelf, competitor prices, flagged entries.",
