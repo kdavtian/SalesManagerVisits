@@ -142,6 +142,7 @@ export function renderPurchases(root, navigate) {
 
   // the suppliers' scorecard of the last 12 months (server products/purchaseFollowUp.js): a line on each card, the whole card when one is picked
   let scorecard = {};
+  let scorecardAsked = false;
   const scoreKey = (k) => String(k ?? "").replace(/\s+/g, " ").trim().toLowerCase();
   const pct = (n) => (n == null ? "—" : `${n}%`);
   function scoreLine(sc) {
@@ -286,14 +287,19 @@ export function renderPurchases(root, navigate) {
       excel = st;
       paintExcel();
       paint();
-      // the scorecard follows: the list never waits for it
-      api
-        .getSupplierScorecard()
-        .then((sc) => {
-          scorecard = sc ?? {};
-          if (root.isConnected) paint();
-        })
-        .catch(() => {});
+      // the scorecard follows (12 months, whatever the period): fetched once per screen, the list never waits for it
+      if (!scorecardAsked) {
+        scorecardAsked = true;
+        api
+          .getSupplierScorecard()
+          .then((sc) => {
+            scorecard = sc ?? {};
+            if (root.isConnected) paint();
+          })
+          .catch(() => {
+            scorecardAsked = false;
+          });
+      }
     } catch (err) {
       listEl.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
     }

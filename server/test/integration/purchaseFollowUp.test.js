@@ -97,3 +97,37 @@ test("supplier scorecard: on time, average delivery, differences, price change; 
   assert.equal(sc.price_change_pct, 10, "$2.00 -> $2.20");
   assert.equal(sc.price_products, 1);
 });
+
+// Review 2026-11-26: the form wiped the expected date whenever it saved a received purchase, so the scorecard lost it.
+test("saving a purchase as received through the form keeps the date it was expected on", async () => {
+  const p = await createProduct();
+  const created = await apiRequest("/api/purchases", {
+    method: "POST",
+    cookie: cookies.accountant,
+    body: { status: "ordered", invoice_date: new Date().toISOString().slice(0, 10), expected_date: "2026-01-10", supplier_name: `ITEST-PF Keep ${stamp}`, lines: [{ product_id: p.id, qty: 10, cost_usd: 1 }] },
+  });
+  assert.ok([200, 201].includes(created.status), JSON.stringify(created.data));
+  const id = created.data.id ?? created.data.invoice?.id;
+  const { rows: [s] } = await pool.query("SELECT supplier_id FROM purchase_invoices WHERE id = $1", [id]);
+  supplierIds.push(s.supplier_id);
+  const saved = await apiRequest(`/api/purchases/${id}`, {
+    method: "PUT",
+    cookie: cookies.accountant,
+    body: { status: "arrived", invoice_no: `ITEST-PF-K-${stamp}`, usd_rate: 400, invoice_date: new Date().toISOString().slice(0, 10), supplier_name: `ITEST-PF Keep ${stamp}`, lines: [{ product_id: p.id, qty: 10, cost_usd: 1 }] },
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const { rows: [after] } = await pool.query("SELECT status, to_char(expected_date, 'YYYY-MM-DD') AS expected FROM purchase_invoices WHERE id = $1", [id]);
+  assert.equal(after.status, "arrived");
+  assert.equal(after.expected, "2026-01-10");
+});
+
+test("price change: a day's price is the average of its lines (two prices the same day do not tilt it)", async () => {
+  const sid = await supplier("Same day");
+  const p = await createProduct();
+  for (const [k, daysAgo] of [[1, 100], [2, 10]]) {
+    const i = await invoice(sid, { status: "arrived", arrivedDaysAgo: daysAgo, invoiceNo: `ITEST-PF-SD${k}-${stamp}`, invoiceDaysAgo: daysAgo });
+    await pool.query("INSERT INTO purchase_lines (invoice_id, product_id, product_name, qty, cost_usd) VALUES ($1, $2, 'x', 10, 2.00), ($1, $2, 'x', 10, 2.20)", [i, p.id]);
+  }
+  const sc = (await apiRequest("/api/purchases/scorecard", { cookie: cookies.admin })).data[`itest-pf same day ${stamp}`];
+  assert.equal(sc.price_change_pct, 0);
+});

@@ -2,7 +2,8 @@
 //
 // 1. LATE PURCHASES: an Ordered / On the way purchase whose expected date has passed gives a task to the person who entered it (when that
 //    person still handles purchases), else to every accountant: "Supplier X is late: ask for the new date and change it in the purchase".
-//    Once per expected date (purchase_invoices.late_task_for): when the new date passes too, a new task. Hourly, in working time only
+//    Once per expected date (purchase_invoices.late_task_for): when the new date passes too, a new task. (A date moved away and back to the
+//    one already told about gives no second task for it.) No accountant: the CEO / admin. Hourly, in working time only
 //    (Mon-Sat 09:00-18:00 Yerevan), so nobody gets a task at night.
 //    (A receiving DIFFERENCE already gives the accountants a task with every line: purchases.js receivePurchase.)
 //
@@ -11,9 +12,10 @@
 //    - on time %          = received on or before the expected date;
 //    - average lead days  = received day − the day the purchase was entered;
 //    - with differences % = received purchases where some line's counted pieces differ from the invoice;
-//    - price change %     = per product bought at least twice from the supplier in the 12 months: (last price − first price) / first price,
-//                           weighted by the pieces bought; app purchases and the Excel Purchase_IN (an Excel invoice the app also holds is
-//                           counted once).
+//    - price change %     = per product bought on at least two days from the supplier in the 12 months: (last day's price − first day's
+//                           price) / first day's price, a day's price being the average of its lines weighted by the pieces; the products
+//                           weighted by the pieces bought; app purchases received and the Excel Purchase_IN (an Excel invoice the app holds
+//                           received is counted once).
 import { pool } from "../db/pool.js";
 import { notifyUser } from "../shared/notifications.js";
 import { canManagePurchases } from "../shared/roles.js";
@@ -38,19 +40,32 @@ export async function checkLatePurchases(now = new Date(), { db = pool, force = 
     const client = await db.connect();
     try {
       await client.query("BEGIN");
-      // claim it first: two servers (or two runs) never make the same task twice
-      const { rowCount } = await client.query(
-        "UPDATE purchase_invoices SET late_task_for = expected_date WHERE id = $1 AND late_task_for IS DISTINCT FROM expected_date AND status IN ('ordered', 'in_transit')",
+      // claim it first: two servers (or two runs) never make the same task twice; still late at this moment (the date may just have been
+      // moved to a later day), and the task names the date claimed
+      const { rows: claimed } = await client.query(
+        `UPDATE purchase_invoices SET late_task_for = expected_date
+          WHERE id = $1 AND late_task_for IS DISTINCT FROM expected_date AND status IN ('ordered', 'in_transit')
+            AND expected_date < (now() AT TIME ZONE 'Asia/Yerevan')::date
+          RETURNING to_char(expected_date, 'YYYY-MM-DD') AS expected`,
         [inv.id]
       );
-      if (!rowCount) {
+      if (!claimed.length) {
         await client.query("ROLLBACK");
         continue;
       }
+      inv.expected = claimed[0].expected;
       const creatorOk = inv.created_by && inv.creator_status === "active" && canManagePurchases(inv.creator_role);
-      const assignees = creatorOk
+      let assignees = creatorOk
         ? [inv.created_by]
         : (await client.query("SELECT id FROM users WHERE role = 'accountant' AND status = 'active' ORDER BY id")).rows.map((r) => r.id);
+      // no accountant: the CEO / admin -- a late purchase is never marked done with nobody told (review 2026-11-26)
+      if (!assignees.length) {
+        assignees = (await client.query("SELECT id FROM users WHERE role IN ('ceo', 'admin') AND status = 'active' ORDER BY CASE role WHEN 'ceo' THEN 0 ELSE 1 END, id LIMIT 1")).rows.map((r) => r.id);
+      }
+      if (!assignees.length) {
+        await client.query("ROLLBACK"); // nobody to give it to: try again next hour
+        continue;
+      }
       const { rows: lines } = await client.query(
         "SELECT product_name, brand, qty::float8 AS qty FROM purchase_lines WHERE invoice_id = $1 ORDER BY id LIMIT 6",
         [inv.id]
@@ -77,8 +92,9 @@ export async function checkLatePurchases(now = new Date(), { db = pool, force = 
         );
       }
     } catch (err) {
+      // one purchase that fails (its claim is rolled back) never stops the others: it is tried again next hour
       await client.query("ROLLBACK").catch(() => {});
-      throw err;
+      console.error(`Late purchase ${inv.id} failed:`, err.message);
     } finally {
       client.release();
     }
@@ -114,11 +130,14 @@ export async function supplierScorecard(db = pool) {
          SELECT ${SQL_SUPPLIER_KEY("e.supplier")}, COALESCE(p.id::text, 'erp:' || e.erp_product_id), e.invoice_date, e.cost_usd::float8, e.qty::float8
            FROM erp_purchase_lines e LEFT JOIN products p ON p.erp_product_id = e.erp_product_id
           WHERE e.erp_product_id IS NOT NULL AND e.cost_usd > 0 AND e.qty > 0 AND e.invoice_date > CURRENT_DATE - 365
-            AND NOT EXISTS (SELECT 1 FROM purchase_invoices x WHERE x.invoice_date = e.invoice_date
+            AND NOT EXISTS (SELECT 1 FROM purchase_invoices x WHERE x.status = 'arrived' AND x.invoice_date = e.invoice_date
                              AND lower(regexp_replace(trim(x.invoice_no), '\\s+', ' ', 'g')) = lower(regexp_replace(trim(e.invoice_no), '\\s+', ' ', 'g')))
+       ), daily AS (
+         -- one price a day per product: the average of that day's lines, weighted by the pieces
+         SELECT sk, pk, d, sum(c * q) / sum(q) AS c, sum(q) AS q FROM lines GROUP BY sk, pk, d
        ), per AS (
-         SELECT sk, pk, (array_agg(c ORDER BY d, c))[1] AS first_c, (array_agg(c ORDER BY d DESC, c DESC))[1] AS last_c, sum(q) AS q, count(DISTINCT d) AS days
-           FROM lines GROUP BY sk, pk
+         SELECT sk, pk, (array_agg(c ORDER BY d))[1] AS first_c, (array_agg(c ORDER BY d DESC))[1] AS last_c, sum(q) AS q, count(*) AS days
+           FROM daily GROUP BY sk, pk
        )
        SELECT sk, (sum(q * (last_c - first_c) / first_c) / nullif(sum(q), 0) * 100)::float8 AS price_change_pct, count(*)::int AS products
          FROM per WHERE days >= 2 AND first_c > 0 GROUP BY sk`
