@@ -11,8 +11,9 @@ export const FLAG_WINDOW_DAYS = 365;
 // Every competitor price entry recorded since `since` (default FLAG_WINDOW_DAYS), flagged against the same window.
 // -> [{ id, checkin_id, customer_id, customer_name, region, sales_channel, user_id, rep_name, brand_key, brand_name, line_code,
 //       line_name_en, line_name_hy, volume, unit, wholesale_amd, retail_amd, recorded_at, wholesale_per_unit, retail_per_unit, flags }]
-export async function loadPriceEntries({ since = null, db = pool } = {}) {
-  const from = since ?? new Date(Date.now() - FLAG_WINDOW_DAYS * 86400000);
+export async function loadPriceEntries({ since = null, until = null, db = pool } = {}) {
+  const to = until ?? new Date();
+  const from = since ?? new Date(to.getTime() - FLAG_WINDOW_DAYS * 86400000);
   const { rows } = await db.query(
     `SELECT p.id, p.checkin_id, p.customer_id, c.name AS customer_name, c.region, c.sales_channel, c.checkin_for_all AS office,
             p.user_id, COALESCE(u.name_hy, u.name) AS rep_name, u.role AS user_role,
@@ -24,9 +25,9 @@ export async function loadPriceEntries({ since = null, db = pool } = {}) {
      LEFT JOIN users u ON u.id = p.user_id
      LEFT JOIN competitor_brands b ON b.key = p.brand_key
      LEFT JOIN volume_potential_lines l ON l.code = p.line_code
-     WHERE p.recorded_at >= $1
+     WHERE p.recorded_at >= $1 AND p.recorded_at <= $2
      ORDER BY p.recorded_at DESC, p.id DESC`,
-    [from]
+    [from, to]
   );
   return flagEntries(rows);
 }
