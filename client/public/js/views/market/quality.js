@@ -2,11 +2,11 @@
 // shelf, share with a competitor price, price entries flagged as outliers (retail below wholesale, 3x off the median), and one score;
 // weakest first, so management knows whom to coach. Below: the flagged entries themselves (tap = the shop). Rules: server
 // reports/market/priceRules.js.
-import { api } from "../api.js";
-import { t } from "../i18n.js";
-import { escapeHtml, formatDateDMY } from "../util.js";
-import { periodTabsHtml } from "./reports/common.js";
-import { nf, pct, pctText, lineLabel, volumeLabel, perUnitLabel, freshnessHtml, marketHeaderHtml, wireMarketHeader } from "../marketCommon.js";
+import { api } from "../../api.js";
+import { t } from "../../i18n.js";
+import { escapeHtml, formatDateDMY } from "../../util.js";
+import { periodTabsHtml } from "../reports/common.js";
+import { nf, pct, pctText, lineLabel, volumeLabel, perUnitLabel, freshnessHtml, marketHeaderHtml, wireMarketHeader } from "./common.js";
 
 const scoreClass = (s) => (s === null || s === undefined ? "" : s >= 70 ? "mkt-score-good" : s >= 40 ? "mkt-score-mid" : "mkt-score-low");
 const scoreHtml = (s) => `<span class="mkt-score ${scoreClass(s)}" aria-label="${escapeHtml(t("mkt_q_score"))}">${s === null || s === undefined ? "—" : s}</span>`;

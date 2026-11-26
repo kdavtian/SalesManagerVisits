@@ -67,7 +67,7 @@ export async function renderReports(root, navigate, reportKey, { inPane = false 
   if (reportKey === "orders_pipeline") return renderOrdersPipelineReport(root, navigate);
   if (reportKey === "brand_availability") return renderBrandAvailabilityReport(root, navigate);
   if (reportKey === "product_wishes") return renderProductWishesReport(root, navigate);
-  if (reportKey === "market_quality") return (await import("./marketQuality.js")).renderMarketQuality(root, navigate);
+  if (reportKey === "market_quality") return (await import("./market/quality.js")).renderMarketQuality(root, navigate);
   if (reportKey === "payments") return renderPaymentsReport(root, navigate);
   // Payments (Excel) now lives on the Sales page as its Payments tab.
   if (reportKey === "erp_payments") return navigate("#/sales?tab=payments");

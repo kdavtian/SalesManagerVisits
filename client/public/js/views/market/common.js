@@ -1,8 +1,8 @@
 // Shared parts of the Market reports (owner, 2026-11-26): the report header with its "!" explanation, the freshness line every aggregate
 // carries (latest date + how many shops it rests on), whole numbers, AMD per litre / kg, a brand / line / volume label.
-import { t, getLang } from "./i18n.js";
-import { escapeHtml, formatDateDMY, openInfoPopup } from "./util.js";
-import { icons } from "./icons.js";
+import { t, getLang } from "../../i18n.js";
+import { escapeHtml, formatDateDMY, openInfoPopup } from "../../util.js";
+import { icons } from "../../icons.js";
 
 export const nf = (n) => (n === null || n === undefined || !Number.isFinite(Number(n)) ? "—" : Math.round(Number(n)).toLocaleString("en-US"));
 export const pct = (part, whole) => (whole > 0 ? Math.round((100 * part) / whole) : null);

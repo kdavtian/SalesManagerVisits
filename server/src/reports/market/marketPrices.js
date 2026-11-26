@@ -2,6 +2,7 @@
 // flags, and each rep's data-quality numbers. SQL lives here, not in the route file (docs/architecture-roadmap.md).
 import { pool } from "../../db/pool.js";
 import { shelfRecordedSql } from "../../field/shelfData.js";
+import { FIELD_REP_ROLE } from "../../field/visitCount.js";
 import { flagEntries, qualityScore, aggregateMeta } from "./priceRules.js";
 
 // The medians that decide what is an outlier look this far back (a price war of one month must not flag the next month's prices).
@@ -13,8 +14,8 @@ export const FLAG_WINDOW_DAYS = 365;
 export async function loadPriceEntries({ since = null, db = pool } = {}) {
   const from = since ?? new Date(Date.now() - FLAG_WINDOW_DAYS * 86400000);
   const { rows } = await db.query(
-    `SELECT p.id, p.checkin_id, p.customer_id, c.name AS customer_name, c.region, c.sales_channel,
-            p.user_id, COALESCE(u.name_hy, u.name) AS rep_name,
+    `SELECT p.id, p.checkin_id, p.customer_id, c.name AS customer_name, c.region, c.sales_channel, c.checkin_for_all AS office,
+            p.user_id, COALESCE(u.name_hy, u.name) AS rep_name, u.role AS user_role,
             p.brand_key, COALESCE(b.name, p.brand_key) AS brand_name,
             p.line_code, l.name_en AS line_name_en, l.name_hy AS line_name_hy,
             p.volume::float8 AS volume, p.unit, p.wholesale_amd, p.retail_amd, p.recorded_at
@@ -31,7 +32,8 @@ export async function loadPriceEntries({ since = null, db = pool } = {}) {
 }
 
 // Each rep's market data over the last `days` days (management, report market_quality): visits, visits with shelf data, visits with a
-// price, price entries, flagged entries, score. Visits of the office "check-in for all" places are not shop visits and are left out.
+// price, price entries, flagged entries, score. Only field reps (visitCount.js: a director dropping by is no visit), and not the office
+// "check-in for all" places; the counts, the flagged list and the freshness line all rest on that same set (independent review).
 // -> { reps: [...], totals: {...}, flagged: [latest flagged entries of the period], meta: { latest_at, shops, entries } }
 export async function marketQuality({ days = 30, db = pool, flaggedLimit = 200 } = {}) {
   const since = new Date(Date.now() - days * 86400000);
@@ -43,15 +45,15 @@ export async function marketQuality({ days = 30, db = pool, flaggedLimit = 200 }
               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM competitor_prices p WHERE p.checkin_id = ch.id))::int AS price_visits,
               max(ch.timestamp) AS last_visit_at
        FROM checkins ch
-       JOIN users u ON u.id = ch.user_id
+       JOIN users u ON u.id = ch.user_id AND u.role = $2
        JOIN customers c ON c.id = ch.customer_id AND NOT c.checkin_for_all
        WHERE ch.timestamp >= $1
        GROUP BY ch.user_id, u.name_hy, u.name`,
-      [since]
+      [since, FIELD_REP_ROLE]
     ),
     loadPriceEntries({ db }),
   ]);
-  const inPeriod = entries.filter((e) => new Date(e.recorded_at) >= since);
+  const inPeriod = entries.filter((e) => new Date(e.recorded_at) >= since && e.user_role === FIELD_REP_ROLE && !e.office);
   const byRep = new Map();
   for (const e of inPeriod) {
     const r = byRep.get(e.user_id) ?? { price_entries: 0, flagged_entries: 0 };

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, apiRequest, loginAs } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
-let repA, repB, ceo, cookies = {}, shop1, shop2, shop3;
+let repA, repB, ceo, director, cookies = {}, shop1, shop2, shop3;
 const checkinIds = [];
 async function visit(rep, shop, { shelf = false, daysAgo = 1 } = {}) {
   const { rows: [r] } = await pool.query(
@@ -28,6 +28,7 @@ test.before(async () => {
   repA = await createUser("sales_manager");
   repB = await createUser("sales_manager");
   ceo = await createUser("ceo");
+  director = await createUser("sales_director");
   for (const [k, u] of Object.entries({ repA, ceo })) cookies[k] = await loginAs(u.email);
   shop1 = await createCustomer({ created_by: repA.id, assigned_manager_id: repA.id, lat: 40.18, lng: 44.51 });
   shop2 = await createCustomer({ created_by: repA.id, assigned_manager_id: repA.id, lat: 40.18, lng: 44.51 });
@@ -43,6 +44,9 @@ test.before(async () => {
   const b1 = await visit(repB, shop3, { shelf: true });
   await visit(repB, shop3, { shelf: true, daysAgo: 2 });
   await price(b1, repB, shop3, { w: 20500, r: 25000 });
+  // a director dropping by is no rep visit: not listed, and the price is not in the flagged list
+  const d1 = await visit(director, shop3);
+  await price(d1, director, shop3, { w: 30000, r: 1000 });
 });
 test.after(async () => {
   await pool.query("DELETE FROM checkins WHERE id = ANY($1::int[])", [checkinIds]);
@@ -69,6 +73,8 @@ test("per rep: visits, shelf, prices, flagged and score; weakest first; flagged 
   assert.equal(f.wholesale_per_unit, 5250);
   assert.equal(f.retail_per_unit, 4750);
   assert.ok(r.data.meta.shops >= 3 && r.data.meta.latest_at);
+  assert.ok(!r.data.reps.some((x) => x.user_id === director.id), "a director is not a rep");
+  assert.ok(!r.data.flagged.some((x) => x.user_id === director.id));
   // 90 days: repA's old visit counts
   const r90 = await apiRequest("/api/market/quality?days=90", { cookie: cookies.ceo });
   assert.equal(r90.data.reps.find((x) => x.user_id === repA.id).visits, 4);
