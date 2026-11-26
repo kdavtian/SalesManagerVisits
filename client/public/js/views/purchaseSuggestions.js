@@ -72,7 +72,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
 
   const recompute = (l) =>
     // from the server's exact inputs (not the rounded numbers shown), so the phone and the server agree to the piece
-    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, order: l.order }));
+    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, order: l.order }));
 
   function qtyLabel(l) {
     if (l.kind === "pack" && l.pack_size > 1) return `${l.order / l.pack_size} ${t("ps_boxes")} · ${l.order} ${t("warehouse_pcs_suffix")}`;
@@ -82,6 +82,7 @@ export async function renderPurchaseSuggestions(root, navigate) {
     const size = l.unit ? normalizeUnitLabel(l.unit) : "";
     const flags = [
       l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      l.too_much ? `<span class="badge badge-warning">${t(l.order <= l.step_pieces ? "ps_too_much_step" : "ps_too_much").replace("{days}", Math.round(l.days_after_receiving))}</span>` : "",
       l.pack_size_guessed ? `<span class="badge badge-neutral">${t("ps_pack_guessed")}</span>` : "",
       l.trend === "up" ? `<span class="badge badge-info">${t("ps_trend_up")}</span>` : l.trend === "down" ? `<span class="badge badge-neutral">${t("ps_trend_down")}</span>` : "",
     ].join("");

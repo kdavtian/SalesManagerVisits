@@ -12,7 +12,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { canManageWarehouse } from "../../shared/roles.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { STOCK_ISSUE_NOTIFY_ROLES, WAREHOUSE_NOTIFY_ROLES } from "../../shared/notificationPreferences.js";
-import { roundToPacks } from "../../products/stockForecast.js";
+import { roundToPacks, packRule } from "../../products/stockForecast.js";
 import { incomingLotsByProduct } from "../../products/purchases.js";
 import { purchaseLine } from "../../products/purchaseSuggestion.js";
 import { computeDemandForecast } from "../../products/demandModel.js";
@@ -327,11 +327,12 @@ warehouseRouter.get("/reorder-suggestions", async (req, res) => {
     if (!["out", "critical", "low"].includes(forecast.status)) continue;
     const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
     if (!(daily > 0)) continue;
-    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: demandSettings.leadTimeDays, coverDays: demandSettings.coverDays, safetyStock: forecast.safetyStock ?? 0, stepPieces: 1 });
+    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: demandSettings.leadTimeDays, coverDays: demandSettings.coverDays, safetyStock: forecast.safetyStock ?? 0, stepPieces: packRule(row).stepPieces, trend: forecast.trend });
     if (!(line.need > 0)) continue;
     const suggestion = { urgency: forecast.status, suggested_qty: line.need, daily_demand: daily, days_of_stock: forecast.daysOfStock };
-    // what is really bought: whole packs, the minimum order (stockForecast.js roundToPacks); the pure need stays as need_qty
-    const packs = roundToPacks(suggestion.suggested_qty, row);
+    // what is really bought: whole steps of packs, rounded the way the smart suggestions round (one step less when it still covers the cover
+    // days or sales are falling; owner 2026-11-26), so To order and Smart suggestions agree; the pure need stays as need_qty
+    const packs = roundToPacks(line.suggested, row);
     out.push({ id: row.id, name: row.name, brand: row.brand, family: row.family, unit: row.unit, stock_qty: row.stock_qty, free_qty: free, reserved_qty: row.held_qty + row.submitted_qty, submitted_qty: row.submitted_qty, incoming_qty: coming, demand_trend: forecast.trend, ...suggestion, need_qty: suggestion.suggested_qty, suggested_qty: packs.pieces, packs: packs.packs, pack_size: packs.packSize, pack_kind: packs.kind });
   }
   const rank = { out: 0, critical: 1, low: 2 };

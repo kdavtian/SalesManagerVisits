@@ -32,6 +32,14 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await line.locator("[data-plus]").click();
     await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
     await expect(line.locator("[data-reset]")).toBeVisible();
+    // owner 2026-11-26: more than twice the cover days after receiving is flagged "Too much" (2 a day: 2 more steps = well over 90 days)
+    await expect(line.locator(".badge-warning")).toHaveCount(0);
+    await line.locator("[data-plus]").click();
+    await line.locator("[data-plus]").click();
+    await expect(line.locator(".badge-warning")).toContainText(/Too much: \d+ days/);
+    await line.locator("[data-minus]").click();
+    await line.locator("[data-minus]").click();
+    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
     // the supplier's card makes the purchase
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator(".ps-create").click();

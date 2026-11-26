@@ -20,9 +20,17 @@
 //   stock at arrival     = the days walked in order (stockAtArrival): the free stock sells, goods on the way join the shelf on their
 //                          expected day, a day with an empty shelf is a lost sale (review 2026-11-25: the customer buys elsewhere, so
 //                          those days are not bought for; and goods ordered earlier are not "sold" before they come)
-//   need                 = daily × cover days + safety stock + still owed to submitted orders − stock at arrival
+//   safety (capped)      = the demand model's safety stock, at most half of the cover days' sales (owner, 2026-11-26, Q1a: a product
+//                          bought by the box sells 0 one week and 12 the next, and the 95 % formula then asked for more safety than the
+//                          cover itself -- Edge 0W-30 1L: 120 bottles = 168 days for a 45-day cover)
+//   need                 = daily × cover days + safety (capped) + still owed to submitted orders − stock at arrival
 //                          (while the stock lasts until the arrival: daily × (lead + cover) + safety + wanted − (stock now + coming))
-//   order                = need rounded UP to the step (nothing when need <= 0)
+//   base need            = the same without the safety stock
+//   order                = need rounded UP to the step (nothing when need <= 0), then ONE STEP LESS (owner, 2026-11-26) when
+//                          - that smaller order still covers the base need (Q2a: the cover days are bought; only the safety is short), or
+//                          - sales are falling (trend down: never rounded up)
+//                          ... but never below one step when something is needed
+//   too much             = days after receiving > 2 × cover days (the screen warns; one step alone can be that much for a slow product)
 //   after receiving      = stock at arrival + order − still owed
 //   days after receiving = after receiving / daily   (counted from the day the goods arrive: today + lead time)
 //   runs out before arrival: the shelf is empty (or owes submitted orders) on some day before the goods come
@@ -35,6 +43,10 @@ export function sizeLiters(product) {
 }
 
 export const STEP_PACKS = 5;
+/** The safety stock bought is at most this share of the cover days' sales (owner, 2026-11-26). */
+export const SAFETY_CAP_OF_COVER = 0.5;
+/** "Too much" when the stock after receiving lasts more than this many times the cover days. */
+export const TOO_MUCH_COVERS = 2;
 export const BY_ONE_ABOVE_LITERS = 20;
 
 /** How a product is bought: { kind: 'drum' | 'canister' | 'pack' | 'piece', packSize, stepPieces, packSizeGuessed }. */
@@ -113,23 +125,38 @@ export function stockAtArrival({ stockNow, comingLots = [], wanted = 0, daily, l
  *   need = daily × cover days + safety stock + still owed to submitted orders − stock at arrival
  *   after receiving = stock at arrival + order − still owed
  */
-export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, order = null }) {
+export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, trend = null, order = null }) {
   const free = Number(stockNow) || 0;
   const d = Number(daily) > 0 ? Number(daily) : 0;
+  const cover = Math.max(0, Number(coverDays) || 0);
   const lots = comingLots ?? (Number(coming) > 0 ? [{ qty: Number(coming), inDays: null }] : []);
   const { atArrival, backlog, ranOut } = stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays });
-  const need = d * coverDays + (Number(safetyStock) || 0) + backlog - atArrival;
-  const suggested = roundUpToStep(need, stepPieces);
+  const safety = Math.min(Math.max(0, Number(safetyStock) || 0), d * cover * SAFETY_CAP_OF_COVER);
+  const baseNeed = d * cover + backlog - atArrival;
+  const need = baseNeed + safety;
+  const step = Math.max(1, Math.round(Number(stepPieces) || 1));
+  let suggested = roundUpToStep(need, step);
+  let rounding = suggested > 0 ? "up" : null;
+  const smaller = suggested - step;
+  if (smaller > 0 && smaller >= baseNeed) rounding = "down_covers";
+  // falling sales: the rounding up is undone, never more (an order that is already exactly the need stays; review 2026-11-26)
+  else if (smaller > 0 && trend === "down" && suggested - need > 1e-9) rounding = "down_trend";
+  if (rounding === "down_covers" || rounding === "down_trend") suggested = smaller;
   const qty = order == null ? suggested : Math.max(0, Number(order) || 0);
   const after = Math.max(0, atArrival + qty - backlog);
+  const daysAfter = d > 0 ? round1(after / d) : null;
   return {
     need: Math.max(0, Math.ceil(need)),
+    base_need: Math.max(0, Math.ceil(baseNeed)),
+    safety_used: Math.round(safety),
+    rounding,
     suggested,
     order: qty,
     stock_at_arrival: Math.round(atArrival),
     after_receiving: Math.round(after),
     days_now: d > 0 ? round1(Math.max(0, free) / d) : null,
-    days_after_receiving: d > 0 ? round1(after / d) : null,
+    days_after_receiving: daysAfter,
+    too_much: qty > 0 && daysAfter != null && cover > 0 && daysAfter > cover * TOO_MUCH_COVERS,
     runs_out_before_arrival: d > 0 && ranOut,
   };
 }

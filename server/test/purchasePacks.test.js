@@ -94,3 +94,41 @@ test("stockAtArrival: lots come on their day, empty days are lost, submitted ord
   // what is still owed to submitted orders at the arrival is bought on top
   assert.equal(purchaseLine({ stockNow: 0, wanted: 15, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).order, 60);
 });
+
+// Owner, 2026-11-26 (screenshot: Edge 0W-30 1L, 0.7 a day, 120 bottles = 168 days for a 45-day cover): the safety stock bought is at most half
+// of the cover days' sales (Q1a); one step less when it still covers the cover days without the safety (Q2a); falling sales never round up;
+// more than twice the cover days after receiving is "too much".
+test("purchaseLine: safety capped, one step less when it covers, falling sales not rounded up, too much flagged", () => {
+  // the screenshot: empty shelf, 0.7 a day, the model's safety 50 (lumpy box sales): capped at 0.7 x 45 / 2 = 15.75 -> need 47.25 -> 60
+  const edge = purchaseLine({ stockNow: 0, daily: 0.7, leadTimeDays: 45, coverDays: 45, safetyStock: 50, stepPieces: 60 });
+  assert.equal(edge.safety_used, 16);
+  assert.equal(edge.suggested, 60, "was 120 (168 days)");
+  assert.equal(edge.days_after_receiving, 85.7);
+  assert.equal(edge.too_much, false);
+  // Magnatec 4L: 0.4 a day, steps of 20: need 18 + 9 = 27 -> 40 up, but 20 already covers the 18 of the 45 days -> 20
+  const mag = purchaseLine({ stockNow: 0, daily: 0.4, leadTimeDays: 45, coverDays: 45, safetyStock: 10, stepPieces: 20 });
+  assert.equal(mag.suggested, 20);
+  assert.equal(mag.rounding, "down_covers");
+  // 2 a day, safety 40: need 90 + 40 = 130 -> 180 up; 120 still covers the 90 -> 120
+  assert.equal(purchaseLine({ stockNow: 0, daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 40, stepPieces: 60 }).suggested, 120);
+  // 2 a day, safety 10: need 100 -> 120 (60 would not cover the 90); falling sales: 60; rising: 120
+  const flat = { stockNow: 0, daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 10, stepPieces: 60 };
+  assert.equal(purchaseLine(flat).suggested, 120);
+  assert.equal(purchaseLine({ ...flat, trend: "down" }).suggested, 60);
+  assert.equal(purchaseLine({ ...flat, trend: "down" }).rounding, "down_trend");
+  assert.equal(purchaseLine({ ...flat, trend: "up" }).suggested, 120);
+  // falling sales with a need that is already whole steps: nothing was rounded up, so nothing is taken off (review 2026-11-26)
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0.5, leadTimeDays: 45, coverDays: 40, stepPieces: 5, trend: "down" }).suggested, 20);
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0.5, leadTimeDays: 45, coverDays: 40, stepPieces: 1, trend: "down" }).suggested, 20);
+  // never below one step when something is needed, falling or not
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0.1, leadTimeDays: 45, coverDays: 45, stepPieces: 60, trend: "down" }).suggested, 60);
+  // a slow product: one step lasts 600 days -> too much (the screen says it is the smallest step)
+  const slow = purchaseLine({ stockNow: 0, daily: 0.1, leadTimeDays: 45, coverDays: 45, stepPieces: 60 });
+  assert.equal(slow.too_much, true);
+  assert.equal(slow.days_after_receiving, 600);
+  // the owner pushes + to 3 steps of a fast product: 180 / 2 = 90 days = 2 x 45, not more -> fine; 4 steps -> too much
+  assert.equal(purchaseLine({ ...flat, order: 180 }).too_much, false);
+  assert.equal(purchaseLine({ ...flat, order: 240 }).too_much, true);
+  // nothing needed: no flag
+  assert.equal(purchaseLine({ stockNow: 500, daily: 2, leadTimeDays: 45, coverDays: 45, stepPieces: 60 }).too_much, false);
+});
