@@ -118,3 +118,18 @@ test("suggestions: a transporter's products are under the real supplier, via the
   assert.equal(line.via, transporter);
   assert.equal(line.supplier, real);
 });
+
+// Owner, 2026-11-26 (step 2): the screen's "what if" -- other lead time / cover days for one answer; the settings stay; nonsense is ignored.
+test("suggestions: what if (lead_days / cover_days) for this answer only", async () => {
+  const res = await apiRequest("/api/purchases/suggestions?lead_days=60&cover_days=30", { cookie: cookies.admin });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.lead_time_days, 60);
+  assert.equal(res.data.cover_days, 30);
+  assert.equal(res.data.settings_lead_days, 45);
+  assert.equal(res.data.settings_cover_days, 45);
+  const bad = await apiRequest("/api/purchases/suggestions?lead_days=0&cover_days=abc", { cookie: cookies.admin });
+  assert.equal(bad.data.lead_time_days, 45);
+  assert.equal(bad.data.cover_days, 45);
+  const { rows: [s] } = await pool.query("SELECT demand_lead_time_days, demand_cover_days FROM app_settings WHERE id = 1");
+  assert.deepEqual([s.demand_lead_time_days, s.demand_cover_days], [45, 45], "the settings are not changed");
+});

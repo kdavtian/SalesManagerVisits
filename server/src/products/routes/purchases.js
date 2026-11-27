@@ -211,8 +211,9 @@ purchasesRouter.get("/scorecard", async (_req, res) => {
 
 // Smart purchase suggestions (owner, 2026-11-25): what to order from each supplier, in whole steps, with stock now / after receiving and
 // the days each lasts (products/purchaseSuggestionsData.js; the rules: client/public/js/shared/purchaseSuggestion.js).
-purchasesRouter.get("/suggestions", async (_req, res) => {
-  res.json(await buildPurchaseSuggestions());
+purchasesRouter.get("/suggestions", async (req, res) => {
+  // ?lead_days=&cover_days= (1..365): the screen's "what if"; anything else = the settings
+  res.json(await buildPurchaseSuggestions(undefined, undefined, { leadDays: req.query.lead_days, coverDays: req.query.cover_days }));
 });
 
 // What the Excel copy holds and when it arrived (the screen says so, and offers the file import while it is empty).

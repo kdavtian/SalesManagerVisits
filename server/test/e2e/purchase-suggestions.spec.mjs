@@ -23,14 +23,18 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await expect(page).toHaveURL(/#\/purchases\/suggestions/);
     const line = page.locator(`.ps-line[data-line="${oil.id}"]`);
     await expect(line).toBeVisible();
-    await expect(line).toContainText("40 pcs");
+    await expect(line).toContainText("In stock 40 pcs");
     await expect(line).toContainText("Runs out before arrival");
     const qty = line.locator(".ps-qty strong");
     const before = await qty.textContent();
     const boxes = Number(before.match(/^(\d+) boxes/)[1]);
     expect(boxes % 5).toBe(0);
     await line.locator("[data-plus]").click();
-    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
+    await expect(qty).toHaveText(`${boxes + 5} boxes`);
+    // compact row (owner 2026-11-26): the details open on a tap on the row: the numbers, back to the suggestion, the supplier
+    await expect(line.locator(".ps-details")).toBeHidden();
+    await line.locator("[data-toggle]").click();
+    await expect(line.locator(".ps-details")).toBeVisible();
     await expect(line.locator("[data-reset]")).toBeVisible();
     // owner 2026-11-26: more than twice the cover days after receiving is flagged "Too much" (2 a day: 2 more steps = well over 90 days)
     await expect(line.locator(".badge-warning")).toHaveCount(0);
@@ -39,7 +43,44 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await expect(line.locator(".badge-warning")).toContainText(/Too much: \d+ days/);
     await line.locator("[data-minus]").click();
     await line.locator("[data-minus]").click();
-    await expect(qty).toHaveText(`${boxes + 5} boxes · ${(boxes + 5) * 12} pcs`);
+    await expect(qty).toHaveText(`${boxes + 5} boxes`);
+    // the details stay open through − / +
+    await expect(line.locator(".ps-details")).toBeVisible();
+    // "what if": another cover for this screen only, the chip says so; back to the settings
+    await page.locator("#ps-plan-chip").click();
+    await page.locator('#ps-plan-edit input[name="cover"]').fill("90");
+    await page.locator('#ps-plan-edit button[type="submit"]').click();
+    await expect(page.locator("#ps-plan-chip")).toContainText("90");
+    await expect(page.locator(".ps-plan-note")).toBeVisible();
+    await page.locator("#ps-plan-chip").click();
+    await page.locator("#ps-plan-reset").click();
+    await expect(page.locator("#ps-plan-chip")).toContainText("45");
+    await expect(page.locator(".ps-plan-note")).toHaveCount(0);
+    await expect(line).toBeVisible();
+    await line.locator("[data-plus]").click();
+    // sort (owner 2026-11-26): products by default, urgency, price -- remembered
+    await expect(page.locator('#ps-sort [data-sort="products"]')).toHaveAttribute("aria-pressed", "true");
+    await page.locator('#ps-sort [data-sort="price"]').click();
+    await expect(page.locator('#ps-sort [data-sort="price"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(line).toBeVisible();
+    // share as Excel: SKU, product, packs of the supplier's order
+    const pick = page.locator("#ps-share-pick");
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      (async () => {
+        await page.locator("#ps-share").click();
+        if (await pick.isVisible()) await pick.locator(`[data-share="${supplier}"]`).click();
+      })(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^purchase-.*\.xlsx$/);
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(await download.path());
+    const ws = wb.worksheets[0];
+    expect(ws.getRow(1).values.slice(1)).toEqual(["SKU", "Product", "Packs"]);
+    const rowOf = ws.getRows(2, ws.rowCount - 1).find((r) => String(r.getCell(2).value).includes(oil.name));
+    expect(rowOf.getCell(1).value).toBe(erpId);
+    expect(rowOf.getCell(3).value).toBe(boxes + 5);
     // the supplier's card makes the purchase
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator(".ps-create").click();
