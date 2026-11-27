@@ -174,6 +174,10 @@ test("fitToBudget: out of stock first, then runs out, fewest days, better margin
   // a big budget changes nothing
   const big = fitToBudget(lines, 1e6);
   assert.equal(big.cut.size, 0);
+  // 0 or a negative budget buys nothing priced; no number = no budget
+  assert.equal(fitToBudget(lines, -5).orders.get("out"), 0);
+  assert.equal(fitToBudget(lines, 0).orders.get("soon"), 0);
+  assert.equal(fitToBudget(lines, null).cut.size, 0);
   // same urgency: the better margin first
   const two = [
     { id: "low", suggested: 60, step: 60, cost: 5, stockNow: 0, runsOut: true, daysNow: 0, priceAmd: 2000 },

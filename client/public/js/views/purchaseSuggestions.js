@@ -97,7 +97,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     <button type="button" class="ps-plan-chip ps-urgent-chip" id="ps-urgent" aria-pressed="false" hidden></button>
     <button type="button" class="ps-plan-chip" id="ps-budget-chip" aria-expanded="false" aria-controls="ps-budget-edit"></button>
     <form class="ps-plan-edit ps-budget-edit" id="ps-budget-edit" hidden>
-      <label><span>${escapeHtml(t("ps_budget_label"))}</span><input type="number" inputmode="decimal" min="1" step="1" name="budget" required></label>
+      <label><span>${escapeHtml(t("ps_budget_label"))}</span><input type="number" inputmode="decimal" min="1" step="any" name="budget" required></label>
       <div class="ps-plan-actions">
         <button type="submit" class="btn btn-primary">${escapeHtml(t("ps_budget_apply"))}</button>
         <button type="button" class="btn" id="ps-budget-clear">${escapeHtml(t("ps_budget_clear"))}</button>
@@ -415,6 +415,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       const l = find((minus ?? plus ?? reset).dataset.minus ?? (minus ?? plus ?? reset).dataset.plus ?? (minus ?? plus ?? reset).dataset.reset);
       if (!l) return;
       l.order = reset ? l.suggested : Math.max(0, l.order + (plus ? l.step_pieces : -l.step_pieces));
+      // back to the full suggestion by hand: no longer cut by the budget (review 2026-11-27)
+      l.next_order = Boolean(l.next_order) && l.order < l.suggested;
       recompute(l);
       redrawLine(l);
       // focus stays on the button pressed; − at 0 is disabled, so focus goes to + (review 2026-11-26)

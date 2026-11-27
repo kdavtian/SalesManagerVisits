@@ -180,7 +180,8 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
  * Returns { orders: Map(id -> pieces), cut: Set(ids that got less than suggested), spent }.
  */
 export function fitToBudget(lines, budgetUsd) {
-  const budget = Number(budgetUsd);
+  // no number = no budget (everything as suggested); 0 or less = nothing can be bought (review 2026-11-27)
+  const budget = Number.isFinite(Number(budgetUsd)) && budgetUsd !== null && budgetUsd !== "" ? Math.max(0, Number(budgetUsd)) : NaN;
   const orders = new Map();
   const cut = new Set();
   let spent = 0;
