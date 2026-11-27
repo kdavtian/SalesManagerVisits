@@ -94,6 +94,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       <span aria-hidden="true" class="ps-plan-pen">✎</span>
     </button>
     ${trying ? `<span class="ps-plan-note">${escapeHtml(t("ps_plan_trying"))}</span>` : ""}
+    <button type="button" class="ps-plan-chip ps-urgent-chip" id="ps-urgent" aria-pressed="false" hidden></button>
     <form class="ps-plan-edit" id="ps-plan-edit" hidden>
       <label><span>${escapeHtml(t("ps_plan_lead"))}</span><input type="number" inputmode="numeric" min="1" max="365" step="1" name="lead" value="${lead}" required></label>
       <label><span>${escapeHtml(t("ps_plan_cover"))}</span><input type="number" inputmode="numeric" min="1" max="365" step="1" name="cover" value="${cover}" required></label>
@@ -183,6 +184,20 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const money = l.cost_usd != null ? usd(l.cost_usd * l.order) : "—";
     return `<strong>${big}</strong><span class="muted">${money}</span>`;
   }
+  // the why of the suggested order (owner 2026-11-26 audit, step 3): cover days' sales + safety + still owed − left on arrival = need,
+  // then whole steps, and why one step less when it was
+  function whyHtml(l) {
+    if (!l.suggested) return "";
+    const parts = [`${cover} ${d} × ${num(l.daily_raw ?? l.daily_demand)} = ${whole(l.cover_need)}`];
+    if (l.safety_used) parts.push(`+ ${t("ps_why_safety")} ${whole(l.safety_used)}`);
+    if (l.backlog) parts.push(`+ ${t("ps_why_owed")} ${whole(l.backlog)}`);
+    if (l.stock_at_arrival) parts.push(`− ${t("ps_why_left")} ${whole(l.stock_at_arrival)}`);
+    const steps = l.step_pieces ? l.suggested / l.step_pieces : 0;
+    // the total is the sum of the parts as shown (each part is rounded), so the line always adds up (review 2026-11-27)
+    const shownNeed = Math.max(0, l.cover_need + (l.safety_used || 0) + (l.backlog || 0) - (l.stock_at_arrival || 0));
+    const note = l.rounding === "down_covers" ? t("ps_why_down_covers") : l.rounding === "down_trend" ? t("ps_why_down_trend") : "";
+    return `<p class="muted ps-why"><strong>${t("ps_why")}:</strong> ${parts.join(" ")} = ${whole(shownNeed)} ${pcs} → ${whole(steps)} × ${whole(l.step_pieces)} = ${whole(l.suggested)} ${pcs}${note ? `. ${escapeHtml(note)}` : ""}</p>`;
+  }
   function lineHtml(l) {
     const size = l.unit ? normalizeUnitLabel(l.unit) : "";
     const out = l.stock_now <= 0;
@@ -221,6 +236,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           `${t("ps_at_arrival")}: ${whole(l.stock_at_arrival)} ${pcs}`,
           until ? `${t("ps_lasts_until")} ${until}` : "",
         ].filter(Boolean).join(" · ")}</p>
+        ${whyHtml(l)}
+        ${l.lost_before_arrival > 0 ? `<p class="ps-lost">${escapeHtml(t("ps_lost").replace("{pcs}", whole(l.lost_before_arrival)).replace("{days}", whole(l.lost_days)))}${l.price_amd ? ` ≈ ${whole(l.lost_before_arrival * l.price_amd)} ֏` : ""}</p>` : ""}
         <div class="ps-detail-actions">
           ${l.order !== l.suggested ? `<button type="button" class="ps-reset" data-reset="${l.product_id}">${t("ps_suggested")}: ${l.suggested} ${pcs}</button>` : ""}
           <a class="ps-open" href="#/product/${l.product_id}">${t("ps_open_product")}</a>
@@ -260,7 +277,25 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     card.querySelector(".ps-totals").innerHTML = totalsHtml(tot);
     card.querySelector(".ps-create").disabled = !tot.products;
   }
+  // "only urgent" (owner 2026-11-26 audit, step 3): out of stock now, or runs out before the goods could come. It only hides rows: the
+  // totals, Create and Share still take the whole order of a supplier.
+  const isUrgent = (l) => l.stock_now <= 0 || l.runs_out_before_arrival;
+  let urgentOnly = false;
+  const urgentChip = root.querySelector("#ps-urgent");
+  function paintUrgent() {
+    const n = lines.filter(isUrgent).length;
+    urgentChip.hidden = !n;
+    urgentChip.textContent = t("ps_only_urgent").replace("{n}", n);
+    urgentChip.classList.toggle("chip-active", urgentOnly);
+    urgentChip.setAttribute("aria-pressed", String(urgentOnly));
+  }
+  urgentChip.addEventListener("click", () => {
+    urgentOnly = !urgentOnly;
+    paintUrgent();
+    render();
+  });
   function render() {
+    paintUrgent();
     const groups = new Map();
     for (const l of lines) {
       if (!groups.has(l.group)) groups.set(l.group, []);
@@ -270,6 +305,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const rank = new Map(data.suppliers.map((s, i) => [s.supplier, i]));
     const order = [...groups.entries()]
       .map(([g, list]) => ({ g, list, tot: totals(list) }))
+      // "urgent only": a supplier with no urgent product is left out (its card would be empty; review 2026-11-27)
+      .filter(({ list }) => !urgentOnly || list.some(isUrgent))
       .sort((a, b) => (a.g ? 0 : 1) - (b.g ? 0 : 1) || (rank.get(a.g) ?? 1e6) - (rank.get(b.g) ?? 1e6));
     if (!order.length) {
       body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>`;
@@ -286,7 +323,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
             </div>
             <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
           </div>
-          ${[...list].sort(SORTS[sortBy]).map(lineHtml).join("")}
+          ${[...list].filter((l) => !urgentOnly || isUrgent(l)).sort(SORTS[sortBy]).map(lineHtml).join("")}
         </section>`
       )
       .join("");
