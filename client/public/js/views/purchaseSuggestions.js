@@ -373,7 +373,10 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
   };
   shareBtn.disabled = false;
   async function shareSupplier(supplier) {
-    const list = [...(ordered().get(supplier) ?? [])].sort(SORTS[sortBy]);
+    // the file follows the rows as they are on the screen: − / + never moves a row under the finger (the sort applies when it is chosen
+    // or the list is drawn again), and the file keeps that same order (Codex review 2026-11-27)
+    const shown = new Map([...body.querySelectorAll("[data-line]")].map((el, i) => [Number(el.dataset.line), i]));
+    const list = [...(ordered().get(supplier) ?? [])].sort((a, b) => (shown.get(a.product_id) ?? 1e9) - (shown.get(b.product_id) ?? 1e9));
     if (!list.length) return;
     const packs = (l) => (l.kind === "pack" && l.pack_size > 1 ? l.order / l.pack_size : l.order);
     const nameOf = (l) => {
