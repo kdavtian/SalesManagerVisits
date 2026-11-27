@@ -472,7 +472,10 @@
 .ps-share-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
 .ps-share-pick p { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
 .ps-supplier { margin: 0 0 14px; padding: 0 12px 4px; }
-.ps-supplier:active { transform: none; opacity: 1; }
+/* a supplier card is a long list scrolled with the finger on it: the shared .card pressed look (grey, shrink) must not show while
+   scrolling (owner screenshot 2026-11-27); only its own buttons react to a tap */
+.ps-supplier:active, .ps-candidates:active { transform: none; opacity: 1; background: var(--bg-card); }
+.ps-row, .ps-step, .ps-create { -webkit-tap-highlight-color: transparent; }
 .ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }
 .ps-supplier-title { flex: 1; min-width: 0; }
 .ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
