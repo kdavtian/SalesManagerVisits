@@ -14,6 +14,12 @@
 // "Changed" compares only what the order itself holds (lines, money, document, test): editing the customer or a product later does not
 // re-send an issued document. A cancel of a PACKED order is told when the warehouse takes the goods back (until then it is packed).
 //
+// The document request (owner, 2026-11-27: "when user taps create waybill or invoice, the accountant should receive a Telegram message
+// with all details of the invoice or waybill she has to create"): POST /orders/:id/accounting-request calls
+// syncOrderPost(id, { request: true }) and the group gets "🧾 CREATE A WAYBILL / AN INVOICE" with every detail. From then on the group
+// holds the details: a change re-sends them in full. Before any request the confirmation is one heads-up line (the details come with the
+// request). A request the bot has not taken yet is rewritten in place when the order changes, and withdrawn when it is moved back.
+//
 // The texts are frozen in group_posts (migration 222); the CEO bot takes them (erpSync /group-posts) and posts to the group of the daily
 // cash sheets. Switch: app_settings.order_confirm_telegram (App configuration, ON by default). OFF = no new announcements; an order the
 // group already has details of is still corrected, taken back or re-confirmed. Nothing here ever throws into the caller.
@@ -51,8 +57,9 @@ async function loadFacts(db, orderId) {
     `SELECT o.id, o.order_code, o.status, o.cancelled_at, o.cancel_reason, o.total_amd, o.note, o.discount_pct, o.discount_amd, o.payment_method,
             o.payment_term_days, o.downpayment_amd, to_char(o.promised_date, 'DD.MM.YYYY') AS promised, COALESCE(o.accounting_is_test, false) AS is_test,
             c.name AS customer, c.erp_customer_id, c.tin, c.legal_name, c.legal_address, c.address, u.name AS rep,
-            conf.changed_at AS confirmed_at, cu.name AS confirmed_by
+            conf.changed_at AS confirmed_at, cu.name AS confirmed_by, ru.name AS requested_by
      FROM orders o JOIN customers c ON c.id = o.customer_id LEFT JOIN users u ON u.id = o.user_id
+     LEFT JOIN users ru ON ru.id = o.accounting_requested_by
      LEFT JOIN LATERAL (SELECT h.changed_at, h.changed_by FROM order_status_history h
                         WHERE h.order_id = o.id AND h.new_status = 'confirmed' ORDER BY h.changed_at DESC, h.id DESC LIMIT 1) conf ON true
      LEFT JOIN users cu ON cu.id = conf.changed_by
@@ -113,13 +120,32 @@ const HEADINGS = {
   changed: "♻️ Պատվերը ՓՈՓՈԽՎԵԼ է, սա նոր տարբերակն է",
   again: "🔁 Պատվերը նորից հաստատված է, առանց փոփոխության",
 };
-/** The whole message, plain text (the bot sends it as it is). heading: first | changed | again (`changed: true` = "changed"). */
-export function orderConfirmedText(o, { changed = false, heading = changed ? "changed" : "first" } = {}) {
+const whoLine = (o) => `Պատվիրեց՝ ${o.rep ?? "—"}${o.confirmed_by ? ` · Հաստատեց՝ ${o.confirmed_by}` : ""}`;
+/**
+ * The whole message, plain text (the bot sends it as it is). heading: first | changed | again (`changed: true` = "changed").
+ * full: every detail (the group was already sent them with a document request, so a document may be issued from them); otherwise one
+ * heads-up line -- the details come with the request.
+ */
+export function orderConfirmedText(o, { changed = false, heading = changed ? "changed" : "first", full = true } = {}) {
+  if (!full) {
+    const doc = o.payment_method === "invoice" ? "հաշիվ-ապրանքագիր" : "բեռնագիր";
+    return [
+      `${HEADINGS[heading] ?? HEADINGS.first} · ${codeOf(o)} · ${o.customer} · ${amd(o.total_amd)} · ${doc}${o.is_test ? " · 🧪 թեստ" : ""}`,
+      "Մանրամասները կգան, երբ փաստաթուղթը պահանջվի։",
+    ].join("\n");
+  }
+  return [`${HEADINGS[heading] ?? HEADINGS.first} · ${codeOf(o)}`, orderDetailsText(o), "", whoLine(o)].join("\n");
+}
+
+/** "Create this document now": everything the accountant types into it, who asked. again = asked before (a retry or another method). */
+export function documentRequestText(o, { again = false } = {}) {
+  const doc = o.payment_method === "invoice" ? "ՀԱՇԻՎ-ԱՊՐԱՆՔԱԳԻՐ" : "ԲԵՌՆԱԳԻՐ";
   return [
-    `${HEADINGS[heading] ?? HEADINGS.first} · ${codeOf(o)}`,
+    `🧾 ՍՏԵՂԾԵԼ ${doc} · ${codeOf(o)}${again ? " · 🔁 կրկին խնդրանք" : ""}`,
     orderDetailsText(o),
     "",
-    `Պատվիրեց՝ ${o.rep ?? "—"}${o.confirmed_by ? ` · Հաստատեց՝ ${o.confirmed_by}` : ""}`,
+    whoLine(o),
+    `Փաստաթուղթը խնդրեց՝ ${o.requested_by ?? "—"}`,
   ].join("\n");
 }
 
@@ -152,14 +178,14 @@ const userName = async (db, id) => (id ? (await db.query("SELECT name FROM users
  * caller knows (the job does not). Returns what it did: "announced" | "changed" | "corrected" | "withdrawn" | "taken_back" |
  * "cancelled" | null (nothing to say). Never throws.
  */
-export async function syncOrderPost(orderId, { byId = null, reason = null } = {}, db = pool) {
+export async function syncOrderPost(orderId, { byId = null, reason = null, request = false } = {}, db = pool) {
   let client;
   try {
     client = await db.connect();
     await client.query("BEGIN");
     // one order at a time: two calls for the same order (a hook and the job, a quick confirm / move back) decide one after the other
     await client.query("SELECT pg_advisory_xact_lock(7222, $1)", [orderId]);
-    const did = await decide(client, orderId, { byId, reason });
+    const did = await decide(client, orderId, { byId, reason, request });
     await client.query("COMMIT");
     return did;
   } catch (err) {
@@ -177,7 +203,10 @@ export async function syncOrderPost(orderId, { byId = null, reason = null } = {}
 // claim skips locked rows) and replaced by what the order needs now, so a quick change never leaves a contradiction behind.
 const SEEN_SQL = `(posted_at IS NOT NULL OR (claimed_at IS NOT NULL AND post_attempts < 10 AND created_at > now() - make_interval(days => ${OFFER_DAYS})))`;
 
-async function decide(db, orderId, { byId, reason }) {
+// the messages that carry an order's details: the confirmation and the document request
+const DETAIL_KINDS = new Set(["order_confirmed", "document_request"]);
+
+async function decide(db, orderId, { byId, reason, request = false }) {
   const { rows: [settings] } = await db.query("SELECT order_confirm_telegram AS on, order_confirm_telegram_since AS since FROM app_settings WHERE id = 1");
   const switchedOn = settings?.on ?? true; // the same default as the settings screen shows
   const { rows: waiting } = await db.query(
@@ -186,7 +215,10 @@ async function decide(db, orderId, { byId, reason }) {
   );
   const { rows: seen } = await db.query(`SELECT id, kind, title, content_hash FROM group_posts WHERE ref_id = $1 AND ${SEEN_SQL} ORDER BY id`, [orderId]);
   const view = seen.at(-1) ?? null; // what the group believes now
-  const lastDetails = [...seen].reverse().find((r) => r.kind === "order_confirmed") ?? null;
+  const lastDetails = [...seen].reverse().find((r) => DETAIL_KINDS.has(r.kind)) ?? null;
+  // the group has every detail once a document was requested: from then on a change says them all again
+  const requestSeen = seen.some((r) => r.kind === "document_request");
+  const requestWaiting = waiting.some((w) => w.kind === "document_request");
   const o = await loadFacts(db, orderId);
 
   // what it should be told now: { kind, title, text, hash } or null
@@ -195,7 +227,11 @@ async function decide(db, orderId, { byId, reason }) {
   if (live) {
     const hash = contentHashOf(o);
     const title = `${codeOf(o)} · ${o.customer}`;
-    if (view?.kind === "order_confirmed") {
+    if ((request && switchedOn) || requestWaiting) {
+      // tapped "Send to accounting", or such a request still waits for the bot: the request, from the order as it is now (it carries every
+      // detail, so a waiting heads-up or "changed" is replaced by it). Asked again after the group saw a request: said as a new request.
+      want = { kind: "document_request", title, hash, text: documentRequestText(o, { again: requestSeen }) };
+    } else if (view && DETAIL_KINDS.has(view.kind)) {
       if (view.content_hash !== hash) want = { kind: "order_confirmed", heading: "changed" };
     } else if (view?.kind === "order_unconfirmed") {
       // told "do not issue yet, a new message will come": it is owed whatever the switch says
@@ -205,10 +241,10 @@ async function decide(db, orderId, { byId, reason }) {
       const recent = o.confirmed_at && !(settings?.since && new Date(o.confirmed_at) < new Date(settings.since));
       if (switchedOn && recent) want = { kind: "order_confirmed", heading: lastDetails ? "changed" : "first" };
     }
-    if (want) Object.assign(want, { title, hash, text: orderConfirmedText(o, { heading: want.heading }) });
+    if (want?.kind === "order_confirmed") Object.assign(want, { title, hash, text: orderConfirmedText(o, { heading: want.heading, full: requestSeen }) });
   } else if (view && view.kind !== "order_cancelled") {
     const gone = !o || Boolean(o.cancelled_at);
-    if (view.kind === "order_confirmed" || gone) {
+    if (DETAIL_KINDS.has(view.kind) || gone) {
       const title = o ? `${codeOf(o)} · ${o.customer}` : view.title ?? lastDetails?.title ?? `#${orderId}`;
       const kind = gone ? "order_cancelled" : "order_unconfirmed";
       // a waiting message of the same kind keeps its words (the route that wrote it knew who and why; the job does not)
@@ -224,6 +260,7 @@ async function decide(db, orderId, { byId, reason }) {
   if (waiting.length) await db.query("DELETE FROM group_posts WHERE id = ANY($1)", [waiting.map((w) => w.id)]);
   if (!want) return "withdrawn";
   await db.query("INSERT INTO group_posts (kind, ref_id, title, text, content_hash) VALUES ($1, $2, $3, $4, $5)", [want.kind, orderId, want.title, want.text, want.hash]);
+  if (want.kind === "document_request") return waiting.some((w) => w.kind === "document_request") ? "corrected" : "requested";
   if (want.kind === "order_cancelled") return "cancelled";
   if (want.kind === "order_unconfirmed") return "taken_back";
   if (waiting.some((w) => w.kind === "order_confirmed")) return "corrected";

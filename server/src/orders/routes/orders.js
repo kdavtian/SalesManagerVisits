@@ -1334,7 +1334,8 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
   accountingQueueChanged();
   res.json(updated[0]);
-  syncOrderPostSoon(order.id, { byId: req.user.id }); // another document than the group was told, or a test order: said again
+  // the accountant gets "create this document" with every detail in the accounting Telegram group (owner 2026-11-27)
+  syncOrderPostSoon(order.id, { byId: req.user.id, request: true });
 });
 
 // Moves a request to another condition by hand (pending = back in the queue
