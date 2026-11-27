@@ -16,6 +16,7 @@ import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoic
 import { parsePurchaseWorkbook } from "../purchaseExcel.js";
 import { buildPurchaseSuggestions } from "../purchaseSuggestionsData.js";
 import { supplierScorecard } from "../purchaseFollowUp.js";
+import { cleanDraft, listDrafts, saveDraft, deleteDraft, DraftError } from "../suggestionDrafts.js";
 
 export const purchasesRouter = Router();
 purchasesRouter.use(requireAuth);
@@ -214,6 +215,24 @@ purchasesRouter.get("/scorecard", async (_req, res) => {
 purchasesRouter.get("/suggestions", async (req, res) => {
   // ?lead_days=&cover_days= (1..365): the screen's "what if"; anything else = the settings
   res.json(await buildPurchaseSuggestions(undefined, undefined, { leadDays: req.query.lead_days, coverDays: req.query.cover_days }));
+});
+
+// Drafts of the suggestions (owner, 2026-11-27): one per supplier, to open later (products/suggestionDrafts.js, migration 227).
+purchasesRouter.get("/suggestion-drafts", async (_req, res) => {
+  res.json({ drafts: await listDrafts() });
+});
+purchasesRouter.post("/suggestion-drafts", async (req, res) => {
+  try {
+    res.json(await saveDraft(cleanDraft(req.body), req.user.id));
+  } catch (err) {
+    if (err instanceof DraftError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+});
+purchasesRouter.delete("/suggestion-drafts/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(400).json({ error: "Bad id" });
+  res.status((await deleteDraft(id)) ? 204 : 404).end();
 });
 
 // What the Excel copy holds and when it arrived (the screen says so, and offers the file import while it is empty).

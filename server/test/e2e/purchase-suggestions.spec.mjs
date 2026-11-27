@@ -86,15 +86,11 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await page.locator('#ps-sort [data-sort="price"]').click();
     await expect(page.locator('#ps-sort [data-sort="price"]')).toHaveAttribute("aria-pressed", "true");
     await expect(line).toBeVisible();
-    // share as Excel: SKU, product, packs of the supplier's order
-    const pick = page.locator("#ps-share-pick");
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      (async () => {
-        await page.locator("#ps-share").click();
-        if (await pick.isVisible()) await pick.locator(`[data-share="${supplier}"]`).click();
-      })(),
-    ]);
+    // share (owner 2026-11-27: on the supplier's card, not in the header; the header keeps only the "!"): Excel = SKU, product, packs
+    await expect(page.locator(".detail-header-actions button")).toHaveCount(1);
+    const supCard = page.locator(".ps-supplier", { hasText: supplier });
+    await supCard.locator("[data-share-menu]").click();
+    const [download] = await Promise.all([page.waitForEvent("download"), supCard.locator("[data-share-excel]").click()]);
     expect(download.suggestedFilename()).toMatch(/^purchase-.*\.xlsx$/);
     const ExcelJS = (await import("exceljs")).default;
     const wb = new ExcelJS.Workbook();
@@ -113,6 +109,20 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await page.waitForTimeout(400); // past the pressed-look transition
     expect(await cardEl.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(bgBefore);
     await page.mouse.up();
+    // save as draft, change the quantity, open the screen again: the draft brings the saved quantity back (owner 2026-11-27)
+    await supCard.locator("[data-share-menu]").click();
+    await supCard.locator("[data-save-draft]").click();
+    await expect(supCard.locator(".ps-card-msg")).toContainText("Saved as draft");
+    await line.locator("[data-plus]").click();
+    await expect(qty).toHaveText(`${boxes + 10} boxes`);
+    await page.reload();
+    const draftsChip = page.locator("#ps-drafts-chip");
+    await expect(draftsChip).toContainText("Drafts (");
+    await draftsChip.click();
+    const draftRow = page.locator(".ps-draft", { hasText: supplier });
+    await draftRow.locator("[data-draft-open]").click();
+    await expect(page.locator(`.ps-line[data-line="${oil.id}"] .ps-qty strong`)).toHaveText(`${boxes + 5} boxes`);
+    await expect(page.locator(".ps-supplier", { hasText: supplier }).locator(".ps-card-msg")).toContainText("opened");
     // the supplier's card makes the purchase
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator(".ps-create").click();
@@ -127,5 +137,6 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await pool.query("DELETE FROM erp_order_lines WHERE erp_customer_id = $1", [tag]);
     await pool.query("DELETE FROM purchase_invoices WHERE supplier_id = $1", [s.id]);
     await pool.query("DELETE FROM suppliers WHERE id = $1", [s.id]);
+    await pool.query("DELETE FROM purchase_suggestion_drafts WHERE supplier ILIKE $1", [`${tag}%`]);
   }
 });

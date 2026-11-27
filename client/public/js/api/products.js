@@ -25,6 +25,10 @@ export const productsApi = {
     return request(`/purchases/suggestions${qs ? `?${qs}` : ""}`, { fresh: true });
   },
   getSupplierScorecard: () => request("/purchases/scorecard", { fresh: true }),
+  // drafts of the smart suggestions, one per supplier (owner 2026-11-27)
+  listSuggestionDrafts: () => request("/purchases/suggestion-drafts", { fresh: true }),
+  saveSuggestionDraft: (data) => json("/purchases/suggestion-drafts", "POST", data),
+  deleteSuggestionDraft: (id) => request(`/purchases/suggestion-drafts/${id}`, { method: "DELETE" }),
   getPurchasesStatus: () => request("/purchases/status", { fresh: true }),
   getPurchaseHistory: (ids, exclude = {}) => request(`/purchases/product-history?${new URLSearchParams({ ids: ids.join(","), ...(exclude.no && exclude.date ? { exclude_no: exclude.no, exclude_date: exclude.date } : {}) }).toString()}`, { fresh: true }),
   // the paper of an invoice (photos / a PDF) and the export of the period (owner plan P3, 2026-11-20)

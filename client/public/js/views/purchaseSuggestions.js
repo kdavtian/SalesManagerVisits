@@ -45,14 +45,11 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
         <div class="detail-header-title"><h1>${t("ps_title")}</h1></div>
-        <div class="detail-header-actions">
-          <button type="button" class="icon-btn" id="ps-share" aria-label="${t("ps_share")}" disabled>${icons.share}</button>
-          <button type="button" class="settings-hint-icon" id="ps-hint" aria-label="${t("more_info")}" aria-expanded="false">!</button>
-        </div>
+        <div class="detail-header-actions"><button type="button" class="settings-hint-icon" id="ps-hint" aria-label="${t("more_info")}" aria-expanded="false">!</button></div>
       </div>
       <p class="muted ps-hint" id="ps-hint-text" hidden></p>
       <div class="ps-plan" id="ps-plan"></div>
-      <div class="ps-share-pick" id="ps-share-pick" hidden></div>
+      <div class="ps-drafts-panel" id="ps-drafts-panel" hidden></div>
       <div class="segmented ps-sort" id="ps-sort" role="group" aria-label="${t("ps_sort")}">
         ${["products", "urgency", "price"].map((k) => `<button type="button" class="chip" data-sort="${k}">${t(`ps_sort_${k}`)}</button>`).join("")}
       </div>
@@ -70,10 +67,12 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   let data;
   let suppliers = [];
+  let drafts = [];
   try {
-    [data, suppliers] = await Promise.all([
+    [data, suppliers, drafts] = await Promise.all([
       api.getPurchaseSuggestions(what),
       api.listSuppliers().then((s) => [...(s.suppliers ?? []).filter((x) => x.active !== false), ...(s.excel_suppliers ?? [])].map((x) => x.name)).catch(() => []),
+      api.listSuggestionDrafts().then((r) => r.drafts ?? []).catch(() => []),
     ]);
   } catch (err) {
     body.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
@@ -96,6 +95,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     ${trying ? `<span class="ps-plan-note">${escapeHtml(t("ps_plan_trying"))}</span>` : ""}
     <button type="button" class="ps-plan-chip ps-urgent-chip" id="ps-urgent" aria-pressed="false" hidden></button>
     <button type="button" class="ps-plan-chip" id="ps-budget-chip" aria-expanded="false" aria-controls="ps-budget-edit"></button>
+    <button type="button" class="ps-plan-chip" id="ps-drafts-chip" aria-expanded="false" aria-controls="ps-drafts-panel" hidden></button>
     <form class="ps-plan-edit ps-budget-edit" id="ps-budget-edit" hidden>
       <label><span>${escapeHtml(t("ps_budget_label"))}</span><input type="number" inputmode="decimal" min="1" step="any" name="budget" required></label>
       <div class="ps-plan-actions">
@@ -392,7 +392,15 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
               ${viaOf(list).length ? `<p class="muted ps-via">${escapeHtml(t("ps_via").replace("{names}", viaOf(list).join(", ")))}</p>` : ""}
               <p class="muted ps-totals">${totalsHtml(tot)}</p>
             </div>
-            <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
+            <div class="ps-head-actions">
+              <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
+              <button type="button" class="icon-btn ps-share-btn" data-share-menu="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_share")}: ${g || t("ps_no_supplier")}`)}" aria-expanded="false">${icons.share}</button>
+            </div>
+            <div class="ps-share-menu" hidden>
+              <button type="button" class="btn" data-share-excel="${escapeHtml(g)}">${escapeHtml(t("ps_share_excel"))}</button>
+              <button type="button" class="btn" data-save-draft="${escapeHtml(g)}">${escapeHtml(t("ps_save_draft"))}</button>
+            </div>
+            <p class="ps-card-msg muted" role="status" hidden></p>
           </div>
           ${[...list].filter((l) => !urgentOnly || isUrgent(l)).sort(SORTS[sortBy]).map(lineHtml).join("")}
         </section>`
@@ -486,24 +494,22 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     render();
   });
 
-  // ---- share as Excel (owner, 2026-11-26): SKU, product name, packs -- one supplier's order, in the order shown ----------------------
-  const shareBtn = root.querySelector("#ps-share");
-  const pick = root.querySelector("#ps-share-pick");
-  const ordered = () => {
-    const groups = new Map();
-    for (const l of lines.filter((x) => x.order > 0)) {
-      if (!groups.has(l.group)) groups.set(l.group, []);
-      groups.get(l.group).push(l);
-    }
-    return groups;
-  };
-  shareBtn.disabled = false;
+  // ---- share (owner, 2026-11-26/27): on each supplier's card, a menu: Excel (SKU, product, packs of that supplier's order, in the order
+  // shown) or Save as draft (the quantities kept on the server, one draft per supplier, opened later from the Drafts chip)
+  const cardOf = (supplier) => [...body.querySelectorAll(".ps-supplier")].find((c) => c.dataset.group === supplier);
+  function cardMessage(supplier, text, isError = false) {
+    const el = cardOf(supplier)?.querySelector(".ps-card-msg");
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("form-error", isError);
+    el.hidden = !text;
+  }
   async function shareSupplier(supplier) {
     // the file follows the rows as they are on the screen: − / + never moves a row under the finger (the sort applies when it is chosen
     // or the list is drawn again), and the file keeps that same order (Codex review 2026-11-27)
     const shown = new Map([...body.querySelectorAll("[data-line]")].map((el, i) => [Number(el.dataset.line), i]));
-    const list = [...(ordered().get(supplier) ?? [])].sort((a, b) => (shown.get(a.product_id) ?? 1e9) - (shown.get(b.product_id) ?? 1e9));
-    if (!list.length) return;
+    const list = lines.filter((l) => l.group === supplier && l.order > 0).sort((a, b) => (shown.get(a.product_id) ?? 1e9) - (shown.get(b.product_id) ?? 1e9));
+    if (!list.length) return cardMessage(supplier, t("ps_share_none"));
     const packs = (l) => (l.kind === "pack" && l.pack_size > 1 ? l.order / l.pack_size : l.order);
     const nameOf = (l) => {
       const size = l.unit ? normalizeUnitLabel(l.unit) : "";
@@ -518,33 +524,133 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const rows = list.map((l) => [l.sku ?? "", nameOf(l), packs(l)]);
     const safe = String(supplier || "order").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 40) || "order";
     const filename = `purchase-${safe}-${data.today}`;
-    shareBtn.disabled = true;
     try {
       await saveBlob(await api.buildXlsx({ filename, sheet: String(supplier || t("ps_no_supplier")).slice(0, 31), columns, rows }), `${filename}.xlsx`);
     } catch (err) {
-      pick.hidden = false;
-      pick.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
-    } finally {
-      shareBtn.disabled = false;
+      cardMessage(supplier, err.message, true);
     }
   }
-  shareBtn.addEventListener("click", () => {
-    const groups = [...ordered().keys()];
-    if (groups.length === 1) {
-      pick.hidden = true;
-      shareSupplier(groups[0]);
-      return;
+  async function saveSupplierDraft(supplier, btn) {
+    const list = lines.filter((l) => l.group === supplier);
+    btn.disabled = true;
+    try {
+      const saved = await api.saveSuggestionDraft({
+        supplier,
+        lines: list.map((l) => ({ product_id: l.product_id, qty: l.order })),
+        lead_days: lead,
+        cover_days: cover,
+        total_usd: list.reduce((a, l) => a + (l.cost_usd ?? 0) * l.order, 0),
+      });
+      drafts = [saved, ...drafts.filter((d) => d.id !== saved.id)];
+      paintDrafts();
+      cardMessage(supplier, t("ps_draft_saved"));
+    } catch (err) {
+      cardMessage(supplier, err.message, true);
+    } finally {
+      btn.disabled = false;
     }
-    // several suppliers with something to order: which one goes to the file (one supplier = one order)
-    pick.hidden = false; // always the current suppliers (a supplier may have gone to 0 since), and an old error is replaced
-    pick.innerHTML = groups.length
-      ? `<p class="muted">${escapeHtml(t("ps_share_pick"))}</p>${groups.map((g) => `<button type="button" class="chip" data-share="${escapeHtml(g)}">${escapeHtml(g || t("ps_no_supplier"))}</button>`).join("")}`
-      : `<p class="muted">${escapeHtml(t("ps_share_none"))}</p>`;
+  }
+  body.addEventListener("click", (e) => {
+    const menuBtn = e.target.closest("[data-share-menu]");
+    const excel = e.target.closest("[data-share-excel]");
+    const save = e.target.closest("[data-save-draft]");
+    if (menuBtn) {
+      const menu = menuBtn.closest(".ps-supplier-head").querySelector(".ps-share-menu");
+      menu.hidden = !menu.hidden;
+      menuBtn.setAttribute("aria-expanded", String(!menu.hidden));
+    } else if (excel) {
+      excel.closest(".ps-share-menu").hidden = true;
+      shareSupplier(excel.dataset.shareExcel);
+    } else if (save) {
+      saveSupplierDraft(save.dataset.saveDraft, save).then(() => {
+        const menu = cardOf(save.dataset.saveDraft)?.querySelector(".ps-share-menu");
+        if (menu) menu.hidden = true;
+      });
+    }
   });
-  pick.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-share]");
-    if (!b) return;
-    pick.hidden = true;
-    shareSupplier(b.dataset.share);
+
+  // ---- drafts (owner, 2026-11-27): the Drafts chip lists the saved drafts; Open puts a draft's quantities back on its supplier's card
+  const draftsChip = root.querySelector("#ps-drafts-chip");
+  const draftsPanel = root.querySelector("#ps-drafts-panel");
+  const keyOf = (n) => String(n ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  function paintDrafts() {
+    draftsChip.hidden = !drafts.length;
+    draftsChip.textContent = t("ps_drafts_chip").replace("{n}", drafts.length);
+    if (!drafts.length) draftsPanel.hidden = true;
+    draftsPanel.innerHTML = drafts
+      .map(
+        (d) => `<div class="ps-draft">
+          <div class="ps-draft-text">
+            <strong>${escapeHtml(d.supplier || t("ps_no_supplier"))}</strong>
+            <span class="muted">${escapeHtml(
+              t("ps_draft_line")
+                .replace("{n}", whole(d.products))
+                .replace("{usd}", d.total_usd != null ? usd(d.total_usd) : "—")
+                .replace("{date}", shortDate(String(d.updated_at).slice(0, 10)))
+                .replace("{who}", d.saved_by || "")
+            )}</span>
+          </div>
+          <div class="ps-draft-actions">
+            <button type="button" class="btn btn-primary" data-draft-open="${d.id}">${escapeHtml(t("ps_draft_open"))}</button>
+            <button type="button" class="btn" data-draft-delete="${d.id}" aria-label="${escapeHtml(`${t("ps_draft_delete")}: ${d.supplier || t("ps_no_supplier")}`)}">${escapeHtml(t("ps_draft_delete"))}</button>
+          </div>
+        </div>`
+      )
+      .join("");
+  }
+  paintDrafts();
+  draftsChip.addEventListener("click", () => {
+    draftsPanel.hidden = !draftsPanel.hidden;
+    draftsChip.setAttribute("aria-expanded", String(!draftsPanel.hidden));
+  });
+  draftsPanel.addEventListener("click", async (e) => {
+    const openBtn = e.target.closest("[data-draft-open]");
+    const delBtn = e.target.closest("[data-draft-delete]");
+    if (openBtn) {
+      const d = drafts.find((x) => x.id === Number(openBtn.dataset.draftOpen));
+      if (!d) return;
+      const qty = new Map((d.lines ?? []).map((l) => [Number(l.product_id), Number(l.qty)]));
+      // the draft's supplier card: every product on it gets the draft's quantity (0 when the draft did not have it); a drafted product the
+      // owner moved to another card gets its quantity there too (review 2026-11-27)
+      // a drafted product the owner had moved to this supplier goes back onto its card, as the move handler does (its transporter
+      // follows: back on the card it came from it is the transporter's again, elsewhere not; Codex review 2026-11-27)
+      const target = lines.find((l) => keyOf(l.group) === keyOf(d.supplier))?.group ?? lines.find((l) => keyOf(l.group_original) === keyOf(d.supplier))?.group_original ?? d.supplier;
+      for (const l of lines) {
+        if (!qty.has(l.product_id) || l.group === target) continue;
+        if (l.via_original === undefined) l.via_original = l.via ?? null;
+        l.group = target;
+        l.via = l.group === l.group_original ? l.via_original : null;
+      }
+      const own = lines.filter((l) => l.group === target);
+      for (const l of own) {
+        l.order = qty.get(l.product_id) ?? 0;
+        l.next_order = false;
+        recompute(l);
+      }
+      const missing = [...qty.entries()].filter(([id, q]) => q > 0 && !lines.some((l) => l.product_id === id)).length;
+      if (!own.length) {
+        // the supplier needs nothing today: its card is not on the screen, say so here (review 2026-11-27)
+        draftsPanel.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(t("ps_draft_no_card"))}</p>`);
+        render();
+        return;
+      }
+      draftsPanel.hidden = true;
+      draftsChip.setAttribute("aria-expanded", "false");
+      urgentOnly = false; // the whole draft is shown, not only its urgent rows
+      render();
+      const supplier = own[0]?.group ?? d.supplier;
+      cardMessage(supplier, `${t("ps_draft_opened").replace("{date}", shortDate(String(d.updated_at).slice(0, 10)))}${missing ? ` ${t("ps_draft_missing").replace("{n}", missing)}` : ""}`);
+      cardOf(supplier)?.scrollIntoView({ block: "start" });
+    } else if (delBtn) {
+      delBtn.disabled = true;
+      try {
+        await api.deleteSuggestionDraft(Number(delBtn.dataset.draftDelete));
+        drafts = drafts.filter((x) => x.id !== Number(delBtn.dataset.draftDelete));
+        paintDrafts();
+      } catch (err) {
+        delBtn.disabled = false;
+        draftsPanel.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(err.message)}</p>`);
+      }
+    }
   });
 }
