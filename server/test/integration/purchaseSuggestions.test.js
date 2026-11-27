@@ -165,3 +165,25 @@ test("suggestions: waiting wishes are bought on top; custom-name wishes are cand
     await pool.query("DELETE FROM product_wishes WHERE customer_id = $1", [customer.id]);
   }
 });
+
+// Owner, 2026-11-27: "save it as a draft and use it later" -- one draft per supplier, kept on the server, purchasing roles only.
+test("suggestion drafts: save, replace for the same supplier, list, delete; purchasing roles only", async () => {
+  const supplier = `ITEST-PS Draft ${stamp}`;
+  const p = await createProduct();
+  assert.equal((await apiRequest("/api/purchases/suggestion-drafts", { cookie: cookies.sales_manager })).status, 403);
+  const bad = await apiRequest("/api/purchases/suggestion-drafts", { method: "POST", cookie: cookies.admin, body: { supplier, lines: [{ product_id: "x", qty: 1 }] } });
+  assert.equal(bad.status, 400);
+  const first = await apiRequest("/api/purchases/suggestion-drafts", { method: "POST", cookie: cookies.admin, body: { supplier, lines: [{ product_id: p.id, qty: 60 }], lead_days: 45, cover_days: 45, total_usd: 210 } });
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.products, 1);
+  assert.equal(first.data.pieces, 60);
+  // the same supplier written differently: the draft is replaced, not doubled
+  const again = await apiRequest("/api/purchases/suggestion-drafts", { method: "POST", cookie: cookies.admin, body: { supplier: ` ${supplier.toLowerCase()}  `, lines: [{ product_id: p.id, qty: 120 }] } });
+  assert.equal(again.data.id, first.data.id);
+  const list = (await apiRequest("/api/purchases/suggestion-drafts", { cookie: cookies.admin })).data.drafts.filter((d) => d.id === first.data.id);
+  assert.equal(list.length, 1);
+  assert.deepEqual(list[0].lines, [{ product_id: p.id, qty: 120 }]);
+  assert.ok(list[0].saved_by);
+  assert.equal((await apiRequest(`/api/purchases/suggestion-drafts/${first.data.id}`, { method: "DELETE", cookie: cookies.admin })).status, 204);
+  assert.equal((await apiRequest(`/api/purchases/suggestion-drafts/${first.data.id}`, { method: "DELETE", cookie: cookies.admin })).status, 404);
+});

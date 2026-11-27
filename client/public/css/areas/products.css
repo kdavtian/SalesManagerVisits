@@ -469,17 +469,27 @@
 .ps-plan-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
 .ps-plan-actions .btn { flex: 1; }
 .ps-sort { margin: 0 0 10px; }
-.ps-share-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
-.ps-share-pick p { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
 .ps-supplier { margin: 0 0 14px; padding: 0 12px 4px; }
 /* a supplier card is a long list scrolled with the finger on it: the shared .card pressed look (grey, shrink) must not show while
    scrolling (owner screenshot 2026-11-27); only its own buttons react to a tap */
 .ps-supplier:active, .ps-candidates:active { transform: none; opacity: 1; background: var(--bg-card); }
 .ps-row, .ps-step, .ps-create { -webkit-tap-highlight-color: transparent; }
-.ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }
+.ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }
 .ps-supplier-title { flex: 1; min-width: 0; }
 .ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
 .ps-supplier-head p { margin: 1px 0 0; font-size: 0.78rem; overflow-wrap: anywhere; }
+.ps-head-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.ps-share-btn { width: 44px; height: 44px; }
+.ps-share-menu { flex-basis: 100%; display: flex; gap: 8px; margin-top: 8px; }
+.ps-share-menu .btn { flex: 1; min-height: 44px; }
+.ps-card-msg { flex-basis: 100%; margin: 6px 0 0; font-size: 0.8rem; }
+.ps-drafts-panel { margin: 0 0 10px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); }
+.ps-draft { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.ps-draft:first-child { border-top: 0; }
+.ps-draft-text { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 2px; font-size: 0.88rem; overflow-wrap: anywhere; }
+.ps-draft-text .muted { font-size: 0.78rem; }
+.ps-draft-actions { display: flex; gap: 6px; }
+.ps-draft-actions .btn { min-height: 44px; }
 .ps-create { flex: none; min-height: 44px; padding: 6px 12px; }
 .ps-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 8px; row-gap: 4px; align-items: center; border-top: 1px solid var(--border); padding: 8px 0; }
 .ps-line > .ps-row { grid-column: 1 / -1; }
