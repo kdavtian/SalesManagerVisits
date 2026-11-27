@@ -612,9 +612,17 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       const qty = new Map((d.lines ?? []).map((l) => [Number(l.product_id), Number(l.qty)]));
       // the draft's supplier card: every product on it gets the draft's quantity (0 when the draft did not have it); a drafted product the
       // owner moved to another card gets its quantity there too (review 2026-11-27)
-      const own = lines.filter((l) => keyOf(l.group) === keyOf(d.supplier));
+      // a drafted product the owner had moved to this supplier goes back onto its card, as the move handler does (its transporter
+      // follows: back on the card it came from it is the transporter's again, elsewhere not; Codex review 2026-11-27)
+      const target = lines.find((l) => keyOf(l.group) === keyOf(d.supplier))?.group ?? lines.find((l) => keyOf(l.group_original) === keyOf(d.supplier))?.group_original ?? d.supplier;
       for (const l of lines) {
-        if (!own.includes(l) && !qty.has(l.product_id)) continue;
+        if (!qty.has(l.product_id) || l.group === target) continue;
+        if (l.via_original === undefined) l.via_original = l.via ?? null;
+        l.group = target;
+        l.via = l.group === l.group_original ? l.via_original : null;
+      }
+      const own = lines.filter((l) => l.group === target);
+      for (const l of own) {
         l.order = qty.get(l.product_id) ?? 0;
         l.next_order = false;
         recompute(l);
