@@ -64,7 +64,7 @@ export function renderPurchases(root, navigate) {
         <div class="pu-head-icons">
           <button type="button" class="icon-btn pu-head-icon" id="pu-suggest" aria-label="${t("ps_open")}" title="${t("ps_open")}">${icons.sparkles}</button>
           <button type="button" class="icon-btn pu-head-icon" id="pu-import" aria-label="${t("pu_import")}" title="${t("pu_import")}"><span class="pu-icon-up" aria-hidden="true">${icons.download}</span></button>
-          <button type="button" class="icon-btn pu-head-icon" id="pu-export" aria-label="${t("pu_export")}" title="${t("pu_export")}">${icons.download}</button>
+          <button type="button" class="icon-btn pu-head-icon" id="pu-export" aria-label="${t("pu_export_aria")}" title="${t("pu_export_aria")}">${icons.download}</button>
         </div>
       </div>
       <div class="pu-new-row"><button type="button" class="btn btn-primary btn-block pu-new-btn" id="pu-new">${icons.plus}<span>${t("pu_new")}</span></button></div>
@@ -132,6 +132,7 @@ export function renderPurchases(root, navigate) {
   // What the Excel copy holds, or -- while it holds nothing -- a card that says why and offers the file import
   function paintExcel() {
     const el = root.querySelector("#pu-excel");
+    excelText = ""; // a failed status or an emptied copy must not leave the last line under the "!" (review 2026-11-27)
     if (!excel) {
       el.innerHTML = "";
       return;
