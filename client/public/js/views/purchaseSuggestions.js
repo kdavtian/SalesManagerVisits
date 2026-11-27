@@ -144,7 +144,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     products: compareProducts,
     // the server's urgency, for every line alike (a line moved to another card sorts right too): runs out before the goods come first,
     // then the fewest days left
-    urgency: (a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? 0) - (b.days_now ?? 0) || a.urgency_rank - b.urgency_rank,
+    urgency: (a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? Infinity) - (b.days_now ?? Infinity) || a.urgency_rank - b.urgency_rank,
     // the most money first; products without a last price after the priced ones
     price: (a, b) => (b.order > 0) - (a.order > 0) || (b.cost_usd != null) - (a.cost_usd != null) || (b.cost_usd ?? 0) * b.order - (a.cost_usd ?? 0) * a.order || compareProducts(a, b),
   };
@@ -213,6 +213,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
       out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      // bought only for wishes, no regular sales: whatever is left after the wishes has no buyer yet (review 2026-11-27)
+      l.wished && !(l.daily_demand > 0) ? `<span class="badge badge-warning">${t("ps_wish_only")}</span>` : "",
       l.wished ? `<span class="badge badge-info">${t("ps_wished").replace("{pcs}", whole(l.wished)).replace("{n}", whole(l.wished_customers || 1))}</span>` : "",
       l.next_order ? `<span class="badge badge-neutral">${t(l.order ? "ps_budget_less" : "ps_next_order")}</span>` : "",
       l.too_much ? `<span class="badge badge-warning">${t(l.order <= l.step_pieces ? "ps_too_much_step" : "ps_too_much").replace("{days}", Math.round(l.days_after_receiving))}</span>` : "",

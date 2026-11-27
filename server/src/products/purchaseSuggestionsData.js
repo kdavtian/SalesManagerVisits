@@ -76,7 +76,9 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
       lastSaleDate: row.last_sale_date, createdAt: row.created_at, today,
     });
     const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
-    const wished = wishes.get(row.id);
+    // a product with free stock again is serving its wishes (back_in_stock_at is set only by the next Excel sync): not counted on top,
+    // or a wisher's submitted order would be counted twice (review 2026-11-27)
+    const wished = free > 0 ? null : wishes.get(row.id);
     if (!(daily > 0) && !wished) continue;
     const step = orderStep(row);
     const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend, wished: wished?.qty ?? 0 });

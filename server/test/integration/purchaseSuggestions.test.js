@@ -156,6 +156,11 @@ test("suggestions: waiting wishes are bought on top; custom-name wishes are cand
     const cand = after.new_candidates.find((c) => c.name.toLowerCase().includes(`unicorn ${stamp}`));
     assert.ok(cand, JSON.stringify(after.new_candidates));
     assert.equal(cand.qty, 8, "the two spellings are one candidate");
+    // stock is back (free > 0) before the sync marks the wish: not counted on top any more (review 2026-11-27)
+    await pool.query("UPDATE products SET stock_qty = 5 WHERE id = $1", [oil.id]);
+    const back = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
+    const lineBack = back.suppliers.flatMap((g) => g.lines).find((l) => l.product_id === oil.id);
+    assert.equal(lineBack?.wished ?? 0, 0);
   } finally {
     await pool.query("DELETE FROM product_wishes WHERE customer_id = $1", [customer.id]);
   }
