@@ -214,18 +214,19 @@
 .pu-title { display: flex; align-items: center; gap: 6px; }
 .pu-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 16px 16px 0; }
 .pu-head h1 { margin: 0; font-size: var(--fs-title); }
-.pu-head-actions { display: flex; gap: 8px; }
-.pu-new-btn, .pu-import-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 0; text-align: center; }
-.pu-new-btn svg, .pu-import-btn svg { width: 18px; height: 18px; }
+.pu-head-icons { display: flex; gap: 6px; margin-left: auto; }
+.pu-head-icon { width: 44px; height: 44px; }
+.pu-head-icon svg { width: 20px; height: 20px; }
+.pu-new-row { padding: 12px 16px 0; }
+/* title and the three icons stay on one row down to 320 px (Armenian "Գնումներ" is long): the title shrinks a step, taps stay 44 px */
+.pu-head:has(.pu-head-icons) { flex-wrap: nowrap; }
+.pu-head:has(.pu-head-icons) h1 { font-size: clamp(1.25rem, 6.5vw, var(--fs-title)); white-space: nowrap; }
+.pu-head-icons .pu-head-icon { flex: none; }
+@media (max-width: 360px) { .pu-head:has(.pu-head-icons) { gap: 6px; } .pu-head-icons { gap: 4px; } }
+.pu-new-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; min-width: 0; text-align: center; }
+.pu-new-btn svg { width: 18px; height: 18px; }
 .pu-icon-up { display: inline-flex; transform: rotate(180deg); }
-@media (max-width: 520px) {
-  .pu-head-actions { width: 100%; }
-  .pu-head-actions .btn { flex: 1 1 0; padding-left: 10px; padding-right: 10px; }
-}
-@media (max-width: 380px) {
-  .pu-head-actions { flex-direction: column; } /* two long Armenian labels do not fit side by side at 320 px */
-}
-.pu-excel-line { margin: 0; padding: 8px 16px 0; font-size: 0.8rem; }
+.pu-excel-line { margin: 10px 0 0; font-size: 0.85rem; color: var(--text-dim); } /* under the "!" (plan B) */
 .pu-excel-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 12px 16px 0; padding: 14px 16px; border: 1px dashed var(--control-border); }
 .pu-excel-empty p { margin: 0; }
 .pu-chips { display: flex; gap: 8px; overflow-x: auto; padding: 8px 16px 0; scrollbar-width: none; }
@@ -403,8 +404,6 @@
 }
 
 /* Purchases P3 (2026-11-20): the paper of an invoice (photos / PDF), its history, the Excel export chip */
-.pu-export-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
-.pu-export-btn svg { width: 16px; height: 16px; }
 .pu-file-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }
 .pu-files-none { grid-column: 1 / -1; margin: 0; }
 .pu-file { position: relative; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-card); }

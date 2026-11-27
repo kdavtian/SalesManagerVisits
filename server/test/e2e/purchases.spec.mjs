@@ -79,8 +79,12 @@ test("@smoke Purchases: the Excel file import fills the history; supplier cards 
     await page.waitForTimeout(450); // the sheet has slid in
     await shot(page, "purchases-import-phone");
     await page.locator("#pu-import-go").click();
-    await expect(page.locator(".pu-excel-line")).toContainText("2 lines", { timeout: 15000 });
-    await expect(page.locator(".pu-row", { hasText: "E2E Import Alpha" })).toContainText("Only in Excel");
+    // what the Excel copy holds is under the "!" now (owner 2026-11-27, Purchases plan B)
+    await expect(page.locator(".pu-row", { hasText: "E2E Import Alpha" })).toContainText("Only in Excel", { timeout: 15000 });
+    await page.locator("#pu-hint").click();
+    await expect(page.locator(".info-popup .pu-excel-line")).toContainText("2 lines");
+    await page.locator(".info-popup [data-action=\"close\"]").click();
+    await expect(page.locator(".info-popup")).toHaveCount(0);
     await expect(page.locator(".pu-kpi").first()).toContainText("2"); // two invoices
     await shot(page, "purchases-list-phone");
     // a supplier card filters; a second tap clears

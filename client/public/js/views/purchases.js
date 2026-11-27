@@ -59,14 +59,17 @@ export function renderPurchases(root, navigate) {
     <div class="detail-view purchases-view">
       <div class="pu-head">
         <h1 class="pu-title">${t("pu_title")}<button type="button" class="settings-hint-icon" id="pu-hint" aria-label="${t("more_info")}">!</button></h1>
-        <div class="pu-head-actions">
-          <button type="button" class="btn pu-suggest-btn" id="pu-suggest">${icons.cart}<span>${t("ps_open")}</span></button>
-          <button type="button" class="btn pu-import-btn" id="pu-import"><span class="pu-icon-up" aria-hidden="true">${icons.download}</span><span>${t("pu_import")}</span></button>
-          <button type="button" class="btn btn-primary pu-new-btn" id="pu-new">${icons.plus}<span>${t("pu_new")}</span></button>
+        <!-- owner 2026-11-27 (Purchases plan B): Smart suggestions, Excel import and the period's Excel file as icons in the header; one
+             New purchase button under it (three long labelled buttons wrapped at 390 px) -->
+        <div class="pu-head-icons">
+          <button type="button" class="icon-btn pu-head-icon" id="pu-suggest" aria-label="${t("ps_open")}" title="${t("ps_open")}">${icons.sparkles}</button>
+          <button type="button" class="icon-btn pu-head-icon" id="pu-import" aria-label="${t("pu_import")}" title="${t("pu_import")}"><span class="pu-icon-up" aria-hidden="true">${icons.download}</span></button>
+          <button type="button" class="icon-btn pu-head-icon" id="pu-export" aria-label="${t("pu_export_aria")}" title="${t("pu_export_aria")}">${icons.download}</button>
         </div>
       </div>
+      <div class="pu-new-row"><button type="button" class="btn btn-primary btn-block pu-new-btn" id="pu-new">${icons.plus}<span>${t("pu_new")}</span></button></div>
       <div id="pu-excel"></div>
-      <div class="pu-chips" id="pu-periods" role="group">${PERIODS.map((p) => `<button type="button" class="map-filter-chip ${p === period ? "chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(`pu_period_${p}`)}</button>`).join("")}<button type="button" class="map-filter-chip pu-export-btn" id="pu-export"><span aria-hidden="true">${icons.download}</span>${t("pu_export")}</button></div>
+      <div class="pu-chips" id="pu-periods" role="group">${PERIODS.map((p) => `<button type="button" class="map-filter-chip ${p === period ? "chip-active" : ""}" data-period="${p}" aria-pressed="${p === period}">${t(`pu_period_${p}`)}</button>`).join("")}</div>
       <div class="pu-kpis" id="pu-kpis"></div>
       <div class="pu-suppliers" id="pu-suppliers"></div>
       <div id="pu-scorecard"></div>
@@ -97,7 +100,11 @@ export function renderPurchases(root, navigate) {
     const r = rows.find((x) => x.id === id);
     openPurchaseSheet({ id, invoiceNo: r?.invoice_no, date: r?.invoice_date, row: r }, { onSaved: load, rows, openInvoice });
   };
-  root.querySelector("#pu-hint").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("pu_hint"))}</p>`));
+  // the "!" holds the explanation and what the Excel copy holds (the line under the buttons moved here; owner: explanations under "!")
+  let excelText = "";
+  root.querySelector("#pu-hint").addEventListener("click", () =>
+    openInfoPopup(`<p>${escapeHtml(t("pu_hint"))}</p>${excelText ? `<p class="pu-excel-line">${escapeHtml(excelText)}</p>` : ""}`)
+  );
   // New purchase (owner, 2026-11-27): choose the supplier first; its products open with the AI fill (Smart suggestions, one supplier). The
   // empty form stays one tap away for an invoice entered by hand.
   root.querySelector("#pu-new").addEventListener("click", () =>
@@ -125,6 +132,7 @@ export function renderPurchases(root, navigate) {
   // What the Excel copy holds, or -- while it holds nothing -- a card that says why and offers the file import
   function paintExcel() {
     const el = root.querySelector("#pu-excel");
+    excelText = ""; // a failed status or an emptied copy must not leave the last line under the "!" (review 2026-11-27)
     if (!excel) {
       el.innerHTML = "";
       return;
@@ -144,7 +152,8 @@ export function renderPurchases(root, navigate) {
       .replace("{from}", formatDateDMY(excel.from))
       .replace("{to}", formatDateDMY(excel.to))
       .replace("{when}", `${sinceText(excel.synced_at, Date.now(), { min: t("pu_unit_min"), h: t("pu_unit_h"), d: t("pu_unit_d") })} ${t("pu_ago")}`);
-    el.innerHTML = `<p class="pu-excel-line muted">${escapeHtml(text)}</p>`;
+    excelText = text;
+    el.innerHTML = "";
   }
 
   // the suppliers' scorecard of the last 12 months (server products/purchaseFollowUp.js): a line on each card, the whole card when one is picked

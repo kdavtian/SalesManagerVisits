@@ -312,6 +312,7 @@ export const enProducts = {
     pu_lines: "Products",
     pu_add_line: "Add product",
     pu_lines_filter: "Find in the lines",
+    pu_export_aria: "Download the period as Excel",
     pu_export: "Excel",
     pu_files: "Invoice paper",
     pu_files_none: "No photo or PDF of the invoice yet",
