@@ -379,7 +379,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       .filter(({ list }) => !urgentOnly || list.some(isUrgent))
       .sort((a, b) => (a.g ? 0 : 1) - (b.g ? 0 : 1) || (rank.get(a.g) ?? 1e6) - (rank.get(b.g) ?? 1e6));
     if (!order.length) {
-      body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>`;
+      // the wished, not-carried products show even when nothing needs ordering (Codex review 2026-11-27)
+      body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>${candidatesHtml()}`;
       return;
     }
     body.innerHTML = order
