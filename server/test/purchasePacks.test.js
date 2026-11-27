@@ -186,3 +186,17 @@ test("fitToBudget: out of stock first, then runs out, fewest days, better margin
   assert.equal(fitToBudget(two, 300).orders.get("high"), 60);
   assert.equal(fitToBudget(two, 300).orders.get("low"), 0);
 });
+
+// Owner, 2026-11-26 (plan step 10): what customers wished for while the product was out of stock is bought on top.
+test("purchaseLine: waiting wishes are bought on top; a wished product with no sales history still gets its wishes", () => {
+  const base = { stockNow: 0, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 };
+  assert.equal(purchaseLine(base).suggested, 45);
+  const w = purchaseLine({ ...base, wished: 12 });
+  assert.equal(w.wished, 12);
+  assert.equal(w.suggested, 60, "45 + 12 = 57 -> 60");
+  assert.equal(w.after_receiving, 48, "60 - the 12 the wishing customers take");
+  // no sales yet (daily 0): the wishes alone, in whole steps
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0, wished: 7, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).suggested, 10);
+  // stock already on the shelf covers the wishes: nothing extra
+  assert.equal(purchaseLine({ stockNow: 100, daily: 0, wished: 7, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).suggested, 0);
+});

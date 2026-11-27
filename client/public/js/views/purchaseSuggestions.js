@@ -181,7 +181,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   const recompute = (l) =>
     // from the server's exact inputs (not the rounded numbers shown), so the phone and the server agree to the piece
-    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, order: l.order }));
+    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, wished: l.wished ?? 0, order: l.order }));
 
   const pcs = t("warehouse_pcs_suffix");
   const d = t("ps_d");
@@ -199,10 +199,11 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const parts = [`${cover} ${d} × ${num(l.daily_raw ?? l.daily_demand)} = ${whole(l.cover_need)}`];
     if (l.safety_used) parts.push(`+ ${t("ps_why_safety")} ${whole(l.safety_used)}`);
     if (l.backlog) parts.push(`+ ${t("ps_why_owed")} ${whole(l.backlog)}`);
+    if (l.wished) parts.push(`+ ${t("ps_why_wished")} ${whole(l.wished)}`);
     if (l.stock_at_arrival) parts.push(`− ${t("ps_why_left")} ${whole(l.stock_at_arrival)}`);
     const steps = l.step_pieces ? l.suggested / l.step_pieces : 0;
     // the total is the sum of the parts as shown (each part is rounded), so the line always adds up (review 2026-11-27)
-    const shownNeed = Math.max(0, l.cover_need + (l.safety_used || 0) + (l.backlog || 0) - (l.stock_at_arrival || 0));
+    const shownNeed = Math.max(0, l.cover_need + (l.safety_used || 0) + (l.backlog || 0) + (l.wished || 0) - (l.stock_at_arrival || 0));
     const note = l.rounding === "down_covers" ? t("ps_why_down_covers") : l.rounding === "down_trend" ? t("ps_why_down_trend") : "";
     return `<p class="muted ps-why"><strong>${t("ps_why")}:</strong> ${parts.join(" ")} = ${whole(shownNeed)} ${pcs} → ${whole(steps)} × ${whole(l.step_pieces)} = ${whole(l.suggested)} ${pcs}${note ? `. ${escapeHtml(note)}` : ""}</p>`;
   }
@@ -212,6 +213,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
       out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      l.wished ? `<span class="badge badge-info">${t("ps_wished").replace("{pcs}", whole(l.wished)).replace("{n}", whole(l.wished_customers || 1))}</span>` : "",
       l.next_order ? `<span class="badge badge-neutral">${t(l.order ? "ps_budget_less" : "ps_next_order")}</span>` : "",
       l.too_much ? `<span class="badge badge-warning">${t(l.order <= l.step_pieces ? "ps_too_much_step" : "ps_too_much").replace("{days}", Math.round(l.days_after_receiving))}</span>` : "",
       l.pack_size_guessed ? `<span class="badge badge-neutral">${t("ps_pack_guessed")}</span>` : "",
@@ -392,7 +394,23 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           ${[...list].filter((l) => !urgentOnly || isUrgent(l)).sort(SORTS[sortBy]).map(lineHtml).join("")}
         </section>`
       )
-      .join("");
+      .join("") + candidatesHtml();
+  }
+  // products we do not carry that customers asked for (owner 2026-11-26, plan step 10): for the assortment decision, not orderable here
+  function candidatesHtml() {
+    const list = data.new_candidates ?? [];
+    if (!list.length) return "";
+    return `<section class="card ps-candidates">
+      <h2>${escapeHtml(t("ps_candidates"))}</h2>
+      <p class="muted">${escapeHtml(t("ps_candidates_hint"))}</p>
+      ${list
+        .map(
+          (c) => `<div class="ps-candidate"><span class="ps-candidate-name">${escapeHtml(c.name)}</span><span class="muted">${escapeHtml(
+            t("ps_candidate_line").replace("{n}", whole(c.customers)).replace("{pcs}", whole(c.qty)).replace("{date}", shortDate(c.last_day))
+          )}</span></div>`
+        )
+        .join("")}
+    </section>`;
   }
   render();
 

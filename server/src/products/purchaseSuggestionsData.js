@@ -37,9 +37,26 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
      WHERE p.active AND p.stock_qty IS NOT NULL`,
     [today]
   );
-  const [demand, settings, incoming, { rows: transporters }] = await Promise.all([
+  // customers' wishes of the last 180 days (owner 2026-11-26, plan step 10; orders/productWishes.js): a catalog product they still wait for
+  // (not back in stock yet) is bought on top; a product we do not carry at all is a "new product" candidate on the screen
+  const WISH_DAYS = 180;
+  const [demand, settings, incoming, { rows: transporters }, { rows: wishRows }, { rows: candidateRows }] = await Promise.all([
     loadDemandInputs(db, today), getDemandSettings(db), incomingLotsByProduct(db),
     db.query("SELECT name, goods_from FROM suppliers WHERE goods_from IS NOT NULL AND trim(goods_from) <> ''"),
+    db.query(
+      `SELECT product_id, SUM(quantity)::int AS qty, COUNT(DISTINCT customer_id)::int AS customers
+         FROM product_wishes WHERE product_id IS NOT NULL AND back_in_stock_at IS NULL AND created_at >= $1::date - $2::int
+        GROUP BY product_id`,
+      [today, WISH_DAYS]
+    ),
+    db.query(
+      `SELECT min(trim(custom_name)) AS name, SUM(quantity)::int AS qty, COUNT(DISTINCT customer_id)::int AS customers,
+              to_char(max(created_at AT TIME ZONE 'Asia/Yerevan'), 'YYYY-MM-DD') AS last_day
+         FROM product_wishes WHERE product_id IS NULL AND custom_name IS NOT NULL AND trim(custom_name) <> '' AND created_at >= $1::date - $2::int
+        GROUP BY lower(regexp_replace(trim(custom_name), '\\s+', ' ', 'g'))
+        ORDER BY COUNT(DISTINCT customer_id) DESC, SUM(quantity) DESC, min(trim(custom_name)) LIMIT 50`,
+      [today, WISH_DAYS]
+    ),
   ]);
   // a transporter's invoices are the real supplier's goods (owner, 2026-11-26: Sole Trans brings Castrol): grouped under the real supplier
   const goodsFrom = new Map(transporters.map((r) => [String(r.name).replace(/\s+/g, " ").trim().toLowerCase(), String(r.goods_from).replace(/\s+/g, " ").trim()]));
@@ -47,6 +64,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   const lead = days(what.leadDays) ?? settings.leadTimeDays;
   const cover = days(what.coverDays) ?? settings.coverDays;
 
+  const wishes = new Map(wishRows.map((r) => [r.product_id, { qty: r.qty, customers: r.customers }]));
   const lines = [];
   for (const row of rows) {
     const free = Number(row.stock_qty) - row.held_qty + row.back_on_shelf_qty;
@@ -58,9 +76,10 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
       lastSaleDate: row.last_sale_date, createdAt: row.created_at, today,
     });
     const daily = forecast.dailyDemand ?? (Number(row.qty_90d) || 0) / 90;
-    if (!(daily > 0)) continue;
+    const wished = wishes.get(row.id);
+    if (!(daily > 0) && !wished) continue;
     const step = orderStep(row);
-    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend });
+    const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend, wished: wished?.qty ?? 0 });
     if (!(line.suggested > 0)) continue;
     lines.push({
       product_id: row.id, sku: row.sku || row.erp_product_id || null, name: row.name,
@@ -70,7 +89,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
       stock_now: Math.max(0, Math.round(free)), coming: Math.round(coming), wanted: row.submitted_qty, daily_demand: Math.round(daily * 100) / 100,
       // the exact inputs: the phone recomputes a line after − / + from these, so it agrees with this suggestion to the piece (review 2026-11-25)
       free_raw: free, coming_lots: lots, daily_raw: daily,
-      safety_stock: forecast.safetyStock ?? 0, trend: forecast.trend, status: forecast.status,
+      safety_stock: forecast.safetyStock ?? 0, trend: forecast.trend, status: forecast.status, wished_customers: wished?.customers ?? 0,
       ...line,
     });
   }
@@ -111,7 +130,12 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   });
   // suppliers by money, the products with no known supplier last
   suppliers.sort((a, b) => (a.supplier ? 0 : 1) - (b.supplier ? 0 : 1) || b.totals.usd - a.totals.usd);
-  return { today, lead_time_days: lead, cover_days: cover, settings_lead_days: settings.leadTimeDays, settings_cover_days: settings.coverDays, arrival_date: addDays(today, lead), suppliers };
+  return {
+    today, lead_time_days: lead, cover_days: cover, settings_lead_days: settings.leadTimeDays, settings_cover_days: settings.coverDays,
+    arrival_date: addDays(today, lead), suppliers,
+    // products we do not carry that customers asked for (not orderable here; for the assortment decision)
+    new_candidates: candidateRows.map((r) => ({ name: r.name, qty: r.qty, customers: r.customers, last_day: r.last_day })),
+  };
 }
 
 /** Pieces, litres and dollars (at the last price; products never bought have none) of a supplier's lines. */

@@ -2,7 +2,7 @@
 // now, on the way, the order, stock and days left after receiving (lead time and cover days from the settings).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { startTestServer, stopTestServer, cleanupAll, createUser, createProduct, loginAs, apiRequest } from "./helpers.js";
+import { startTestServer, stopTestServer, cleanupAll, createUser, createProduct, createCustomer, loginAs, apiRequest } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
 
 const stamp = Date.now();
@@ -132,4 +132,31 @@ test("suggestions: what if (lead_days / cover_days) for this answer only", async
   assert.equal(bad.data.cover_days, 45);
   const { rows: [s] } = await pool.query("SELECT demand_lead_time_days, demand_cover_days FROM app_settings WHERE id = 1");
   assert.deepEqual([s.demand_lead_time_days, s.demand_cover_days], [45, 45], "the settings are not changed");
+});
+
+// Owner, 2026-11-26 (plan step 10): waiting wishes raise the suggestion; products we do not carry are new product candidates.
+test("suggestions: waiting wishes are bought on top; custom-name wishes are candidates", async () => {
+  const supplier = `ITEST-PS Wish ${stamp}`;
+  const oil = await selling("ITEST-PS Wish 4L", "4L", 7, { itemsPerPack: 4, stock: 0 }); // 1 a day
+  await boughtFrom(oil, supplier, 10);
+  const before = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
+  const lineBefore = before.suppliers.flatMap((g) => g.lines).find((l) => l.product_id === oil.id);
+  const rep = await createUser("sales_manager");
+  const customer = await createCustomer({ created_by: rep.id });
+  await pool.query("INSERT INTO product_wishes (customer_id, product_id, quantity) VALUES ($1, $2, 30)", [customer.id, oil.id]);
+  await pool.query("INSERT INTO product_wishes (customer_id, custom_name, quantity) VALUES ($1, $2, 5), ($1, $3, 3)", [customer.id, `ITEST-PS Unicorn ${stamp}`, ` itest-ps  unicorn ${stamp} `]);
+  // a wish already served (back in stock) does not count
+  await pool.query("INSERT INTO product_wishes (customer_id, product_id, quantity, back_in_stock_at) VALUES ($1, $2, 500, now())", [customer.id, oil.id]);
+  try {
+    const after = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
+    const line = after.suppliers.flatMap((g) => g.lines).find((l) => l.product_id === oil.id);
+    assert.equal(line.wished, 30);
+    assert.equal(line.wished_customers, 1);
+    assert.ok(line.need >= lineBefore.need + 29, `${lineBefore.need} -> ${line.need}`);
+    const cand = after.new_candidates.find((c) => c.name.toLowerCase().includes(`unicorn ${stamp}`));
+    assert.ok(cand, JSON.stringify(after.new_candidates));
+    assert.equal(cand.qty, 8, "the two spellings are one candidate");
+  } finally {
+    await pool.query("DELETE FROM product_wishes WHERE customer_id = $1", [customer.id]);
+  }
 });
