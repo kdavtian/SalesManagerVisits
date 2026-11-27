@@ -26,7 +26,7 @@ test("@smoke new purchase: choose the supplier, all its products at 0, AI fills,
     await page.goto("/#/purchases");
     await page.locator("#pu-new").click();
     const pick = page.locator(`[data-pick="${supplier}"]`);
-    await expect(pick).toContainText("2 products");
+    await expect(pick).toContainText("products: 2");
     await pick.click();
     await expect(page).toHaveURL(/#\/purchases\/suggestions\?supplier=.*&all=1/);
     await expect(page.locator(".detail-header-title h1")).toHaveText("New purchase");
@@ -38,7 +38,7 @@ test("@smoke new purchase: choose the supplier, all its products at 0, AI fills,
     // AI fills the smart quantities; the calm product stays 0
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator("[data-ai-fill]").click();
-    await expect(card.locator(".ps-card-msg")).toContainText("Filled smartly: 1 products");
+    await expect(card.locator(".ps-card-msg")).toContainText("products: 1");
     const filled = await lineA.locator(".ps-qty strong").textContent();
     const boxes = Number(filled.match(/^(\d+) boxes/)[1]);
     expect(boxes).toBeGreaterThan(0);

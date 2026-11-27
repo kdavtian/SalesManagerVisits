@@ -218,7 +218,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const out = l.stock_now <= 0;
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
-      out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      out && l.daily_demand > 0 ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
       // bought only for wishes, no regular sales: whatever is left after the wishes has no buyer yet (review 2026-11-27)
       l.wished && !(l.daily_demand > 0) ? `<span class="badge badge-warning">${t("ps_wish_only")}</span>` : "",
       l.wished ? `<span class="badge badge-info">${t("ps_wished").replace("{pcs}", whole(l.wished)).replace("{n}", whole(l.wished_customers || 1))}</span>` : "",
@@ -312,7 +312,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     budget = value;
     if (value == null) {
       for (const l of lines) {
-        l.order = l.suggested;
+        // no budget: back to the suggestions -- in a new purchase, back to empty (the AI button fills it; review 2026-11-27)
+        l.order = builder ? 0 : l.suggested;
         l.next_order = false;
         recompute(l);
       }
@@ -354,7 +355,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   // "only urgent" (owner 2026-11-26 audit, step 3): out of stock now, or runs out before the goods could come. It only hides rows: the
   // totals, Create and Share still take the whole order of a supplier.
-  const isUrgent = (l) => l.stock_now <= 0 || l.runs_out_before_arrival;
+  // a product nobody buys (a new purchase lists every product of the supplier) is not urgent however empty its shelf (review 2026-11-27)
+  const isUrgent = (l) => l.daily_demand > 0 && (l.stock_now <= 0 || l.runs_out_before_arrival);
   let urgentOnly = false;
   const urgentChip = root.querySelector("#ps-urgent");
   function paintUrgent() {

@@ -135,7 +135,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   if (onlySupplier != null) for (const key of [...bySupplier.keys()]) if (String(key).toLowerCase() !== onlySupplier) bySupplier.delete(key);
   const suppliers = [...bySupplier.entries()].map(([supplier, list]) => {
     // the most urgent first: runs out before the goods could come, then the fewest days left
-    list.sort((a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? 0) - (b.days_now ?? 0));
+    list.sort((a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? Infinity) - (b.days_now ?? Infinity));
     return { supplier, via: [...(viaOf.get(String(supplier ?? "").toLowerCase()) ?? [])], lines: list, totals: supplierTotals(list) };
   });
   // suppliers by money, the products with no known supplier last
