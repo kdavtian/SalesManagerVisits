@@ -36,6 +36,18 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await line.locator("[data-toggle]").click();
     await expect(line.locator(".ps-details")).toBeVisible();
     await expect(line.locator("[data-reset]")).toBeVisible();
+    // step 3 (owner 2026-11-26): why the order, and the sales lost before the goods come (40 in stock, 2 a day, 45 days: 25 empty days)
+    await expect(line.locator(".ps-why")).toContainText("Why:");
+    await expect(line.locator(".ps-lost")).toContainText("50 pcs");
+    // urgent only: this product runs out before the goods come, so it stays
+    const urgent = page.locator("#ps-urgent");
+    await expect(urgent).toBeVisible();
+    await urgent.click();
+    await expect(urgent).toHaveAttribute("aria-pressed", "true");
+    await expect(line).toBeVisible();
+    await urgent.click();
+    await expect(urgent).toHaveAttribute("aria-pressed", "false");
+    await expect(line.locator(".ps-details")).toBeVisible(); // still open after the list was drawn again
     // owner 2026-11-26: more than twice the cover days after receiving is flagged "Too much" (2 a day: 2 more steps = well over 90 days)
     await expect(line.locator(".badge-warning")).toHaveCount(0);
     await line.locator("[data-plus]").click();

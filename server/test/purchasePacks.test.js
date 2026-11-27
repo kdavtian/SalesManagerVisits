@@ -80,11 +80,11 @@ const pick = (r) => [r.packs, r.pieces];
 import { stockAtArrival } from "../src/products/purchaseSuggestion.js";
 test("stockAtArrival: lots come on their day, empty days are lost, submitted orders are served first", () => {
   // empty shelf, 100 expected in 10 days, 2 a day, lead 45: 10 days lost, then 100 - 2 x 35 = 30 left
-  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 100, inDays: 10 }], daily: 2, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true });
+  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 100, inDays: 10 }], daily: 2, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true, lost: 20 });
   // ordered today with no date: it comes with the new order at the end of the lead time and is not "sold" before
-  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 90, inDays: null }], daily: 2, leadTimeDays: 45 }), { atArrival: 90, backlog: 0, ranOut: true });
+  assert.deepEqual(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 90, inDays: null }], daily: 2, leadTimeDays: 45 }), { atArrival: 90, backlog: 0, ranOut: true, lost: 90 });
   // 10 free, submitted orders want 30: 20 owed, the 50 coming on day 5 serve them first
-  assert.deepEqual(stockAtArrival({ stockNow: 10, wanted: 30, comingLots: [{ qty: 50, inDays: 5 }], daily: 0, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true });
+  assert.deepEqual(stockAtArrival({ stockNow: 10, wanted: 30, comingLots: [{ qty: 50, inDays: 5 }], daily: 0, leadTimeDays: 45 }), { atArrival: 30, backlog: 0, ranOut: true, lost: 0 });
   // late (expected after the lead time) counts at the end; a past date counts as today
   assert.equal(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 40, inDays: 90 }], daily: 1, leadTimeDays: 45 }).atArrival, 40);
   assert.equal(stockAtArrival({ stockNow: 0, comingLots: [{ qty: 40, inDays: -3 }], daily: 1, leadTimeDays: 45 }).atArrival, 0);
@@ -131,4 +131,20 @@ test("purchaseLine: safety capped, one step less when it covers, falling sales n
   assert.equal(purchaseLine({ ...flat, order: 240 }).too_much, true);
   // nothing needed: no flag
   assert.equal(purchaseLine({ stockNow: 500, daily: 2, leadTimeDays: 45, coverDays: 45, stepPieces: 60 }).too_much, false);
+});
+
+// Owner, 2026-11-26 (step 3): the why of an order and the sales lost before the goods come.
+test("purchaseLine: why (cover need, safety, owed, left on arrival) and sales lost before arrival", () => {
+  // 40 in stock, 2 a day, lead 45: lasts 20 days, 25 empty days = 50 pieces lost
+  const l = purchaseLine({ stockNow: 40, daily: 2, leadTimeDays: 45, coverDays: 45, safetyStock: 10, stepPieces: 60 });
+  assert.equal(l.lost_before_arrival, 50);
+  assert.equal(l.cover_need, 90);
+  assert.equal(l.safety_used, 10);
+  assert.equal(l.stock_at_arrival, 0);
+  // enough until the arrival: nothing lost
+  assert.equal(purchaseLine({ stockNow: 200, daily: 2, leadTimeDays: 45, coverDays: 45, stepPieces: 60 }).lost_before_arrival, 0);
+  // a lot on day 10 refills an empty shelf: only the first 10 days are lost
+  assert.equal(purchaseLine({ stockNow: 0, comingLots: [{ qty: 200, inDays: 10 }], daily: 2, leadTimeDays: 45, coverDays: 45, stepPieces: 60 }).lost_before_arrival, 20);
+  // owed to submitted orders is reported as backlog
+  assert.equal(purchaseLine({ stockNow: 0, wanted: 15, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).backlog, 15);
 });

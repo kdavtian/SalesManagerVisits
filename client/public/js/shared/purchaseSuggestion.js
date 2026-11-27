@@ -99,10 +99,13 @@ export function stockAtArrival({ stockNow, comingLots = [], wanted = 0, daily, l
     .filter((l) => l.qty > 0)
     .sort((a, b) => a.at - b.at);
   let t = 0;
+  // lost = the sales of the empty days (pieces customers wanted while the shelf was empty; they buy elsewhere)
+  let lost = 0;
   for (const lot of lots) {
     s -= d * (lot.at - t);
     if (s < 0) {
       ranOut = true;
+      lost += -s;
       s = 0;
     }
     t = lot.at;
@@ -113,9 +116,10 @@ export function stockAtArrival({ stockNow, comingLots = [], wanted = 0, daily, l
   s -= d * (lead - t);
   if (s < 0) {
     ranOut = true;
+    lost += -s;
     s = 0;
   }
-  return { atArrival: s, backlog, ranOut };
+  return { atArrival: s, backlog, ranOut, lost };
 }
 
 /**
@@ -130,7 +134,7 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
   const d = Number(daily) > 0 ? Number(daily) : 0;
   const cover = Math.max(0, Number(coverDays) || 0);
   const lots = comingLots ?? (Number(coming) > 0 ? [{ qty: Number(coming), inDays: null }] : []);
-  const { atArrival, backlog, ranOut } = stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays });
+  const { atArrival, backlog, ranOut, lost } = stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays });
   const safety = Math.min(Math.max(0, Number(safetyStock) || 0), d * cover * SAFETY_CAP_OF_COVER);
   const baseNeed = d * cover + backlog - atArrival;
   const need = baseNeed + safety;
@@ -153,6 +157,11 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
     suggested,
     order: qty,
     stock_at_arrival: Math.round(atArrival),
+    // the "why" of the order (owner 2026-11-26 audit, step 3): cover days' sales + safety + still owed - left on arrival = need
+    cover_need: Math.round(d * cover),
+    backlog: Math.round(backlog),
+    // sales lost before the goods can come (the shelf empty on those days), pieces
+    lost_before_arrival: Math.round(lost),
     after_receiving: Math.round(after),
     days_now: d > 0 ? round1(Math.max(0, free) / d) : null,
     days_after_receiving: daysAfter,
