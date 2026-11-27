@@ -133,9 +133,11 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
   }
   const SORTS = {
     products: compareProducts,
-    urgency: (a, b) => a.urgency_rank - b.urgency_rank,
+    // the server's urgency, for every line alike (a line moved to another card sorts right too): runs out before the goods come first,
+    // then the fewest days left
+    urgency: (a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? 0) - (b.days_now ?? 0) || a.urgency_rank - b.urgency_rank,
     // the most money first; products without a last price after the priced ones
-    price: (a, b) => (b.cost_usd != null) - (a.cost_usd != null) || (b.cost_usd ?? 0) * b.order - (a.cost_usd ?? 0) * a.order || compareProducts(a, b),
+    price: (a, b) => (b.order > 0) - (a.order > 0) || (b.cost_usd != null) - (a.cost_usd != null) || (b.cost_usd ?? 0) * b.order - (a.cost_usd ?? 0) * a.order || compareProducts(a, b),
   };
   const sortBar = root.querySelector("#ps-sort");
   const paintSort = () =>
@@ -186,7 +188,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const out = l.stock_now <= 0;
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
-      l.runs_out_before_arrival && !out ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
       l.too_much ? `<span class="badge badge-warning">${t(l.order <= l.step_pieces ? "ps_too_much_step" : "ps_too_much").replace("{days}", Math.round(l.days_after_receiving))}</span>` : "",
       l.pack_size_guessed ? `<span class="badge badge-neutral">${t("ps_pack_guessed")}</span>` : "",
       l.trend === "up" ? `<span class="badge badge-info">${t("ps_trend_up")}</span>` : l.trend === "down" ? `<span class="badge badge-neutral">${t("ps_trend_down")}</span>` : "",
@@ -405,7 +407,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       return;
     }
     // several suppliers with something to order: which one goes to the file (one supplier = one order)
-    pick.hidden = !pick.hidden;
+    pick.hidden = false; // always the current suppliers (a supplier may have gone to 0 since), and an old error is replaced
     pick.innerHTML = groups.length
       ? `<p class="muted">${escapeHtml(t("ps_share_pick"))}</p>${groups.map((g) => `<button type="button" class="chip" data-share="${escapeHtml(g)}">${escapeHtml(g || t("ps_no_supplier"))}</button>`).join("")}`
       : `<p class="muted">${escapeHtml(t("ps_share_none"))}</p>`;

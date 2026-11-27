@@ -497,10 +497,6 @@
 .ps-qty strong { font-size: 0.92rem; white-space: nowrap; }
 .ps-qty .muted { font-size: 0.7rem; white-space: nowrap; }
 .ps-details { grid-column: 1 / -1; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--bg); }
-.ps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; }
-.ps-grid > div { display: flex; flex-direction: column; min-width: 0; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
-.ps-grid strong { font-size: 0.95rem; }
-.ps-k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
 .ps-rate { margin: 6px 0 0; font-size: 0.78rem; }
 .ps-detail-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
 .ps-reset, .ps-open { display: inline-flex; align-items: center; min-height: 44px; border: 0; background: none; color: var(--accent); font-size: 0.82rem; padding: 0; text-decoration: none; }
