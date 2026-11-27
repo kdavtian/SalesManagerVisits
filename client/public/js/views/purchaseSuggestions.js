@@ -185,7 +185,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   const recompute = (l) =>
     // from the server's exact inputs (not the rounded numbers shown), so the phone and the server agree to the piece
-    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, wished: l.wished ?? 0, order: l.order }));
+    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, wished: l.wish_qty ?? l.wished ?? 0, order: l.order }));
   // a new purchase starts empty: the AI button (or − / +) fills it; the suggestion stays on each line for "AI" and "Back to the suggestion"
   if (builder) for (const l of lines) Object.assign(l, recompute({ ...l, order: 0 }), { order: 0 });
 

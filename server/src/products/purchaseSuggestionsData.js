@@ -95,7 +95,8 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
       liters_per_piece: sizeLiters(row), kind: step.kind, pack_size: step.packSize, step_pieces: step.stepPieces, pack_size_guessed: step.packSizeGuessed,
       stock_now: Math.max(0, Math.round(free)), coming: Math.round(coming), wanted: row.submitted_qty, daily_demand: Math.round(daily * 100) / 100,
       // the exact inputs: the phone recomputes a line after − / + from these, so it agrees with this suggestion to the piece (review 2026-11-25)
-      free_raw: free, coming_lots: lots, daily_raw: daily,
+      // wish_qty: the wish as asked (line.wished is what is left of it after the goods on the way; Codex review 2026-11-27)
+      free_raw: free, coming_lots: lots, daily_raw: daily, wish_qty: wished?.qty ?? 0,
       safety_stock: forecast.safetyStock ?? 0, trend: forecast.trend, status: forecast.status, wished_customers: wished?.customers ?? 0,
       ...line,
     });

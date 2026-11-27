@@ -151,6 +151,7 @@ test("suggestions: waiting wishes are bought on top; custom-name wishes are cand
     const after = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
     const line = after.suppliers.flatMap((g) => g.lines).find((l) => l.product_id === oil.id);
     assert.equal(line.wished, 30);
+    assert.equal(line.wish_qty, 30, "the wish as asked, for the phone's recompute");
     assert.equal(line.wished_customers, 1);
     assert.ok(line.need >= lineBefore.need + 29, `${lineBefore.need} -> ${line.need}`);
     const cand = after.new_candidates.find((c) => c.name.toLowerCase().includes(`unicorn ${stamp}`));
