@@ -162,6 +162,7 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
     backlog: Math.round(backlog),
     // sales lost before the goods can come (the shelf empty on those days), pieces
     lost_before_arrival: Math.round(lost),
+    lost_days: d > 0 ? Math.round(lost / d) : 0,
     after_receiving: Math.round(after),
     days_now: d > 0 ? round1(Math.max(0, free) / d) : null,
     days_after_receiving: daysAfter,

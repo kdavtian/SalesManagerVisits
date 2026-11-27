@@ -31,7 +31,7 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
        SELECT product_id, SUM(qty) FILTER (WHERE order_date >= $1::date - 90) AS qty_90d, MAX(order_date) AS last_sale_date
        FROM erp_order_lines WHERE product_id IS NOT NULL GROUP BY product_id
      )
-     SELECT p.id, p.erp_product_id, p.sku, p.name, COALESCE(p.silver_price_amd, p.unit_price_amd) AS price_amd, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at,
+     SELECT p.id, p.erp_product_id, p.sku, p.name, COALESCE(NULLIF(p.silver_price_amd, 0), NULLIF(p.unit_price_amd, 0)) AS price_amd, p.brand, p.family, p.unit, p.size_l, p.items_per_pack, p.stock_qty, p.created_at,
             d.qty_90d, d.last_sale_date, ${STOCK_FIGURE_COLUMNS}
      FROM products p ${STOCK_FIGURE_JOINS} LEFT JOIN demand d ON d.product_id = p.erp_product_id
      WHERE p.active AND p.stock_qty IS NOT NULL`,

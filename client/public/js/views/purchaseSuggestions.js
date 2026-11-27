@@ -193,8 +193,10 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     if (l.backlog) parts.push(`+ ${t("ps_why_owed")} ${whole(l.backlog)}`);
     if (l.stock_at_arrival) parts.push(`− ${t("ps_why_left")} ${whole(l.stock_at_arrival)}`);
     const steps = l.step_pieces ? l.suggested / l.step_pieces : 0;
+    // the total is the sum of the parts as shown (each part is rounded), so the line always adds up (review 2026-11-27)
+    const shownNeed = Math.max(0, l.cover_need + (l.safety_used || 0) + (l.backlog || 0) - (l.stock_at_arrival || 0));
     const note = l.rounding === "down_covers" ? t("ps_why_down_covers") : l.rounding === "down_trend" ? t("ps_why_down_trend") : "";
-    return `<p class="muted ps-why"><strong>${t("ps_why")}:</strong> ${parts.join(" ")} = ${whole(l.need)} ${pcs} → ${whole(steps)} × ${whole(l.step_pieces)} = ${whole(l.suggested)} ${pcs}${note ? `. ${escapeHtml(note)}` : ""}</p>`;
+    return `<p class="muted ps-why"><strong>${t("ps_why")}:</strong> ${parts.join(" ")} = ${whole(shownNeed)} ${pcs} → ${whole(steps)} × ${whole(l.step_pieces)} = ${whole(l.suggested)} ${pcs}${note ? `. ${escapeHtml(note)}` : ""}</p>`;
   }
   function lineHtml(l) {
     const size = l.unit ? normalizeUnitLabel(l.unit) : "";
@@ -235,7 +237,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           until ? `${t("ps_lasts_until")} ${until}` : "",
         ].filter(Boolean).join(" · ")}</p>
         ${whyHtml(l)}
-        ${l.lost_before_arrival > 0 ? `<p class="ps-lost">${escapeHtml(t("ps_lost").replace("{pcs}", whole(l.lost_before_arrival)).replace("{days}", whole(l.lost_before_arrival / (l.daily_raw || l.daily_demand || 1))))}${l.price_amd ? ` ≈ ${whole(l.lost_before_arrival * l.price_amd)} ֏` : ""}</p>` : ""}
+        ${l.lost_before_arrival > 0 ? `<p class="ps-lost">${escapeHtml(t("ps_lost").replace("{pcs}", whole(l.lost_before_arrival)).replace("{days}", whole(l.lost_days)))}${l.price_amd ? ` ≈ ${whole(l.lost_before_arrival * l.price_amd)} ֏` : ""}</p>` : ""}
         <div class="ps-detail-actions">
           ${l.order !== l.suggested ? `<button type="button" class="ps-reset" data-reset="${l.product_id}">${t("ps_suggested")}: ${l.suggested} ${pcs}</button>` : ""}
           <a class="ps-open" href="#/product/${l.product_id}">${t("ps_open_product")}</a>
@@ -303,6 +305,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const rank = new Map(data.suppliers.map((s, i) => [s.supplier, i]));
     const order = [...groups.entries()]
       .map(([g, list]) => ({ g, list, tot: totals(list) }))
+      // "urgent only": a supplier with no urgent product is left out (its card would be empty; review 2026-11-27)
+      .filter(({ list }) => !urgentOnly || list.some(isUrgent))
       .sort((a, b) => (a.g ? 0 : 1) - (b.g ? 0 : 1) || (rank.get(a.g) ?? 1e6) - (rank.get(b.g) ?? 1e6));
     if (!order.length) {
       body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>`;
