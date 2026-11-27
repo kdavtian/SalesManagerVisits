@@ -595,3 +595,20 @@ test("optionalSyncStep: a failing derived step is skipped, the transaction stays
     client.release();
   }
 });
+
+// Owner, 2026-11-27: the purchase Excel must carry the workbook's SKU (Castrol's code), not the product id.
+test("POST /api/erp-sync: sku syncs from the workbook; a blank later value keeps it", async () => {
+  const erpId = `ITEST-SKU-${Date.now()}`;
+  try {
+    let res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "SKU Test Oil", unit_price_amd: 10000, sku: " 15D5A2 " }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.equal((await pool.query("SELECT sku FROM products WHERE erp_product_id = $1", [erpId])).rows[0].sku, "15D5A2");
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "SKU Test Oil", unit_price_amd: 10000 }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal(res.status, 200);
+    assert.equal((await pool.query("SELECT sku FROM products WHERE erp_product_id = $1", [erpId])).rows[0].sku, "15D5A2", "an older bot without sku keeps it");
+    res = await syncRequest({ customers: [], products: [{ erp_product_id: erpId, name: "SKU Test Oil", unit_price_amd: 10000, sku: "15D5B0" }] }, { "X-Sync-Key": SYNC_KEY, ...BYPASS });
+    assert.equal((await pool.query("SELECT sku FROM products WHERE erp_product_id = $1", [erpId])).rows[0].sku, "15D5B0");
+  } finally {
+    await pool.query("DELETE FROM products WHERE erp_product_id = $1", [erpId]);
+  }
+});

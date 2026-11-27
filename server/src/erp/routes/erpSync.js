@@ -196,6 +196,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
     prodSizeL,
     prodRetail,
     prodHcCodes,
+    prodSkus,
     prodActives,
   } = transformErpProducts(products);
 
@@ -507,6 +508,14 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
          FROM unnest($1::text[], $2::text[]) AS t(erp_product_id, hc_code)
          WHERE products.erp_product_id = t.erp_product_id AND t.hc_code IS NOT NULL AND products.hc_code IS DISTINCT FROM t.hc_code`,
         [prodErpIds, prodHcCodes]
+      );
+      // SKU from the workbook's Products sheet (owner, 2026-11-27): the same rule as the HC code -- applied whatever was edited by hand, and
+      // a blank cell (or an older bot that does not send it) never wipes a code
+      await client.query(
+        `UPDATE products SET sku = t.sku
+         FROM unnest($1::text[], $2::text[]) AS t(erp_product_id, sku)
+         WHERE products.erp_product_id = t.erp_product_id AND t.sku IS NOT NULL AND products.sku IS DISTINCT FROM t.sku`,
+        [prodErpIds, prodSkus]
       );
       priceChangedProducts = (await logTierPriceChanges(client, pricesBefore, prodErpIds)) + excelRetailChanged;
     }

@@ -7,7 +7,7 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
   const tag = `PSE${Date.now().toString(36)}`;
   const oil = await fixtures.createProduct({ name: `${tag} Edge 5W-30 1L` });
   const erpId = `${tag}-ERP`;
-  await pool.query("UPDATE products SET erp_product_id = $2, unit = '1L', items_per_pack = 12, stock_qty = 40, brand = 'Castrol', created_at = now() - interval '2 years' WHERE id = $1", [oil.id, erpId]);
+  await pool.query("UPDATE products SET erp_product_id = $2, sku = '15D5A2', unit = '1L', items_per_pack = 12, stock_qty = 40, brand = 'Castrol', created_at = now() - interval '2 years' WHERE id = $1", [oil.id, erpId]);
   for (let w = 0; w < 26; w += 1) {
     await pool.query("INSERT INTO erp_order_lines (erp_customer_id, order_id, order_date, product_id, qty, revenue_amd) VALUES ($1, $2, CURRENT_DATE - $3::int, $4, 14, 1)", [tag, `${tag}-${w}`, w * 7 + 1, erpId]);
   }
@@ -102,7 +102,7 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     const ws = wb.worksheets[0];
     expect(ws.getRow(1).values.slice(1)).toEqual(["SKU", "Product", "Packs"]);
     const rowOf = ws.getRows(2, ws.rowCount - 1).find((r) => String(r.getCell(2).value).includes(oil.name));
-    expect(rowOf.getCell(1).value).toBe(erpId);
+    expect(rowOf.getCell(1).value).toBe("15D5A2"); // the Excel's SKU, not the product id (owner 2026-11-27)
     expect(rowOf.getCell(3).value).toBe(boxes + 5);
     // a finger on the card while scrolling does not grey it (owner screenshot 2026-11-27: the shared .card pressed look)
     const cardEl = page.locator(".ps-supplier", { hasText: supplier });
