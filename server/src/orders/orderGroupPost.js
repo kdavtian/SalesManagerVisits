@@ -221,10 +221,13 @@ async function decide(db, orderId, { byId, reason }) {
   );
   const switchedOn = settings?.on ?? true; // the same default as the settings screen shows
   const { rows: waiting } = await db.query(
-    "SELECT id, kind, text, content_hash, requested_at FROM group_posts WHERE ref_id = $1 AND posted_at IS NULL AND claimed_at IS NULL ORDER BY id FOR UPDATE",
+    // a row the bot gave up on (10 failed tries, or too old to post) is not waiting: the message is written again (review 2026-11-27)
+    `SELECT id, kind, text, content_hash, requested_at FROM group_posts
+      WHERE ref_id = $1 AND posted_at IS NULL AND claimed_at IS NULL AND post_attempts < 10 AND created_at > now() - make_interval(days => ${OFFER_DAYS})
+      ORDER BY id FOR UPDATE`,
     [orderId]
   );
-  const { rows: seen } = await db.query(`SELECT id, kind, title, content_hash, requested_at FROM group_posts WHERE ref_id = $1 AND ${SEEN_SQL} ORDER BY id`, [orderId]);
+  const { rows: seen } = await db.query(`SELECT id, kind, title, content_hash, requested_at, created_at FROM group_posts WHERE ref_id = $1 AND ${SEEN_SQL} ORDER BY id`, [orderId]);
   // what the group believes about the order (a request's withdrawal says nothing about the order itself)
   const view = [...seen].reverse().find((r) => r.kind !== "request_withdrawn") ?? null;
   const lastDetails = [...seen].reverse().find((r) => DETAIL_KINDS.has(r.kind)) ?? null;
@@ -241,7 +244,9 @@ async function decide(db, orderId, { byId, reason }) {
     const title = `${codeOf(o)} · ${o.customer}`;
     // the order's own word: a document is asked for (and not withdrawn) -- which request: when it was asked
     const requestStands = Boolean(o.accounting_status && o.accounting_status !== "cancelled" && o.accounting_requested_at);
-    const requestTold = seen.some((r) => r.kind === "document_request" && sameTime(r.requested_at, o.accounting_requested_at));
+    // told = THIS request is what the group last heard about the document (a "do not issue" or "withdrawn" since then ends it: a request
+    // standing again in the app -- confirmed again after a stock issue, put back by hand -- is said again; review 2026-11-27)
+    const requestTold = requestStandsInGroup && sameTime(requestView.requested_at, o.accounting_requested_at);
     // asked since the switch was (last) turned on, and since this feature exists (migration 228: no "create" for documents made before)
     const askedAt = new Date(o.accounting_requested_at);
     const requestNew =
@@ -264,7 +269,9 @@ async function decide(db, orderId, { byId, reason }) {
       if (switchedOn && recent) want = { kind: "order_confirmed", heading: lastDetails ? "changed" : "first" };
     }
     // every detail while a request stands in the group (a document may be issued from them); one heads-up line otherwise
-    if (want?.kind === "order_confirmed") Object.assign(want, { title, hash, text: orderConfirmedText(o, { heading: want.heading, full: requestStandsInGroup }) });
+    // (a confirmation posted before this feature carried every detail too: a change to such an order still says them all; review)
+    const fullBefore = seen.some((r) => r.kind === "order_confirmed" && settings?.request_since && new Date(r.created_at) < new Date(settings.request_since));
+    if (want?.kind === "order_confirmed") Object.assign(want, { title, hash, text: orderConfirmedText(o, { heading: want.heading, full: requestStandsInGroup || fullBefore }) });
   } else if (view && view.kind !== "order_cancelled") {
     const gone = !o || Boolean(o.cancelled_at);
     if (DETAIL_KINDS.has(view.kind) || gone) {
