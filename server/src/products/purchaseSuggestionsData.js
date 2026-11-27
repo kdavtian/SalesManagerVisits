@@ -84,7 +84,8 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend, wished: wished?.qty ?? 0 });
     if (!(line.suggested > 0)) continue;
     lines.push({
-      product_id: row.id, sku: row.sku || row.erp_product_id || null, name: row.name,
+      product_id: row.id, // the SKU column of the Excel (synced); no SKU = an empty cell, never the product id (owner 2026-11-27)
+      sku: row.sku || null, name: row.name,
       // our selling price (Silver, else the base price): what the lost sales are worth
       price_amd: row.price_amd == null ? null : Number(row.price_amd), brand: row.brand, family: row.family, unit: row.unit,
       liters_per_piece: sizeLiters(row), kind: step.kind, pack_size: step.packSize, step_pieces: step.stepPieces, pack_size_guessed: step.packSizeGuessed,

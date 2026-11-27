@@ -135,3 +135,21 @@ test("classifyImportRows/applyImportRows: a brand-new product's Net Cost column 
   trackProduct(created[0].id);
   assert.equal(Number(created[0].net_cost_amd), 4500);
 });
+
+// Review 2026-11-27: the ERP sync now writes the workbook's SKU, and one Castrol code can sit on two products (two sizes). A shared SKU
+// must not pick whichever product came last: the row falls back to brand+name+unit.
+test("classifyImportRows: a SKU two products share matches by brand+name+unit instead", async () => {
+  const sku = `ITEST-SHARED-${Date.now()}`;
+  await insertProduct({ name: "Itest Shared Sku Oil", brand: "Itest Brand", unit: "1L", sku, standard: 3000, retail: 3600 });
+  const fourL = await insertProduct({ name: "Itest Shared Sku Oil", brand: "Itest Brand", unit: "4L", sku, standard: 9000, retail: 10000 });
+  const oneL = (await pool.query("SELECT id FROM products WHERE sku = $1 AND unit = '1L'", [sku])).rows[0];
+  const classified = await classifyImportRows([
+    { rowNumber: 2, brand: "Itest Brand", name: "Itest Shared Sku Oil", unit: "1L", sku, standard: 3100, special: null, specialFrom: null, specialTo: null, retail: 3700, netCost: null },
+    { rowNumber: 3, brand: "Itest Brand", name: "Itest Shared Sku Oil", unit: "4L", sku, standard: 9500, special: null, specialFrom: null, specialTo: null, retail: 10500, netCost: null },
+  ]);
+  assert.equal(classified.newProducts.length, 0);
+  assert.equal(classified.duplicates.length, 0, "both sizes of one SKU are imported (Codex review)");
+  assert.equal(classified.changedPrices.length, 2);
+  assert.deepEqual(classified.changedPrices.map((c) => c.productId).sort((a, b) => a - b), [oneL.id, fourL.id].sort((a, b) => a - b), "each size by its name and size, not the last product with that SKU");
+  assert.ok(!classified.missingProducts.some((m) => m.id === oneL.id || m.id === fourL.id));
+});

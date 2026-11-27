@@ -269,6 +269,7 @@ export function transformErpProducts(products) {
   const prodSizeL = [];
   const prodRetail = [];
   const prodHcCodes = [];
+  const prodSkus = [];
   const prodActives = [];
 
   for (const p of isPlainArray(products)) {
@@ -295,6 +296,9 @@ export function transformErpProducts(products) {
     // HC (ՀԾ-Հաշվապահ) product code, text so "000010" keeps its zeros.
     const hc = p.hc_code != null ? String(p.hc_code).trim() : "";
     prodHcCodes.push(hc || null);
+    // the workbook's SKU (Castrol's own product code, Products sheet column C; owner 2026-11-27: the purchase Excel must carry it)
+    const sku = p.sku != null ? String(p.sku).trim().slice(0, 64) : "";
+    prodSkus.push(sku || null);
     // Workbook SKU Status: true = ACTIVE, false = not sold any more, null = not reported.
     prodActives.push(typeof p.active === "boolean" ? p.active : null);
   }
@@ -318,6 +322,7 @@ export function transformErpProducts(products) {
     prodSizeL,
     prodRetail,
     prodHcCodes,
+    prodSkus,
     prodActives,
   };
 }

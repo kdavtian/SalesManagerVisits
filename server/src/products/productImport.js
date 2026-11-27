@@ -118,7 +118,11 @@ export async function classifyImportRows(rows) {
   const { rows: existing } = await pool.query(
     "SELECT id, sku, brand, name, unit, bronze_price_amd, retail_price_amd, net_cost_amd FROM products WHERE active"
   );
-  const bySku = new Map(existing.filter((p) => p.sku).map((p) => [p.sku.toLowerCase(), p]));
+  // a SKU two products share (the workbook's SKU is synced since 2026-11-27, and one Castrol code can sit on two sizes) matches nothing:
+  // such a row falls back to the brand+name+unit identity below instead of silently updating whichever product came last (review)
+  const skuCount = new Map();
+  for (const p of existing) if (p.sku) skuCount.set(p.sku.toLowerCase(), (skuCount.get(p.sku.toLowerCase()) ?? 0) + 1);
+  const bySku = new Map(existing.filter((p) => p.sku && skuCount.get(p.sku.toLowerCase()) === 1).map((p) => [p.sku.toLowerCase(), p]));
   // Existing rows go through the same normalizeErpText cleanup the
   // workbook rows already got when parsed (see parseImportFile) before
   // this identity key is built -- a pre-existing row's own stored
@@ -157,7 +161,9 @@ export async function classifyImportRows(rows) {
       continue;
     }
 
-    const key = row.sku ? `sku:${row.sku.toLowerCase()}` : `id:${identityKeyOf(row.brand, row.name, row.unit)}`;
+    // a row is "the same product twice" when its SKU AND its brand+name+unit repeat: one workbook SKU can sit on two sizes (Codex review
+    // 2026-11-27), and the 4L must not be dropped as a duplicate of the 1L
+    const key = `${row.sku ? `sku:${row.sku.toLowerCase()}|` : ""}id:${identityKeyOf(row.brand, row.name, row.unit)}`;
     if (seenKeys.has(key)) {
       duplicates.push({ rowNumber: row.rowNumber, name: row.name, reason: "Same product appears more than once in this file" });
       continue;
@@ -167,9 +173,8 @@ export async function classifyImportRows(rows) {
     const identityKey = identityKeyOf(row.brand, row.name, row.unit);
     // SKU match first, but always fall back to the brand+name+unit identity
     // match rather than only trying it when the row has no SKU at all.
-    // ERP-synced products (see erpSync.js's products upsert) never get a
-    // sku written -- it's a column that only ever comes from this manual
-    // import path or the admin's own product form -- so a row that
+    // ERP-synced products used to have no sku (since 2026-11-27 the sync
+    // writes the workbook's SKU when it has one), so a row that
     // legitimately matches an existing ERP-synced product by name/brand/
     // unit, but happens to also carry a Product Code the ERP feed never
     // set, used to fail the SKU lookup and fall through to "new product",
