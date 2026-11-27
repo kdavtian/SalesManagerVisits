@@ -463,13 +463,13 @@ test("@smoke Purchases C: a transporter's invoice names the real supplier; the c
   const carrier = `E2E Carrier ${stamp}`;
   const maker = `E2E Maker ${stamp}`;
   const today = new Date().toISOString().slice(0, 10);
-  await pool.query("INSERT INTO suppliers (name, goods_from) VALUES ($1, $2)", [carrier, maker]);
-  await pool.query("INSERT INTO suppliers (name, brands) VALUES ($1, $1)", [maker]);
-  await pool.query(
-    "INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, product_name, size_l, qty, cost_usd, amount_amd, excel_row) VALUES ($1, $2, $3, 'C-X1', 'Edge', 4, 10, 15, 57750, 1)",
-    [`C${stamp}`, today, carrier]
-  );
   try {
+    await pool.query("INSERT INTO suppliers (name, goods_from) VALUES ($1, $2)", [carrier, maker]);
+    await pool.query("INSERT INTO suppliers (name, brands) VALUES ($1, $1)", [maker]);
+    await pool.query(
+      "INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, product_name, size_l, qty, cost_usd, amount_amd, excel_row) VALUES ($1, $2, $3, 'C-X1', 'Edge', 4, 10, 15, 57750, 1)",
+      [`C${stamp}`, today, carrier]
+    );
     await page.setViewportSize({ width: 390, height: 844 });
     await loginViaUi(page, acc.email);
     await page.goto("/#/purchases");

@@ -24,7 +24,7 @@ const noOf = (no) => (String(no ?? "").trim() ? `№ ${escapeHtml(no)}` : `<span
 function supplierHtml(name, goodsFrom) {
   const own = String(name || "").trim() || "—";
   if (!goodsFrom || goodsFrom.toLowerCase() === own.toLowerCase()) return escapeHtml(own);
-  return `${escapeHtml(goodsFrom)} <span class="pu-via">· ${escapeHtml(t("pu_via").replace("{name}", own))}</span>`;
+  return `${escapeHtml(goodsFrom)} <span class="pu-via">· ${escapeHtml(t("pu_via").replace("{name}", () => own) /* a "$&" in a name stays text (review) */)}</span>`;
 }
 
 // the flow of a purchase as small badges: Ordered / On the way (+ the expected date), the paper missing, a counted difference
