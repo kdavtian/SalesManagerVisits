@@ -333,7 +333,11 @@ export async function renderRoute(ctx) {
   } else if (path === "#/purchases") {
     (await fresh(import("../views/purchases.js"))).renderPurchases(ctx.app, ctx.navigate);
   } else if (path === "#/purchases/suggestions") {
-    (await fresh(import("../views/purchaseSuggestions.js"))).renderPurchaseSuggestions(ctx.app, ctx.navigate);
+    // ?supplier=&all=1: New purchase for one supplier, every product it sells us (owner 2026-11-27)
+    (await fresh(import("../views/purchaseSuggestions.js"))).renderPurchaseSuggestions(ctx.app, ctx.navigate, {
+      supplier: query.get("supplier") || null,
+      all: query.get("all") === "1",
+    });
   } else if (path === "#/cashflow") {
     (await fresh(import("../views/cashflow.js"))).renderCashflow(ctx.app, ctx.navigate);
   } else if (path === "#/requests") {

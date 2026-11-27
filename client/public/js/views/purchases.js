@@ -98,7 +98,14 @@ export function renderPurchases(root, navigate) {
     openPurchaseSheet({ id, invoiceNo: r?.invoice_no, date: r?.invoice_date, row: r }, { onSaved: load, rows, openInvoice });
   };
   root.querySelector("#pu-hint").addEventListener("click", () => openInfoPopup(`<p>${escapeHtml(t("pu_hint"))}</p>`));
-  root.querySelector("#pu-new").addEventListener("click", () => openPurchaseForm(null, { onSaved: load, rows, openInvoice }));
+  // New purchase (owner, 2026-11-27): choose the supplier first; its products open with the AI fill (Smart suggestions, one supplier). The
+  // empty form stays one tap away for an invoice entered by hand.
+  root.querySelector("#pu-new").addEventListener("click", () =>
+    openSupplierChooser({
+      onPick: (supplier) => (navigate ? navigate : (h) => (location.hash = h))(`#/purchases/suggestions?supplier=${encodeURIComponent(supplier)}&all=1`),
+      onEmpty: () => openPurchaseForm(null, { onSaved: load, rows, openInvoice }),
+    })
+  );
   root.querySelector("#pu-import").addEventListener("click", () => openImportSheet({ onDone: load }));
   root.querySelector("#pu-list-search").addEventListener("input", (e) => {
     query = e.target.value.trim().toLowerCase();
@@ -540,4 +547,54 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
     sheet.innerHTML = `<button type="button" class="icon-btn sheet-close-x" aria-label="${t("close")}">${icons.close}</button><p class="form-error">${escapeHtml(err.message)}</p>`;
     sheet.querySelector(".sheet-close-x").addEventListener("click", close);
   }
+}
+
+// The supplier chooser of New purchase: every supplier we buy from (as Smart suggestions group them: a transporter's goods under the real
+// supplier), with how many products it sells us; and the empty form.
+function openSupplierChooser({ onPick, onEmpty }) {
+  const overlay = document.createElement("div");
+  overlay.className = "sheet-overlay";
+  overlay.innerHTML = `
+    <div class="sheet pn-choose-sheet" role="dialog" aria-modal="true" aria-labelledby="pn-choose-title">
+      <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
+      <h2 id="pn-choose-title">${t("pn_choose")}</h2>
+      <p class="muted">${t("pn_choose_hint")}</p>
+      <div class="pn-suppliers" id="pn-suppliers"><p class="loading-state" role="status">${t("loading")}</p></div>
+      <button type="button" class="btn btn-block" id="pn-empty">${t("pn_empty_form")}</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  activateDialog(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener("click", (e) => e.target === overlay && close());
+  overlay.querySelectorAll('[data-action="close-sheet"]').forEach((b) => b.addEventListener("click", close));
+  overlay.querySelector("#pn-empty").addEventListener("click", () => {
+    close();
+    onEmpty();
+  });
+  const list = overlay.querySelector("#pn-suppliers");
+  api
+    .getPurchaseSuggestions({ all: true })
+    .then((data) => {
+      if (!overlay.isConnected) return;
+      const groups = (data.suppliers ?? []).filter((g) => g.supplier);
+      list.innerHTML = groups.length
+        ? groups
+            .map(
+              (g) => `<button type="button" class="pn-supplier" data-pick="${escapeHtml(g.supplier)}">
+                <strong>${escapeHtml(g.supplier)}</strong>
+                <span class="muted">${escapeHtml([t("pn_products").replace("{n}", g.lines.length), ...(g.via?.length ? [t("ps_via").replace("{names}", g.via.join(", "))] : [])].join(" · "))}</span>
+              </button>`
+            )
+            .join("")
+        : `<p class="empty-state">${t("pn_none")}</p>`;
+    })
+    .catch((err) => {
+      if (overlay.isConnected) list.innerHTML = `<p class="form-error">${escapeHtml(err.message)}</p>`;
+    });
+  list.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pick]");
+    if (!b) return;
+    close();
+    onPick(b.dataset.pick);
+  });
 }

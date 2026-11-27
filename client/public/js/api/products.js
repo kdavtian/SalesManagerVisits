@@ -21,6 +21,8 @@ export const productsApi = {
     const q = new URLSearchParams();
     if (what.lead_days) q.set("lead_days", String(what.lead_days));
     if (what.cover_days) q.set("cover_days", String(what.cover_days));
+    if (what.supplier) q.set("supplier", String(what.supplier));
+    if (what.all) q.set("all", "1");
     const qs = q.toString();
     return request(`/purchases/suggestions${qs ? `?${qs}` : ""}`, { fresh: true });
   },

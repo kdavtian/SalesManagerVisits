@@ -63,6 +63,10 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
   const days = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 365 ? Number(v) : null);
   const lead = days(what.leadDays) ?? settings.leadTimeDays;
   const cover = days(what.coverDays) ?? settings.coverDays;
+  // all = every product a supplier sells us, also those that need nothing now (owner 2026-11-27: New purchase -> choose the supplier ->
+  // all its products, quantities filled by the AI button); supplier = only that supplier's card
+  const all = Boolean(what.all);
+  const onlySupplier = what.supplier == null || what.supplier === "" ? null : String(what.supplier).replace(/\s+/g, " ").trim().toLowerCase();
 
   const wishes = new Map(wishRows.map((r) => [r.product_id, { qty: r.qty, customers: r.customers }]));
   const lines = [];
@@ -79,10 +83,10 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     // a product with free stock again is serving its wishes (back_in_stock_at is set only by the next Excel sync): not counted on top,
     // or a wisher's submitted order would be counted twice (review 2026-11-27)
     const wished = free > 0 ? null : wishes.get(row.id);
-    if (!(daily > 0) && !wished) continue;
+    if (!all && !(daily > 0) && !wished) continue;
     const step = orderStep(row);
     const line = purchaseLine({ stockNow: free, comingLots: lots, wanted: row.submitted_qty, daily, leadTimeDays: lead, coverDays: cover, safetyStock: forecast.safetyStock ?? 0, stepPieces: step.stepPieces, trend: forecast.trend, wished: wished?.qty ?? 0 });
-    if (!(line.suggested > 0)) continue;
+    if (!all && !(line.suggested > 0)) continue;
     lines.push({
       product_id: row.id, // the SKU column of the Excel (synced); no SKU = an empty cell, never the product id (owner 2026-11-27)
       sku: row.sku || null, name: row.name,
@@ -126,6 +130,9 @@ export async function buildPurchaseSuggestions(db = pool, today = yerevanToday()
     if (!bySupplier.has(l.supplier)) bySupplier.set(l.supplier, []);
     bySupplier.get(l.supplier).push(l);
   }
+  // all products: only those with a supplier to buy them from (never bought = no supplier, nothing to order from)
+  if (all) bySupplier.delete("");
+  if (onlySupplier != null) for (const key of [...bySupplier.keys()]) if (String(key).toLowerCase() !== onlySupplier) bySupplier.delete(key);
   const suppliers = [...bySupplier.entries()].map(([supplier, list]) => {
     // the most urgent first: runs out before the goods could come, then the fewest days left
     list.sort((a, b) => Number(b.runs_out_before_arrival) - Number(a.runs_out_before_arrival) || (a.days_now ?? 0) - (b.days_now ?? 0));

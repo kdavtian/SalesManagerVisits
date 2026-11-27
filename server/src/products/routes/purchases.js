@@ -214,7 +214,13 @@ purchasesRouter.get("/scorecard", async (_req, res) => {
 // the days each lasts (products/purchaseSuggestionsData.js; the rules: client/public/js/shared/purchaseSuggestion.js).
 purchasesRouter.get("/suggestions", async (req, res) => {
   // ?lead_days=&cover_days= (1..365): the screen's "what if"; anything else = the settings
-  res.json(await buildPurchaseSuggestions(undefined, undefined, { leadDays: req.query.lead_days, coverDays: req.query.cover_days }));
+  // ?all=1: every product of a supplier, also those needing nothing now; ?supplier=: only that supplier (the New purchase flow)
+  res.json(
+    await buildPurchaseSuggestions(undefined, undefined, {
+      leadDays: req.query.lead_days, coverDays: req.query.cover_days, all: req.query.all === "1",
+      supplier: typeof req.query.supplier === "string" ? req.query.supplier.slice(0, 200) : null,
+    })
+  );
 });
 
 // Drafts of the suggestions (owner, 2026-11-27): one per supplier, to open later (products/suggestionDrafts.js, migration 227).

@@ -22,6 +22,7 @@ test("purchase form: Ordered folds the invoice, expected = today + lead time, su
     await loginViaUi(page, admin.email);
     await page.goto("/#/purchases");
     await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
     const form = page.locator(".pu-form-sheet");
     await expect(form.locator("#pu-save-why")).toHaveText("Choose the supplier to save.");
     await form.locator('[data-status="ordered"]').click();
