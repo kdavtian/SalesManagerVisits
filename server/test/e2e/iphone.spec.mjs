@@ -41,6 +41,8 @@ test("@iphone a launch records every stage, counted from the service worker's st
   await page.reload();
   await expect.poll(async () => (await lastLaunch(page)).found != null, { timeout: 10000 }).toBe(true);
   await expect.poll(async () => (await lastLaunch(page)).screen != null, { timeout: 10000 }).toBe(true);
+  // the browser reports the first drawing a moment after it happened: on a quick start the record gets it after the first screen
+  await expect.poll(async () => (await lastLaunch(page)).fp != null, { timeout: 10000 }).toBe(true);
   const e = await lastLaunch(page);
   expect(e).toMatchObject({ sw: 1, woke: 0, type: "reload" });
   expect(e.pre).toBeGreaterThanOrEqual(0);

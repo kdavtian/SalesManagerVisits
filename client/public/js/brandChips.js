@@ -5,10 +5,10 @@
 //   current -- per brand group, the values of the latest visit that recorded
 //              that group (a visit that skips a group leaves it unchanged);
 //   ever    -- every value any visit recorded + the latest date it was seen.
-import { t, hasText } from "./i18n.js";
+import { t, hasText, siteBrandGroups } from "./i18n.js";
 import { escapeHtml, formatDayMonth } from "./util.js";
 
-export const BRAND_GROUP_ORDER = ["castrol", "lotos", "royal", "competitors"];
+export const BRAND_GROUP_ORDER = siteBrandGroups(["castrol", "lotos", "royal", "competitors"]);
 
 // The competitors in the order the check-in lists them (owner, 2026-10-26). Same list on the server (routes/checkins.js).
 export const COMPETITORS = [

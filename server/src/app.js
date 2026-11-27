@@ -354,6 +354,10 @@ app.get(/^\/css\/.*\.css$/, async (req, res, next) => {
 // false, and manifest.json is shadowed by the explicit route below) --
 // both are generated per-request from the calculator-mode setting instead;
 // everything else in client/public (icons included) still serves directly.
+// /index.html is the start page too, never the raw template file: the service worker stores "/index.html" when it installs (sw.js APP_SHELL)
+// and opens the app from that copy, so the template (no title, no branding, and on the demo site no English / USD marks) was what the
+// second launch showed until the background refresh replaced it (owner, 2026-11-27: the demo still said AMD after the update).
+app.get("/index.html", (req, res) => startPage(req, res));
 if (clientBuild) {
   app.use("/js", express.static(path.join(CLIENT_DIST_DIR, "js"), { index: false }));
   app.get("/sw.js", (req, res) => res.sendFile(path.join(CLIENT_DIST_DIR, "sw.js")));
@@ -395,7 +399,7 @@ const isDemoSite = () => process.env.DEMO_MODE === "1";
 const DEMO_BRANDING = { title: "KAD Demo", themeColor: "#6d28d9" };
 // The demo is shown to clients abroad (owner, 2026-11-22): English until the visitor picks Armenian, amounts in US dollars. Read by the page
 // before anything else runs (theme-init.js, browser-check.js, bootGate.js, i18n.js); a language picked in Settings still wins.
-const DEMO_HEAD_META = '<meta name="robots" content="noindex, nofollow" />\n    <meta name="default-lang" content="en" />\n    <meta name="site-currency" content="USD" />';
+const DEMO_HEAD_META = '<meta name="robots" content="noindex, nofollow" />\n    <meta name="default-lang" content="en" />\n    <meta name="site-currency" content="USD" />\n    <meta name="site-brands" content="castrol" />';
 
 app.get("/manifest.json", async (req, res) => {
   if (isDemoSite()) {
@@ -434,7 +438,8 @@ app.get(ASSET_PATH, (req, res) => {
 // root path "/" itself, which this route must still serve). A RegExp
 // bypasses that string-pattern parsing entirely and is matched directly,
 // same approach already used above for the CSS route.
-app.get(/.*/, async (req, res) => {
+app.get(/.*/, startPage);
+async function startPage(req, res) {
   // Read server-side (never fetched by the client) so the calculator
   // disguise's "touches no network before unlock" property holds whether
   // the feature is on or off -- see bootGate.js.
@@ -465,7 +470,7 @@ app.get(/.*/, async (req, res) => {
   res.set("Cache-Control", "no-store");
   if (demoSite) res.set("X-Robots-Tag", "noindex, nofollow");
   res.type("html").send(html);
-});
+}
 
 app.use((err, req, res, next) => {
   console.error(err);

@@ -65,8 +65,28 @@ export function markShellShown() {
     entry.ready = Math.round(performance.now());
     entry.fp ??= firstPaint(); // the first drawing can come after the code showed the header
     store();
+    waitForFirstPaint();
   });
   askWorker();
+}
+
+// The browser reports the first drawing a moment after it happened; a start that is quick (everything stored on the phone and preloaded)
+// can show the header and the first screen before that report arrives, and the record then kept "no first drawing" for good. Filled in
+// when the report comes.
+function waitForFirstPaint() {
+  if (entry.fp != null || typeof PerformanceObserver === "undefined") return;
+  try {
+    const observer = new PerformanceObserver(() => {
+      const fp = firstPaint();
+      if (fp == null) return;
+      observer.disconnect();
+      entry.fp = fp;
+      store();
+    });
+    observer.observe({ type: "paint", buffered: true });
+  } catch {
+    /* a browser without paint timing: the record stays without it */
+  }
 }
 
 // The service worker's side of this launch (sw.js "launch-times"): when it started and when it got / answered the start-page request.
@@ -99,6 +119,7 @@ export function markFirstScreenShown() {
   screenDone = true;
   afterPaint(() => {
     entry.screen = Math.max(entry.ready, Math.round(performance.now()));
+    entry.fp ??= firstPaint();
     store();
   });
 }

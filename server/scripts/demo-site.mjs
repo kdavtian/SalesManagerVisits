@@ -14,6 +14,10 @@ import bcrypt from "bcryptjs";
 import { pool } from "../src/db/pool.js";
 import { ROLES } from "../src/shared/roles.js";
 import { formatOrderCode } from "../src/orders/routes/orders.js";
+import fs from "node:fs";
+import path from "node:path";
+import { uploadDirPath } from "../src/shared/upload.js";
+import { lockSignedOrders, createSignedActs, createPaymentSlip } from "../src/orders/signedActs.js";
 
 const DOMAIN = "kad.demo";
 
@@ -84,10 +88,10 @@ const PRODUCTS = [
   ["Castrol", "Castrol Transmax ATF Dex III 1L", "Transmax", 1, 7800, 7500, 7200, 9900, 5600, 350],
   ["Castrol", "Castrol Brake Fluid DOT 4 0.5L", "Brake", 0.5, 3200, 3100, 2950, 4200, 2300, 500],
   ["Castrol", "Castrol Power1 4T 10W-40 1L", "Moto", 1, 6900, 6700, 6400, 8900, 4900, 220],
-  ["Royal", "Royal 5W-30 Synthetic 4L", "Royal", 4, 19900, 19300, 18700, 24900, 14300, 140],
-  ["Royal", "Royal 10W-40 Semi-Synthetic 4L", "Royal", 4, 15900, 15400, 14900, 19900, 11400, 200],
-  ["Lotos", "Lotos Quazar 5W-40 4L", "Lotos", 4, 17500, 17000, 16400, 22000, 12600, 150],
-  ["Orlen", "Orlen Platinum Ultor 15W-40 20L", "Orlen", 20, 58000, 56200, 54300, 72000, 42000, 60],
+  ["Castrol", "Castrol Magnatec Stop-Start 5W-30 A5 4L", "Magnatec", 4, 19900, 19300, 18700, 24900, 14300, 140],
+  ["Castrol", "Castrol GTX Ultraclean 10W-40 4L", "GTX", 4, 15900, 15400, 14900, 19900, 11400, 200],
+  ["Castrol", "Castrol EDGE Turbo Diesel 5W-40 4L", "EDGE", 4, 17500, 17000, 16400, 22000, 12600, 150],
+  ["Castrol", "Castrol CRB Multi 15W-40 20L", "CRB", 20, 58000, 56200, 54300, 72000, 42000, 60],
 ];
 
 // ---------- helpers ----------
@@ -98,10 +102,37 @@ async function insertUser(client, { name, hy, email, role, position = null, colo
   const { rows } = await client.query(
     `INSERT INTO users (name, name_hy, email, password_hash, role, position, map_color, phone)
      VALUES ($1, $2, $3, $4, $5, $6, $7, '+37400000000') RETURNING id`,
-    [name, hy ?? null, email, hash, role, position, color]
+    // name_hy stays empty: the demo's documents and screens then use the English name whatever the language
+    [name, null, email, hash, role, position, color]
   );
   return rows[0].id;
 }
+
+// A hand-drawn-looking signature (a few loops and a flourish) as a PNG in the uploads folder; every signer gets a different one.
+async function drawSignature() {
+  const sharp = (await import("sharp")).default;
+  let x = 30;
+  let d = `M ${x} ${between(70, 90)}`;
+  for (let i = 0, loops = between(4, 6); i < loops; i++) {
+    const w = between(28, 46);
+    d += ` C ${x + w * 0.2} ${between(10, 40)}, ${x + w * 0.9} ${between(15, 45)}, ${x + w * 0.55} ${between(75, 100)} S ${x + w * 1.2} ${between(40, 70)}, ${x + w} ${between(68, 88)}`;
+    x += w;
+  }
+  d += ` M 24 ${between(104, 112)} Q ${x / 2} ${between(96, 120)}, ${x + 24} ${between(98, 110)}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${x + 60}" height="130"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="none" stroke="#1e2a5a" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const fileName = `${crypto.randomUUID()}.png`;
+  await fs.promises.mkdir(uploadDirPath, { recursive: true });
+  await sharp(Buffer.from(svg)).png().toFile(path.join(uploadDirPath, fileName));
+  return fileName;
+}
+
+// The sentences a customer reads before signing and the note printed on the documents, in English for the demo (Settings can change them).
+const DEMO_DOCUMENT_TEXTS = {
+  sign_order: "I confirm that I received order [order no]. The debt balance is [updated debt balance] USD.",
+  sign_payment: "I confirm that I paid [payment amount] USD. The debt balance is [updated debt balance] USD.",
+  sign_order_payment: "I confirm that I received order [order no] and paid [payment amount] USD. The debt balance is [updated debt balance] USD.",
+  pdf_warning: "YOU WILL ALSO RECEIVE THIS CONFIRMATION IN THE WHATSAPP GROUP WITHIN 2 WORKING DAYS. IF YOU DO NOT, PLEASE CALL THE OFFICE.",
+};
 
 // ---------- seed ----------
 async function seed() {
@@ -136,7 +167,8 @@ async function seed() {
         `INSERT INTO products (name, brand, family, unit, unit_price_amd, active, bronze_price_amd, silver_price_amd, gold_price_amd, retail_price_amd,
            stock_qty, size_l, landing_cost_amd, net_cost_amd, is_commercial)
          VALUES ($1, $2, $3, 'pcs', $4, true, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING id, name, brand, unit_price_amd`,
-        [name, brand, family, usd(bronze), usd(silver), usd(gold), usd(retail), stock, size, usd(landing), usd(landing * 1.04)]
+        // the brand has its own column and the lists and documents print it in front of the name
+        [name.replace(/^Castrol /, ""), brand, family, usd(bronze), usd(silver), usd(gold), usd(retail), stock, size, usd(landing), usd(landing * 1.04)]
       );
       productRows.push(rows[0]);
     }
@@ -186,7 +218,7 @@ async function seed() {
       await client.query(
         `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, note, brands_found, created_at, ended_at)
          VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $3, $9)`,
-        [c.id, repIds[c.rep], at, c.lat + 0.00003, c.lng + 0.00002, between(5, 60), pick(notes), pick([["Castrol"], ["Castrol", "Mobil"], ["Castrol", "Shell"], ["Mobil"]]), new Date(at.getTime() + between(8, 30) * 60000)]
+        [c.id, repIds[c.rep], at, c.lat + 0.00003, c.lng + 0.00002, between(5, 60), pick(notes), pick([["Castrol"], ["Castrol"], ["Castrol", "Mobil"], ["Castrol", "Shell"], ["Mobil"]]), new Date(at.getTime() + between(8, 30) * 60000)]
       );
       visits += 1;
     };
@@ -329,8 +361,43 @@ async function seed() {
       }
     }
 
+    // Electronic documents (owner, 2026-11-27: "so that users understand the whole feature"): every rep has a signature on the profile,
+    // the last delivered order of each buying customer is signed by the customer (a delivery-acceptance act, the order locked), and most
+    // approved payments carry a signed receipt; the rest stay "not confirmed", which is what the Payments screen flags.
+    await client.query(
+      `INSERT INTO app_settings (id, document_texts) VALUES (1, $1::jsonb) ON CONFLICT (id) DO UPDATE SET document_texts = EXCLUDED.document_texts`,
+      [JSON.stringify(DEMO_DOCUMENT_TEXTS)]
+    );
+    for (const id of [ceoId, ...repIds]) await client.query("UPDATE users SET signature_path = $1 WHERE id = $2", [await drawSignature(), id]);
+    let signedOrders = 0;
+    let signedPayments = 0;
+    for (const c of customers.filter((x) => x.buys)) {
+      const signaturePath = await drawSignature();
+      const { rows: [order] } = await client.query(
+        "SELECT id, created_at FROM orders WHERE customer_id = $1 AND status = 'delivered' ORDER BY created_at DESC LIMIT 1",
+        [c.id]
+      );
+      if (order) {
+        const signedAt = new Date(new Date(order.created_at).getTime() + 26 * 3600 * 1000 > Date.now() ? Date.now() - 600000 : new Date(order.created_at).getTime() + 26 * 3600 * 1000);
+        await lockSignedOrders(client, { customerId: c.id, filePath: signaturePath, createdBy: repIds[c.rep], orderIds: [order.id], signedAt });
+        const acts = await createSignedActs({ orderIds: [order.id], customerId: c.id, customerSignaturePath: signaturePath, signerId: repIds[c.rep], signedAt, db: client });
+        // dated when it was signed, not when the demo was filled (Documents lists by this date)
+        await client.query("UPDATE customer_files SET created_at = $2 WHERE id = ANY($1)", [acts.map((a) => a.id), signedAt]);
+        signedOrders += 1;
+      }
+      const { rows: paid } = await client.query("SELECT id, amount_amd, payment_date FROM payments WHERE customer_id = $1 AND status = 'approved'", [c.id]);
+      for (const p of paid) {
+        const signed = rnd() < 0.75;
+        await client.query("UPDATE payments SET customer_confirmation = $2 WHERE id = $1", [p.id, signed ? "signed" : "none"]);
+        if (!signed) continue;
+        const slip = await createPaymentSlip({ paymentId: p.id, customerId: c.id, amountAmd: p.amount_amd, paidAt: new Date(p.payment_date), customerSignaturePath: signaturePath, signerId: repIds[c.rep], db: client });
+        await client.query("UPDATE customer_files SET created_at = $2 WHERE id = $1", [slip.id, p.payment_date]);
+        signedPayments += 1;
+      }
+    }
+
     await client.query("COMMIT");
-    console.log("Demo data created:", { users: 1 + REPS.length, products: productRows.length, customers: customers.length, visits, orders, payments });
+    console.log("Demo data created:", { users: 1 + REPS.length, products: productRows.length, customers: customers.length, visits, orders, payments, signedOrders, signedPayments });
     console.log(`CEO login: ceo@${DOMAIN}`);
     console.log(process.env.DEMO_PASSWORD ? "Password: the one in DEMO_PASSWORD." : `Password (shown once): ${ceoPassword}`);
   } catch (err) {

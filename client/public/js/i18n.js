@@ -48,6 +48,10 @@ export function getLang() {
 // is about both currencies (the USD/AMD rate in Cashflow, the cost calculator, Ops control) and is left alone: "USD to USD rate" is wrong.
 const USD_SITE = headMeta("site-currency") === "USD";
 export const usdSite = () => USD_SITE;
+// The demo site shows one brand of its own, Castrol (owner, 2026-11-27): the shelf sections and map filters of the company's other
+// brands are left out there. A list of brand-group keys goes in, the ones this site shows come out.
+const CASTROL_ONLY = headMeta("site-brands") === "castrol";
+export const siteBrandGroups = (groups) => (CASTROL_ONLY ? groups.filter((g) => !["lotos", "royal"].includes(g.key ?? g)) : groups);
 // A dram amount written in a text ("a 50,000 AMD bonus", "under 300,000 AMD") is shown in dollars at the rate the demo data uses
 // (server/scripts/demo-site.mjs AMD_PER_USD).
 const AMD_PER_USD = 400;
