@@ -564,3 +564,6 @@
 .pn-suppliers { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; max-height: 55vh; overflow-y: auto; }
 .pn-supplier { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); color: var(--text); text-align: left; font: inherit; }
 .pn-supplier .muted { font-size: 0.8rem; }
+
+/* "Castrol · via Sole Trans": the transporter in a lighter, smaller weight (views/purchases.js supplierHtml, owner 2026-11-27) */
+.pu-via { font-weight: 400; font-size: 0.85em; color: var(--text-dim); }

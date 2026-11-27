@@ -454,3 +454,46 @@ test("@smoke Purchases P5: an Ordered purchase is Coming, the warehouse receives
     await pool.query("DELETE FROM suppliers WHERE id = $1", [supplier]);
   }
 });
+
+// Owner 2026-11-27 (Purchases plan C): a transporter's invoice reads "Castrol · via Sole Trans"; either name finds it; a chip whose brand
+// is its own name does not say it twice.
+test("@smoke Purchases C: a transporter's invoice names the real supplier; the chips do not repeat a name", async ({ page, fixtures }) => {
+  const acc = await fixtures.createUser("accountant");
+  const stamp = `${Date.now() % 100000}`;
+  const carrier = `E2E Carrier ${stamp}`;
+  const maker = `E2E Maker ${stamp}`;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await pool.query("INSERT INTO suppliers (name, goods_from) VALUES ($1, $2)", [carrier, maker]);
+    await pool.query("INSERT INTO suppliers (name, brands) VALUES ($1, $1)", [maker]);
+    await pool.query(
+      "INSERT INTO erp_purchase_lines (invoice_no, invoice_date, supplier, erp_product_id, product_name, size_l, qty, cost_usd, amount_amd, excel_row) VALUES ($1, $2, $3, 'C-X1', 'Edge', 4, 10, 15, 57750, 1)",
+      [`C${stamp}`, today, carrier]
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await loginViaUi(page, acc.email);
+    await page.goto("/#/purchases");
+    const row = page.locator(".pu-row", { hasText: `C${stamp}` });
+    await expect(row.locator(".pu-row-main strong")).toHaveText(`${maker} · via ${carrier}`, { timeout: 15000 });
+    await shot(page, "purchases-via-phone");
+    // either name finds it
+    for (const q of [maker, carrier]) {
+      await page.locator("#pu-list-search").fill(q);
+      await expect(page.locator(".pu-row")).toHaveCount(1);
+    }
+    await page.locator("#pu-list-search").fill("");
+    // the invoice sheet says the same
+    await row.click();
+    await expect(page.locator(".sheet h2").first()).toHaveText(`${maker} · via ${carrier}`);
+    await page.keyboard.press("Escape");
+    // the form's chips: the carrier shows whose goods it carries, the maker is not written twice
+    await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click();
+    const chips = page.locator("#pu-supplier-chips");
+    await expect(chips.locator(`[data-supplier="${carrier}"] .muted`)).toHaveText(maker);
+    await expect(chips.locator(`[data-supplier="${maker}"] .muted`)).toHaveCount(0);
+  } finally {
+    await pool.query("DELETE FROM erp_purchase_lines WHERE invoice_no = $1", [`C${stamp}`]);
+    await pool.query("DELETE FROM suppliers WHERE name IN ($1, $2)", [carrier, maker]);
+  }
+});

@@ -392,7 +392,7 @@ export async function applyExcelPurchases(rows, db = pool) {
  */
 export async function listPurchases({ from = null, to = null, supplierId = null } = {}, db = pool) {
   const params = [from, to];
-  const [{ rows: app }, { rows: excel }] = await Promise.all([
+  const [{ rows: app }, { rows: excel }, { rows: transporters }] = await Promise.all([
     db.query(
       `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, s.id AS supplier_id, s.name AS supplier,
               i.status AS flow, to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date,
@@ -415,7 +415,10 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
         GROUP BY ${SQL_KEY("invoice_no")}, invoice_date, ${SQL_SUPPLIER_KEY("supplier")}`,
       params
     ),
+    db.query("SELECT name, goods_from FROM suppliers WHERE goods_from IS NOT NULL AND btrim(goods_from) <> ''"),
   ]);
+  // a transporter's invoices name the real supplier too (Sole Trans carries Castrol; owner 2026-11-27, Purchases plan C)
+  const goodsFrom = new Map(transporters.map((r) => [supplierKey(r.name), String(r.goods_from).replace(/\s+/g, " ").trim()]));
   // Every app invoice is its own row (two suppliers' invoices with the same number and date used to share one and hide the other,
   // review 2026-11-20). An Excel invoice pairs with the app invoice of the same number, date and supplier; when the supplier is written
   // differently on the two sides, with the only app invoice of that number and date that is still unpaired.
@@ -467,6 +470,7 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
       invoice_no: base.invoice_no,
       invoice_date: base.invoice_date,
       supplier: a?.supplier ?? e?.supplier ?? null,
+      goods_from: goodsFrom.get(supplierKey(a?.supplier ?? e?.supplier)) ?? null,
       status,
       lines: base.lines,
       qty: base.qty,
@@ -492,7 +496,7 @@ export async function listPurchases({ from = null, to = null, supplierId = null 
 /** One invoice with its lines, and the Excel lines of the same invoice number and date beside them. */
 export async function getPurchase(id, db = pool) {
   const { rows: [inv] } = await db.query(
-    `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, i.supplier_id, s.name AS supplier,
+    `SELECT i.id, i.invoice_no, to_char(i.invoice_date, 'YYYY-MM-DD') AS invoice_date, i.usd_rate::float8 AS usd_rate, i.note, i.supplier_id, s.name AS supplier, NULLIF(btrim(s.goods_from), '') AS goods_from,
             i.status, to_char(i.expected_date, 'YYYY-MM-DD') AS expected_date, i.arrived_at, i.arrival_note, ua.name AS arrived_by_name,
             i.created_at, i.updated_at, u.name AS created_by_name
        FROM purchase_invoices i JOIN suppliers s ON s.id = i.supplier_id LEFT JOIN users u ON u.id = i.created_by LEFT JOIN users ua ON ua.id = i.arrived_by WHERE i.id = $1`,
@@ -515,7 +519,7 @@ export async function getPurchase(id, db = pool) {
 
 export async function listSuppliers(db = pool) {
   const { rows } = await db.query(
-    `SELECT s.id, s.name, s.brands, s.active, to_char(max(i.invoice_date), 'YYYY-MM-DD') AS last_invoice_date, count(i.id)::int AS invoices,
+    `SELECT s.id, s.name, s.brands, NULLIF(btrim(s.goods_from), '') AS goods_from, s.active, to_char(max(i.invoice_date), 'YYYY-MM-DD') AS last_invoice_date, count(i.id)::int AS invoices,
             (SELECT usd_rate::float8 FROM purchase_invoices x WHERE x.supplier_id = s.id AND x.usd_rate IS NOT NULL ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_usd_rate,
             (SELECT invoice_no FROM purchase_invoices x WHERE x.supplier_id = s.id AND x.invoice_no IS NOT NULL ORDER BY x.invoice_date DESC, x.id DESC LIMIT 1) AS last_invoice_no
        FROM suppliers s LEFT JOIN purchase_invoices i ON i.supplier_id = s.id

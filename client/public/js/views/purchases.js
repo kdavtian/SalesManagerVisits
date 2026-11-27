@@ -19,6 +19,14 @@ const STATUSES = ["", "coming", "match", "diff", "app_only", "excel_only"];
 const STATUS_LABEL = { "": "pu_st_all", coming: "pu_status_coming", match: "pu_st_match", diff: "pu_st_diff", app_only: "pu_st_app_only", excel_only: "pu_st_excel_only" };
 const isComing = (r) => r.flow && r.flow !== "arrived";
 const noOf = (no) => (String(no ?? "").trim() ? `№ ${escapeHtml(no)}` : `<span class="muted">№ —</span>`);
+// A supplier's name; a transporter's as the real supplier with "via" the transporter ("Castrol · via Sole Trans"; owner 2026-11-27,
+// Purchases plan C). Search and the supplier filter keep using the name on the invoice.
+function supplierHtml(name, goodsFrom) {
+  const own = String(name || "").trim() || "—";
+  if (!goodsFrom || goodsFrom.toLowerCase() === own.toLowerCase()) return escapeHtml(own);
+  return `${escapeHtml(goodsFrom)} <span class="pu-via">· ${escapeHtml(t("pu_via").replace("{name}", () => own) /* a "$&" in a name stays text (review) */)}</span>`;
+}
+
 // the flow of a purchase as small badges: Ordered / On the way (+ the expected date), the paper missing, a counted difference
 function flowBadges(r) {
   const out = [];
@@ -182,7 +190,7 @@ export function renderPurchases(root, navigate) {
     const map = new Map();
     for (const r of list) {
       const key = String(r.supplier || "—").toLowerCase();
-      const g = map.get(key) ?? { key, name: r.supplier || "—", usd: 0, liquid: 0, liters: 0, invoices: 0 };
+      const g = map.get(key) ?? { key, name: r.supplier || "—", goods_from: r.goods_from ?? null, usd: 0, liquid: 0, liters: 0, invoices: 0 };
       g.usd += r.usd;
       g.liquid += r.liquid_usd ?? r.usd;
       g.liters += r.liters;
@@ -193,14 +201,14 @@ export function renderPurchases(root, navigate) {
   };
   const matches = (r) => {
     if (status === "coming" ? !isComing(r) : status && r.status !== status) return false;
-    if (query && !`${r.supplier ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) return false;
+    if (query && !`${r.supplier ?? ""} ${r.goods_from ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) return false;
     return true;
   };
 
   function paint() {
     const base = rows.filter(matches); // before the supplier filter: the supplier cards show every supplier's share
     const shown = supplier ? base.filter((r) => String(r.supplier || "—").toLowerCase() === supplier) : base;
-    const statusBase = rows.filter((r) => (!query || `${r.supplier ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) && (!supplier || String(r.supplier || "—").toLowerCase() === supplier));
+    const statusBase = rows.filter((r) => (!query || `${r.supplier ?? ""} ${r.goods_from ?? ""} ${r.invoice_no ?? ""}`.toLowerCase().includes(query)) && (!supplier || String(r.supplier || "—").toLowerCase() === supplier));
     const counts = Object.fromEntries(STATUSES.map((s) => [s, s === "coming" ? statusBase.filter(isComing).length : s ? statusBase.filter((r) => r.status === s).length : statusBase.length]));
     root.querySelector("#pu-statuses").innerHTML = STATUSES.filter((s) => s !== "coming" || counts.coming || status === "coming").map(
       (s) => `<button type="button" class="map-filter-chip ${s === status ? "chip-active" : ""}" data-status="${s}" aria-pressed="${s === status}">${t(STATUS_LABEL[s])} <span class="pu-count">${counts[s]}</span></button>`
@@ -236,7 +244,7 @@ export function renderPurchases(root, navigate) {
         ? groups
             .map(
               (g) => `<button type="button" class="pu-supplier ${g.key === supplier ? "pu-supplier-active" : ""}" data-supplier="${escapeHtml(g.key)}" aria-pressed="${g.key === supplier}">
-                <span class="pu-supplier-name">${escapeHtml(g.name)}</span>
+                <span class="pu-supplier-name">${supplierHtml(g.name, g.goods_from)}</span>
                 <span class="pu-supplier-usd">${usd0(g.usd)}</span>
                 <span class="pu-supplier-bar" aria-hidden="true"><i style="width:${Math.max(3, Math.round((g.usd / topUsd) * 100))}%"></i></span>
                 <span class="pu-supplier-meta muted">${Math.round((g.usd / topUsd) * 100)}% · ${liters(g.liters)}${g.liters > 0 ? ` · ${usd(g.liquid / g.liters)}/L` : ""}</span>
@@ -273,7 +281,7 @@ export function renderPurchases(root, navigate) {
       <div class="card pu-group">${list
         .map(
           (r) => `<button type="button" class="pu-row" data-idx="${shown.indexOf(r)}">
-            <span class="pu-row-main"><strong>${escapeHtml(r.supplier || "—")}</strong><span class="muted">${escapeHtml(formatDateDMY(r.invoice_date))} · ${noOf(r.invoice_no)} · ${liters(r.liters)}</span>${flowBadges(r) ? `<span class="pu-flow">${flowBadges(r)}</span>` : ""}</span>
+            <span class="pu-row-main"><strong>${supplierHtml(r.supplier, r.goods_from)}</strong><span class="muted">${escapeHtml(formatDateDMY(r.invoice_date))} · ${noOf(r.invoice_no)} · ${liters(r.liters)}</span>${flowBadges(r) ? `<span class="pu-flow">${flowBadges(r)}</span>` : ""}</span>
             <span class="pu-row-cols">
               <span class="pu-col-date">${escapeHtml(formatDateDMY(r.invoice_date))}</span>
               <span class="pu-col-no">${noOf(r.invoice_no)}</span>
@@ -488,7 +496,7 @@ async function openPurchaseSheet({ id, invoiceNo, date, row }, { onSaved, rows =
     const rate = app?.usd_rate;
     sheet.innerHTML = `
       <button type="button" class="icon-btn sheet-close-x" data-close aria-label="${t("close")}">${icons.close}</button>
-      <h2>${escapeHtml(head.supplier || "—")}</h2>
+      <h2>${supplierHtml(head.supplier, head.goods_from ?? row?.goods_from)}</h2>
       <p class="muted">${noOf(head.invoice_no)} · ${escapeHtml(formatDateDMY(head.invoice_date))}${app ? `${app.usd_rate ? ` · ${t("pu_rate")} ${groupDigits(app.usd_rate)}` : ""}${app.created_by_name ? ` · ${t("pu_by")} ${escapeHtml(app.created_by_name)}` : ""}` : ""}</p>
       ${row ? `<p class="pu-sheet-status">${isComing(row) ? "" : `<span class="badge ${STATUS_BADGE[row.status]}">${t(STATUS_LABEL[row.status])}</span>`}${flowBadges(app ? { ...row, flow: app.status, expected_date: app.expected_date, paper_missing: !app.invoice_no || !app.usd_rate, has_difference: app.lines.some(recvDiff) } : row)}${rate ? ` <span class="muted">${formatAmd(Math.round(sumOf(app.lines) * rate))} · ${liters(litersOf(app.lines))}</span>` : ""}</p>` : ""}
       ${app?.arrived_at && app.lines.some((l) => l.received_qty !== null) ? `<p class="muted pu-arrived">${t("pu_received_by")}: ${escapeHtml(formatDateDMY(new Date(app.arrived_at).toLocaleDateString("sv-SE", { timeZone: "Asia/Yerevan" })))}${app.arrived_by_name ? ` · ${escapeHtml(app.arrived_by_name)}` : ""}${app.arrival_note ? ` · ${escapeHtml(app.arrival_note)}` : ""}</p>` : ""}
