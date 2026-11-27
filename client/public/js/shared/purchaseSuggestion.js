@@ -170,3 +170,39 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
     runs_out_before_arrival: d > 0 && ranOut,
   };
 }
+
+/**
+ * A purchase budget (owner, 2026-11-26 audit, step 4): the suggested orders filled by priority until the money runs out.
+ * Priority: out of stock now, then runs out before the goods could come, then the fewest days left, then the better margin (our selling
+ * price per piece / its cost per piece). A line that does not fit whole gets the most whole steps that fit; one that cannot get a single
+ * step waits for the next order (0). Lines without a last price cost nothing here and keep their order (they cannot be weighed).
+ * lines: [{ id, suggested, step, cost (USD a piece or null), stockNow, runsOut, daysNow, priceAmd }]
+ * Returns { orders: Map(id -> pieces), cut: Set(ids that got less than suggested), spent }.
+ */
+export function fitToBudget(lines, budgetUsd) {
+  const budget = Number(budgetUsd);
+  const orders = new Map();
+  const cut = new Set();
+  let spent = 0;
+  const rank = (l) => (Number(l.stockNow) <= 0 ? 0 : l.runsOut ? 1 : 2);
+  const margin = (l) => (Number(l.cost) > 0 && Number(l.priceAmd) > 0 ? Number(l.priceAmd) / Number(l.cost) : 0);
+  const sorted = [...lines].sort(
+    (a, b) => rank(a) - rank(b) || (a.daysNow ?? Infinity) - (b.daysNow ?? Infinity) || margin(b) - margin(a) || String(a.id).localeCompare(String(b.id))
+  );
+  for (const l of sorted) {
+    const want = Math.max(0, Number(l.suggested) || 0);
+    const cost = Number(l.cost);
+    if (!(cost > 0) || !(budget >= 0)) {
+      orders.set(l.id, want);
+      continue;
+    }
+    const step = Math.max(1, Math.round(Number(l.step) || 1));
+    const left = budget - spent;
+    const fitSteps = Math.floor((left + 1e-9) / (step * cost));
+    const pieces = Math.min(want, fitSteps * step);
+    orders.set(l.id, pieces);
+    if (pieces < want) cut.add(l.id);
+    spent += pieces * cost;
+  }
+  return { orders, cut, spent: Math.round(spent * 100) / 100 };
+}

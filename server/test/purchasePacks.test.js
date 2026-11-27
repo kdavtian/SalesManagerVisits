@@ -148,3 +148,37 @@ test("purchaseLine: why (cover need, safety, owed, left on arrival) and sales lo
   // owed to submitted orders is reported as backlog
   assert.equal(purchaseLine({ stockNow: 0, wanted: 15, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).backlog, 15);
 });
+
+// Owner, 2026-11-26 (step 4): a budget fills the orders by priority; what does not fit waits for the next order.
+import { fitToBudget } from "../src/products/purchaseSuggestion.js";
+test("fitToBudget: out of stock first, then runs out, fewest days, better margin; whole steps only", () => {
+  const lines = [
+    { id: "calm", suggested: 60, step: 60, cost: 3, stockNow: 200, runsOut: false, daysNow: 90, priceAmd: 3000 },
+    { id: "out", suggested: 120, step: 60, cost: 3, stockNow: 0, runsOut: true, daysNow: 0, priceAmd: 2000 },
+    { id: "soon", suggested: 60, step: 60, cost: 4, stockNow: 10, runsOut: true, daysNow: 5, priceAmd: 2000 },
+    { id: "nocost", suggested: 20, step: 20, cost: null, stockNow: 0, runsOut: true, daysNow: 0, priceAmd: null },
+  ];
+  // 700$: out 120 x 3 = 360, soon 60 x 4 = 240 (600), calm needs 180 more: does not fit -> next order
+  const r = fitToBudget(lines, 700);
+  assert.equal(r.orders.get("out"), 120);
+  assert.equal(r.orders.get("soon"), 60);
+  assert.equal(r.orders.get("calm"), 0);
+  assert.equal(r.orders.get("nocost"), 20, "no price: kept, cannot be weighed");
+  assert.deepEqual([...r.cut], ["calm"]);
+  assert.equal(r.spent, 600);
+  // 200$: out gets one step of 60 (180$), the rest waits
+  const small = fitToBudget(lines, 200);
+  assert.equal(small.orders.get("out"), 60);
+  assert.equal(small.orders.get("soon"), 0);
+  assert.ok(small.cut.has("out") && small.cut.has("soon") && small.cut.has("calm"));
+  // a big budget changes nothing
+  const big = fitToBudget(lines, 1e6);
+  assert.equal(big.cut.size, 0);
+  // same urgency: the better margin first
+  const two = [
+    { id: "low", suggested: 60, step: 60, cost: 5, stockNow: 0, runsOut: true, daysNow: 0, priceAmd: 2000 },
+    { id: "high", suggested: 60, step: 60, cost: 5, stockNow: 0, runsOut: true, daysNow: 0, priceAmd: 4000 },
+  ];
+  assert.equal(fitToBudget(two, 300).orders.get("high"), 60);
+  assert.equal(fitToBudget(two, 300).orders.get("low"), 0);
+});
