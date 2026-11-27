@@ -277,6 +277,7 @@ export const enProducts = {
     ps_draft_delete: "Delete",
     ps_draft_opened: "Draft of {date} opened.",
     ps_draft_missing: "{n} of its products are not suggested any more.",
+    ps_draft_no_card: "This supplier needs nothing today, so its card is not shown. Use New purchase to order its products.",
     ps_trend_down: "Sales ↓",
     pu_hint: "Supplier invoices, typed here with the columns of the Excel Purchase_IN sheet. Every invoice is compared with the Excel: same number and date, the same packs and the same USD total = matches. The Excel stays the source of stock until the Purchases module is switched over.",
     pu_new: "New purchase",

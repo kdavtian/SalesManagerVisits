@@ -31,7 +31,7 @@ export function cleanDraft(body) {
     lines,
     leadDays: days(body?.lead_days),
     coverDays: days(body?.cover_days),
-    totalUsd: Number.isFinite(total) && total >= 0 ? Math.round(total * 100) / 100 : null,
+    totalUsd: Number.isFinite(total) && total >= 0 && total < 1e11 ? Math.round(total * 100) / 100 : null,
   };
 }
 

@@ -610,16 +610,25 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       const d = drafts.find((x) => x.id === Number(openBtn.dataset.draftOpen));
       if (!d) return;
       const qty = new Map((d.lines ?? []).map((l) => [Number(l.product_id), Number(l.qty)]));
-      // the draft's supplier card: every product on it gets the draft's quantity (0 when the draft did not have it)
+      // the draft's supplier card: every product on it gets the draft's quantity (0 when the draft did not have it); a drafted product the
+      // owner moved to another card gets its quantity there too (review 2026-11-27)
       const own = lines.filter((l) => keyOf(l.group) === keyOf(d.supplier));
-      for (const l of own) {
+      for (const l of lines) {
+        if (!own.includes(l) && !qty.has(l.product_id)) continue;
         l.order = qty.get(l.product_id) ?? 0;
         l.next_order = false;
         recompute(l);
       }
-      const missing = [...qty.entries()].filter(([id, q]) => q > 0 && !own.some((l) => l.product_id === id)).length;
+      const missing = [...qty.entries()].filter(([id, q]) => q > 0 && !lines.some((l) => l.product_id === id)).length;
+      if (!own.length) {
+        // the supplier needs nothing today: its card is not on the screen, say so here (review 2026-11-27)
+        draftsPanel.insertAdjacentHTML("afterbegin", `<p class="form-error">${escapeHtml(t("ps_draft_no_card"))}</p>`);
+        render();
+        return;
+      }
       draftsPanel.hidden = true;
       draftsChip.setAttribute("aria-expanded", "false");
+      urgentOnly = false; // the whole draft is shown, not only its urgent rows
       render();
       const supplier = own[0]?.group ?? d.supplier;
       cardMessage(supplier, `${t("ps_draft_opened").replace("{date}", shortDate(String(d.updated_at).slice(0, 10)))}${missing ? ` ${t("ps_draft_missing").replace("{n}", missing)}` : ""}`);

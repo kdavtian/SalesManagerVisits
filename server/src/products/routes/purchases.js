@@ -231,7 +231,7 @@ purchasesRouter.post("/suggestion-drafts", async (req, res) => {
 });
 purchasesRouter.delete("/suggestion-drafts/:id", async (req, res) => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) return res.status(400).json({ error: "Bad id" });
+  if (!Number.isInteger(id) || id <= 0 || id > 2147483647) return res.status(400).json({ error: "Bad id" });
   res.status((await deleteDraft(id)) ? 204 : 404).end();
 });
 
