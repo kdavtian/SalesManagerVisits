@@ -6,7 +6,7 @@ import { enqueueCheckin, fileBytes } from "../offlineQueue.js";
 import { openFileViewer } from "../fileViewer.js";
 import { openSyncQueueSheet } from "../syncQueueSheet.js";
 import { openOrderMenu } from "../orderMenu.js";
-import { t, getLang } from "../i18n.js";
+import { t, getLang, siteBrandGroups } from "../i18n.js";
 import { icons } from "../icons.js";
 import { state } from "../state.js";
 import { openPhotoLightbox } from "../photoLightbox.js";
@@ -34,7 +34,7 @@ const OUTCOME_OPTIONS = [
 
 // Castrol/Lotos/Royal each get their own status tags; Competitors is a flat
 // list of brand names (presence is implied by ticking the name, no sub-status).
-const BRAND_GROUPS = [
+const BRAND_GROUPS = siteBrandGroups([
   {
     key: "castrol",
     labelKey: "brand_group_castrol",
@@ -64,11 +64,11 @@ const BRAND_GROUPS = [
     labelKey: "brand_group_competitors",
     options: [], // the competitors sheet (competitorShelf.js) reads the live list: competitorBrandList.js
   },
-];
+]);
 
 // The two cards of "Products found at this location": one "KAD products" card (Castrol, Lotos and Royal in one sheet) and Competitors.
 const BRAND_CARDS = [
-  { key: "kad", labelKey: "brand_group_kad", groups: ["castrol", "lotos", "royal"] },
+  { key: "kad", labelKey: "brand_group_kad", groups: siteBrandGroups(["castrol", "lotos", "royal"]) },
   { key: "competitors", labelKey: "brand_group_competitors", groups: ["competitors"] },
 ];
 
@@ -492,10 +492,10 @@ export async function renderCheckin(root, navigate, customerId) {
         <button type="button" class="icon-btn sheet-close-x" data-action="close-sheet" aria-label="${t("close")}">${icons.close}</button>
         <h2>${escapeHtml(t(card.labelKey))}</h2>
         ${
-          card.key === "kad"
+          card.key === "kad" && groups.length > 1
             ? `<div class="brand-sheet-columns">
                 <div class="brand-sheet-col">${sectionHtml(groups[0])}</div>
-                <div class="brand-sheet-col">${sectionHtml(groups[1])}${sectionHtml(groups[2])}</div>
+                <div class="brand-sheet-col">${groups.slice(1).map(sectionHtml).join("")}</div>
               </div>`
             : groups.map(sectionHtml).join("")
         }

@@ -314,10 +314,11 @@ const LOGO_ASPECT = { castrol: 558 / 148, lotos: 452 / 113, royal: 401 / 105 };
 // bigger than the Castrol mark; scaled down to match it optically.
 const LOGO_SCALE = { castrol: 1, lotos: 0.78, royal: 1 };
 function drawLogos(doc, cy, h) {
-  const names = ["castrol", "lotos", "royal"];
+  // the demo site shows one brand only (owner, 2026-11-27)
+  const names = DEMO_SITE ? ["castrol"] : ["castrol", "lotos", "royal"];
   const heights = names.map((n) => h * LOGO_SCALE[n]);
   const widths = names.map((n, i) => heights[i] * LOGO_ASPECT[n]);
-  const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / 2;
+  const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / Math.max(1, names.length - 1);
   let x = COLS[0];
   names.forEach((n, i) => {
     doc.image(logo(n), x, cy - heights[i] / 2, { width: widths[i], height: heights[i] });

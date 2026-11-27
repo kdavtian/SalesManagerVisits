@@ -399,7 +399,7 @@ const isDemoSite = () => process.env.DEMO_MODE === "1";
 const DEMO_BRANDING = { title: "KAD Demo", themeColor: "#6d28d9" };
 // The demo is shown to clients abroad (owner, 2026-11-22): English until the visitor picks Armenian, amounts in US dollars. Read by the page
 // before anything else runs (theme-init.js, browser-check.js, bootGate.js, i18n.js); a language picked in Settings still wins.
-const DEMO_HEAD_META = '<meta name="robots" content="noindex, nofollow" />\n    <meta name="default-lang" content="en" />\n    <meta name="site-currency" content="USD" />';
+const DEMO_HEAD_META = '<meta name="robots" content="noindex, nofollow" />\n    <meta name="default-lang" content="en" />\n    <meta name="site-currency" content="USD" />\n    <meta name="site-brands" content="castrol" />';
 
 app.get("/manifest.json", async (req, res) => {
   if (isDemoSite()) {

@@ -16,6 +16,8 @@ The demo opens **in English** (a visitor can still switch to Armenian in Setting
 
 Electronic documents are filled in too (owner, 2026-11-27): every rep has a signature, the last delivered order of each buying customer carries a customer-signed delivery-acceptance act, and most approved payments carry a signed receipt (the rest show as "not confirmed"). On the demo these PDFs are in English with USD amounts (`DEMO_EN` in `server/src/orders/orderBlankPdf.js`); the real app's documents are unchanged. A demo filled earlier needs `./deploy/demo.sh reset` once.
 
+The demo shows **one brand, Castrol** (owner, 2026-11-27): all 16 products are Castrol, the shelf sections and map filters of the company's other brands are hidden (`site-brands` meta, `siteBrandGroups` in `i18n.js`) and its documents carry only the Castrol logo. Competitor brands found at a visit (Mobil, Shell...) stay: that is the competitor-tracking feature.
+
 The demo looks different where nobody can miss it: it installs / appears as **"KAD Demo"** with a purple status bar, and it asks search engines not to index it. `demo-site.mjs` refuses to run unless `DEMO_MODE=1` (set only in the demo compose file), and `seed` refuses any database that holds a user whose e-mail does not end in `@kad.demo`.
 
 ## What the demo contains

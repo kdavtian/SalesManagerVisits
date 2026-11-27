@@ -88,10 +88,10 @@ const PRODUCTS = [
   ["Castrol", "Castrol Transmax ATF Dex III 1L", "Transmax", 1, 7800, 7500, 7200, 9900, 5600, 350],
   ["Castrol", "Castrol Brake Fluid DOT 4 0.5L", "Brake", 0.5, 3200, 3100, 2950, 4200, 2300, 500],
   ["Castrol", "Castrol Power1 4T 10W-40 1L", "Moto", 1, 6900, 6700, 6400, 8900, 4900, 220],
-  ["Royal", "Royal 5W-30 Synthetic 4L", "Royal", 4, 19900, 19300, 18700, 24900, 14300, 140],
-  ["Royal", "Royal 10W-40 Semi-Synthetic 4L", "Royal", 4, 15900, 15400, 14900, 19900, 11400, 200],
-  ["Lotos", "Lotos Quazar 5W-40 4L", "Lotos", 4, 17500, 17000, 16400, 22000, 12600, 150],
-  ["Orlen", "Orlen Platinum Ultor 15W-40 20L", "Orlen", 20, 58000, 56200, 54300, 72000, 42000, 60],
+  ["Castrol", "Castrol Magnatec Stop-Start 5W-30 A5 4L", "Magnatec", 4, 19900, 19300, 18700, 24900, 14300, 140],
+  ["Castrol", "Castrol GTX Ultraclean 10W-40 4L", "GTX", 4, 15900, 15400, 14900, 19900, 11400, 200],
+  ["Castrol", "Castrol EDGE Turbo Diesel 5W-40 4L", "EDGE", 4, 17500, 17000, 16400, 22000, 12600, 150],
+  ["Castrol", "Castrol CRB Multi 15W-40 20L", "CRB", 20, 58000, 56200, 54300, 72000, 42000, 60],
 ];
 
 // ---------- helpers ----------
@@ -167,7 +167,8 @@ async function seed() {
         `INSERT INTO products (name, brand, family, unit, unit_price_amd, active, bronze_price_amd, silver_price_amd, gold_price_amd, retail_price_amd,
            stock_qty, size_l, landing_cost_amd, net_cost_amd, is_commercial)
          VALUES ($1, $2, $3, 'pcs', $4, true, $4, $5, $6, $7, $8, $9, $10, $11, true) RETURNING id, name, brand, unit_price_amd`,
-        [name, brand, family, usd(bronze), usd(silver), usd(gold), usd(retail), stock, size, usd(landing), usd(landing * 1.04)]
+        // the brand has its own column and the lists and documents print it in front of the name
+        [name.replace(/^Castrol /, ""), brand, family, usd(bronze), usd(silver), usd(gold), usd(retail), stock, size, usd(landing), usd(landing * 1.04)]
       );
       productRows.push(rows[0]);
     }
@@ -217,7 +218,7 @@ async function seed() {
       await client.query(
         `INSERT INTO checkins (customer_id, user_id, timestamp, lat, lng, distance_meters, within_range, note, brands_found, created_at, ended_at)
          VALUES ($1, $2, $3, $4, $5, $6, true, $7, $8, $3, $9)`,
-        [c.id, repIds[c.rep], at, c.lat + 0.00003, c.lng + 0.00002, between(5, 60), pick(notes), pick([["Castrol"], ["Castrol", "Mobil"], ["Castrol", "Shell"], ["Mobil"]]), new Date(at.getTime() + between(8, 30) * 60000)]
+        [c.id, repIds[c.rep], at, c.lat + 0.00003, c.lng + 0.00002, between(5, 60), pick(notes), pick([["Castrol"], ["Castrol"], ["Castrol", "Mobil"], ["Castrol", "Shell"], ["Mobil"]]), new Date(at.getTime() + between(8, 30) * 60000)]
       );
       visits += 1;
     };
