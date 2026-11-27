@@ -243,11 +243,17 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
     const shown = [...$("#pu-supplier-chips").querySelectorAll("[data-supplier]")].filter((b) => b.dataset.supplier !== "__new");
     if (shown.length === 1) shown[0].click();
   });
+  // the line under a supplier chip: a transporter's real supplier, else its brands -- never the chip's own name again ("Castrol / Castrol";
+  // owner 2026-11-27, Purchases plan C)
+  const chipNote = (s) => {
+    const note = String(s.goods_from || s.brands || "").trim();
+    return note && note.toLowerCase() !== String(s.name).trim().toLowerCase() ? note : "";
+  };
   function paintSupplier() {
     const q = findEl.value.trim().toLowerCase();
     const chips = known.filter((s) => !q || s.name.toLowerCase().includes(q) || s.name.toLowerCase() === supplierName.toLowerCase()).map((s) => {
       const on = s.name.toLowerCase() === supplierName.toLowerCase();
-      return `<button type="button" class="pu-chip ${on ? "pu-chip-on" : ""}" role="radio" aria-checked="${on}" data-supplier="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong>${s.brands ? `<span class="muted">${escapeHtml(s.brands)}</span>` : ""}</button>`;
+      return `<button type="button" class="pu-chip ${on ? "pu-chip-on" : ""}" role="radio" aria-checked="${on}" data-supplier="${escapeHtml(s.name)}"><strong>${escapeHtml(s.name)}</strong>${chipNote(s) ? `<span class="muted">${escapeHtml(chipNote(s))}</span>` : ""}</button>`;
     });
     chips.push(`<button type="button" class="pu-chip pu-chip-add ${supplierName === "__new" ? "pu-chip-on" : ""}" role="radio" aria-checked="${supplierName === "__new"}" data-supplier="__new"><strong>${t("pu_supplier_add")}</strong></button>`);
     $("#pu-supplier-chips").innerHTML = chips.join("");

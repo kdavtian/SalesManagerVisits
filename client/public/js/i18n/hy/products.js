@@ -313,6 +313,7 @@ export const hyProducts = {
     pu_add_line: "Ավելացնել ապրանք",
     pu_lines_filter: "Գտնել ապրանքներում",
     pu_export_aria: "Ներբեռնել ժամանակահատվածը Excel-ով",
+    pu_via: "{name}-ի միջոցով",
     pu_export: "Excel",
     pu_files: "Հաշվի թուղթը",
     pu_files_none: "Հաշվի լուսանկար կամ PDF դեռ չկա",
