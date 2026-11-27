@@ -41,6 +41,7 @@ const PUBLIC_ROUTES = new Map([
   ["app.js GET /^\\/css\\/.*\\.css$/", "stylesheets"],
   ["app.js GET /^\\/(?:js|css|icons|brand|fonts|vendor|assets)\\/|\\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|webmanifest)$/i", "a missing script / style / picture file: a plain 404, never the app page (no data)"],
   ["app.js GET /manifest.json", "the install manifest"],
+  ["app.js GET /index.html", "the start page itself, the same one every other address returns (the service worker stores it at install)"],
   ["app.js GET /.*/", "the app page for every other address (no data)"],
 ]);
 
