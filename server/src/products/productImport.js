@@ -161,7 +161,9 @@ export async function classifyImportRows(rows) {
       continue;
     }
 
-    const key = row.sku ? `sku:${row.sku.toLowerCase()}` : `id:${identityKeyOf(row.brand, row.name, row.unit)}`;
+    // a row is "the same product twice" when its SKU AND its brand+name+unit repeat: one workbook SKU can sit on two sizes (Codex review
+    // 2026-11-27), and the 4L must not be dropped as a duplicate of the 1L
+    const key = `${row.sku ? `sku:${row.sku.toLowerCase()}|` : ""}id:${identityKeyOf(row.brand, row.name, row.unit)}`;
     if (seenKeys.has(key)) {
       duplicates.push({ rowNumber: row.rowNumber, name: row.name, reason: "Same product appears more than once in this file" });
       continue;

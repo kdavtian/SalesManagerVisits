@@ -142,10 +142,14 @@ test("classifyImportRows: a SKU two products share matches by brand+name+unit in
   const sku = `ITEST-SHARED-${Date.now()}`;
   await insertProduct({ name: "Itest Shared Sku Oil", brand: "Itest Brand", unit: "1L", sku, standard: 3000, retail: 3600 });
   const fourL = await insertProduct({ name: "Itest Shared Sku Oil", brand: "Itest Brand", unit: "4L", sku, standard: 9000, retail: 10000 });
+  const oneL = (await pool.query("SELECT id FROM products WHERE sku = $1 AND unit = '1L'", [sku])).rows[0];
   const classified = await classifyImportRows([
-    { rowNumber: 2, brand: "Itest Brand", name: "Itest Shared Sku Oil", unit: "4L", sku, standard: 9500, special: null, specialFrom: null, specialTo: null, retail: 10500, netCost: null },
+    { rowNumber: 2, brand: "Itest Brand", name: "Itest Shared Sku Oil", unit: "1L", sku, standard: 3100, special: null, specialFrom: null, specialTo: null, retail: 3700, netCost: null },
+    { rowNumber: 3, brand: "Itest Brand", name: "Itest Shared Sku Oil", unit: "4L", sku, standard: 9500, special: null, specialFrom: null, specialTo: null, retail: 10500, netCost: null },
   ]);
   assert.equal(classified.newProducts.length, 0);
-  assert.equal(classified.changedPrices.length, 1);
-  assert.equal(classified.changedPrices[0].productId, fourL.id, "the 4L, by its name and size, not the last product with that SKU");
+  assert.equal(classified.duplicates.length, 0, "both sizes of one SKU are imported (Codex review)");
+  assert.equal(classified.changedPrices.length, 2);
+  assert.deepEqual(classified.changedPrices.map((c) => c.productId).sort((a, b) => a - b), [oneL.id, fourL.id].sort((a, b) => a - b), "each size by its name and size, not the last product with that SKU");
+  assert.ok(!classified.missingProducts.some((m) => m.id === oneL.id || m.id === fourL.id));
 });
