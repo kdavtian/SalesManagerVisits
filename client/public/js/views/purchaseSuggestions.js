@@ -14,7 +14,7 @@ import { t } from "../i18n.js";
 import { escapeHtml, saveBlob } from "../util.js";
 import { icons } from "../icons.js";
 import { normalizeUnitLabel, compareProducts } from "../productSort.js";
-import { purchaseLine } from "../shared/purchaseSuggestion.js";
+import { purchaseLine, fitToBudget } from "../shared/purchaseSuggestion.js";
 
 // dollars as the owner writes them: 4,500$ (whole) and 12.7$ (a piece's price, up to 2 decimals)
 const usd = (n) => `${Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}$`;
@@ -95,6 +95,14 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     </button>
     ${trying ? `<span class="ps-plan-note">${escapeHtml(t("ps_plan_trying"))}</span>` : ""}
     <button type="button" class="ps-plan-chip ps-urgent-chip" id="ps-urgent" aria-pressed="false" hidden></button>
+    <button type="button" class="ps-plan-chip" id="ps-budget-chip" aria-expanded="false" aria-controls="ps-budget-edit"></button>
+    <form class="ps-plan-edit ps-budget-edit" id="ps-budget-edit" hidden>
+      <label><span>${escapeHtml(t("ps_budget_label"))}</span><input type="number" inputmode="decimal" min="1" step="any" name="budget" required></label>
+      <div class="ps-plan-actions">
+        <button type="submit" class="btn btn-primary">${escapeHtml(t("ps_budget_apply"))}</button>
+        <button type="button" class="btn" id="ps-budget-clear">${escapeHtml(t("ps_budget_clear"))}</button>
+      </div>
+    </form>
     <form class="ps-plan-edit" id="ps-plan-edit" hidden>
       <label><span>${escapeHtml(t("ps_plan_lead"))}</span><input type="number" inputmode="numeric" min="1" max="365" step="1" name="lead" value="${lead}" required></label>
       <label><span>${escapeHtml(t("ps_plan_cover"))}</span><input type="number" inputmode="numeric" min="1" max="365" step="1" name="cover" value="${cover}" required></label>
@@ -204,6 +212,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
       out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      l.next_order ? `<span class="badge badge-neutral">${t(l.order ? "ps_budget_less" : "ps_next_order")}</span>` : "",
       l.too_much ? `<span class="badge badge-warning">${t(l.order <= l.step_pieces ? "ps_too_much_step" : "ps_too_much").replace("{days}", Math.round(l.days_after_receiving))}</span>` : "",
       l.pack_size_guessed ? `<span class="badge badge-neutral">${t("ps_pack_guessed")}</span>` : "",
       l.trend === "up" ? `<span class="badge badge-info">${t("ps_trend_up")}</span>` : l.trend === "down" ? `<span class="badge badge-neutral">${t("ps_trend_down")}</span>` : "",
@@ -276,7 +285,63 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const tot = totals(lines.filter((x) => x.group === l.group));
     card.querySelector(".ps-totals").innerHTML = totalsHtml(tot);
     card.querySelector(".ps-create").disabled = !tot.products;
+    paintBudget();
   }
+  // ---- budget (owner 2026-11-26 audit, step 4): the orders filled by priority until the money runs out (shared fitToBudget); what does not
+  // fit is marked "next order". For this screen only; "Clear" gives the suggestions back. A − / + afterwards is the owner's own choice.
+  let budget = null;
+  const budgetChip = root.querySelector("#ps-budget-chip");
+  const budgetEdit = root.querySelector("#ps-budget-edit");
+  function paintBudget() {
+    const spent = lines.reduce((a, l) => a + (l.cost_usd ?? 0) * l.order, 0);
+    budgetChip.textContent = budget == null ? t("ps_budget_chip") : t("ps_budget_on").replace("{budget}", usd(budget)).replace("{spent}", usd(spent));
+    budgetChip.classList.toggle("chip-active", budget != null);
+    budgetChip.classList.toggle("ps-budget-over", budget != null && spent > budget + 0.5);
+  }
+  function applyBudget(value) {
+    budget = value;
+    if (value == null) {
+      for (const l of lines) {
+        l.order = l.suggested;
+        l.next_order = false;
+        recompute(l);
+      }
+    } else {
+      const { orders, cut } = fitToBudget(
+        lines.map((l) => ({ id: l.product_id, suggested: l.suggested, step: l.step_pieces, cost: l.cost_usd, stockNow: l.stock_now, runsOut: l.runs_out_before_arrival, daysNow: l.days_now, priceAmd: l.price_amd })),
+        value
+      );
+      for (const l of lines) {
+        l.order = orders.get(l.product_id) ?? l.order;
+        l.next_order = cut.has(l.product_id);
+        recompute(l);
+      }
+    }
+    render();
+  }
+  budgetChip.addEventListener("click", () => {
+    budgetEdit.hidden = !budgetEdit.hidden;
+    budgetChip.setAttribute("aria-expanded", String(!budgetEdit.hidden));
+    if (!budgetEdit.hidden) {
+      const input = budgetEdit.querySelector("input");
+      input.value = budget ?? "";
+      input.focus();
+    }
+  });
+  budgetEdit.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const value = Number(String(new FormData(budgetEdit).get("budget") ?? "").replace(/[, ]/g, ""));
+    if (!(value > 0)) return budgetEdit.reportValidity();
+    budgetEdit.hidden = true;
+    budgetChip.setAttribute("aria-expanded", "false");
+    applyBudget(value);
+  });
+  root.querySelector("#ps-budget-clear").addEventListener("click", () => {
+    budgetEdit.hidden = true;
+    budgetChip.setAttribute("aria-expanded", "false");
+    applyBudget(null);
+  });
+
   // "only urgent" (owner 2026-11-26 audit, step 3): out of stock now, or runs out before the goods could come. It only hides rows: the
   // totals, Create and Share still take the whole order of a supplier.
   const isUrgent = (l) => l.stock_now <= 0 || l.runs_out_before_arrival;
@@ -296,6 +361,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
   });
   function render() {
     paintUrgent();
+    paintBudget();
     const groups = new Map();
     for (const l of lines) {
       if (!groups.has(l.group)) groups.set(l.group, []);
@@ -349,6 +415,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       const l = find((minus ?? plus ?? reset).dataset.minus ?? (minus ?? plus ?? reset).dataset.plus ?? (minus ?? plus ?? reset).dataset.reset);
       if (!l) return;
       l.order = reset ? l.suggested : Math.max(0, l.order + (plus ? l.step_pieces : -l.step_pieces));
+      // back to the full suggestion by hand: no longer cut by the budget (review 2026-11-27)
+      l.next_order = Boolean(l.next_order) && l.order < l.suggested;
       recompute(l);
       redrawLine(l);
       // focus stays on the button pressed; − at 0 is disabled, so focus goes to + (review 2026-11-26)

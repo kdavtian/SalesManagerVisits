@@ -69,6 +69,17 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     await expect(page.locator("#ps-plan-chip")).toContainText("45");
     await expect(page.locator(".ps-plan-note")).toHaveCount(0);
     await expect(line).toBeVisible();
+    // budget (owner 2026-11-26, step 4): 1$ fits nothing -> the product waits for the next order; "No budget" gives the suggestion back
+    await page.locator("#ps-budget-chip").click();
+    await page.locator('#ps-budget-edit input[name="budget"]').fill("1");
+    await page.locator('#ps-budget-edit button[type="submit"]').click();
+    await expect(line.locator(".ps-qty strong")).toHaveText("0 boxes");
+    await expect(line).toContainText("Next order");
+    await expect(page.locator("#ps-budget-chip")).toContainText("Budget 1$");
+    await page.locator("#ps-budget-chip").click();
+    await page.locator("#ps-budget-clear").click();
+    await expect(line.locator(".ps-qty strong")).toHaveText(`${boxes} boxes`);
+    await expect(line).not.toContainText("Next order");
     await line.locator("[data-plus]").click();
     // sort (owner 2026-11-26): products by default, urgency, price -- remembered
     await expect(page.locator('#ps-sort [data-sort="products"]')).toHaveAttribute("aria-pressed", "true");
