@@ -104,6 +104,15 @@ test("@iphone purchase suggestions: a step up recomputes the line, Create purcha
     const rowOf = ws.getRows(2, ws.rowCount - 1).find((r) => String(r.getCell(2).value).includes(oil.name));
     expect(rowOf.getCell(1).value).toBe(erpId);
     expect(rowOf.getCell(3).value).toBe(boxes + 5);
+    // a finger on the card while scrolling does not grey it (owner screenshot 2026-11-27: the shared .card pressed look)
+    const cardEl = page.locator(".ps-supplier", { hasText: supplier });
+    const bgBefore = await cardEl.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const box = await line.locator(".ps-price").boundingBox();
+    await page.mouse.move(box.x + 5, box.y + 5);
+    await page.mouse.down();
+    await page.waitForTimeout(400); // past the pressed-look transition
+    expect(await cardEl.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(bgBefore);
+    await page.mouse.up();
     // the supplier's card makes the purchase
     const card = page.locator(".ps-supplier", { hasText: supplier });
     await card.locator(".ps-create").click();
