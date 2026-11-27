@@ -134,6 +134,7 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
       await page.evaluate(() => localStorage.removeItem("fv_pu_draft"));
       await page.goto("/#/purchases");
       await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
       const form = page.locator(".pu-form-sheet");
       await expect(form.locator("#pu-supplier-chips")).toBeVisible({ timeout: 15000 });
       await page.waitForTimeout(500); // the sheet has slid in
@@ -175,6 +176,7 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
       await page.waitForTimeout(600);
       await form.locator("#pu-cancel").click();
       await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
       await expect(page.locator(".pu-draft")).toBeVisible();
       await expect(page.locator("#pu-no")).toHaveValue(newNo);
       await expect(page.locator(".pu-fl")).toHaveCount(2);
@@ -186,6 +188,7 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
       expect(await page.evaluate(() => localStorage.getItem("fv_pu_draft"))).toBeNull();
       // the same supplier, number and day again: warned at once; Save anyway is the way through
       await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
       await page.locator('[data-supplier="E2E Hist Supplier"]').click();
       await page.locator("#pu-no").fill(newNo);
       await expect(page.locator("#pu-dup")).toBeVisible();
@@ -198,6 +201,7 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
     // the date can be changed: the button shows the new day, and a price left empty is refused (not saved as $0)
     await page.goto("/#/purchases");
     await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
     await page.locator('[data-supplier="E2E Hist Supplier"]').click();
     await page.locator("#pu-no").fill("DATE-1");
     const errors = [];
@@ -220,6 +224,9 @@ test("@smoke Purchases form: supplier chip, next number, last rate, history besi
     // an empty form says what is missing next to each field, not in one line at the bottom
     await page.goto("/#/purchases");
     await page.locator("#pu-new").click();
+    // the cancelled form's draft is written 400 ms after the last key: cleared again now, right before the empty form opens
+    await page.evaluate(() => localStorage.removeItem("fv_pu_draft"));
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
     await page.locator("#pu-save").click();
     await expect(page.locator("#err-supplier")).toBeVisible();
     await expect(page.locator("#err-no")).toBeVisible();
@@ -345,6 +352,7 @@ test.describe("narrow Armenian", () => {
       await shot(page, "purchases-hy-import");
       await page.keyboard.press("Escape");
       await page.locator("#pu-new").click();
+    await page.locator("#pn-empty").click(); // New purchase asks for the supplier first (owner 2026-11-27); the empty form for an invoice by hand
       await expect(page.locator("#pu-supplier-chips")).toBeVisible();
       await page.locator('[data-supplier^="E2E Երկար"]').click();
       await page.locator("#pu-search").fill("Castrol Edge");

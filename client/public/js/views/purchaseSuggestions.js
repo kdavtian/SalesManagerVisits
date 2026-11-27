@@ -38,13 +38,17 @@ const addDays = (day, n) => {
 const shortDate = (day) => (day ? `${day.slice(8, 10)}.${day.slice(5, 7)}.${day.slice(2, 4)}` : "");
 
 export async function renderPurchaseSuggestions(root, navigate, what = {}) {
+  // New purchase (owner, 2026-11-27): "New -> choose the supplier -> all products of that supplier; an AI button fills the quantities
+  // smartly, which can be changed; can be saved as a draft". The same screen, for one supplier, every product it sells us, all at 0.
+  const builder = Boolean(what.all && what.supplier);
+  const keep = builder ? { supplier: what.supplier, all: true } : {};
   root.innerHTML = `
     <div class="detail-view ps-view">
       <div class="detail-header">
         <button class="icon-btn" id="back-btn" aria-label="${t("back")}">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <div class="detail-header-title"><h1>${t("ps_title")}</h1></div>
+        <div class="detail-header-title"><h1>${t(builder ? "pn_title" : "ps_title")}</h1></div>
         <div class="detail-header-actions"><button type="button" class="settings-hint-icon" id="ps-hint" aria-label="${t("more_info")}" aria-expanded="false">!</button></div>
       </div>
       <p class="muted ps-hint" id="ps-hint-text" hidden></p>
@@ -123,9 +127,9 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const f = new FormData(editor);
     const ok = (v) => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 365;
     if (!ok(f.get("lead")) || !ok(f.get("cover"))) return editor.reportValidity();
-    renderPurchaseSuggestions(root, navigate, { lead_days: Number(f.get("lead")), cover_days: Number(f.get("cover")) });
+    renderPurchaseSuggestions(root, navigate, { ...keep, lead_days: Number(f.get("lead")), cover_days: Number(f.get("cover")) });
   });
-  plan.querySelector("#ps-plan-reset")?.addEventListener("click", () => renderPurchaseSuggestions(root, navigate));
+  plan.querySelector("#ps-plan-reset")?.addEventListener("click", () => renderPurchaseSuggestions(root, navigate, keep));
 
   // every line once, by product; `group` = the supplier it sits under now (the owner can move it)
   // urgency_rank = the server's order inside a card (runs out before the goods come first, then the fewest days left)
@@ -181,7 +185,9 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   const recompute = (l) =>
     // from the server's exact inputs (not the rounded numbers shown), so the phone and the server agree to the piece
-    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, wished: l.wished ?? 0, order: l.order }));
+    Object.assign(l, purchaseLine({ stockNow: l.free_raw ?? l.stock_now, coming: l.coming, comingLots: l.coming_lots ?? null, wanted: l.wanted, daily: l.daily_raw ?? l.daily_demand, leadTimeDays: lead, coverDays: cover, safetyStock: l.safety_stock, stepPieces: l.step_pieces, trend: l.trend, wished: l.wish_qty ?? l.wished ?? 0, order: l.order }));
+  // a new purchase starts empty: the AI button (or − / +) fills it; the suggestion stays on each line for "AI" and "Back to the suggestion"
+  if (builder) for (const l of lines) Object.assign(l, recompute({ ...l, order: 0 }), { order: 0 });
 
   const pcs = t("warehouse_pcs_suffix");
   const d = t("ps_d");
@@ -212,7 +218,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     const out = l.stock_now <= 0;
     const flags = [
       // an empty shelf already says "Out of stock" on the row; the badge is for a shelf that empties before the goods come
-      out ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
+      out && l.daily_demand > 0 ? `<span class="badge badge-danger">${t("ps_out")}</span>` : l.runs_out_before_arrival ? `<span class="badge badge-danger">${t("ps_runs_out")}</span>` : "",
       // bought only for wishes, no regular sales: whatever is left after the wishes has no buyer yet (review 2026-11-27)
       l.wished && !(l.daily_demand > 0) ? `<span class="badge badge-warning">${t("ps_wish_only")}</span>` : "",
       l.wished ? `<span class="badge badge-info">${t("ps_wished").replace("{pcs}", whole(l.wished)).replace("{n}", whole(l.wished_customers || 1))}</span>` : "",
@@ -230,7 +236,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     // row 3: the order in pieces x the last price of a piece
     const price = `${whole(l.order)} ${pcs}${l.cost_usd != null ? ` x ${usdPiece(l.cost_usd)}` : ""}`;
     const isOpen = open.has(l.product_id);
-    return `<div class="ps-line ${l.order ? "" : "ps-line-off"}" data-line="${l.product_id}">
+    return `<div class="ps-line ${l.order || builder ? "" : "ps-line-off"}" data-line="${l.product_id}">
       <button type="button" class="ps-row" data-toggle="${l.product_id}" aria-expanded="${isOpen}">
         <span class="ps-row-name">${escapeHtml(size ? nameWithoutSize(l.name, l.unit) : l.name)}${size ? ` <span class="inventory-row-size-chip">${escapeHtml(size)}</span>` : ""}</span>
         <span class="ps-row-sub">${now}${after}</span>
@@ -306,7 +312,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     budget = value;
     if (value == null) {
       for (const l of lines) {
-        l.order = l.suggested;
+        // no budget: back to the suggestions -- in a new purchase, back to empty (the AI button fills it; review 2026-11-27)
+        l.order = builder ? 0 : l.suggested;
         l.next_order = false;
         recompute(l);
       }
@@ -348,7 +355,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
 
   // "only urgent" (owner 2026-11-26 audit, step 3): out of stock now, or runs out before the goods could come. It only hides rows: the
   // totals, Create and Share still take the whole order of a supplier.
-  const isUrgent = (l) => l.stock_now <= 0 || l.runs_out_before_arrival;
+  // a product nobody buys (a new purchase lists every product of the supplier) is not urgent however empty its shelf (review 2026-11-27)
+  const isUrgent = (l) => l.daily_demand > 0 && (l.stock_now <= 0 || l.runs_out_before_arrival);
   let urgentOnly = false;
   const urgentChip = root.querySelector("#ps-urgent");
   function paintUrgent() {
@@ -380,7 +388,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
       .sort((a, b) => (a.g ? 0 : 1) - (b.g ? 0 : 1) || (rank.get(a.g) ?? 1e6) - (rank.get(b.g) ?? 1e6));
     if (!order.length) {
       // the wished, not-carried products show even when nothing needs ordering (Codex review 2026-11-27)
-      body.innerHTML = `<p class="empty-state">${t("ps_none")}</p>${candidatesHtml()}`;
+      body.innerHTML = `<p class="empty-state">${t(builder ? "pn_none" : "ps_none")}</p>${builder ? "" : candidatesHtml()}`;
       return;
     }
     body.innerHTML = order
@@ -393,6 +401,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
               <p class="muted ps-totals">${totalsHtml(tot)}</p>
             </div>
             <div class="ps-head-actions">
+              ${builder ? `<button type="button" class="btn ps-ai" data-ai-fill="${escapeHtml(g)}" aria-label="${escapeHtml(t("pn_ai_fill"))}">${icons.sparkles}<span>AI</span></button>` : ""}
               <button type="button" class="btn ${k === 0 ? "btn-primary" : ""} btn-has-icon ps-create" data-create="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_create")}: ${g || t("ps_no_supplier")}`)}" ${tot.products ? "" : "disabled"}>${icons.plus}<span>${escapeHtml(t("ps_create_short"))}</span></button>
               <button type="button" class="icon-btn ps-share-btn" data-share-menu="${escapeHtml(g)}" aria-label="${escapeHtml(`${t("ps_share")}: ${g || t("ps_no_supplier")}`)}" aria-expanded="false">${icons.share}</button>
             </div>
@@ -405,7 +414,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           ${[...list].filter((l) => !urgentOnly || isUrgent(l)).sort(SORTS[sortBy]).map(lineHtml).join("")}
         </section>`
       )
-      .join("") + candidatesHtml();
+      .join("") + (builder ? "" : candidatesHtml());
   }
   // products we do not carry that customers asked for (owner 2026-11-26, plan step 10): for the assortment decision, not orderable here
   function candidatesHtml() {
@@ -469,7 +478,7 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
           draft_tag: `suggest:${supplier.toLowerCase()}:${data.today}${trying ? `:w${lead}-${cover}` : ""}`,
           lines: list.map((l) => ({ product_id: l.product_id, product_name: l.name, brand: l.brand, size_l: l.liters_per_piece, qty: l.order, cost_usd: l.cost_usd })),
         },
-        { onSaved: () => renderPurchaseSuggestions(root, navigate, what) }
+        { onSaved: () => (builder ? navigate("#/purchases") : renderPurchaseSuggestions(root, navigate, what)) }
       );
     }
   });
@@ -551,6 +560,27 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
     }
   }
   body.addEventListener("click", (e) => {
+    const ai = e.target.closest("[data-ai-fill]");
+    if (ai) {
+      // the AI fill (owner 2026-11-27): every product of the card gets its smart quantity (the suggestion: sales until the goods come and
+      // the cover days after, safety, wishes, whole steps); each one can be changed with − / + afterwards
+      const supplier = ai.dataset.aiFill;
+      const own = lines.filter((l) => l.group === supplier);
+      for (const l of own) {
+        l.order = l.suggested;
+        l.next_order = false;
+        recompute(l);
+      }
+      render();
+      const filled = own.filter((l) => l.order > 0);
+      cardMessage(
+        supplier,
+        filled.length
+          ? t("pn_ai_done").replace("{n}", filled.length).replace("{usd}", usd(filled.reduce((a, l) => a + (l.cost_usd ?? 0) * l.order, 0)))
+          : t("pn_ai_nothing")
+      );
+      return;
+    }
     const menuBtn = e.target.closest("[data-share-menu]");
     const excel = e.target.closest("[data-share-excel]");
     const save = e.target.closest("[data-save-draft]");
@@ -573,6 +603,8 @@ export async function renderPurchaseSuggestions(root, navigate, what = {}) {
   const draftsChip = root.querySelector("#ps-drafts-chip");
   const draftsPanel = root.querySelector("#ps-drafts-panel");
   const keyOf = (n) => String(n ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  // a new purchase shows only its supplier's draft
+  if (builder) drafts = drafts.filter((d) => String(d.supplier).replace(/\s+/g, " ").trim().toLowerCase() === String(what.supplier).replace(/\s+/g, " ").trim().toLowerCase());
   function paintDrafts() {
     draftsChip.hidden = !drafts.length;
     draftsChip.textContent = t("ps_drafts_chip").replace("{n}", drafts.length);

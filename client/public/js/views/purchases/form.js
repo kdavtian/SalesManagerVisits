@@ -84,8 +84,15 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   overlay.className = "sheet-overlay";
   overlay.innerHTML = `<div class="sheet pu-form-sheet"><p class="loading-state" role="status">${t("loading")}</p></div>`;
   document.body.appendChild(overlay);
-  activateDialog(overlay);
-  const close = () => overlay.remove();
+  // Escape closes like Cancel (the pending draft is written first; review 2026-11-27)
+  activateDialog(overlay, { onEscape: () => close() });
+  // closing writes a pending draft at once (the typing is kept, as before) instead of 400 ms later, when the screen may already have moved
+  // on -- a draft written after the sheet was gone came back in the next empty form (2026-11-27)
+  let flushDraft = () => {};
+  const close = () => {
+    flushDraft();
+    overlay.remove();
+  };
   overlay.addEventListener("click", (e) => e.target === overlay && close());
 
   const [suppliersData, catalog] = await Promise.all([
@@ -202,10 +209,24 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
   const touched = () => Boolean(supplierName || noInput.value.trim() || lines.length || $("#pu-note").value.trim());
   function scheduleDraft() {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => (touched() ? writeDraft(draftKey, snapshot()) : clearDraft(draftKey)), 400);
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      if (touched()) writeDraft(draftKey, snapshot());
+      else clearDraft(draftKey);
+    }, 400);
   }
+  flushDraft = () => {
+    if (!saveTimer) return;
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (touched()) writeDraft(draftKey, snapshot());
+    else clearDraft(draftKey);
+  };
   if (draft) $("#pu-draft").hidden = false;
   $("#pu-draft-discard").addEventListener("click", () => {
+    // a pending write must not bring the discarded draft back when the sheet closes (review 2026-11-27)
+    clearTimeout(saveTimer);
+    saveTimer = null;
     clearDraft(draftKey);
     close();
     openPurchaseForm(invoice ?? null, { onSaved, rows, openInvoice });
@@ -761,6 +782,7 @@ export async function openPurchaseForm(invoice, { onSaved, rows = [], openInvoic
         allow_duplicate: allowDuplicate || undefined,
       });
       clearTimeout(saveTimer);
+      saveTimer = null;
       clearDraft(draftKey);
       close();
       onSaved?.();

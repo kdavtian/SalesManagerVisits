@@ -151,6 +151,7 @@ test("suggestions: waiting wishes are bought on top; custom-name wishes are cand
     const after = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
     const line = after.suppliers.flatMap((g) => g.lines).find((l) => l.product_id === oil.id);
     assert.equal(line.wished, 30);
+    assert.equal(line.wish_qty, 30, "the wish as asked, for the phone's recompute");
     assert.equal(line.wished_customers, 1);
     assert.ok(line.need >= lineBefore.need + 29, `${lineBefore.need} -> ${line.need}`);
     const cand = after.new_candidates.find((c) => c.name.toLowerCase().includes(`unicorn ${stamp}`));
@@ -186,4 +187,26 @@ test("suggestion drafts: save, replace for the same supplier, list, delete; purc
   assert.ok(list[0].saved_by);
   assert.equal((await apiRequest(`/api/purchases/suggestion-drafts/${first.data.id}`, { method: "DELETE", cookie: cookies.admin })).status, 204);
   assert.equal((await apiRequest(`/api/purchases/suggestion-drafts/${first.data.id}`, { method: "DELETE", cookie: cookies.admin })).status, 404);
+});
+
+// Owner, 2026-11-27 (New purchase): ?all=1&supplier= gives every product bought from that supplier, also those needing nothing now.
+test("suggestions: all products of one supplier for New purchase", async () => {
+  const supplier = `ITEST-PS All ${stamp}`;
+  const busy = await selling("ITEST-PS All Busy 1L", "1L", 14, { itemsPerPack: 12, stock: 0 });
+  const calm = await createProduct({ name: `ITEST-PS All Calm ${stamp}` });
+  await pool.query("UPDATE products SET unit = '4L', items_per_pack = 4, stock_qty = 500 WHERE id = $1", [calm.id]);
+  await boughtFrom(busy, supplier, 3);
+  await boughtFrom(calm, supplier, 9);
+  const normal = (await apiRequest("/api/purchases/suggestions", { cookie: cookies.admin })).data;
+  const inNormal = normal.suppliers.flatMap((g) => g.lines).map((l) => l.product_id);
+  assert.ok(inNormal.includes(busy.id));
+  assert.ok(!inNormal.includes(calm.id), "a product needing nothing is not a suggestion");
+  const res = await apiRequest(`/api/purchases/suggestions?all=1&supplier=${encodeURIComponent(supplier.toLowerCase())}`, { cookie: cookies.admin });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.suppliers.length, 1, "only that supplier");
+  const ids = res.data.suppliers[0].lines.map((l) => l.product_id);
+  assert.ok(ids.includes(busy.id) && ids.includes(calm.id));
+  const calmLine = res.data.suppliers[0].lines.find((l) => l.product_id === calm.id);
+  assert.equal(calmLine.suggested, 0);
+  assert.equal(calmLine.cost_usd, 9);
 });

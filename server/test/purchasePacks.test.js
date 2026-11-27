@@ -215,3 +215,13 @@ test("purchaseLine: an earlier lot serves the wishes, only the rest is bought", 
   assert.equal(both.backlog, 0);
   assert.equal(both.wished, 7);
 });
+
+// Codex review 2026-11-27: `wished` comes back as what is left after the goods on the way; the phone recomputes from the wish as asked
+// (wish_qty). Fed the netted number again it would net twice: 100 wished, 60 on the way -> 40 still owed, not 0.
+test("purchaseLine: recomputing from the wish as asked gives the same suggestion; the netted wish would lose pieces", () => {
+  const base = { stockNow: 0, comingLots: [{ qty: 60, inDays: 3 }], wanted: 0, daily: 0, leadTimeDays: 7, coverDays: 30, safetyStock: 0, stepPieces: 1 };
+  const server = purchaseLine({ ...base, wished: 100 });
+  assert.equal(server.wished, 40);
+  assert.equal(purchaseLine({ ...base, wished: 100, order: null }).suggested, server.suggested);
+  assert.ok(purchaseLine({ ...base, wished: server.wished }).suggested < server.suggested, "netting twice loses pieces");
+});

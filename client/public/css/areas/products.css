@@ -475,11 +475,14 @@
 .ps-supplier:active, .ps-candidates:active { transform: none; opacity: 1; background: var(--bg-card); }
 .ps-row, .ps-step, .ps-create { -webkit-tap-highlight-color: transparent; }
 .ps-supplier-head { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: var(--bg-card); border-bottom: 1px solid var(--border); border-radius: var(--radius, 14px) var(--radius, 14px) 0 0; }
-.ps-supplier-title { flex: 1; min-width: 0; }
+.ps-supplier-title { flex: 1 1 170px; min-width: 0; }
+.ps-head-actions { margin-left: auto; }
 .ps-supplier-head h2 { margin: 0; font-size: 1.05rem; }
 .ps-supplier-head p { margin: 1px 0 0; font-size: 0.78rem; overflow-wrap: anywhere; }
 .ps-head-actions { flex: none; display: flex; align-items: center; gap: 6px; }
 .ps-share-btn { width: 44px; height: 44px; }
+.ps-ai { flex: none; min-height: 44px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--accent); }
+.ps-ai svg { width: 18px; height: 18px; }
 .ps-share-menu { flex-basis: 100%; display: flex; gap: 8px; margin-top: 8px; }
 .ps-share-menu .btn { flex: 1; min-height: 44px; }
 .ps-card-msg { flex-basis: 100%; margin: 6px 0 0; font-size: 0.8rem; }
@@ -555,3 +558,10 @@
 .pm-comp + .pm-comp { border-top: 1px solid var(--border); }
 .pm-comp-head { min-height: 0; font-size: 11px; text-align: right; }
 .pm-comp > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+
+/* New purchase: the supplier chooser (views/purchases.js, owner 2026-11-27) */
+.pn-choose-sheet h2 { margin: 0 0 2px; }
+.pn-choose-sheet > p { margin: 0 0 10px; font-size: 0.85rem; }
+.pn-suppliers { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; max-height: 55vh; overflow-y: auto; }
+.pn-supplier { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 56px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card); color: var(--text); text-align: left; font: inherit; }
+.pn-supplier .muted { font-size: 0.8rem; }
