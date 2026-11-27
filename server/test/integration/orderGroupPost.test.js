@@ -26,7 +26,7 @@ test.before(async () => {
   oil = await createProduct({ name: "Castrol EDGE 5W-30", unit: "4L", unit_price_amd: 20000 });
   filter = await createProduct({ name: "Oil filter W712", unit: "pcs", unit_price_amd: 3000 });
   // the feature counts from when it was switched on: in this file, from before the first order
-  await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute', document_request_since = now() - interval '1 minute' WHERE id = 1");
 });
 test.after(async () => {
   await pool.query("UPDATE app_settings SET order_confirm_telegram = true WHERE id = 1");
@@ -391,9 +391,84 @@ test("Send to accounting: the request waits with every detail; asked again befor
     const id3 = await submittedOrder("cash");
     await confirm(id3);
     await requestDoc(id3);
-    assert.equal(await syncOrderPost(id3, { request: true }), null);
+    assert.equal(await syncOrderPost(id3), null);
     assert.deepEqual(await kindsOf(id3), []);
   } finally {
     await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
   }
+});
+
+// Independent review 2026-11-27: the request is decided from the ORDER (accounting_status, accounting_requested_at), not from the tap.
+test("request from the order's state: a lost hook is posted by the job; a withdraw in the app is told; a quick back-and-confirm does not leave a request standing; switched off drops a waiting one; a request from before the feature is never posted", async () => {
+  // the hook was lost (a restart right after the tap): the order says "pending", the job posts the request, once
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  await botPostsEverything();
+  await pool.query(
+    "UPDATE orders SET accounting_status = 'pending', accounting_doc_type = 'waybill', accounting_requested_by = $2, accounting_requested_at = now(), updated_at = now() WHERE id = $1",
+    [id, director.id]
+  );
+  assert.ok((await runOrderGroupPosts()).requested >= 1); // (the job looks at every order: other tests' orders may be in it too)
+  await runOrderGroupPosts();
+  let posts = await expectKinds(id, ["order_confirmed", "document_request"], "posted by the job, once");
+  assert.ok(posts.at(-1).kind === "document_request" && posts.at(-1).text.includes("Փաստաթուղթը խնդրեց՝ Post Director"), posts.at(-1).text);
+  await botPostsEverything();
+  // withdrawn by hand in the app: the group is told not to create it
+  assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "cancelled" } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn"]);
+  assert.ok(posts[2].text.startsWith("⛔"), posts[2].text);
+  await botPostsEverything();
+  // back in the queue by hand: asked again
+  assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn", "document_request"]);
+  assert.ok(posts[3].text.includes("🔁"), posts[3].text);
+  await botPostsEverything();
+  // a change while the request stands: every detail again
+  assert.equal((await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity: 3 }] } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn", "document_request", "order_confirmed"]);
+  assert.ok(posts[4].text.startsWith("♻️") && posts[4].text.includes("3 հատ × 20,000 դր"), posts[4].text);
+  await botPostsEverything();
+
+  // moved back and confirmed again before the bot took the "do not issue": the request was cancelled with it, so the group hears that
+  const id2 = await submittedOrder("cash");
+  await confirm(id2);
+  await expectKinds(id2, ["order_confirmed"]);
+  await requestDoc(id2);
+  await expectKinds(id2, ["document_request"]);
+  await botPostsEverything();
+  await unconfirm(id2, "check");
+  await expectKinds(id2, ["document_request", "order_unconfirmed"]);
+  await confirm(id2);
+  posts = await expectKinds(id2, ["document_request", "request_withdrawn"], "not left standing while the app says cancelled");
+  await botPostsEverything();
+  // the manager asks again: a new request, said as 'again'
+  await requestDoc(id2);
+  posts = await expectKinds(id2, ["document_request", "request_withdrawn", "document_request"]);
+  assert.ok(posts[2].text.includes("🔁"), posts[2].text);
+  await botPostsEverything();
+
+  // switched off while a request waits for the bot: dropped, like a waiting heads-up
+  const id3 = await submittedOrder("cash");
+  await confirm(id3);
+  await expectKinds(id3, ["order_confirmed"]);
+  await botPostsEverything();
+  await requestDoc(id3);
+  await expectKinds(id3, ["order_confirmed", "document_request"]);
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = false WHERE id = 1");
+  try {
+    await syncOrderPost(id3);
+    assert.deepEqual(await kindsOf(id3), ["order_confirmed"]);
+  } finally {
+    await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
+  }
+
+  // a request asked before this feature existed (migration 228): never posted
+  const id4 = await submittedOrder("cash");
+  await confirm(id4);
+  await expectKinds(id4, ["order_confirmed"]);
+  await botPostsEverything();
+  await pool.query("UPDATE orders SET accounting_status = 'waybill_created', accounting_requested_at = now() - interval '1 day', updated_at = now() WHERE id = $1", [id4]);
+  await syncOrderPost(id4);
+  assert.deepEqual(await kindsOf(id4), ["order_confirmed"]);
 });
