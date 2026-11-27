@@ -122,7 +122,10 @@ export async function loadBrandSummary(ctx) {
     await loadWithCache("customers-brand-summary", () => api.getBrandSummary(), (rows) => {
       ctx.brandSummary = indexBrandSummary(rows);
       ctx.renderIconFilterRow();
-      if (ctx.brandChipIds.size || ctx.searchQuery) ctx.applyFilter({ refit: false });
+      // opened from a deep link (#/map?brands=): fit the matching pins once, the first time the data is in
+      const refit = ctx.brandFitPending;
+      ctx.brandFitPending = false;
+      if (ctx.brandChipIds.size || ctx.searchQuery) ctx.applyFilter({ refit });
     });
   } catch {
     /* optional feature */
@@ -139,7 +142,8 @@ export function renderIconFilterRow(ctx) {
     ctx.lastCustomers.length
       ? ctx.mapFilterIconButton({ key: "assignment", icon: FILTER_ICONS.manager, label: t("filter_direction_manager_title"), active: assignmentIds.size > 0, count: assignmentChannelCount })
       : "",
-    ctx.brandSummary.size
+    // shown while chips are picked even with no data (a deep link offline): the only way to clear them
+    ctx.brandSummary.size || ctx.brandChipIds.size
       ? ctx.mapFilterIconButton({ key: "brandchips", icon: FILTER_ICONS.brands, label: t("filter_brands_title"), active: ctx.brandChipIds.size > 0, count: ctx.brandChipIds.size })
       : "",
     ctx.lastCustomers.length

@@ -33,6 +33,8 @@ import { deleteOldUsage } from "../system/usageAnalytics.js";
 import { deleteOldNavTimings } from "../system/navTimings.js";
 import { remindOverdueDocuments } from "../orders/partnerDocuments.js";
 import { checkLatePurchases } from "../products/purchaseFollowUp.js";
+import { checkPriceDrops } from "../reports/market/priceAlerts.js";
+import { checkMonthlyMarketReport } from "../reports/market/monthlyReport.js";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -74,6 +76,10 @@ export const JOBS = [
   { name: "expense-watch", everyMs: HOUR, run: () => runExpenseWatch() },
   // documents for signature past their deadline: the rep gets a task, then a reminder once a day (orders/partnerDocuments.js)
   { name: "partner-document-reminders", everyMs: HOUR, run: (now) => remindOverdueDocuments(now) },
+  // once a month: competitor brands whose median price fell > 5 % (reports/market/priceAlerts.js)
+  { name: "market-price-drop", everyMs: HOUR, run: (now) => checkPriceDrops(now) },
+  // the 1st of a month from 10:00: last month's market summary for admin / CEO (reports/market/monthlyReport.js)
+  { name: "market-monthly-report", everyMs: HOUR, run: (now) => checkMonthlyMarketReport(now) },
   { name: "overdue-visit-reminders", everyMs: 2 * HOUR, run: () => checkOverdueReminders(), ...needsPush },
 ];
 

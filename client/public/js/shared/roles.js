@@ -176,6 +176,10 @@ export function seesOrderAmounts(role) {
 export function seesTierPrices(role) {
   return role !== "warehouse_manager";
 }
+// The product card's Market section (shelf, competitor prices, wishes, potential; owner 2026-11-26): the people who sell and manage sales.
+export function seesProductMarket(role) {
+  return ["admin", "ceo", "operations_director", "sales_director", "sales_manager"].includes(role);
+}
 // Papers that carry amounts -- order blanks / acts, accounting documents (invoice, waybill), debt statements, payment slips -- are not for the
 // warehouse manager at all (owner, 2026-11-03: "restrict"). The stock-count paper has quantities only and stays his; the price list he may print
 // with the retail column only. Checked on the server for every such route.

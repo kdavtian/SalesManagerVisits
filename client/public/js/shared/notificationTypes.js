@@ -89,6 +89,10 @@ export const NOTIFICATION_GROUPS = [
       { type: "sync_reports_ready", roles: MANAGEMENT },
       // the bot's sync did NOT arrive in time (erpSyncMonitor.js)
       { type: "erp_sync_stale", roles: ["admin", "ceo", "operations_director"] },
+      // a competitor brand's median price fell > 5 % month on month (reports/market/priceAlerts.js)
+      { type: "market_price_drop", roles: ["admin", "ceo"] },
+      // the 1st of a month: last month's market in bullets (reports/market/monthlyReport.js)
+      { type: "market_monthly", roles: ["admin", "ceo"] },
     ],
   },
 ];

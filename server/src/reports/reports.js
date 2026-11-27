@@ -53,6 +53,35 @@ export const REPORTS = [
     descriptionKey: "report_product_wishes_description",
     defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
   },
+  // Market (owner, 2026-11-26): the shelf and competitor prices reps record, cleaned (reports/market/). Data quality: each rep's share of
+  // visits with shelf data and prices, and the price entries flagged as outliers.
+  {
+    key: "market_quality",
+    nameKey: "report_market_quality_name",
+    descriptionKey: "report_market_quality_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
+  // Competitor price index: medians per brand, line and volume beside our tiers, gaps, shop margins, trend (reports/market/priceIndex.js)
+  {
+    key: "market_prices",
+    nameKey: "report_market_prices_name",
+    descriptionKey: "report_market_prices_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
+  // Shelf share: % of visited shops carrying Castrol / each competitor, weighted by litres potential, trend, fake / grey spots (shelfShare.js)
+  {
+    key: "market_shelf",
+    nameKey: "report_market_shelf_name",
+    descriptionKey: "report_market_shelf_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
+  // Gaps and targets: litres potential minus what we sell per line; shops with potential and no Castrol on the shelf -> visit tasks (gaps.js)
+  {
+    key: "market_gaps",
+    nameKey: "report_market_gaps_name",
+    descriptionKey: "report_market_gaps_description",
+    defaultRoles: ["admin", "ceo", "operations_director", "sales_director"],
+  },
   {
     key: "new_customers",
     nameKey: "report_new_customers_name",
@@ -213,6 +242,10 @@ const REPORT_DISPLAY_ORDER = [
   "brand_volume",
   "brand_availability",
   "product_wishes",
+  "market_gaps",
+  "market_shelf",
+  "market_prices",
+  "market_quality",
   "cash_custody",
   "cash_reconciliation",
   "documents",

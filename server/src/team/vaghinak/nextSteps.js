@@ -12,6 +12,9 @@
 //                      - a competitor on the shelf   -> raise_share_competitor {brand}
 //                      - otherwise                   -> raise_share
 //   stage 4 our share  - our litres fell >= 30 % against the window before -> keep_loyal (else nothing to do)
+//   any stage          - fake or grey-imported Castrol on the shop's latest shelf -> replace_grey (market data, owner 2026-11-26)
+// raise_share_competitor carries the market facts of that brand (reports/market/priceIndex.js): our gap and the shop's margin with us vs
+// with them, so the rep knows what to pitch.
 // A counterfeit-restricted customer gets no step (management first). Value: how close the customer is to the next stage, plus its size.
 import { pool } from "../../db/pool.js";
 import { computeFunnel, PRODUCT_GROUP_SQL } from "./funnel.js";
@@ -22,6 +25,8 @@ import { yerevanToday } from "../../utils/yerevanDate.js";
 import { mondayOf } from "./digest.js";
 import { hyCommon } from "../../../../client/public/js/i18n/hy/common.js";
 import { minuteOfDay, isWorkingDay } from "./engine.js";
+import { priceIndex } from "../../reports/market/priceIndex.js";
+import { SHELF_FRESH_DAYS } from "../../field/shelfData.js";
 
 export const PICKS_PER_REP = 5;
 const REASSESS_DAYS = 60;
@@ -31,6 +36,15 @@ const DROP_SHARE = 0.3;
 //   extra: { counterfeit, potentialUpdatedAt, missingGroup, competitor, litresBefore }
 export function stepOf(c, extra = {}, now = Date.now()) {
   if (extra.counterfeit) return null;
+  const base = baseStep(c, extra, now);
+  if (!extra.castrolGrey) return base;
+  // fake / grey Castrol on a fresh shelf: offered unless the funnel step is worth more (a High-potential first order, a falling customer)
+  const size0 = Math.min(Number(c.expected_volume_l) || Number(c.litres_month) || 0, 2000) / 2000;
+  const grey = { kind: "replace_grey", params: { fake: extra.castrolGrey === "fake" }, value: Math.round((1.35 + (c.progress == null ? 0.5 : c.progress / 100) + size0) * 100) };
+  return base && base.value > grey.value ? base : grey;
+}
+
+function baseStep(c, extra, now) {
   const size = Math.min(Number(c.expected_volume_l) || Number(c.litres_month) || 0, 2000) / 2000; // 0..1, a bigger shop counts more
   const near = c.progress == null ? 0.5 : c.progress / 100; // closer to the next stage counts more
   const value = (kindWeight) => Math.round((kindWeight + near + size) * 100);
@@ -49,7 +63,11 @@ export function stepOf(c, extra = {}, now = Date.now()) {
   }
   if (c.stage === 3) {
     if (c.next === "expected_volume_missing") return { kind: "ask_need", params: {}, value: value(0.9) };
-    if (extra.competitor) return { kind: "raise_share_competitor", params: { brand: extra.competitor, ...(extra.competitorName ? { brand_name: extra.competitorName } : {}), share: c.share ?? 0 }, value: value(1.3) };
+    if (extra.competitor) {
+      const params = { brand: extra.competitor, ...(extra.competitorName ? { brand_name: extra.competitorName } : {}), share: c.share ?? 0 };
+      if (extra.pitch) params.pitch = extra.pitch;
+      return { kind: "raise_share_competitor", params, value: value(1.3) };
+    }
     return { kind: "raise_share", params: { share: c.share ?? 0 }, value: value(1.0) };
   }
   const before = Number(extra.litresBefore) || 0;
@@ -57,6 +75,47 @@ export function stepOf(c, extra = {}, now = Date.now()) {
     return { kind: "keep_loyal", params: { before: Math.round(before), now: Math.round(Number(c.litres_month) || 0) }, value: value(1.4) };
   }
   return null;
+}
+
+// What to pitch against a competitor brand (pure, unit-tested): from the price index, the line and volume of that brand with most shops
+// where we have a product to compare; our gap (+ = we are dearer, Bronze vs their wholesale) and the shop's margin per pack with us vs them.
+export function pitchesByBrand(index) {
+  const out = new Map();
+  for (const g of index?.groups ?? []) {
+    const ref = g.ours.find((p) => p.id === g.reference_id);
+    if (!ref) continue;
+    for (const b of g.brands) {
+      // a candidate must say something: a gap, or both margins (else pitchHy would print nothing)
+      if (b.gap_wholesale_pct == null && (b.margin == null || ref.margin_bronze == null)) continue;
+      const cur = out.get(b.brand_key);
+      if (cur && cur.shops >= b.meta.shops) continue;
+      out.set(b.brand_key, {
+        line_hy: g.line_name_hy,
+        line_en: g.line_name_en,
+        volume: g.volume,
+        unit: g.unit,
+        gap_pct: b.gap_wholesale_pct,
+        margin_ours: ref.margin_bronze,
+        margin_theirs: b.margin,
+        shops: b.meta.shops,
+      });
+    }
+  }
+  return out;
+}
+
+// The pitches by brand, from the price index read on the pool (never inside the weekly picks' transaction: a failed market query there
+// would abort it, review) and kept 10 minutes (the funnel screen and the picks ask often; prices change daily at most).
+let pitchCache = null;
+export async function marketPitches(now = new Date()) {
+  if (pitchCache && Date.now() - pitchCache.at < 10 * 60 * 1000) return pitchCache.map;
+  try {
+    const map = pitchesByBrand(await priceIndex({ db: pool, now }));
+    pitchCache = { at: Date.now(), map };
+    return map;
+  } catch {
+    return new Map();
+  }
 }
 
 // "Similar shops buy this" (pure, unit-tested): the 2 products of a group most shops of the same tier buy (all tiers when no shop of the
@@ -83,7 +142,7 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
   const { cfg, customers } = funnel ?? (await computeFunnel({ db, settings: await getVaghinakSettings(db) }));
   const ids = customers.map((c) => c.id);
   if (!ids.length) return [];
-  const [{ rows: facts }, { rows: groupsBought }, { rows: shelves }, { rows: before }, { rows: productBuyers }] = await Promise.all([
+  const [{ rows: facts }, { rows: groupsBought }, { rows: shelves }, { rows: before }, { rows: productBuyers }, { rows: castrolShelves }, index] = await Promise.all([
     db.query("SELECT id, counterfeit_flag, potential_updated_at FROM customers WHERE id = ANY($1::int[])", [ids]),
     // which product groups each customer bought in the window (to find the group its tier usually buys and it does not)
     db.query(
@@ -123,7 +182,24 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
        GROUP BY 1, 2, 3, 4`,
       [ids, cfg.windowDays]
     ),
+    // the Castrol values of the latest visit that recorded the Castrol group (fake / grey-imported -> replace_grey)
+    db.query(
+      `SELECT DISTINCT ON (customer_id) customer_id, brand_status -> 'castrol' AS castrol
+       FROM checkins WHERE customer_id = ANY($1::int[]) AND jsonb_typeof(brand_status -> 'castrol') = 'array'
+         AND timestamp > now() - make_interval(days => $2::int)  -- fresh shelf only (SHELF_FRESH_DAYS), as the shelf reports
+       ORDER BY customer_id, timestamp DESC, id DESC`,
+      [ids, SHELF_FRESH_DAYS]
+    ),
+    // the market facts to pitch: read outside the caller's transaction and cached (a failure here never stops the steps)
+    marketPitches(now),
   ]);
+  const greyOf = new Map(
+    castrolShelves.map((s) => {
+      const v = Array.isArray(s.castrol) ? s.castrol : [];
+      return [s.customer_id, v.includes("fake") ? "fake" : v.some((x) => String(x).startsWith("imported_")) ? "grey" : null];
+    })
+  );
+  const pitches = index ?? new Map();
   const factOf = new Map(facts.map((f) => [f.id, f]));
   const shelfOf = new Map(shelves.map((s) => [s.customer_id, s.brands]));
   const brandNameOf = new Map(shelves.map((s) => [s.customer_id, s.first_brand_name]));
@@ -165,6 +241,8 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
         missingGroup,
         similar: missingGroup ? similarFor(c.tier, missingGroup) : null,
         competitor: Array.isArray(brands) && brands.length ? String(brands[0]) : null,
+        pitch: Array.isArray(brands) && brands.length ? (pitches.get(String(brands[0])) ?? null) : null,
+        castrolGrey: greyOf.get(c.id) ?? null,
         competitorName: brandNameOf.get(c.id) ?? null, // a brand a rep added has no translation: the name it was added with
         litresBefore: beforeOf.get(c.id),
       },
@@ -173,6 +251,18 @@ export async function computeNextSteps({ db = pool, now = new Date(), funnel = n
     if (step) steps.push({ customer: c, ...step });
   }
   return steps.sort((a, b) => b.value - a.value);
+}
+
+// The pitch facts as a short Armenian tail: ". PCMO 5W-30 4 լ՝ մենք 5%-ով էժան ենք, խանութի մարժան մեզ հետ 4,000 / նրանց հետ 3,000 դր"
+const nf = (n) => Math.round(n).toLocaleString("en-US");
+export function pitchHy(p) {
+  if (!p) return "";
+  const parts = [];
+  if (p.gap_pct != null) parts.push(p.gap_pct < 0 ? `մենք ${-p.gap_pct}%-ով էժան ենք` : p.gap_pct > 0 ? `մենք ${p.gap_pct}%-ով թանկ ենք` : "գինը նույնն է");
+  if (p.margin_ours != null && p.margin_theirs != null) parts.push(`խանութի մարժան մեզ հետ ${nf(p.margin_ours)} / նրանց հետ ${nf(p.margin_theirs)} դր`);
+  if (!parts.length) return "";
+  const vol = `${Number(p.volume).toLocaleString("en-US", { maximumFractionDigits: 3 })} ${p.unit === "kg" ? "կգ" : "լ"}`;
+  return `. ${p.line_hy} ${vol}՝ ${parts.join(", ")}`;
 }
 
 // The text a rep's task carries (Armenian, the reps' language).
@@ -188,7 +278,8 @@ export function taskTitleOf(step) {
       return `Առաջարկիր ${GROUP_HY[step.params.group] ?? step.params.group}՝ ${name}${products ? ` (նման խանութները գնում են՝ ${products})` : ""}`;
     }
     case "ask_need": return `Ճշտիր ամսական յուղի պահանջը՝ ${name}`;
-    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand_name ?? step.params.brand})`;
+    case "raise_share_competitor": return `Մեծացրու մեր բաժինը՝ ${name} (դարակում՝ ${hyCommon[`competitor_${step.params.brand}`] ?? step.params.brand_name ?? step.params.brand})${pitchHy(step.params.pitch)}`;
+    case "replace_grey": return `Առաջարկիր օրիգինալ Castrol՝ ${name} (դարակում՝ ${step.params.fake ? "կեղծ" : "գորշ ներմուծված"} Castrol)`;
     case "raise_share": return `Մեծացրու մեր բաժինը՝ ${name}`;
     case "keep_loyal": return `Ստուգիր, ինչու են պատվերները նվազել՝ ${name}`;
     default: return name;
