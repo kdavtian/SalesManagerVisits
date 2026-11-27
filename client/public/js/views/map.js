@@ -1,6 +1,6 @@
 import { api } from "../api.js";
 import { openInfoPopup, escapeHtml, formatAmd, parseDateOnly, formatDayMonth } from "../util.js";
-import { t, usdSite } from "../i18n.js";
+import { t, usdSite, siteBrandGroups } from "../i18n.js";
 import { NO_GROUP_KEY } from "../regionTree.js";
 import { nextVisitRowHtml, formatLastVisit } from "../visitSchedule.js";
 import { state } from "../state.js";
@@ -29,7 +29,7 @@ export const NEARBY_RADIUS_METERS = 5000;
 // competitor is a flat presence flag inside brand_status.competitors.
 // The competitors are the live list (owner, 2026-11-19: approved brands and the ones reps added, competitorBrandList.js), plus any brand a
 // loaded visit recorded that the list does not name (another rep's brand still waiting for approval).
-const KAD_BRAND_FILTER_OPTIONS = ["castrol", "lotos", "royal"].map((value) => ({ value, label: () => t(`brand_group_${value}`) }));
+const KAD_BRAND_FILTER_OPTIONS = siteBrandGroups(["castrol", "lotos", "royal"]).map((value) => ({ value, label: () => t(`brand_group_${value}`) }));
 function brandFilterOptions(brands, brandStatusByCustomer) {
   const keys = brands.map((b) => b.key);
   const seen = new Set(keys);

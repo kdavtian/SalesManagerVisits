@@ -23,7 +23,55 @@ export { formatPhone };
 const ASSET_DIR = ASSETS_DIR;
 const logo = (name) => fs.readFileSync(path.join(ASSET_DIR, "logos", `ob-${name}.png`));
 
-export const COMPANY_NAME = "Քալանթարյան Ֆէմիլի ՓԲԸ";
+// The demo site (DEMO_MODE=1, docs/demo-site.md) is shown to people who do not read Armenian: the same documents with English labels and
+// amounts in US dollars. On the real app L() returns the text as it is, so its documents do not change by a single character.
+const DEMO_EN = {
+  "Քալանթարյան Ֆէմիլի ՓԲԸ": "KAD Demo LLC",
+  "Վճարման ժամկետ՝ առաքման պահին": "Payment due: on delivery",
+  "Պատվերի No՝": "Order No:",
+  "Առաքման ամսաթիվ՝": "Delivery date:",
+  "Կոդ՝": "Code:",
+  "Գործընկերոջ անվանում՝": "Customer:",
+  "ՀՎՀՀ՝": "Tax ID:",
+  "Իրավ. անվանում՝": "Legal name:",
+  "Հեռախոս՝": "Phone:",
+  "Առաքման հասցե՝": "Delivery address:",
+  "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ": "DELIVERY ACCEPTANCE ACT",
+  "Հ/Հ": "No",
+  "ՄԱՏԱԿԱՐԱՐՎԱԾ ԱՊՐԱՆՔԻ ԱՆՎԱՆՈՒՄ": "PRODUCT DELIVERED",
+  "Չ/Մ\n(ԼԻՏՐ)": "SIZE\n(LITRES)",
+  "ՔԱՆԱԿ": "QTY",
+  "ԳԻՆ": "PRICE",
+  "ԳՈՒՄԱՐ": "AMOUNT",
+  "ԸՆԴԱՄԵՆԸ՝": "TOTAL:",
+  "Հանձնեց՝": "Handed over by:",
+  "Ընդունեց՝": "Received by:",
+  "ստորագրություն": "signature",
+  "Պարտքի նախկին մնացորդ՝": "Previous balance:",
+  "Պատվեր՝": "Order:",
+  "Վճարում՝": "Payment:",
+  "Պարտքի ներկա մնացորդ՝": "Current balance:",
+  "Շարունակությունը հաջորդ էջում…": "Continued on the next page…",
+  "ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ": "PAYMENT RECEIPT",
+  "Վճարման ամսաթիվ՝": "Payment date:",
+  "Անդորրագրի No՝": "Receipt No:",
+  "Ստացավ՝": "Received by:",
+  "Վճարեց՝": "Paid by:",
+  "դր": " USD",
+  "Վճարման ժամկետ՝": "Payment due:",
+  "օր": "days",
+  "Կանխավճար՝": "Downpayment:",
+  "Մենեջեր՝": "Manager:",
+  "Հեռ՝": "Tel:",
+  "Գրասենյակ՝": "Office:",
+  "հատ": "pcs",
+  "Ստորագրվել է էլեկտրոնային եղանակով՝": "Signed electronically:",
+  "Էջ": "Page",
+};
+const DEMO_SITE = process.env.DEMO_MODE === "1";
+const L = (text) => (DEMO_SITE ? DEMO_EN[text] ?? text : text);
+
+export const COMPANY_NAME = L("Քալանթարյան Ֆէմիլի ՓԲԸ");
 export const HALF_MAX_ROWS = 8;
 export const FULL_MIN_ROWS = 15;
 const FULL_PAGE_ROWS = 22;
@@ -43,7 +91,7 @@ export function suggestVariant(items) {
 // "5,700դր" -- amounts always carry the currency on the blank.
 function amd(n) {
   if (n === null || n === undefined || n === "") return "";
-  return `${Math.round(Number(n)).toLocaleString("en-US")}դր`;
+  return `${Math.round(Number(n)).toLocaleString("en-US")}${L("դր")}`;
 }
 
 // Payment terms line of the blank (1.337.0): only the due days and the downpayment, so the customer signs for them
@@ -51,9 +99,9 @@ function amd(n) {
 export function paymentTermsText(terms) {
   if (!terms) return { due: null, down: null };
   const days = terms.dueDays;
-  const due = days == null ? null : Number(days) === 0 ? "Վճարման ժամկետ՝ առաքման պահին" : `Վճարման ժամկետ՝ ${Number(days)} օր`;
+  const due = days == null ? null : Number(days) === 0 ? L("Վճարման ժամկետ՝ առաքման պահին") : `${L("Վճարման ժամկետ՝")} ${Number(days)} ${L("օր")}`;
   const pct = terms.downpaymentPct != null && Number(terms.downpaymentPct) > 0 ? ` (${Number(terms.downpaymentPct)}%)` : "";
-  const down = terms.downpaymentAmd == null ? null : `Կանխավճար՝ ${amd(terms.downpaymentAmd)}${pct}`;
+  const down = terms.downpaymentAmd == null ? null : `${L("Կանխավճար՝")} ${amd(terms.downpaymentAmd)}${pct}`;
   return { due, down };
 }
 
@@ -141,28 +189,28 @@ function drawHeader(c, doc, { order, customer, rep, printedAt }, v, head = {}) {
   const { hline, text, center, field, fit, right, textW } = c;
   hline(v.rule1);
   text(COMPANY_NAME, 21.6, v.rule1 + 3.5, { size: v.fs });
-  text(`Մենեջեր՝ ${rep?.name ?? ""}`, 21.6, v.rule1 + 3.5 + v.lh, { size: v.fs });
+  text(`${L("Մենեջեր՝")} ${rep?.name ?? ""}`, 21.6, v.rule1 + 3.5 + v.lh, { size: v.fs });
   // Phones, right aligned: the sales rep's own number first, the office number
   // always (also when the rep has none on file).
-  const phoneLines = [rep?.phone ? `Հեռ՝ ${formatPhone(rep.phone)}` : null, `Գրասենյակ՝ ${formatPhone(rep?.officePhone || OFFICE_PHONE)}`].filter(Boolean);
+  const phoneLines = [rep?.phone ? `${L("Հեռ՝")} ${formatPhone(rep.phone)}` : null, `${L("Գրասենյակ՝")} ${formatPhone(rep?.officePhone || OFFICE_PHONE)}`].filter(Boolean);
   phoneLines.forEach((line, i) => right(line, 589.6, v.rule1 + 3.5 + i * v.lh, { size: v.fs }));
   hline(v.rule2);
   // Number on the left, the one date (delivery / payment) on the right. The order date is gone (owner, 2026-10-27).
-  if (head.numberLabel !== null) field(head.numberLabel ?? "Պատվերի No՝", head.number ?? order?.order_code ?? "", 21.6, v.row1, 170, v.fs);
-  const dateLabel = head.dateLabel ?? "Առաքման ամսաթիվ՝";
+  if (head.numberLabel !== null) field(head.numberLabel ?? L("Պատվերի No՝"), head.number ?? order?.order_code ?? "", 21.6, v.row1, 170, v.fs);
+  const dateLabel = head.dateLabel ?? L("Առաքման ամսաթիվ՝");
   const dateW = textW(dateLabel, { size: v.fs }) + 4 + textW(deliveryDate, { bold: true, size: v.fs }) + 12;
   field(dateLabel, deliveryDate, 589.6 - dateW, v.row1, 589.6, v.fs);
-  const codeX = fixedField(c, "Կոդ՝", customer?.erp_customer_id ?? "", 5, 589.6, v.row2, v.fs);
-  field("Գործընկերոջ անվանում՝", fit(cleanCustomerName(customer?.name), codeX - 160, v.fs), 21.6, v.row2, codeX - 14, v.fs);
-  const tinX = fixedField(c, "ՀՎՀՀ՝", customer?.tin ?? "", 8, 589.6, v.row3, v.fs);
-  field("Իրավ. անվանում՝", fit(customer?.legal_name ?? "", tinX - 130, v.fs), 21.6, v.row3, tinX - 14, v.fs);
+  const codeX = fixedField(c, L("Կոդ՝"), customer?.erp_customer_id ?? "", 5, 589.6, v.row2, v.fs);
+  field(L("Գործընկերոջ անվանում՝"), fit(cleanCustomerName(customer?.name), codeX - 160, v.fs), 21.6, v.row2, codeX - 14, v.fs);
+  const tinX = fixedField(c, L("ՀՎՀՀ՝"), customer?.tin ?? "", 8, 589.6, v.row3, v.fs);
+  field(L("Իրավ. անվանում՝"), fit(customer?.legal_name ?? "", tinX - 130, v.fs), 21.6, v.row3, tinX - 14, v.fs);
   // Delivery address on the left and the customer's phone on the right, on one line (owner, 2026-10-27).
   const phone = customer?.phone ? formatPhone(customer.phone) : "";
   const phoneLineW = Math.max(textW("+374 00 000 000", { bold: true, size: v.fs }), textW(phone, { bold: true, size: v.fs })) + 10;
-  const phoneX = 589.6 - phoneLineW - textW("Հեռախոս՝", { size: v.fs }) - 4;
-  field("Հեռախոս՝", phone, phoneX, v.row4, 589.6, v.fs);
-  field("Առաքման հասցե՝", fit(customer?.address ?? "", phoneX - 120, v.fs), 21.6, v.row4, phoneX - 14, v.fs);
-  const title = head.title ?? "ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ";
+  const phoneX = 589.6 - phoneLineW - textW(L("Հեռախոս՝"), { size: v.fs }) - 4;
+  field(L("Հեռախոս՝"), phone, phoneX, v.row4, 589.6, v.fs);
+  field(L("Առաքման հասցե՝"), fit(customer?.address ?? "", phoneX - 120, v.fs), 21.6, v.row4, phoneX - 14, v.fs);
+  const title = head.title ?? L("ՀԱՆՁՆՄԱՆ-ԸՆԴՈՒՆՄԱՆ ԱԿՏ");
   center(title, 21.6, 589.6, v.title, { bold: true, size: v.fs + 1 });
   const tw = c.textW(title, { bold: true, size: v.fs + 1 });
   hline(v.title + v.fs + 5, (611.2 - tw) / 2, (611.2 + tw) / 2, INK, 0.8);
@@ -173,7 +221,7 @@ function drawTable(c, doc, chunk, startNo, rowCount, v) {
   const top = v.tableTop;
   const bottom = top + v.headH + rowCount * v.rowH;
   doc.save().rect(COLS[0], top, COLS[6] - COLS[0], v.headH).fill("#E9E9E9").restore();
-  ["Հ/Հ", "ՄԱՏԱԿԱՐԱՐՎԱԾ ԱՊՐԱՆՔԻ ԱՆՎԱՆՈՒՄ", "Չ/Մ\n(ԼԻՏՐ)", "ՔԱՆԱԿ", "ԳԻՆ", "ԳՈՒՄԱՐ"].forEach((h, i) => {
+  [L("Հ/Հ"), L("ՄԱՏԱԿԱՐԱՐՎԱԾ ԱՊՐԱՆՔԻ ԱՆՎԱՆՈՒՄ"), L("Չ/Մ\n(ԼԻՏՐ)"), L("ՔԱՆԱԿ"), L("ԳԻՆ"), L("ԳՈՒՄԱՐ")].forEach((h, i) => {
     const lines = h.split("\n");
     const hs = v.fs - 1.5;
     const y0 = top + (v.headH - lines.length * (hs + 1.5)) / 2 + 0.5;
@@ -189,7 +237,7 @@ function drawTable(c, doc, chunk, startNo, rowCount, v) {
       const name = [it.brand, it.product_name].filter(Boolean).join(" ").replace(/\s+/g, " ");
       text(fit(name, COLS[2] - COLS[1] - 8, v.cs), COLS[1] + 4, ty, { size: v.cs });
       center(formatSize(it.size_l), COLS[2], COLS[3], ty, { size: v.cs });
-      center(`${Number(it.quantity)} հատ`, COLS[3], COLS[4], ty, { size: v.cs });
+      center(`${Number(it.quantity)} ${L("հատ")}`, COLS[3], COLS[4], ty, { size: v.cs });
       right(amd(it.unit_price_amd), COLS[5] - 5, ty, { size: v.cs });
       right(amd(it.line_total_amd ?? Number(it.quantity) * Number(it.unit_price_amd)), COLS[6] - 5, ty, { size: v.cs });
     }
@@ -204,10 +252,10 @@ function drawTable(c, doc, chunk, startNo, rowCount, v) {
 function drawTotal(c, doc, y, t, h, fs) {
   doc.save().rect(COLS[0], y, COLS[6] - COLS[0], h).lineWidth(0.8).strokeColor("#555555").stroke().restore();
   const ty = y + (h - fs) / 2;
-  c.text("ԸՆԴԱՄԵՆԸ՝", COLS[0] + 3, ty, { bold: true, size: fs });
+  c.text(L("ԸՆԴԱՄԵՆԸ՝"), COLS[0] + 3, ty, { bold: true, size: fs });
   // Total litres under the size column, total pieces under the quantity column.
   if (t.liters > 0) c.center(formatLiters(t.liters), COLS[2], COLS[3], ty, { bold: true, size: fs - 0.5 });
-  c.center(`${t.qty} հատ`, COLS[3], COLS[4], ty, { bold: true, size: fs - 0.5 });
+  c.center(`${t.qty} ${L("հատ")}`, COLS[3], COLS[4], ty, { bold: true, size: fs - 0.5 });
   c.right(amd(t.sum), COLS[6] - 5, ty, { bold: true, size: fs });
 }
 
@@ -221,15 +269,15 @@ export function yerevanDateTime(when) {
 // The images are drawn on the two signature lines, so the same paper that was printed for a pen is now signed on the phone.
 // labels: [rep side, customer side] -- the act: the rep hands over the goods, the customer receives them; the payment slip: the rep
 // receives the money, the customer pays it.
-function drawSignatures(c, doc, data, y, fs, labels = ["Հանձնեց՝", "Ընդունեց՝"]) {
+function drawSignatures(c, doc, data, y, fs, labels = [L("Հանձնեց՝"), L("Ընդունեց՝")]) {
   const { field, center, textW } = c;
   const sig = data.signatures;
   const signer = sig?.signerName ?? data.rep?.name ?? "";
   const [repLabel, customerLabel] = labels;
   field(repLabel, signer, 21.6, y, 345, fs);
   field(customerLabel, "", 379, y, 589.6, fs);
-  center("ստորագրություն", 21.6 + textW(repLabel, { size: fs }) + 4, 345, y + fs + 4, { size: 7 });
-  center("ստորագրություն", 379 + textW(customerLabel, { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
+  center(L("ստորագրություն"), 21.6 + textW(repLabel, { size: fs }) + 4, 345, y + fs + 4, { size: 7 });
+  center(L("ստորագրություն"), 379 + textW(customerLabel, { size: fs }) + 4, 589.6, y + fs + 4, { size: 7 });
   if (!sig) return;
   const h = fs > 9 ? 34 : 24;
   const place = (img, x1, x2) => {
@@ -243,7 +291,7 @@ function drawSignatures(c, doc, data, y, fs, labels = ["Հանձնեց՝", "Ըն
   const repStart = 21.6 + textW(repLabel, { size: fs }) + 4 + 2 + textW(signer, { bold: true, size: fs }) + 8;
   place(sig.rep, repStart, 345);
   place(sig.customer, 379 + textW(customerLabel, { size: fs }) + 8, 589.6);
-  if (sig.signedAt) c.text(`Ստորագրվել է էլեկտրոնային եղանակով՝ ${yerevanDateTime(sig.signedAt)}`, 21.6, y + fs + 15, { size: 6.5 });
+  if (sig.signedAt) c.text(`${L("Ստորագրվել է էլեկտրոնային եղանակով՝")} ${yerevanDateTime(sig.signedAt)}`, 21.6, y + fs + 15, { size: 6.5 });
 }
 
 // The owner's notice at the foot of every blank (owner, 2026-10-27: "This message should be printed on all pdf's"; the text is edited in
@@ -266,10 +314,11 @@ const LOGO_ASPECT = { castrol: 558 / 148, lotos: 452 / 113, royal: 401 / 105 };
 // bigger than the Castrol mark; scaled down to match it optically.
 const LOGO_SCALE = { castrol: 1, lotos: 0.78, royal: 1 };
 function drawLogos(doc, cy, h) {
-  const names = ["castrol", "lotos", "royal"];
+  // the demo site shows one brand only (owner, 2026-11-27)
+  const names = DEMO_SITE ? ["castrol"] : ["castrol", "lotos", "royal"];
   const heights = names.map((n) => h * LOGO_SCALE[n]);
   const widths = names.map((n, i) => heights[i] * LOGO_ASPECT[n]);
-  const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / 2;
+  const gap = (COLS[6] - COLS[0] - widths.reduce((a, b) => a + b, 0)) / Math.max(1, names.length - 1);
   let x = COLS[0];
   names.forEach((n, i) => {
     doc.image(logo(n), x, cy - heights[i] / 2, { width: widths[i], height: heights[i] });
@@ -299,7 +348,7 @@ function drawFull(doc, data, firstPageDrawn) {
     if (last) {
       drawTotal(c, doc, bottom, t, 22, 10);
       const y = bottom + 22 + 22;
-      [["Պարտքի նախկին մնացորդ՝", data.previousDebtAmd ?? null], ["Պատվեր՝", t.orderTotal], ["Վճարում՝", data.paymentAmd ?? null], ["Պարտքի ներկա մնացորդ՝", t.current]].forEach(([label, value], i) => {
+      [[L("Պարտքի նախկին մնացորդ՝"), data.previousDebtAmd ?? null], [L("Պատվեր՝"), t.orderTotal], [L("Վճարում՝"), data.paymentAmd ?? null], [L("Պարտքի ներկա մնացորդ՝"), t.current]].forEach(([label, value], i) => {
         const ry = y + i * 21;
         if (i % 2 === 1 || i === 3) doc.save().rect(21.6, ry - 3, 568, 21).fill(SHADE).restore();
         c.text(label, 24.6, ry + 1, { bold: true, size: 10 });
@@ -318,10 +367,10 @@ function drawFull(doc, data, firstPageDrawn) {
       drawSignatures(c, doc, data, sigY, 10);
       drawWarning(doc, data.warning, sigY + 40, 8.5);
     } else {
-      c.text("Շարունակությունը հաջորդ էջում…", 21.6, bottom + 8, { size: 9 });
+      c.text(L("Շարունակությունը հաջորդ էջում…"), 21.6, bottom + 8, { size: 9 });
     }
     // "Էջ 1/2" in the lower right corner of every sheet of a multi-page order.
-    if (pages.length > 1) c.right(`Էջ ${pi + 1}/${pages.length}`, 589.6, 767, { size: 9 });
+    if (pages.length > 1) c.right(`${L("Էջ")} ${pi + 1}/${pages.length}`, 589.6, 767, { size: 9 });
     doc.restore();
   });
 }
@@ -341,10 +390,10 @@ function drawHalf(doc, data, slotTop, slotH) {
   // debt block: 2 x 2
   const y = bottom + 16 + 9;
   const cells = [
-    ["Պարտքի նախկին մնացորդ՝", data.previousDebtAmd ?? null, 21.6, 289],
-    ["Վճարում՝", data.paymentAmd ?? null, 306, 589.6],
-    ["Պատվեր՝", t.orderTotal, 21.6, 289],
-    ["Պարտքի ներկա մնացորդ՝", t.current, 306, 589.6],
+    [L("Պարտքի նախկին մնացորդ՝"), data.previousDebtAmd ?? null, 21.6, 289],
+    [L("Վճարում՝"), data.paymentAmd ?? null, 306, 589.6],
+    [L("Պատվեր՝"), t.orderTotal, 21.6, 289],
+    [L("Պարտքի ներկա մնացորդ՝"), t.current, 306, 589.6],
   ];
   cells.forEach(([label, value, x1, x2], i) => {
     const ry = y + Math.floor(i / 2) * 15;
@@ -419,23 +468,23 @@ function drawPaymentSlip(doc, data, slotTop, slotH) {
   drawLogos(doc, 24, 25);
   const v = { rule1: 46, rule2: 76, row1: 87, row2: 107, row3: 127, row4: 147, title: 172, fs: 9.5, lh: 12 };
   drawHeader(c, doc, { order: {}, customer: data.customer, rep: data.rep, printedAt: data.paidAt }, v, {
-    title: "ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ",
-    dateLabel: "Վճարման ամսաթիվ՝",
-    numberLabel: "Անդորրագրի No՝",
+    title: L("ՎՃԱՐՄԱՆ ԱՆԴՈՐՐԱԳԻՐ"),
+    dateLabel: L("Վճարման ամսաթիվ՝"),
+    numberLabel: L("Անդորրագրի No՝"),
     number: data.number ?? "",
   });
   const prev = data.previousDebtAmd ?? null;
   const pay = data.amountAmd;
   const current = prev !== null ? Number(prev) - Number(pay) : null;
   const y = 205;
-  [["Պարտքի նախկին մնացորդ՝", prev], ["Վճարում՝", pay], ["Պարտքի ներկա մնացորդ՝", current]].forEach(([label, value], i) => {
+  [[L("Պարտքի նախկին մնացորդ՝"), prev], [L("Վճարում՝"), pay], [L("Պարտքի ներկա մնացորդ՝"), current]].forEach(([label, value], i) => {
     const ry = y + i * 22;
     if (i !== 0) doc.save().rect(21.6, ry - 4, 568, 22).fill(SHADE).restore();
     c.text(label, 24.6, ry + 1, { bold: true, size: 10.5 });
     if (value !== null && value !== undefined) c.right(amd(value), 580, ry + 1, { bold: true, size: i === 1 ? 12 : 10.5 });
     else c.hline(ry + 13, 215, 589, "#555555", 0.5);
   });
-  drawSignatures(c, doc, data, y + 3 * 22 + 40, 9.5, ["Ստացավ՝", "Վճարեց՝"]);
+  drawSignatures(c, doc, data, y + 3 * 22 + 40, 9.5, [L("Ստացավ՝"), L("Վճարեց՝")]);
   drawWarning(doc, data.warning, y + 3 * 22 + 40 + 36, 8.5);
   doc.restore();
 }
