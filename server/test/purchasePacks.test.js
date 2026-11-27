@@ -186,3 +186,32 @@ test("fitToBudget: out of stock first, then runs out, fewest days, better margin
   assert.equal(fitToBudget(two, 300).orders.get("high"), 60);
   assert.equal(fitToBudget(two, 300).orders.get("low"), 0);
 });
+
+// Owner, 2026-11-26 (plan step 10): what customers wished for while the product was out of stock is bought on top.
+test("purchaseLine: waiting wishes are bought on top; a wished product with no sales history still gets its wishes", () => {
+  const base = { stockNow: 0, daily: 1, leadTimeDays: 45, coverDays: 45, stepPieces: 5 };
+  assert.equal(purchaseLine(base).suggested, 45);
+  const w = purchaseLine({ ...base, wished: 12 });
+  assert.equal(w.wished, 12);
+  assert.equal(w.suggested, 60, "45 + 12 = 57 -> 60");
+  assert.equal(w.after_receiving, 48, "60 - the 12 the wishing customers take");
+  // no sales yet (daily 0): the wishes alone, in whole steps
+  assert.equal(purchaseLine({ stockNow: 0, daily: 0, wished: 7, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).suggested, 10);
+  // stock already on the shelf covers the wishes: nothing extra
+  assert.equal(purchaseLine({ stockNow: 100, daily: 0, wished: 7, leadTimeDays: 45, coverDays: 45, stepPieces: 5 }).suggested, 0);
+});
+
+// Codex review 2026-11-27: goods already on the way serve the waiting wishes first; only what is still owed is bought.
+test("purchaseLine: an earlier lot serves the wishes, only the rest is bought", () => {
+  const l = purchaseLine({ stockNow: 0, daily: 1, wished: 10, comingLots: [{ qty: 10, inDays: 1 }], leadTimeDays: 11, coverDays: 10, stepPieces: 1 });
+  assert.equal(l.wished, 0, "the lot of day 1 serves the 10 wished");
+  assert.equal(l.suggested, 10, "10 days of cover only, not 20");
+  // a smaller lot: 4 come, 6 still owed to the wishing customers
+  const part = purchaseLine({ stockNow: 0, daily: 0, wished: 10, comingLots: [{ qty: 4, inDays: 1 }], leadTimeDays: 11, coverDays: 10, stepPieces: 1 });
+  assert.equal(part.wished, 6);
+  assert.equal(part.suggested, 6);
+  // submitted orders are served before the wishes
+  const both = purchaseLine({ stockNow: 0, daily: 0, wanted: 5, wished: 10, comingLots: [{ qty: 8, inDays: 1 }], leadTimeDays: 11, coverDays: 10, stepPieces: 1 });
+  assert.equal(both.backlog, 0);
+  assert.equal(both.wished, 7);
+});

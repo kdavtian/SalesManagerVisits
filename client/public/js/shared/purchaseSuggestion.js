@@ -129,14 +129,21 @@ export function stockAtArrival({ stockNow, comingLots = [], wanted = 0, daily, l
  *   need = daily × cover days + safety stock + still owed to submitted orders − stock at arrival
  *   after receiving = stock at arrival + order − still owed
  */
-export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, trend = null, order = null }) {
+export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted = 0, wished = 0, daily, leadTimeDays, coverDays, safetyStock = 0, stepPieces, trend = null, order = null }) {
   const free = Number(stockNow) || 0;
   const d = Number(daily) > 0 ? Number(daily) : 0;
   const cover = Math.max(0, Number(coverDays) || 0);
   const lots = comingLots ?? (Number(coming) > 0 ? [{ qty: Number(coming), inDays: null }] : []);
-  const { atArrival, backlog, ranOut, lost } = stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays });
+  // wished (owner 2026-11-26, plan step 10): pieces customers asked for while the product was out of stock and still wait for. They are
+  // owed like submitted orders: goods already on the way serve them first, and only what is still owed when this purchase comes is bought
+  // (Codex review 2026-11-27). wishLeft = the part of the backlog that is theirs.
+  const wish = Math.max(0, Number(wished) || 0);
+  const ordersOnly = wish > 0 ? stockAtArrival({ stockNow: free, comingLots: lots, wanted, daily: d, leadTimeDays }).backlog : null;
+  const { atArrival, backlog: owedAll, ranOut, lost } = stockAtArrival({ stockNow: free, comingLots: lots, wanted: (Number(wanted) || 0) + wish, daily: d, leadTimeDays });
+  const backlog = ordersOnly == null ? owedAll : Math.min(ordersOnly, owedAll);
+  const wishLeft = owedAll - backlog;
   const safety = Math.min(Math.max(0, Number(safetyStock) || 0), d * cover * SAFETY_CAP_OF_COVER);
-  const baseNeed = d * cover + backlog - atArrival;
+  const baseNeed = d * cover + owedAll - atArrival;
   const need = baseNeed + safety;
   const step = Math.max(1, Math.round(Number(stepPieces) || 1));
   let suggested = roundUpToStep(need, step);
@@ -147,10 +154,12 @@ export function purchaseLine({ stockNow, coming = 0, comingLots = null, wanted =
   else if (smaller > 0 && trend === "down" && suggested - need > 1e-9) rounding = "down_trend";
   if (rounding === "down_covers" || rounding === "down_trend") suggested = smaller;
   const qty = order == null ? suggested : Math.max(0, Number(order) || 0);
-  const after = Math.max(0, atArrival + qty - backlog);
+  // the waiting customers (orders and wishes) take their pieces when the goods come, so they are not on the shelf after receiving
+  const after = Math.max(0, atArrival + qty - owedAll);
   const daysAfter = d > 0 ? round1(after / d) : null;
   return {
     need: Math.max(0, Math.ceil(need)),
+    wished: Math.round(wishLeft),
     base_need: Math.max(0, Math.ceil(baseNeed)),
     safety_used: Math.round(safety),
     rounding,

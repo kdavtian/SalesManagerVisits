@@ -500,6 +500,12 @@
 .ps-rate { margin: 6px 0 0; font-size: 0.78rem; }
 .ps-why { margin: 4px 0 0; font-size: 0.78rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .ps-lost { margin: 4px 0 0; font-size: 0.8rem; color: var(--danger); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ps-candidates { margin: 0 0 14px; padding: 12px; }
+.ps-candidates h2 { margin: 0; font-size: 1rem; }
+.ps-candidates > p { margin: 2px 0 6px; font-size: 0.78rem; }
+.ps-candidate { display: flex; flex-direction: column; gap: 1px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.88rem; }
+.ps-candidate-name { font-weight: 600; overflow-wrap: anywhere; }
+.ps-candidate .muted { font-size: 0.78rem; }
 .ps-budget-over { border-color: var(--danger); color: var(--danger); }
 .ps-urgent-chip.chip-active { border-color: var(--danger); color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--bg-card)); }
 .ps-detail-actions { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
