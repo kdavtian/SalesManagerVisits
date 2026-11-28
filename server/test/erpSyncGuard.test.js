@@ -57,3 +57,16 @@ test("with no dollar rate in the sheet, the app's newest rate is used; with none
   assert.equal(b[0].amount_amd, 0);
   assert.equal(b[0].fx_rate, null);
 });
+
+test("a rate read from a typo'd AMD amount is not used for the neighbours; filled rows are whole AMD and marked estimated", () => {
+  const rows = [
+    normalizeCashRow({ date: "2031-03-01", amount: 10, currency: "USD", currency_rate: 385 }),
+    normalizeCashRow({ date: "2031-03-10", amount: 100, currency: "USD", amount_amd: 3900 }), // typo: 39 AMD per dollar
+    normalizeCashRow({ date: "2031-03-11", amount: 3.33, currency: "USD" }),
+  ];
+  assert.deepEqual(fillMissingRates(rows, null), { filled: 1, missing: 0 });
+  assert.equal(rows[2].fx_rate, 385, "the typo's 39 is ignored; the typed 385 is used");
+  assert.equal(rows[2].amount_amd, 1282, "whole AMD");
+  assert.equal(rows[2].fx_estimated, true);
+  assert.equal(rows[0].fx_estimated, false);
+});

@@ -3,8 +3,10 @@
 // so every credit check passed until the next good file. Now, before anything is changed, the incoming counts are compared with the last
 // good sync: when one of them falls by more than MAX_DROP (and the old count was meaningful, more than MIN_PREVIOUS), the sync is refused
 // with 422, nothing changes, and admin / CEO / operations director are told (app notification + the Telegram alert chats).
-// A real change gets through with `force: true` in the bot's payload, or with the admin's one-time "Accept the next sync" button in System
-// health (open for ACCEPT_HOURS). Rules only here; the routes call checkSyncDrop() / refuseDrop().
+// A real change gets through with `force: true` in the bot's payload, or with the admin's "Accept the next sync" button in System health:
+// it lets ONE sync of each kind (main sync, Cashflow push of the same file) through within ACCEPT_HOURS, then it is used up, so a second bad
+// file in the same window is refused again. Every big drop let through is recorded as a warning attempt (who / how).
+// Rules only here; the routes call checkSyncDrop() / refuseDrop().
 import { pool } from "../db/pool.js";
 import { recordSyncAttempt } from "./erpSyncAttempts.js";
 import { notifyTelegram, escapeHtml } from "../shared/telegram.js";
@@ -51,40 +53,71 @@ export async function lastGoodCounts(db = pool) {
   return out;
 }
 
+export const MAIN = "/api/erp-sync";
+export const LEDGER = "/api/erp-sync/cashflow-ledger";
+
 export async function getSyncGuard(db = pool) {
   const { rows } = await db.query(
-    `SELECT s.erp_sync_refused_at AS refused_at, s.erp_sync_refused_reason AS refused_reason, s.erp_sync_accept_until AS accept_until, u.name AS accept_by_name
+    `SELECT s.erp_sync_refused_at AS refused_at, s.erp_sync_refused_reason AS refused_reason, s.erp_sync_refused_endpoint AS refused_endpoint,
+            s.erp_sync_accept_until AS accept_until, s.erp_sync_accept_used AS accept_used, u.name AS accept_by_name
        FROM app_settings s LEFT JOIN users u ON u.id = s.erp_sync_accept_by WHERE s.id = 1`
   );
   const r = rows[0] ?? {};
-  const acceptOpen = Boolean(r.accept_until && new Date(r.accept_until).getTime() > Date.now());
+  const used = r.accept_used ?? [];
+  // open while the time lasts and not both kinds of sync have used it
+  const acceptOpen = Boolean(r.accept_until && new Date(r.accept_until).getTime() > Date.now() && !(used.includes(MAIN) && used.includes(LEDGER)));
   return {
     refused_at: r.refused_at ?? null,
     refused_reason: r.refused_reason ?? null,
+    refused_endpoint: r.refused_endpoint ?? null,
     accept_until: acceptOpen ? r.accept_until : null,
+    accept_used: acceptOpen ? used : [],
     accept_by_name: acceptOpen ? (r.accept_by_name ?? null) : null,
   };
+}
+
+// Is the last refusal still open? Closed by a later good sync of the SAME kind: the main sync by erp_sync_runs, the Cashflow push by the
+// bot's cash_syncs row (a good main sync does not fix a refused Cashflow sheet).
+export async function refusalOpen(guard, db = pool) {
+  if (!guard.refused_at) return false;
+  const sql =
+    guard.refused_endpoint === LEDGER
+      ? "SELECT MAX(at) AS at FROM cash_syncs WHERE via = 'bot'"
+      : "SELECT MAX(at) AS at FROM erp_sync_runs";
+  const { rows } = await db.query(sql);
+  return !rows[0]?.at || new Date(guard.refused_at) > new Date(rows[0].at);
 }
 
 // The admin's "Accept the next sync": the next syncs within ACCEPT_HOURS go through even with a big drop.
 export async function acceptNextSync(userId, db = pool) {
   await db.query(
-    `INSERT INTO app_settings (id, erp_sync_accept_until, erp_sync_accept_by) VALUES (1, now() + make_interval(hours => $2), $1)
-     ON CONFLICT (id) DO UPDATE SET erp_sync_accept_until = EXCLUDED.erp_sync_accept_until, erp_sync_accept_by = EXCLUDED.erp_sync_accept_by`,
+    `INSERT INTO app_settings (id, erp_sync_accept_until, erp_sync_accept_by, erp_sync_accept_used) VALUES (1, now() + make_interval(hours => $2), $1, '{}')
+     ON CONFLICT (id) DO UPDATE SET erp_sync_accept_until = EXCLUDED.erp_sync_accept_until, erp_sync_accept_by = EXCLUDED.erp_sync_accept_by, erp_sync_accept_used = '{}'`,
     [userId ?? null, ACCEPT_HOURS]
   );
   return getSyncGuard(db);
 }
 
-// The decision for one sync. `previous` is read by the caller (main sync: lastGoodCounts; ledger: the rows in the app now).
-// Returns { ok: true, drops, overridden } or { ok: false, drops, reason }.
-export async function checkSyncDrop({ incoming, previous, force = false, db = pool }) {
+// The decision for one sync of `endpoint` (MAIN or LEDGER). `previous` is read by the caller (main sync: lastGoodCounts; ledger: the rows in
+// the app now). Returns { ok: true, drops, overridden } or { ok: false, drops, reason }. A drop let through is recorded (warning attempt), and
+// an admin's accept is used up for this endpoint (atomically: two syncs at once cannot both use it).
+export async function checkSyncDrop({ endpoint, incoming, previous, force = false, db = pool }) {
   const drops = findDrops(incoming, previous);
   if (!drops.length) return { ok: true, drops, overridden: false };
-  if (force === true) return { ok: true, drops, overridden: "force" };
-  const guard = await getSyncGuard(db);
-  if (guard.accept_until) return { ok: true, drops, overridden: "accepted" };
-  return { ok: false, drops, reason: `Big drop against the last good sync, nothing was changed: ${describeDrops(drops)}` };
+  let overridden = null;
+  if (force === true) overridden = "the bot's force flag";
+  else {
+    const { rows } = await db.query(
+      `UPDATE app_settings s SET erp_sync_accept_used = array_append(s.erp_sync_accept_used, $1::text)
+        WHERE s.id = 1 AND s.erp_sync_accept_until > now() AND NOT ($1::text = ANY(s.erp_sync_accept_used))
+        RETURNING (SELECT name FROM users WHERE id = s.erp_sync_accept_by) AS by_name`,
+      [endpoint]
+    );
+    if (rows[0]) overridden = `accepted by ${rows[0].by_name ?? "an admin"}`;
+  }
+  if (!overridden) return { ok: false, drops, reason: `Big drop against the last good sync, nothing was changed: ${describeDrops(drops)}` };
+  await recordSyncAttempt({ endpoint, ok: true, warnings: [`Big drop let through (${overridden}): ${describeDrops(drops)}`] });
+  return { ok: true, drops, overridden };
 }
 
 // Records a refused sync and tells management; answers the bot with 422. Best effort around the answer: never throws.
@@ -92,16 +125,19 @@ const telegramSent = new Map(); // reason -> last time; one Telegram message per
 export async function refuseDrop(res, { endpoint, check }) {
   try {
     await pool.query(
-      `INSERT INTO app_settings (id, erp_sync_refused_at, erp_sync_refused_reason) VALUES (1, now(), $1)
-       ON CONFLICT (id) DO UPDATE SET erp_sync_refused_at = now(), erp_sync_refused_reason = EXCLUDED.erp_sync_refused_reason`,
-      [check.reason.slice(0, 2000)]
+      `INSERT INTO app_settings (id, erp_sync_refused_at, erp_sync_refused_reason, erp_sync_refused_endpoint) VALUES (1, now(), $1, $2)
+       ON CONFLICT (id) DO UPDATE SET erp_sync_refused_at = now(), erp_sync_refused_reason = EXCLUDED.erp_sync_refused_reason,
+         erp_sync_refused_endpoint = EXCLUDED.erp_sync_refused_endpoint`,
+      [check.reason.slice(0, 2000), endpoint]
     );
   } catch (err) {
     console.error("erp sync guard: could not save the refusal:", err.message);
   }
   await recordSyncAttempt({ endpoint, ok: false, error: check.reason });
   const hy = describeDrops(check.drops, "hy");
-  if (Date.now() - (telegramSent.get(hy) ?? 0) > 6 * 3600 * 1000) {
+  const SIX_HOURS = 6 * 3600 * 1000;
+  if (Date.now() - (telegramSent.get(hy) ?? 0) > SIX_HOURS) {
+    for (const [k, at] of telegramSent) if (Date.now() - at > SIX_HOURS) telegramSent.delete(k);
     telegramSent.set(hy, Date.now());
     notifyTelegram(
       `⚠️ <b>Excel-ի համաժամացումը մերժվեց</b>\nՖայլում տվյալները կտրուկ պակասել են՝ ${escapeHtml(hy)}։\nԱպում ոչինչ չի փոխվել (պարտքերը մնացել են նախորդ ֆայլից)։\nԵթե փոփոխությունը իրական է՝ Համակարգի վիճակ → «Ընդունել հաջորդ համաժամացումը»։`

@@ -41,7 +41,7 @@ cashflowRouter.get("/meta", async (req, res) => {
     ),
     pool.query("SELECT at, via, rows_in, rows_skipped, rows_rate_filled, rows_no_rate, file_name FROM cash_syncs ORDER BY at DESC LIMIT 1"),
     pool.query("SELECT MIN(entry_date)::text AS first, MAX(entry_date)::text AS last, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE origin = 'excel')::int AS excel_rows FROM cash_entries"),
-    pool.query("SELECT fx_rate::float8 AS rate FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1"),
+    pool.query("SELECT fx_rate::float8 AS rate FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL AND NOT fx_estimated ORDER BY entry_date DESC, id DESC LIMIT 1"),
     // dollar rows of the Excel sheet with no rate anywhere (plan 0.9): counted as 0 AMD until the accountant types the rate; the Excel row numbers
     pool.query("SELECT excel_row, COUNT(*) OVER ()::int AS total FROM cash_entries WHERE fx_missing ORDER BY excel_row NULLS LAST, id LIMIT 10"),
   ]);

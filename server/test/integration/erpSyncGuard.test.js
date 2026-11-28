@@ -34,8 +34,11 @@ const customers = (n, debtors = n) =>
   Array.from({ length: n }, (_, i) => ({ erp_customer_id: `${RUN}-${i}`, customer_name: `Guard Shop ${i}`, debt_amd: i < debtors ? 1000 + i : 0 }));
 const debtTotal = async () => Number((await pool.query("SELECT COALESCE(SUM(debt_amd), 0) AS s FROM erp_customer_data WHERE erp_customer_id LIKE $1", [`${RUN}%`])).rows[0].s);
 
+const orderLines = (n) => Array.from({ length: n }, (_, i) => ({ erp_customer_id: `${RUN}-0`, order_id: `${RUN}-O${i}`, date: "2031-01-05", product_id: "P1", qty: 1, revenue_amd: 100 }));
+const orderCount = async () => (await pool.query("SELECT count(*)::int AS n FROM erp_order_lines WHERE order_id LIKE $1", [`${RUN}%`])).rows[0].n;
+
 test("a good full sync, then an empty file: refused with 422, debts kept, refusal recorded and shown in System health", async () => {
-  const good = await sync({ customers: customers(120), order_lines: [] });
+  const good = await sync({ customers: customers(120), order_lines: orderLines(60) });
   assert.equal(good.status, 200, JSON.stringify(good.data));
   const before = await debtTotal();
   assert.ok(before > 0);
@@ -43,12 +46,14 @@ test("a good full sync, then an empty file: refused with 422, debts kept, refusa
   assert.equal(run.customers, 120);
   assert.equal(run.customers_with_debt, 120, "the run now remembers how many customers owe");
 
+  assert.equal(await orderCount(), 60);
   const empty = await sync({ customers: [], order_lines: [] });
   assert.equal(empty.status, 422);
   assert.equal(empty.data.code, "sync_drop_refused");
   assert.match(empty.data.error, /customers: 120 → 0/);
-  assert.deepEqual(empty.data.drops.map((d) => d.key), ["customers", "customers_with_debt"]);
+  assert.deepEqual(empty.data.drops.map((d) => d.key), ["customers", "customers_with_debt", "order_lines"]);
   assert.equal(await debtTotal(), before, "nothing was wiped");
+  assert.equal(await orderCount(), 60, "the order history was not wiped either");
 
   const attempt = (await pool.query("SELECT ok, error FROM erp_sync_attempts WHERE endpoint = '/api/erp-sync' ORDER BY id DESC LIMIT 1")).rows[0];
   assert.equal(attempt.ok, false);
@@ -59,27 +64,35 @@ test("a good full sync, then an empty file: refused with 422, debts kept, refusa
   assert.match(st.data.guard.refused_reason, /customers: 120 → 0/);
   assert.match(st.data.last_failure.error, /Big drop/);
   assert.equal(st.data.last_success.counts.customers, 120, "the last good sync is unchanged");
+  // order lines alone halving (customers fine) is refused too
+  const halfOrders = await sync({ customers: customers(120), order_lines: orderLines(20) });
+  assert.equal(halfOrders.status, 422);
+  assert.deepEqual(halfOrders.data.drops.map((d) => d.key), ["order_lines"]);
+  assert.equal(await orderCount(), 60);
 });
 
 test("debtors dropping alone (half-saved debt column) is refused too; a small real change goes through", async () => {
   const halfDebts = await sync({ customers: customers(120, 60) });
   assert.equal(halfDebts.status, 422);
   assert.deepEqual(halfDebts.data.drops.map((d) => d.key), ["customers_with_debt"]);
-  const small = await sync({ customers: customers(110) });
+  const small = await sync({ customers: customers(110), order_lines: orderLines(60) });
   assert.equal(small.status, 200, "an 8 % drop is normal life");
   const st = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
   assert.equal(st.data.guard.refused_open, false, "a good sync after the refusal closes it");
 });
 
-test("force: true from the bot lets a real big change through", async () => {
+test("force: true from the bot lets a real big change through, and it is recorded", async () => {
   const res = await sync({ customers: customers(30), force: true });
   assert.equal(res.status, 200);
+  const rec = (await pool.query("SELECT ok, warnings FROM erp_sync_attempts WHERE endpoint = '/api/erp-sync' ORDER BY id DESC LIMIT 1")).rows[0];
+  assert.equal(rec.ok, true);
+  assert.match(rec.warnings[0], /Big drop let through \(the bot's force flag\): customers: 110 → 30/);
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM erp_customer_data WHERE erp_customer_id LIKE $1", [`${RUN}%`])).rows[0].n, 30);
   // back to a big baseline for the next test
   assert.equal((await sync({ customers: customers(120), force: true })).status, 200);
 });
 
-test("only admin / CEO accept the next sync; while the window is open a big drop goes through", async () => {
+test("only admin / CEO accept the next sync; it lets ONE big drop through, a second bad file is refused again", async () => {
   assert.equal((await sync({ customers: customers(10) })).status, 422);
   assert.equal((await apiRequest("/api/erp-sync/accept-drop", { method: "POST", cookie: repCookie })).status, 403);
   assert.equal((await apiRequest("/api/erp-sync/accept-drop", { method: "POST" })).status, 401);
@@ -89,7 +102,14 @@ test("only admin / CEO accept the next sync; while the window is open a big drop
   const st = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
   assert.ok(st.data.guard.accept_until);
   assert.equal((await sync({ customers: customers(10) })).status, 200);
-  await pool.query("UPDATE app_settings SET erp_sync_accept_until = NULL WHERE id = 1");
+  const rec = (await pool.query("SELECT warnings FROM erp_sync_attempts WHERE endpoint = '/api/erp-sync' ORDER BY id DESC LIMIT 1")).rows[0];
+  assert.match(rec.warnings[0], /accepted by /);
+  // the accept is used up for the main sync; the window stays open for the Cashflow push of the same file only
+  const after = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
+  assert.deepEqual(after.data.guard.accept_used, ["/api/erp-sync"]);
+  assert.equal((await sync({ customers: customers(120), force: true })).status, 200);
+  assert.equal((await sync({ customers: customers(10) })).status, 422, "a second bad file in the same window is refused");
+  await pool.query("UPDATE app_settings SET erp_sync_accept_until = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
 });
 
 test("the bot's Cashflow push: a half sheet is refused and the ledger kept; dollar rows without a rate take the nearest rate or are flagged", async () => {
@@ -102,11 +122,24 @@ test("the bot's Cashflow push: a half sheet is refused and the ledger kept; doll
   assert.equal(full.data.usd_no_rate, 0);
   const filled = (await pool.query("SELECT fx_rate::float8 AS r, amount_amd::float8 AS a, fx_missing FROM cash_entries WHERE info = $1", [`${RUN} usd no rate`])).rows[0];
   assert.deepEqual(filled, { r: 390, a: 39000, fx_missing: false }, "not 0 AMD any more");
+  assert.equal((await pool.query("SELECT fx_estimated FROM cash_entries WHERE info = $1", [`${RUN} usd no rate`])).rows[0].fx_estimated, true);
 
   const half = await ledger({ rows: rows.slice(0, 20) });
   assert.equal(half.status, 422);
   assert.equal(half.data.code, "sync_drop_refused");
   assert.equal((await pool.query("SELECT count(*)::int AS n FROM cash_entries WHERE origin = 'excel'")).rows[0].n, 82, "the ledger was not wiped");
+  // a good MAIN sync afterwards does not hide the refused Cashflow sheet
+  assert.equal((await sync({ customers: customers(120) })).status, 200);
+  const st = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
+  assert.equal(st.data.guard.refused_open, true, "still open: only a good Cashflow push closes it");
+  assert.equal(st.data.guard.refused_endpoint, "/api/erp-sync/cashflow-ledger");
+  // the admin's accept lets one Cashflow push through, then the ledger guard is back
+  await apiRequest("/api/erp-sync/accept-drop", { method: "POST", cookie: adminCookie });
+  assert.equal((await ledger({ rows: rows.slice(0, 60) })).status, 200);
+  assert.equal((await apiRequest("/api/erp-sync/status", { cookie: adminCookie })).data.guard.refused_open, false);
+  assert.equal((await ledger({ rows: rows.slice(0, 10) })).status, 422, "used up");
+  assert.equal((await ledger({ rows, force: true })).status, 200, "force works on the Cashflow push too");
+  await pool.query("UPDATE app_settings SET erp_sync_accept_until = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
 
   // no dollar rate in the sheet and none in the app: kept, flagged, counted, shown on the Cashflow meta with its Excel row
   await pool.query("UPDATE cash_entries SET fx_rate = NULL WHERE currency = 'USD'");

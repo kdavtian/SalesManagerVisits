@@ -81,18 +81,24 @@ export function normalizeCashRow(raw) {
     sales_rep: text(raw.sales_rep),
     transaction_id: text(raw.transaction_id),
     fx_missing: needsRate,
+    fx_estimated: false,
   };
 }
 
 // The rate for a dollar row that has none (plan 0.9): the rate of the dollar row nearest in date in the same sheet (a typed rate, or AMD / USD
-// when both amounts are there), else `fallback` (the newest rate the app knows, the same one a manual entry uses: cleanEntry). Fills the rows
-// in place; returns { filled, missing }. A row with no rate anywhere stays at 0 AMD with fx_missing = true.
+// when both amounts are there), else `fallback` (the newest typed rate the app knows, the same one a manual entry uses: cleanEntry). Fills
+// the rows in place (whole AMD, fx_estimated = true); returns { filled, missing }. A row with no rate anywhere stays at 0 AMD, fx_missing.
+// A rate read from the two amounts is used only when it is within half / double of the sheet's typed rates (or the fallback): one typo in
+// an AMD amount must not become the rate of its neighbours.
 export function fillMissingRates(rows, fallback = null) {
+  const typed = rows.filter((r) => r.currency === "USD" && !r.fx_missing && r.fx_rate > 0).map((r) => r.fx_rate).sort((a, b) => a - b);
+  const ref = typed.length ? typed[Math.floor(typed.length / 2)] : fallback > 0 ? fallback : null;
+  const sane = (rate) => rate > 0 && Number.isFinite(rate) && (!ref || (rate >= ref / 2 && rate <= ref * 2));
   const known = [];
   for (const r of rows) {
     if (r.currency !== "USD" || r.fx_missing) continue;
     const rate = r.fx_rate > 0 ? r.fx_rate : r.amount ? Math.abs(r.amount_amd / r.amount) : null;
-    if (rate > 0 && Number.isFinite(rate)) known.push({ t: Date.parse(r.date), rate });
+    if (r.fx_rate > 0 || sane(rate)) known.push({ t: Date.parse(r.date), rate });
   }
   let filled = 0;
   let missing = 0;
@@ -104,8 +110,9 @@ export function fillMissingRates(rows, fallback = null) {
     const rate = best ? Math.round(best.rate * 10000) / 10000 : fallback > 0 ? fallback : null;
     if (rate) {
       r.fx_rate = rate;
-      r.amount_amd = Math.round(r.amount * rate * 100) / 100;
+      r.amount_amd = Math.round(r.amount * rate);
       r.fx_missing = false;
+      r.fx_estimated = true;
       filled++;
     } else {
       missing++;
@@ -171,7 +178,7 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
   }
   let rates = { filled: 0, missing: 0 };
   if (clean.some((r) => r.fx_missing)) {
-    const { rows: [last] } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate > 0 AND NOT fx_missing ORDER BY entry_date DESC, id DESC LIMIT 1");
+    const { rows: [last] } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate > 0 AND NOT fx_missing AND NOT fx_estimated ORDER BY entry_date DESC, id DESC LIMIT 1");
     rates = fillMissingRates(clean, last?.r ?? null);
   }
   const client = await pool.connect();
@@ -207,12 +214,12 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
         d: r.date, a: r.amount, c: r.currency, fx: r.fx_rate, aa: r.amount_amd,
         cat: r.category ? categories.get(r.category.toLowerCase()) : null,
         acc: r.account ? accounts.get(r.account.toLowerCase()) : null,
-        cu: r.erp_customer_id, rf: r.ref, i: r.info, s: r.sales_rep, t: r.transaction_id, x: r.excel_row, fm: r.fx_missing,
+        cu: r.erp_customer_id, rf: r.ref, i: r.info, s: r.sales_rep, t: r.transaction_id, x: r.excel_row, fm: r.fx_missing, fe: r.fx_estimated,
       }));
       await client.query(
-        `INSERT INTO cash_entries (entry_date, amount, currency, fx_rate, amount_amd, category_id, account_id, erp_customer_id, ref, info, sales_rep, transaction_id, origin, excel_row, fx_missing)
-         SELECT d, a, c, fx, aa, cat, acc, cu, rf, i, s, t, 'excel', x, fm
-         FROM jsonb_to_recordset($1::jsonb) AS x(d date, a numeric, c text, fx numeric, aa numeric, cat int, acc int, cu text, rf text, i text, s text, t text, x int, fm boolean)`,
+        `INSERT INTO cash_entries (entry_date, amount, currency, fx_rate, amount_amd, category_id, account_id, erp_customer_id, ref, info, sales_rep, transaction_id, origin, excel_row, fx_missing, fx_estimated)
+         SELECT d, a, c, fx, aa, cat, acc, cu, rf, i, s, t, 'excel', x, fm, fe
+         FROM jsonb_to_recordset($1::jsonb) AS x(d date, a numeric, c text, fx numeric, aa numeric, cat int, acc int, cu text, rf text, i text, s text, t text, x int, fm boolean, fe boolean)`,
         [JSON.stringify(part)]
       );
     }
@@ -243,7 +250,7 @@ export async function cleanEntry(b) {
   if (currency === "USD") {
     fx = Number(b.fx_rate);
     if (!(fx > 0)) {
-      const { rows } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1");
+      const { rows } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL AND NOT fx_estimated ORDER BY entry_date DESC, id DESC LIMIT 1");
       fx = rows[0]?.r ?? null;
     }
     if (!(fx > 0)) return err("Enter the USD rate (AMD per USD)");
