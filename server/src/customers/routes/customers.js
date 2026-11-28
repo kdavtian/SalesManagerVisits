@@ -4,13 +4,14 @@ import { cashPlace } from "../../shared/cashPlace.js";
 import { VOICE_NOTES_JSON_SQL } from "../../field/voiceNotes.js";
 import { Router } from "express";
 import { customerIdsMatching } from "../customerSearch.js";
+import { customerAccess, reachableCustomersSql } from "../customerAccess.js";
 import { pool } from "../../db/pool.js";
 import { placeNewCustomer } from "../../field/autoRoutePlan.js";
 import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday, yerevanDateOf } from "../../utils/yerevanDate.js";
 import { shelfRecordedSql } from "../../field/shelfData.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS, seesAllPayments } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
@@ -43,12 +44,9 @@ customersRouter.use(requireAuth);
 // A sales manager reaches ONLY the customers assigned to him (owner, 2026-11-04: "rep should see only customers assigned to him"), on every
 // /:id route -- the card, its documents, check-ins, orders, debt statement ... -- not just in the list. The offices every rep may check in at
 // (checkin_for_all) stay open. Someone else's customer answers 404, so its existence is not revealed.
+// The rule itself is customers/customerAccess.js, shared with check-ins, social profiles and order documents.
 customersRouter.param("id", async (req, res, next, id) => {
-  if (seesAllActivity(req.user.role)) return next();
-  const n = Number(id);
-  if (!Number.isInteger(n)) return next();
-  const { rows: [c] } = await pool.query("SELECT assigned_manager_id, checkin_for_all FROM customers WHERE id = $1", [n]);
-  if (!c || c.checkin_for_all || c.assigned_manager_id === req.user.id) return next();
+  if ((await customerAccess(req.user, id)) !== "denied") return next();
   return res.status(404).json({ error: "Customer not found" });
 });
 
@@ -513,12 +511,15 @@ customersRouter.get("/regions", async (req, res) => {
 // just our own brands. DISTINCT ON picks each customer's single most
 // recent checkin that actually recorded brand data; a customer never
 // checked this way just doesn't appear.
+// A sales manager gets only the customers he reaches (customerAccess.js): his own and the offices.
 customersRouter.get("/brand-status", async (req, res) => {
+  const scope = reachableCustomersSql(req.user, "c", 1);
   const { rows } = await pool.query(
-    `SELECT DISTINCT ON (customer_id) customer_id, brand_status, timestamp
-     FROM checkins
-     WHERE brand_status IS NOT NULL
-     ORDER BY customer_id, timestamp DESC`
+    `SELECT DISTINCT ON (ch.customer_id) ch.customer_id, ch.brand_status, ch.timestamp
+     FROM checkins ch ${scope ? `JOIN customers c ON c.id = ch.customer_id AND ${scope}` : ""}
+     WHERE ch.brand_status IS NOT NULL
+     ORDER BY ch.customer_id, ch.timestamp DESC`,
+    scope ? [req.user.id] : []
   );
   res.json(rows);
 });
@@ -1300,7 +1301,7 @@ customersRouter.get("/:id/payments-received", async (req, res) => {
 
   const appParams = [customer.id];
   let appScope = "";
-  if (req.user.role === "sales_manager") {
+  if (!seesAllPayments(req.user.role)) { // a rep, the warehouse, a driver: only payments they collected (roles.js, 0.13)
     appParams.push(req.user.id);
     appScope = "AND p.sales_manager_id = $2";
   }

@@ -24,7 +24,10 @@ for what that implies.
 | Financial CSV exports (payments, debt, orders) | `seesFinancialExports` | `admin`, `ceo`, `sales_director`, `accountant`. |
 | Live team-location map | `canViewTeamLocations` | `admin`, `sales_director`, `ceo`. |
 | A customer's ERP data (debt, order/payment history) | `seesCustomerErpData` | `sales_manager` only for customers assigned to them; every other role sees it for any customer. |
-| Payments | `seesAllPayments` (= `seesAllActivity`) | Same shape as Activity. |
+| Payments, cash hand-overs, shortfalls | `seesAllPayments` | `admin`, `ceo`, `operations_director`, `sales_director`, `accountant` see all; everyone else (a rep, the warehouse, a driver) only their own (2026-11-28, improvement plan 0.13). |
+| Reaching one customer by id (card, check-in, delivery list, social profiles, an order's signed documents, shelf status) | `server/src/customers/customerAccess.js` | Every role except `sales_manager` reaches every customer; a `sales_manager` his assigned customers and the offices (`checkin_for_all`). Someone else's: 404 on reads, 403 on a check-in (an offline-queued visit stays on the phone). |
+| Team Performance plan, versions, audit, comments | `seesAllPerformance` | Management only; a rep reads his own channels via My Performance (2026-11-28, 0.10). |
+| Supplier costs on products (gold price, landing, net, pack cost USD, workbook landing) | `seesProductCosts` | Roles without it get an allow-list of product fields (`PRODUCT_FIELDS_FOR_ALL`, 2026-11-28, 0.14). |
 | Unrecorded-order backlog badge | `seesUnrecordedBadge` | `accountant`, `ceo`, `admin` — deliberately not `sales_director`. |
 | Generated reports (Sales Director/debt/CEO workbooks) | `seesGeneratedReports` (= `seesFinancialExports`) | Same as financial exports. |
 | Team Performance (company-wide vs. own channel) | `seesAllPerformance` | `admin`, `ceo`, `sales_director`, `accountant`. |

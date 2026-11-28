@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesAllActivity } from "../../shared/roles.js";
+import { mayReachCustomerRow } from "../customerAccess.js";
 
 export const customerSocialRouter = Router();
 customerSocialRouter.use(requireAuth);
@@ -81,7 +82,7 @@ function cleanWebsite(value) {
 
 async function loadCustomer(id) {
   const { rows } = await pool.query(
-    "SELECT id, created_by, assigned_manager_id, instagram_username, facebook_url, email, website FROM customers WHERE id = $1",
+    "SELECT id, created_by, assigned_manager_id, checkin_for_all, instagram_username, facebook_url, email, website FROM customers WHERE id = $1",
     [id]
   );
   return rows[0];
@@ -97,7 +98,8 @@ function canEditSocial(user, customer) {
 
 customerSocialRouter.get("/:id", async (req, res) => {
   const customer = await loadCustomer(req.params.id);
-  if (!customer) return res.status(404).json({ error: "Customer not found" });
+  // a rep reads only a customer he reaches (customerAccess.js); someone else's answers 404, like the card
+  if (!customer || !mayReachCustomerRow(req.user, customer)) return res.status(404).json({ error: "Customer not found" });
   res.json({
     instagram_username: customer.instagram_username,
     facebook_url: customer.facebook_url,
