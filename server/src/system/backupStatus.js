@@ -1,4 +1,4 @@
-// "Last good backup" for Settings > System health. deploy/backup.sh writes one backup_runs row per run (migration 229);
+// "Last good backup" for Settings > System health. deploy/backup.sh writes one backup_runs row per run (migration 231);
 // a backup older than BACKUP_STALE_AFTER_HOURS -- nightly cron plus a half-day of slack -- is shown red.
 import { pool } from "../db/pool.js";
 

@@ -49,7 +49,7 @@ test.before(async () => {
   await admin.query(`CREATE DATABASE ${DB}`);
   const db = new pg.Client({ connectionString: DB_URL });
   await db.connect();
-  await db.query(fs.readFileSync(path.join(REPO, "server/migrations/229_backup_runs.sql"), "utf8"));
+  await db.query(fs.readFileSync(path.join(REPO, "server/migrations/231_backup_runs.sql"), "utf8"));
   // the restore drill's key tables, with rows
   for (const t of ["users", "customers", "products", "orders", "order_items", "checkins", "payments", "schema_migrations"]) {
     await db.query(`CREATE TABLE ${t} (id serial PRIMARY KEY, note text)`);

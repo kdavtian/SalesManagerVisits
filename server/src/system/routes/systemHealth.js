@@ -59,7 +59,7 @@ systemHealthRouter.get("/", async (req, res) => {
     migrationStatus(),
     pool.query("SELECT MAX(snapshot_date) AS last_digest FROM debt_digest_snapshots"),
     backgroundJobStatus().catch(() => []), // before migration 167 the table does not exist yet
-    backupStatus().catch(() => null), // before migration 229 the table does not exist yet
+    backupStatus().catch(() => null), // before migration 231 the table does not exist yet
   ]);
 
   res.json({

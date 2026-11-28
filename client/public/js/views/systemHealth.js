@@ -122,7 +122,7 @@ const BACKUP_STEPS = ["database dump", "uploads archive", "off-server copy", "no
 const stepText = (step) => (BACKUP_STEPS.includes(step) ? t(`health_backup_step_${step.replaceAll(" ", "_").replaceAll("-", "_")}`) : (step ?? ""));
 const sizeText = (bytes) => (bytes >= 1048576 ? `${Math.round(bytes / 1048576)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 function backupCardHtml(b) {
-  if (!b) return ""; // server before migration 229
+  if (!b) return ""; // server before migration 231
   const offsite = b.offsite ? b.offsite.split(",").map((k) => OFFSITE_LABELS[k] ?? k).join(", ") : null;
   return `<div class="card health-card" id="backup-card">
       <h3 class="health-title">${t("health_backup")} ${b.stale ? `<span class="badge badge-danger">!</span>` : ""}</h3>

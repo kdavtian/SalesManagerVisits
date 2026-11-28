@@ -37,7 +37,7 @@ test("system health: admin only, reports the served version, migrations and feed
   assert.ok(!JSON.stringify(h).match(/token|secret|password/i), "no secrets in the payload");
 });
 
-// deploy/backup.sh writes one backup_runs row per night (migration 229); System health shows the last good one, red after 36 h.
+// deploy/backup.sh writes one backup_runs row per night (migration 231); System health shows the last good one, red after 36 h.
 test("system health: last good backup, stale after 36 hours, a newer failure is reported", async () => {
   const { pool } = await import("../../src/db/pool.js");
   const { isBackupStale, BACKUP_STALE_AFTER_HOURS } = await import("../../src/system/backupStatus.js");
