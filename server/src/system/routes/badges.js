@@ -13,6 +13,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { accountingBadgeCount } from "../../orders/accountingBadge.js";
 import { decidableRequests } from "../requests/rules.js";
+import { NOT_ON_OPEN_ROUTE_SQL } from "../../orders/routeStops.js";
 import {
   canConfirmSubmittedOrders,
   seesAllPayments,
@@ -52,7 +53,7 @@ badgesRouter.get("/", async (req, res) => {
       ? pool.query(
           `SELECT
              (SELECT COUNT(*)::int FROM orders o WHERE o.status = 'packed_stock_out'
-                AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id))
+                AND ${NOT_ON_OPEN_ROUTE_SQL})
              + (SELECT COUNT(*)::int FROM route_stops WHERE completed_at IS NULL)
              AS count`
         )

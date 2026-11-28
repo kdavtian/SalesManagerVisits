@@ -21,6 +21,7 @@ import { insertPayment } from "../../money/routes/payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
+import { NOT_ON_OPEN_ROUTE_SQL, LATEST_STOP_OF_DAY_SQL } from "../routeStops.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
@@ -70,11 +71,11 @@ deliveryRouter.get("/home", async (req, res) => {
      JOIN delivery_routes r ON r.id = rs.route_id
      JOIN orders o ON o.id = rs.order_id
      JOIN customers c ON c.id = o.customer_id
-     WHERE r.driver_id = $1 AND r.route_date = $2
+     WHERE r.driver_id = $1 AND r.route_date = $2 AND ${LATEST_STOP_OF_DAY_SQL}
      ORDER BY rs.sequence`,
       [req.user.id, today]
     ),
-    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
+    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND ${NOT_ON_OPEN_ROUTE_SQL}`),
     pool.query(`SELECT COUNT(*)::int AS n FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.driver_id = $1 AND rs.completed_at IS NULL AND r.route_date < $2`, [req.user.id, today]),
     orderWaiting(),
   ]);
@@ -100,7 +101,7 @@ deliveryRouter.get("/packed-orders", async (req, res) => {
      FROM orders o
      JOIN customers c ON c.id = o.customer_id
      WHERE o.status = 'packed_stock_out'
-       AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)
+       AND ${NOT_ON_OPEN_ROUTE_SQL}
      ORDER BY ${(await getAppOrderSettings()).priority_enabled ? "o.placed_via_app DESC, " : ""}o.created_at ASC`
   );
   res.json(rows);
@@ -117,7 +118,7 @@ deliveryRouter.get("/pending-count", async (req, res) => {
   const { rows } = await pool.query(
     `SELECT
        (SELECT COUNT(*)::int FROM orders o WHERE o.status = 'packed_stock_out'
-          AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id))
+          AND ${NOT_ON_OPEN_ROUTE_SQL})
        + (SELECT COUNT(*)::int FROM route_stops WHERE completed_at IS NULL)
        AS count`
   );
@@ -214,7 +215,7 @@ deliveryRouter.post("/routes/plan", async (req, res) => {
     `SELECT o.id, o.status, c.name AS customer_name, c.lat, c.lng
      FROM orders o JOIN customers c ON c.id = o.customer_id
      WHERE o.status = 'packed_stock_out'
-       AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)
+       AND ${NOT_ON_OPEN_ROUTE_SQL}
        AND c.lat IS NOT NULL AND c.lng IS NOT NULL
      ORDER BY o.created_at ASC`
   );
@@ -447,7 +448,7 @@ deliveryRouter.post("/orders/:id/confirm", (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [order.id, req.user.id, driverName, signaturePath, debtBefore, order.total_amd, amountCollected, newBalance, paymentMethod]
     );
-    await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
+    await client.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
     await client.query(
       `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
        VALUES ($1, 'packed_stock_out', 'delivered', 'Delivered (signature captured)', $2)`,
@@ -515,7 +516,7 @@ deliveryRouter.post("/orders/:id/fail", async (req, res) => {
   if (!updatedRows[0]) {
     return res.status(409).json({ error: `Cannot fail delivery for an order that is "${order.status}"` });
   }
-  await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1", [order.id]);
+  await pool.query("UPDATE route_stops SET completed_at = now() WHERE order_id = $1 AND completed_at IS NULL", [order.id]);
   await pool.query(
     `INSERT INTO order_status_history (order_id, old_status, new_status, reason, changed_by)
      VALUES ($1, 'packed_stock_out', 'packed_stock_out', 'Delivery attempt failed -- back to packed', $2)`,

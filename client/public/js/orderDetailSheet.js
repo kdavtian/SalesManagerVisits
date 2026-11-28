@@ -267,7 +267,8 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
     overlay.querySelector(".sheet").classList.remove("sheet-adding");
     // Send to the accountant (owner, 2026-11-12): a paper-plane icon next to Print / Close instead of a full-width button. Its label (send /
     // send again / change the document) stays as the accessible name and tooltip.
-    const canSendToAccounting = canConfirmSubmittedOrders(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null);
+    // not once the order was corrected after its document (server: 409 order_changed -- asking again would make a second document)
+    const canSendToAccounting = canConfirmSubmittedOrders(state.user.role) && ACCOUNTING_ELIGIBLE.has(order.status) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null) && order.accounting_error?.code !== "order_changed";
     const sendLabel = order.accounting_status === "needs_attention" || order.accounting_status === "cancelled" ? t("acc_send_again") : order.accounting_status === "pending" ? t("acc_change_document") : t("acc_send_to_accounting");
     overlay.querySelector(".sheet").innerHTML = `
       <div class="sheet-head-actions">
@@ -404,7 +405,7 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: editLabel, action: "edit-order", cls: "btn btn-has-icon" });
     } else if (!order.cancelled_at && ["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status) && canCorrectOrders(state.user.role)) {
       buttons.push({ label: editLabel, action: "correct-order", cls: "btn btn-has-icon" });
-    } else if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null)) {
+    } else if (order.status === "confirmed" && !order.cancelled_at && canConfirmOrders(state.user.role) && ["pending", "needs_attention", "cancelled", null].includes(order.accounting_status ?? null) && !(order.accounting_documents?.length > 0)) {
       buttons.push({ label: editLabel, action: "unconfirm-edit", cls: "btn btn-has-icon" });
     }
     // Permanent delete (distinct from a director's reject, which keeps
@@ -419,10 +420,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
     }
 
-    // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, reject or delete the order
-    // (owner, 2026-10-26). Returns stay open: they are a request, decided by management.
+    // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, correct, reject or delete the order
+    // (owner, 2026-10-26; correct too, Phase 0 item 0.18). Returns stay open: they are a request, decided by management.
     if (isSignedLocked(order)) {
-      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order", "unconfirm-order", "unconfirm-edit"].includes(buttons[i].action)) buttons.splice(i, 1);
+      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "correct-order", "delete-order", "reject-order", "unconfirm-order", "unconfirm-edit"].includes(buttons[i].action)) buttons.splice(i, 1);
     }
 
     actionsEl.innerHTML = buttons

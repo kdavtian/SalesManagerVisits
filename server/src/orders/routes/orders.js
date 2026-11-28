@@ -1,7 +1,8 @@
-import { nextStatusFromDocuments, ACCOUNTING_STATUSES } from "../accountingStatus.js";
+import { nextStatusFromDocuments, ACCOUNTING_STATUSES, WITHDRAW_WAITING_REQUEST_SQL, hasAccountingDocuments } from "../accountingStatus.js";
 import { mayOpenOrderDocument } from "../../customers/customerAccess.js";
 import { customerIdsMatching } from "../../customers/customerSearch.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
+import { matchExistingLines, applyCorrection, isOrderChangedFlag, ORDER_CHANGED_SQL } from "../orderCorrection.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
@@ -1321,6 +1322,11 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   if (!["pending", "needs_attention", "cancelled", null].includes(order.accounting_status)) {
     return res.status(409).json({ error: "Accounting is already working on this order's document" });
   }
+  // corrected after Lily's document (orderCorrection.js): asking again would wipe the documents she made and she would make a second one;
+  // the accountant fixes the document and sets the request's status by hand
+  if (isOrderChangedFlag(order)) {
+    return res.status(409).json({ error: "This order was changed after its document -- fix the document in accounting and set its status by hand", code: "order_changed" });
+  }
   if (!order.erp_customer_id) return res.status(409).json({ error: "This order's customer has no ERP customer ID" });
   if (method === "invoice" && !order.customer_tin) {
     return res.status(409).json({ error: "An invoice needs the customer's TIN -- add it on the customer page first" });
@@ -1331,7 +1337,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
     `UPDATE orders SET payment_method = $2, accounting_doc_type = $3, accounting_status = 'pending', accounting_is_test = $4,
             accounting_requested_by = $5, accounting_requested_at = now(), accounting_claimed_at = NULL,
             accounting_documents = '[]'::jsonb, accounting_error = NULL, accounting_updated_at = now(), updated_at = now()
-     WHERE id = $1 AND accounting_status IS NOT DISTINCT FROM $6 RETURNING *`,
+     WHERE id = $1 AND accounting_status IS NOT DISTINCT FROM $6 AND NOT COALESCE(${ORDER_CHANGED_SQL}, false) RETURNING *`,
     [order.id, method, docType, isTest, req.user.id, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
@@ -1584,15 +1590,14 @@ ordersRouter.post("/:id/unconfirm", async (req, res) => {
   if (order.status !== "confirmed") {
     return res.status(409).json({ error: `Only a confirmed order can go back to submitted (this one is "${order.status}")`, code: "not_confirmed" });
   }
-  if (!ACCOUNTING_FREE_TO_UNCONFIRM.includes(order.accounting_status ?? null)) {
+  if (!ACCOUNTING_FREE_TO_UNCONFIRM.includes(order.accounting_status ?? null) || hasAccountingDocuments(order)) {
     return res.status(409).json({ error: "Accounting is working on this order's documents -- cancel them there first", code: "accounting_busy" });
   }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const { rows: updated } = await client.query(
-      `UPDATE orders SET status = 'submitted', updated_at = now(),
-              accounting_status = CASE WHEN accounting_status IN ('pending', 'needs_attention') THEN 'cancelled' ELSE accounting_status END
+      `UPDATE orders SET status = 'submitted', updated_at = now(), ${WITHDRAW_WAITING_REQUEST_SQL}
        WHERE id = $1 AND status = 'confirmed' RETURNING *`,
       [order.id]
     );
@@ -1776,11 +1781,16 @@ ordersRouter.post("/:id/mark-delivered", async (req, res) => {
 // packed or delivered order. A reason is required; the order before and after is kept in order_corrections; the rep who placed it and the
 // accountants are told (an order already in the Excel must be fixed there too). Lines already on the order keep their price; a product
 // added now gets the customer's price, the way a new order would. Stock and live debt follow by themselves: both are read from the lines.
+// Phase 0 (2026-11-28): lines are changed IN PLACE (a kept product keeps its line id, so returns and Lily's ln_<id> still point at it); a
+// product may not go below what the customer already returned of it; a signed order only by the admin or the CEO (like Edit); an order whose
+// document Lily is making or made is flagged "needs attention" (the document no longer matches the order).
 ordersRouter.post("/:id/correct", async (req, res) => {
   if (!canCorrectOrders(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
   const order = rows[0];
   if (!order) return res.status(404).json({ error: "Order not found" });
+  const mayChangeSigned = canChangeSignedOrder(req.user.role);
+  if (order.signed_at && !mayChangeSigned) return res.status(423).json(SIGNED_ORDER_ERROR);
   if (order.cancelled_at) return res.status(409).json({ error: "This order was cancelled -- it can no longer be changed", code: "cancelled_by_customer" });
   if (!["confirmed", "packed_stock_out", "delivered", "recorded"].includes(order.status)) {
     return res.status(409).json({ error: "A draft or submitted order is changed with Edit, not corrected", code: "use_edit" });
@@ -1790,19 +1800,20 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   const { items, discount_pct, discount_amd, payment_method, payment_term_days } = req.body ?? {};
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: "At least one item is required" });
 
-  const { rows: before } = await pool.query("SELECT product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
-  const keptPrice = new Map(before.map((l) => [l.product_id, l]));
+  const { rows: before } = await pool.query("SELECT id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
   let lines;
+  let goneLineIds;
   try {
     const { rows: tierRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [order.customer_id]);
     const priced = await buildOrderLines(
       items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
       { customerId: order.customer_id, tier: tierRows[0]?.customer_tier, dryRun: true }
     );
-    lines = priced.map((l) => {
-      const was = keptPrice.get(l.product_id);
+    const match = matchExistingLines(before, priced);
+    goneLineIds = match.goneLineIds; // lines whose product is no longer on the order (or fewer times)
+    lines = match.matched.map(({ line: l, was }) => {
       const price = was ? Number(was.unit_price_amd) : l.unit_price_amd;
-      return { ...l, unit_price_amd: price, line_total_amd: price * l.quantity, campaign_id: was?.campaign_id ?? null, list_price_amd: was?.list_price_amd ?? l.list_price_amd ?? null };
+      return { ...l, keepLineId: was?.id ?? null, unit_price_amd: price, line_total_amd: price * l.quantity, campaign_id: was?.campaign_id ?? null, list_price_amd: was?.list_price_amd ?? l.list_price_amd ?? null };
     });
   } catch (err) {
     if (err instanceof OrderValidationError) return res.status(400).json({ error: err.message });
@@ -1848,6 +1859,11 @@ ordersRouter.post("/:id/correct", async (req, res) => {
     payment_method: o.payment_method,
     payment_term_days: o.payment_term_days,
   });
+  // the order really changes (not a correction back to exactly what it was): a started document no longer matches it
+  // (by product, quantity and price: a product renamed in the catalogue since is not a change of the order)
+  const comparable = (snap) =>
+    JSON.stringify({ ...snap, items: snap.items.map(({ product_name: _name, ...i }) => i).sort((a, b) => a.product_id - b.product_id || a.quantity - b.quantity) });
+  const changed = comparable(snapshot(before, order)) !== comparable(snapshot(lines, { total_amd: total, discount_pct: pct, discount_amd: amd, payment_method: method, payment_term_days: term }));
 
   const client = await pool.connect();
   let updated;
@@ -1864,22 +1880,21 @@ ordersRouter.post("/:id/correct", async (req, res) => {
     const { rows: up } = await client.query(
       `UPDATE orders SET total_amd = $2, discount_pct = $3, discount_amd = $4, payment_method = $5, payment_term_days = $6, corrected_at = now(), updated_at = now(),
               downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END
-        WHERE id = $1 AND status = $7 AND cancelled_at IS NULL RETURNING *`,
-      [order.id, total, pct, amd, method, term, order.status]
+        WHERE id = $1 AND status = $7 AND cancelled_at IS NULL AND (signed_at IS NULL OR $8) RETURNING *`,
+      [order.id, total, pct, amd, method, term, order.status, mayChangeSigned]
     );
     updated = up[0];
     if (!updated) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
     }
-    await client.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
-    for (const line of lines) {
-      await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
-      );
+    // lines in place, the returned-goods floor, the "order changed after the document" flag (orders/orderCorrection.js)
+    const applied = await applyCorrection(client, { orderId: order.id, before, lines, goneLineIds, changed });
+    if (applied.error) {
+      await client.query("ROLLBACK");
+      return res.status(applied.error.status).json(applied.error.body);
     }
+    if (applied.order) updated = applied.order;
     await client.query(
       "INSERT INTO order_corrections (order_id, corrected_by, reason, before, after) VALUES ($1, $2, $3, $4, $5)",
       [order.id, req.user.id, reason.slice(0, 1000), JSON.stringify(snapshot(before, order)), JSON.stringify(snapshot(lines, updated))]

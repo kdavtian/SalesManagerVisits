@@ -5,7 +5,8 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { checkBearer, auditTokenCall } from "../integrationTokens.js";
-import { nextStatusFromDocuments } from "../../orders/accountingStatus.js";
+import { nextStatusFromDocuments, ORDER_LIVE_FOR_ACCOUNTING_SQL } from "../../orders/accountingStatus.js";
+import { isOrderChangedFlag, ORDER_CHANGED_SQL } from "../../orders/orderCorrection.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
 
@@ -207,7 +208,7 @@ async function notifyRequester(order, title, body) {
 async function pendingOrderRefs(req) {
   await expireStaleClaims();
   const { rows } = await pool.query(
-    `SELECT o.id FROM orders o WHERE o.accounting_status = 'pending' ${testScope(req)} ORDER BY o.accounting_requested_at LIMIT 50`
+    `SELECT o.id FROM orders o WHERE o.accounting_status = 'pending' AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL} ${testScope(req)} ORDER BY o.accounting_requested_at LIMIT 50`
   );
   return rows.map((r) => orderRef(r.id));
 }
@@ -237,11 +238,13 @@ integrationRouter.get("/orders", async (req, res) => {
     params.push(req.query.doc_type);
     docFilter = `AND o.accounting_doc_type = $${params.length}`;
   }
+  // the ready queue never lists an order sent back to draft, back in review or cancelled (other statuses: Lily follows her documents)
+  const liveFilter = status === "pending" ? `AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL}` : "";
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
   params.push(limit);
   const { rows } = await pool.query(
     `${ORDER_SELECT}
-     WHERE o.accounting_status = $1 ${docFilter} ${testScope(req)}
+     WHERE o.accounting_status = $1 ${docFilter} ${liveFilter} ${testScope(req)}
      ORDER BY o.accounting_requested_at, o.id LIMIT $${params.length}`,
     params
   );
@@ -262,11 +265,14 @@ integrationRouter.post("/orders/:id/claim", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
   const { rows } = await pool.query(
-    `UPDATE orders SET accounting_status = 'in_progress', accounting_claimed_at = now(), accounting_updated_at = now(), accounting_error = NULL
-     WHERE id = $1 AND accounting_status = 'pending' RETURNING id`,
+    `UPDATE orders o SET accounting_status = 'in_progress', accounting_claimed_at = now(), accounting_updated_at = now(), accounting_error = NULL
+     WHERE o.id = $1 AND o.accounting_status = 'pending' AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL} RETURNING o.id`,
     [order.id]
   );
-  if (!rows[0]) return fail(res, 409, "not_pending", `Order is "${order.accounting_status}", only a pending order can be claimed`);
+  if (!rows[0]) {
+    const why = order.accounting_status === "pending" ? "Order was sent back or cancelled in KAD and is not ready" : `Order is "${order.accounting_status}", only a pending order can be claimed`;
+    return fail(res, 409, "not_pending", why);
+  }
   await respondWithOrder(res, order.id);
 });
 
@@ -276,7 +282,10 @@ integrationRouter.post("/orders/:id/claim", async (req, res) => {
 integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
-  if (!["in_progress", "partially_created", "waybill_created"].includes(order.accounting_status)) {
+  // corrected in KAD while Lily was making the document (orders/orderCorrection.js): what she made is still recorded -- it exists in HC and the
+  // person fixing it must see it -- and the order stays flagged
+  const changedMeanwhile = isOrderChangedFlag(order);
+  if (!changedMeanwhile && !["in_progress", "partially_created", "waybill_created"].includes(order.accounting_status)) {
     return fail(res, 409, "invalid_state", `Order is "${order.accounting_status}"; claim it first`);
   }
   const list = req.body?.waybills;
@@ -314,14 +323,17 @@ integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   const covered = new Map();
   for (const w of merged) for (const l of w.items) covered.set(l.line_id, (covered.get(l.line_id) ?? 0) + l.quantity);
   const unknown = [...covered.keys()].filter((id) => !orderedItems.some((i) => i.line_id === id));
-  if (unknown.length) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
+  // (a line the correction removed is not "unknown" to a document made before it)
+  if (unknown.length && !changedMeanwhile) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
   const complete = orderedItems.every((i) => (covered.get(i.line_id) ?? 0) >= i.quantity);
-  const next = !complete ? "partially_created" : "waybill_created";
-
-  await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(merged), next]
+  // the flag is kept by the UPDATE itself (a correction may commit between loadOrder and here)
+  const { rows: [saved] } = await pool.query(
+    `UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_status ELSE $3 END,
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error ELSE NULL END, accounting_updated_at = now()
+      WHERE id = $1 RETURNING accounting_status`,
+    [order.id, JSON.stringify(merged), !complete ? "partially_created" : "waybill_created"]
   );
+  const next = saved.accounting_status;
   if (next !== order.accounting_status) {
     await notifyRequester(order, next === "partially_created" ? "Բեռնագիրը մասամբ ստեղծված է" : "Փաստաթուղթը ստեղծված է", next === "partially_created" ? "մի մասը դեռ սպասում է" : "Լիլին ստեղծեց փաստաթուղթը");
   }
@@ -339,11 +351,15 @@ integrationRouter.post("/orders/:id/waybills/:number/einvoicing", async (req, re
   const doc = docs.find((d) => d.hc_doc_number === req.params.number);
   if (!doc) return fail(res, 404, "waybill_not_found", "No waybill with that number on this order");
   doc.einvoicing = { status, exported_at: exportedAt ?? iso(new Date()) };
-  const next = nextStatusFromDocuments(order.accounting_status, docs);
-  await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(docs), next]
+  // an order corrected after its document stays flagged: the e-invoice no longer matches the order until a person fixes it
+  // (kept by the UPDATE itself, against the row as it is now: a correction may commit between loadOrder and here)
+  const { rows: [saved] } = await pool.query(
+    `UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_status ELSE $3 END,
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error ELSE NULL END, accounting_updated_at = now()
+      WHERE id = $1 RETURNING accounting_status`,
+    [order.id, JSON.stringify(docs), nextStatusFromDocuments(order.accounting_status, docs)]
   );
+  const next = saved.accounting_status;
   if (next === "signed" && order.accounting_status !== "signed") {
     await notifyRequester(order, "Փաստաթուղթը ստորագրված է", "ստորագրված է");
   }
@@ -418,7 +434,10 @@ async function reportIssue(req, res) {
   if (!ISSUE_CODES.includes(code)) return fail(res, 400, "invalid_code", `code must be one of ${ISSUE_CODES.join(", ")}`);
   const issue = { code, message: String(message), lines: Array.isArray(lines) ? lines : [], reported_at: iso(new Date()) };
   await pool.query(
-    "UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $2::jsonb, accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1",
+    // an order corrected after its document keeps that flag (it stops "send again" from wiping her documents); her issue is added to it
+    `UPDATE orders SET accounting_status = 'needs_attention',
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error || jsonb_build_object('lily_issue', $2::jsonb) ELSE $2::jsonb END,
+            accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1`,
     [order.id, JSON.stringify(issue)]
   );
   await notifyRequester(order, "Պահանջվում է ուշադրություն", String(message).slice(0, 200));

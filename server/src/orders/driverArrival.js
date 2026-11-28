@@ -124,7 +124,7 @@ async function deliverStops(user, group, { how, reason }) {
   try {
     await client.query("BEGIN");
     delivered = await moveOrdersToDelivered(client, { customerId: group.customer_id, orderIds: group.stops.map((x) => x.order_id), userId: user.id, reason });
-    if (delivered.length) await client.query("UPDATE route_stops SET completed_by_arrival = $2 WHERE order_id = ANY($1)", [delivered.map((d) => d.id), how]);
+    if (delivered.length) await client.query("UPDATE route_stops SET completed_by_arrival = $2 WHERE order_id = ANY($1) AND id = ANY($3)", [delivered.map((d) => d.id), how, group.stops.map((x) => x.stop_id)]);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
