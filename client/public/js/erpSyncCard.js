@@ -17,11 +17,23 @@ function fileAgeText(hours) {
 
 // true when something needs attention: no sync yet, the sync or the file is older than the limit, or the newest call failed
 export function syncNeedsAttention(st) {
-  return Boolean(st.pause?.paused) || !st.last_success || st.sync_stale || st.workbook_stale || Boolean(st.last_failure);
+  return Boolean(st.pause?.paused) || Boolean(st.guard?.refused_open) || !st.last_success || st.sync_stale || st.workbook_stale || Boolean(st.last_failure);
 }
 
 function row(label, value, extra = "") {
   return `<div class="health-row"><span class="health-label">${escapeHtml(label)}</span><span class="health-value">${value}${extra ? ` ${extra}` : ""}</span></div>`;
+}
+
+// The "big drop" guard (plan 0.5): the last sync was refused because the file had far fewer rows than the last good one; admin / CEO can open
+// a short window in which the next syncs go through (the change is real), or once open, the card says until when.
+function dropHtml(st) {
+  const g = st.guard;
+  if (!g) return "";
+  if (g.accept_until) return `<div class="es-problem es-accepted">${escapeHtml(t("es_accept_open").replace("{d}", formatDateTime(g.accept_until)).replace("{who}", g.accept_by_name || ""))}</div>`;
+  if (!g.refused_open) return "";
+  return `<div class="es-problem"><strong>${t("es_drop_title")}</strong> ${escapeHtml(t("es_drop_note"))}${
+    st.can_pause ? `<button type="button" class="btn es-accept-btn" id="es-accept">${t("es_accept_btn")}</button>` : ""
+  }</div>`;
 }
 
 function cardHtml(st) {
@@ -38,6 +50,7 @@ function cardHtml(st) {
     ${row(t("es_file"), last?.workbook_modified_at ? escapeHtml(formatDateDMY(last.workbook_modified_at)) : "—", `<span class="muted">${escapeHtml(fileAgeText(st.workbook_age_hours))}</span> ${st.workbook_age_hours == null ? "" : badge(!st.workbook_stale)}`)}
     ${last?.warnings?.length ? row(t("es_skipped"), String(last.warnings.length)) : ""}
     ${st.last_failure ? `<div class="es-problem"><strong>${t("es_problem")}</strong> ${escapeHtml(formatDateTime(st.last_failure.at))}<br>${escapeHtml(st.last_failure.error ?? "")}</div>` : ""}
+    ${dropHtml(st)}
     ${lastReq}
     ${
       st.can_pause
@@ -60,6 +73,19 @@ export async function renderErpSyncCard(container) {
     container.innerHTML = cardHtml(st);
     container.querySelector("#es-hint").addEventListener("click", () => openInfoPopup(`<p>${t("es_hint")}</p>`));
     container.querySelector("#es-sync-now").addEventListener("click", () => syncNow(container, paint));
+    // "Accept the next sync" after a big-drop refusal: asks once, then the card redraws from the server's answer
+    const acceptBtn = container.querySelector("#es-accept");
+    acceptBtn?.addEventListener("click", async () => {
+      if (!window.confirm(t("es_accept_confirm"))) return;
+      acceptBtn.disabled = true;
+      try {
+        await api.acceptErpSyncDrop();
+        paint(await api.getErpSyncStatus());
+      } catch (err) {
+        acceptBtn.disabled = false;
+        showToast(err.message, { ms: 4000 });
+      }
+    });
     // the pause switch (owner, 2026-11-07): one tap each way, the card redraws from the server's answer
     const pauseBtn = container.querySelector("#es-pause");
     pauseBtn?.addEventListener("click", async () => {

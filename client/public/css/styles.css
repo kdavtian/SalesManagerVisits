@@ -9904,6 +9904,8 @@ input.ghost-active::placeholder { color: var(--text-dim); opacity: 0.75; }
 .es-home-bad { border-color: var(--danger, #e33b43); }
 .es-home-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .es-problem { margin: 6px 0; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--danger, #e33b43) 12%, transparent); font-size: 0.85rem; overflow-wrap: anywhere; }
+.es-accept-btn { margin-top: 8px; width: 100%; min-height: 44px; }
+.es-accepted { background: color-mix(in srgb, var(--success, #2e9e5b) 12%, transparent); }
 .es-pause-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 6px 0; border-top: 1px solid var(--border); }
 .es-pause-row .health-label { display: flex; flex-direction: column; }
 .es-pause-since { font-size: 0.78rem; font-weight: 400; }

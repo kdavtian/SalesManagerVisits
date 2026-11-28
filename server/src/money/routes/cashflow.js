@@ -25,7 +25,7 @@ cashflowRouter.use("/bank", bankRouter);
 // Accounts with their balance (as of `asOf`, default today) in their own currencies, the categories, and the last refresh.
 cashflowRouter.get("/meta", async (req, res) => {
   const asOf = DATE.test(String(req.query.as_of ?? "")) ? req.query.as_of : yerevanToday();
-  const [{ rows: accounts }, { rows: categories }, { rows: [sync] }, { rows: [range] }, { rows: [rate] }] = await Promise.all([
+  const [{ rows: accounts }, { rows: categories }, { rows: [sync] }, { rows: [range] }, { rows: [rate] }, { rows: noRate }] = await Promise.all([
     pool.query(
       `SELECT a.id, a.name, a.kind, a.active, a.sort_order,
               COALESCE(json_agg(json_build_object('currency', b.currency, 'balance', b.balance, 'amd', b.amd) ORDER BY b.currency) FILTER (WHERE b.currency IS NOT NULL), '[]') AS balances
@@ -39,14 +39,17 @@ cashflowRouter.get("/meta", async (req, res) => {
               (SELECT count(*)::int FROM cash_entries e WHERE e.category_id = c.id) AS n
          FROM cash_categories c ORDER BY c.sort_order, c.name`
     ),
-    pool.query("SELECT at, via, rows_in, rows_skipped, file_name FROM cash_syncs ORDER BY at DESC LIMIT 1"),
+    pool.query("SELECT at, via, rows_in, rows_skipped, rows_rate_filled, rows_no_rate, file_name FROM cash_syncs ORDER BY at DESC LIMIT 1"),
     pool.query("SELECT MIN(entry_date)::text AS first, MAX(entry_date)::text AS last, COUNT(*)::int AS n, COUNT(*) FILTER (WHERE origin = 'excel')::int AS excel_rows FROM cash_entries"),
     pool.query("SELECT fx_rate::float8 AS rate FROM cash_entries WHERE currency = 'USD' AND fx_rate IS NOT NULL ORDER BY entry_date DESC, id DESC LIMIT 1"),
+    // dollar rows of the Excel sheet with no rate anywhere (plan 0.9): counted as 0 AMD until the accountant types the rate; the Excel row numbers
+    pool.query("SELECT excel_row, COUNT(*) OVER ()::int AS total FROM cash_entries WHERE fx_missing ORDER BY excel_row NULLS LAST, id LIMIT 10"),
   ]);
   const management = isCashflowManagement(req.user.role);
   const { rows: [pending] } = await pool.query("SELECT COUNT(*)::int AS n FROM cash_entry_requests WHERE status = 'pending'" + (management ? "" : " AND requested_by = $1"), management ? [] : [req.user.id]);
   res.json({
-    as_of: asOf, accounts, categories, last_sync: sync ?? null, range, usd_rate: rate?.rate ?? null, can_edit: canEditCashflow(req.user.role),
+    as_of: asOf, accounts, categories, last_sync: sync ?? null, range, usd_rate: rate?.rate ?? null,
+    no_rate: { n: noRate[0]?.total ?? 0, excel_rows: noRate.map((r) => r.excel_row).filter((x) => x != null) }, can_edit: canEditCashflow(req.user.role),
     is_management: management, edit_window_days: CASH_EDIT_WINDOW_DAYS, pending_requests: pending.n, can_manage_categories: canManageCashCategories(req.user.role),
   });
 });

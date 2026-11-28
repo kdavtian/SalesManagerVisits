@@ -60,7 +60,10 @@ export function normalizeCashRow(raw) {
   const currency = String(raw.currency ?? "AMD").trim().toUpperCase() === "USD" ? "USD" : "AMD";
   const rate = num(raw.currency_rate);
   let amountAmd = num(raw.amount_amd);
-  if (amountAmd === null) amountAmd = currency === "USD" ? Math.round(amount * (rate ?? 0)) : amount;
+  // A dollar row with neither an AMD amount nor a rate (plan 0.9): used to count as 0 AMD silently. Now flagged; applyCashLedger fills the
+  // nearest known rate, or keeps the row at 0 AMD with fx_missing so the Cashflow screen says how many rows need the accountant's rate.
+  const needsRate = amountAmd === null && currency === "USD" && !(rate > 0);
+  if (amountAmd === null) amountAmd = currency === "USD" ? (needsRate ? 0 : Math.round(amount * rate)) : amount;
   const category = text(raw.for);
   const idText = text(raw.id);
   const isCustomerId = category && category.toLowerCase() === "oil order" && idText && /^\d+$/.test(idText);
@@ -77,7 +80,38 @@ export function normalizeCashRow(raw) {
     info: text(raw.info),
     sales_rep: text(raw.sales_rep),
     transaction_id: text(raw.transaction_id),
+    fx_missing: needsRate,
   };
+}
+
+// The rate for a dollar row that has none (plan 0.9): the rate of the dollar row nearest in date in the same sheet (a typed rate, or AMD / USD
+// when both amounts are there), else `fallback` (the newest rate the app knows, the same one a manual entry uses: cleanEntry). Fills the rows
+// in place; returns { filled, missing }. A row with no rate anywhere stays at 0 AMD with fx_missing = true.
+export function fillMissingRates(rows, fallback = null) {
+  const known = [];
+  for (const r of rows) {
+    if (r.currency !== "USD" || r.fx_missing) continue;
+    const rate = r.fx_rate > 0 ? r.fx_rate : r.amount ? Math.abs(r.amount_amd / r.amount) : null;
+    if (rate > 0 && Number.isFinite(rate)) known.push({ t: Date.parse(r.date), rate });
+  }
+  let filled = 0;
+  let missing = 0;
+  for (const r of rows) {
+    if (!r.fx_missing) continue;
+    const t = Date.parse(r.date);
+    let best = null;
+    for (const k of known) if (!best || Math.abs(k.t - t) < Math.abs(best.t - t)) best = k;
+    const rate = best ? Math.round(best.rate * 10000) / 10000 : fallback > 0 ? fallback : null;
+    if (rate) {
+      r.fx_rate = rate;
+      r.amount_amd = Math.round(r.amount * rate * 100) / 100;
+      r.fx_missing = false;
+      filled++;
+    } else {
+      missing++;
+    }
+  }
+  return { filled, missing };
 }
 
 // The rows of the `Cashflow` sheet of a workbook buffer. The header row is found by its labels (it moved between workbook versions).
@@ -117,8 +151,11 @@ export async function readCashWorkbook(buffer) {
 // "Cash YVN", "Office desk", "SM YVN desk" are cash desks (payments2/desks.js); the rest is a bank account unless it says credit.
 const guessKind = (name) => (/^cash\b|\bdesk\b|դրամարկղ/i.test(name) ? "cash" : /credit/i.test(name) ? "credit" : "bank");
 
-// Replaces every Excel-origin ledger row with `rawRows` (raw = CASH_COLUMNS keys). Atomic. Returns { rows, skipped, accounts_added, categories_added }.
-export async function applyCashLedger(rawRows, { via, userId = null, fileName = null, note = null } = {}) {
+// Replaces every Excel-origin ledger row with `rawRows` (raw = CASH_COLUMNS keys). Atomic.
+// Returns { rows, skipped, usd_rate_filled, usd_no_rate, accounts_added, categories_added }.
+// `guard` (the bot's push, erp/erpSyncGuard.js): async ({ incoming, previous }) -> { ok, ... }; when it says no, nothing is changed and
+// { refused: <its answer> } is returned.
+export async function applyCashLedger(rawRows, { via, userId = null, fileName = null, note = null, guard = null } = {}) {
   const clean = [];
   let skipped = 0;
   for (const raw of rawRows) {
@@ -127,6 +164,16 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
     else clean.push({ ...n, excel_row: raw.excel_row ?? null });
   }
   if (!clean.length) throw new Error("No usable Cashflow rows");
+  if (guard) {
+    const { rows: [prev] } = await pool.query("SELECT COUNT(*)::int AS n FROM cash_entries WHERE origin = 'excel'");
+    const check = await guard({ incoming: { ledger_rows: clean.length }, previous: { ledger_rows: prev.n } });
+    if (!check.ok) return { refused: check };
+  }
+  let rates = { filled: 0, missing: 0 };
+  if (clean.some((r) => r.fx_missing)) {
+    const { rows: [last] } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate > 0 AND NOT fx_missing ORDER BY entry_date DESC, id DESC LIMIT 1");
+    rates = fillMissingRates(clean, last?.r ?? null);
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -160,20 +207,20 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
         d: r.date, a: r.amount, c: r.currency, fx: r.fx_rate, aa: r.amount_amd,
         cat: r.category ? categories.get(r.category.toLowerCase()) : null,
         acc: r.account ? accounts.get(r.account.toLowerCase()) : null,
-        cu: r.erp_customer_id, rf: r.ref, i: r.info, s: r.sales_rep, t: r.transaction_id, x: r.excel_row,
+        cu: r.erp_customer_id, rf: r.ref, i: r.info, s: r.sales_rep, t: r.transaction_id, x: r.excel_row, fm: r.fx_missing,
       }));
       await client.query(
-        `INSERT INTO cash_entries (entry_date, amount, currency, fx_rate, amount_amd, category_id, account_id, erp_customer_id, ref, info, sales_rep, transaction_id, origin, excel_row)
-         SELECT d, a, c, fx, aa, cat, acc, cu, rf, i, s, t, 'excel', x
-         FROM jsonb_to_recordset($1::jsonb) AS x(d date, a numeric, c text, fx numeric, aa numeric, cat int, acc int, cu text, rf text, i text, s text, t text, x int)`,
+        `INSERT INTO cash_entries (entry_date, amount, currency, fx_rate, amount_amd, category_id, account_id, erp_customer_id, ref, info, sales_rep, transaction_id, origin, excel_row, fx_missing)
+         SELECT d, a, c, fx, aa, cat, acc, cu, rf, i, s, t, 'excel', x, fm
+         FROM jsonb_to_recordset($1::jsonb) AS x(d date, a numeric, c text, fx numeric, aa numeric, cat int, acc int, cu text, rf text, i text, s text, t text, x int, fm boolean)`,
         [JSON.stringify(part)]
       );
     }
-    await client.query("INSERT INTO cash_syncs (via, rows_in, rows_skipped, file_name, user_id, note) VALUES ($1, $2, $3, $4, $5, $6)", [via, clean.length, skipped, fileName, userId, note]);
+    await client.query("INSERT INTO cash_syncs (via, rows_in, rows_skipped, file_name, user_id, note, rows_rate_filled, rows_no_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [via, clean.length, skipped, fileName, userId, note, rates.filled, rates.missing]);
     await client.query("COMMIT");
     // the accountant's rows may now match bank lines imported earlier: they teach the category rules (best effort, never fails the refresh)
     import("./bankReconcile.js").then(async (m) => m.learnFromMatches((await m.reconcile({ statuses: ["open"] })).lines)).catch((err) => console.error("Bank category learning failed:", err.message));
-    return { rows: clean.length, skipped, accounts_added: accountsAdded, categories_added: categoriesAdded };
+    return { rows: clean.length, skipped, usd_rate_filled: rates.filled, usd_no_rate: rates.missing, accounts_added: accountsAdded, categories_added: categoriesAdded };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
