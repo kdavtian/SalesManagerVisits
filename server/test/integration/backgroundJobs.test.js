@@ -120,10 +120,17 @@ test("a run past its time limit is marked failed and its signal aborted; it is n
   await makeDue(j.name);
   assert.equal(await s.tick(), 0, "never two copies of the same job side by side");
   assert.equal(calls, 1);
+  // a deploy gives the run past its limit the time left too (stop() is not over while it still works)
+  let stopDone = false;
+  const stopping = s.stop(5000).then((left) => ((stopDone = true), left));
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(stopDone, false, "stop() waits for the timed-out run's work");
   release();
+  assert.equal(await stopping, 0);
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(s.running(), [], "the slot is free once the run really ended");
-  assert.equal(await s.tick(), 1, "and the job runs again");
+  const next = createScheduler([j], { log: quiet, alert: async () => {} }); // the stopped one starts nothing, as on a deploy
+  assert.equal(await next.tick(), 1, "and the job runs again");
   assert.equal(calls, 2);
   release();
 });

@@ -28,6 +28,7 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
   const running = new Map(); // name -> { startedAt } while a run is in progress (until its work really ends, past the time limit too)
   const runs = new Set(); // every runJob() in progress, its result write included (what stop() waits for)
   const ticks = new Set(); // every tick() in progress (a tick that already claimed jobs is waited for by stop())
+  const works = new Set(); // every job's own work in progress, a run past its time limit included (stop() gives it the time left too)
   let timer = null;
   let registered = null;
   let stopping = false;
@@ -71,7 +72,13 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
     const work = Promise.resolve().then(() => job.run(now, { signal: controller.signal }));
     running.set(job.name, { startedAt: t0 });
     // the slot stays taken until the work itself ends (after a timeout it may still finish or fail later: already counted)
-    work.catch(() => {}).finally(() => running.delete(job.name));
+    const settled = work
+      .catch(() => {})
+      .finally(() => {
+        running.delete(job.name);
+        works.delete(settled);
+      });
+    works.add(settled);
     const limit = new Promise((_, reject) => {
       limitTimer = setTimeout(() => {
         controller.abort();
@@ -164,7 +171,7 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
     clearInterval(timer);
     timer = null;
     stopping = true;
-    const inFlight = [...ticks, ...runs];
+    const inFlight = [...ticks, ...runs, ...works];
     if (!inFlight.length || !waitMs) return Promise.resolve(inFlight.length);
     let t;
     const cap = new Promise((resolve) => {
@@ -173,7 +180,7 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
     });
     return Promise.race([Promise.allSettled(inFlight), cap]).then(() => {
       clearTimeout(t);
-      return runs.size + ticks.size;
+      return runs.size + ticks.size + works.size;
     });
   }
 
