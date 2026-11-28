@@ -7863,8 +7863,16 @@ button.pd-stock-line { cursor: pointer; }
   align-items: flex-end;
   gap: 6px;
 }
+.sync-queue-refused-hint {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 9%, var(--bg-card));
+}
 .sync-queue-discard {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 10px;
   font-size: 0.8rem;
 }

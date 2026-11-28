@@ -23,6 +23,30 @@ export const GET_CACHE_TTL_MS = 20000;
 
 export const GET_TIMEOUT_MS = 30000;
 
+// The saves that wait in the offline queue when they cannot get through (offlineQueue.js; Phase 0 item 0.8, owner 2026-11-28): a visit, an
+// order, a payment, a stock count, a customer's volume potential. Each carries a client_ref (or is one row per product and day), so sending
+// one again after a lost answer saves it once. Such a save that has not answered in SAVE_TIMEOUT_MS is given up and queued, like no signal;
+// a background send from the queue gets QUEUE_SEND_TIMEOUT_MS (photos on weak signal take time, and a lost answer is harmless).
+export const SAVE_TIMEOUT_MS = 30000;
+export const QUEUE_SEND_TIMEOUT_MS = 120000;
+const QUEUEABLE_SAVES = [
+  ["POST", /^\/(checkins|orders|payments)$/],
+  ["PUT", /^\/stock-count\/items\/\d+$/],
+  ["PUT", /^\/volume-potential\/customers\/\d+$/],
+];
+const isQueueableSave = (method, path) => QUEUEABLE_SAVES.some(([m, re]) => m === method && re.test(path.split("?")[0]));
+
+// The save did not get through and may be tried again later from the queue: no connection (fetch throws a TypeError), no answer in time
+// (code "save_timeout"), the server or its proxy unavailable for a moment (502/503/504, e.g. during a deploy), or this phone's version is
+// too old to save (426 "update_required": the save waits and is sent by the updated app). Every screen that queues uses this one test.
+export const NO_SIGNAL_STATUSES = new Set([502, 503, 504]);
+export function isNoSignal(err) {
+  if (!err) return false;
+  if (err instanceof TypeError) return true;
+  if (err.code === "save_timeout" || err.code === "update_required") return true;
+  return NO_SIGNAL_STATUSES.has(err.status);
+}
+
 export const CACHEABLE_BASE_PATHS = new Set(["/dashboard/summary", "/dashboard/trends", "/settings", "/customers", "/checkins", "/orders", "/products"]);
 
 export const getCache = new Map();
@@ -141,13 +165,18 @@ export async function doRequest(path, options) {
   const jsonBody = typeof options.body === "string" && !options.headers?.["Content-Type"];
   // A read that has not answered in 30 s is given up (owner, 2026-10-26: a customer card spun forever): the screen gets an error it can show
   // with a Retry instead of an endless "Loading". Writes and uploads keep their own, longer patience.
-  const controller = method === "GET" && !options.signal ? new AbortController() : null;
-  const timer = controller ? setTimeout(() => controller.abort(), GET_TIMEOUT_MS) : null;
+  // A save that waits in the offline queue when it cannot get through gets its own limit (SAVE_TIMEOUT_MS, item 0.8): on weak signal it used
+  // to hang with no end while the rep stood at the customer.
+  const queueable = method !== "GET" && isQueueableSave(method, path);
+  const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : queueable ? options.saveTimeoutMs || SAVE_TIMEOUT_MS : 0;
+  const controller = timeoutMs && !options.signal ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   let res;
+  const { saveTimeoutMs: _saveTimeoutMs, ...fetchOptions } = options;
   try {
     res = await fetch(`/api${path}`, {
       credentials: "include",
-      ...options,
+      ...fetchOptions,
       ...(controller ? { signal: controller.signal } : {}),
       headers: {
         ...(jsonBody ? { "Content-Type": "application/json" } : {}),
@@ -166,6 +195,7 @@ export async function doRequest(path, options) {
     if (controller?.signal.aborted) {
       const timeout = new Error(t("request_timeout"));
       timeout.status = 408;
+      if (queueable) timeout.code = "save_timeout";
       throw timeout;
     }
     throw err;
@@ -192,6 +222,11 @@ export async function doRequest(path, options) {
       // itself is idempotent about being shown twice.
       import("../lockdownScreen.js").then((m) => m.showLockdownOverlay());
     }
+    // This phone's version is older than the server accepts for saves (MIN_APP_VERSION, item 0.21): the update screen without "Later".
+    // The save itself is kept in the offline queue by the screen (isNoSignal) and sent by the updated app.
+    if (res.status === 426 && body?.code === "update_required") {
+      import("../updateBanner.js").then((m) => m.showForcedUpdate()).catch(() => {});
+    }
     // 45 server routes answer a role check with the bare English "Not
     // allowed", which then showed as a red error line on whatever screen the
     // request came from (Warehouse, Reports, Recorded... reached by link or
@@ -208,16 +243,20 @@ export async function doRequest(path, options) {
         : res.status === 403 && (body?.message || body?.error) === "Not allowed"
           ? t("not_available_for_role")
           : body?.message || body?.error;
-    const err = new Error(message || `Request failed (${res.status})`);
+    const err = new Error(
+      res.status === 426 && body?.code === "update_required" ? t("update_required_body") : message || `Request failed (${res.status})`
+    );
     err.status = res.status;
     err.body = body;
+    if (body?.code === "update_required") err.code = "update_required";
     throw err;
   }
   return body;
 }
 
-export function json(path, method, data) {
+export function json(path, method, data, extra = {}) {
   return request(path, {
+    ...extra,
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

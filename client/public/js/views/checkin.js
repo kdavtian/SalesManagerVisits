@@ -1,5 +1,5 @@
 import { mountVoiceRecorder, voiceFileName } from "../voiceRecorder.js";
-import { api } from "../api.js";
+import { api, isNoSignal } from "../api.js";
 import { renderPotentialCard } from "../potential.js";
 import { showToast, escapeHtml, formatDateDMY, getCurrentPosition, locationErrorHint, compressImage, rotateImageBlob, formatDistance, haversineMeters, creditedDistanceMeters, activateDialog } from "../util.js";
 import { enqueueCheckin, fileBytes } from "../offlineQueue.js";
@@ -1124,8 +1124,8 @@ export async function renderCheckin(root, navigate, customerId) {
       const checkin = await api.createCheckin(formData);
       showResult(checkin);
     } catch (err) {
-      if (err instanceof TypeError) {
-        // Offline / network failure — queue it instead of losing the visit.
+      if (isNoSignal(err)) {
+        // No signal, no answer in 30 s, the server busy for a moment (502/503/504) or an update required -- queue it instead of losing the visit.
         // Raw Blobs, not base64 -- offlineQueue.js's IndexedDB store
         // handles Blobs natively, no data-URL round trip needed.
         enqueueCheckin({

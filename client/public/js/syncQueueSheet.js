@@ -67,6 +67,7 @@ export function openSyncQueueSheet() {
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2>${t("sync_sheet_title")}</h2>
       <p class="muted">${t(navigator.onLine ? "sync_sheet_online_hint" : "sync_sheet_offline_hint")}${last ? ` · ${t("sync_sheet_last")} ${escapeHtml(formatDateTime(new Date(last).toISOString()))}` : ""}</p>
+      ${queue.some((e) => e.needsAttention) ? `<p class="sync-queue-refused-hint" role="status">${t("sync_refused_hint")}</p>` : ""}
       <div class="sync-queue-list">${queue.map(itemHtml).join("")}</div>
       <div class="sheet-actions">
         <button type="button" class="btn btn-primary" data-action="retry" ${retrying ? "disabled" : ""}>${t(retrying ? "sync_retrying" : "sync_retry_now")}</button>

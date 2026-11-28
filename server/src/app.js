@@ -5,6 +5,7 @@
 // the thin "run this for real" entrypoint; this file is the "build the
 // app" one. See test/integration/testServer.js for how tests use this.
 import "dotenv/config";
+import { requireCurrentApp } from "./middleware/appVersion.js";
 // Express 5 (see package.json) catches a rejected promise from an async
 // route handler natively and forwards it to the error-handling middleware
 // below -- express-async-errors existed only to patch that behavior into
@@ -214,6 +215,7 @@ app.use(cookieParser());
 app.use(lockdownGate);
 app.use(requestTiming);
 app.use(requireCsrf);
+app.use(requireCurrentApp);
 
 app.use("/api/auth", express.json(), authRouter);
 app.use("/api/me", express.json(), meRouter);

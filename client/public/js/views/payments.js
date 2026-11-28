@@ -1,4 +1,4 @@
-import { api } from "../api.js";
+import { api, isNoSignal } from "../api.js";
 import { escapeHtml, formatAmd, formatDateTime, activateDialog, channelDisplayLabel, customerNameLinkHtml, activateCustomerNameLinks, leaveSheetTo, labelColon, formatDateDMY, compressImage, showToast } from "../util.js";
 import { openSignaturePad, ensureOwnSignature, clearPendingOwnSignature } from "../signaturePad.js";
 import { customerSignStatement } from "../signStatement.js";
@@ -1356,7 +1356,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
           return;
         }
         // no signal: the payment waits on the phone (with its photos and signature) and is sent when the signal is back
-        if (err instanceof TypeError) {
+        if (isNoSignal(err)) {
           try {
             await enqueuePayment(entry);
             showToast(t("pay_saved_offline"));

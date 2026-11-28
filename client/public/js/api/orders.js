@@ -32,7 +32,7 @@ export const ordersApi = {
     }
     return res.blob();
   },
-  createOrder: (data) => json("/orders", "POST", data),
+  createOrder: (data, opts) => json("/orders", "POST", data, opts),
   submitOrder: (id, erpCustomerId) => json(`/orders/${id}/submit`, "POST", erpCustomerId ? { erp_customer_id: erpCustomerId } : {}),
   listOrders: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -71,7 +71,7 @@ export const ordersApi = {
   getDeliveryHome: () => request("/delivery/home", { fresh: true }),
   // Stock count (Գույքագրում, server/src/orders/stockCount.js)
   getStockCountDay: (day) => request(`/stock-count/day${day ? `?day=${day}` : ""}`, { fresh: true }),
-  saveStockCount: (productId, qty, note, day) => json(`/stock-count/items/${productId}`, "PUT", { qty, note, ...(day ? { day } : {}) }),
+  saveStockCount: (productId, qty, note, day, opts) => json(`/stock-count/items/${productId}`, "PUT", { qty, note, ...(day ? { day } : {}) }, opts),
   clearStockCount: (productId) => request(`/stock-count/items/${productId}`, { method: "DELETE" }),
   // the day is signed (the PNG drawn on the pad, mandatory) and may come with a photo / PDF of the paper count (owner, 2026-11-03)
   finishStockCountDay: (signature, attachment = null) => {

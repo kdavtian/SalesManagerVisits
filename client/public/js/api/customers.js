@@ -23,7 +23,7 @@ export const customersApi = {
   getPotentialHistory: (id) => request(`/customers/${id}/potential-history`, { fresh: true }),
   // volume potential (server customers/volumePotential.js): the card's section, its save (also replayed by the offline queue), its history
   getVolumePotential: (id) => request(`/volume-potential/customers/${id}`, { fresh: true }),
-  saveVolumePotential: (id, body) => json(`/volume-potential/customers/${id}`, "PUT", body),
+  saveVolumePotential: (id, body, opts) => json(`/volume-potential/customers/${id}`, "PUT", body, opts),
   getVolumePotentialHistory: (id) => request(`/volume-potential/customers/${id}/history`, { fresh: true }),
   getPotentialLines: (all = false) => request(`/volume-potential/lines${all ? "?all=1" : ""}`, { fresh: true }),
   getPotentialSkus: (all = false) => request(`/volume-potential/skus${all ? "?status=all" : ""}`, { fresh: true }),

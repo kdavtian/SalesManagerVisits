@@ -45,6 +45,7 @@ everything else.
 |---|---|---|
 | `PORT` | HTTP port the server listens on | `3000` |
 | `UPLOAD_DIR` | Where check-in photos/POD signatures are written | `./uploads` (Docker volume in production) |
+| `MIN_APP_VERSION` | Oldest phone app version allowed to SAVE (e.g. `1.611.0`). Older phones get the update screen without "Later"; their unsent work waits and is sent after the update. Reads, the CEO bot, the integration API and KAD OS are never affected. Capped at the version this server ships. See [`offline-sync.md`](offline-sync.md#minimum-app-version-min_app_version). | empty (off) |
 | `CHECKIN_RADIUS_METERS` | Server-side GPS proximity check tolerance for a check-in | `200` |
 
 ## Secret handling

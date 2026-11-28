@@ -1,4 +1,7 @@
 import { api } from "./api.js";
+import { QUEUE_SEND_TIMEOUT_MS } from "./api/core.js";
+import { state } from "./state.js";
+import { t } from "./i18n.js";
 
 // Fourth of the audit-driven perf batch: this used to be pure localStorage
 // -- the whole queue (photos included, base64-encoded) JSON.stringify'd and
@@ -58,8 +61,17 @@ function idbDelete(db, id) {
   });
 }
 
+// Whose work it is (Phase 0 item 0.1, owner 2026-11-28): every entry remembers the user who saved it, and only that user's entries are shown
+// and sent -- after another person signs in on the same phone, the first person's visits, orders and payments wait for them instead of being
+// sent under the wrong login. An entry saved by an app version from before this rule has no owner: it is treated as the signed-in user's, as
+// before, and the first send pass claims it for that person (flushQueue).
+const currentUserId = () => state.user?.id ?? null;
+const isMine = (entry) => currentUserId() != null && (entry.userId == null || entry.userId === currentUserId());
+const stamp = (record) => ({ ...record, userId: currentUserId() });
+
 function notify() {
-  listeners.forEach((fn) => fn(memoryQueue));
+  const mine = getQueue();
+  listeners.forEach((fn) => fn(mine));
 }
 
 // Resolves once memoryQueue reflects whatever was already durably queued
@@ -129,8 +141,9 @@ async function persistEntry(entry) {
   }
 }
 
+// The signed-in user's waiting entries only (see isMine); nobody signed in: none.
 export function getQueue() {
-  return memoryQueue;
+  return memoryQueue.filter(isMine);
 }
 
 export function onQueueChange(fn) {
@@ -140,7 +153,7 @@ export function onQueueChange(fn) {
 
 export async function enqueueCheckin(entry) {
   await ready;
-  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "checkin", ...entry };
+  const record = stamp({ id: crypto.randomUUID(), createdAt: Date.now(), type: "checkin", ...entry });
   memoryQueue = [...memoryQueue, record];
   await persistNewEntry(record);
   notify();
@@ -150,7 +163,7 @@ export async function enqueueCheckin(entry) {
 // spot -- queue it the same way instead of losing the order entirely.
 export async function enqueueOrder(entry) {
   await ready;
-  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "order", ...entry };
+  const record = stamp({ id: crypto.randomUUID(), createdAt: Date.now(), type: "order", ...entry });
   memoryQueue = [...memoryQueue, record];
   await persistNewEntry(record);
   notify();
@@ -160,9 +173,9 @@ export async function enqueueOrder(entry) {
 // product again replaces the waiting one. The server saves it on the day it was counted (server/src/orders/routes/stockCount.js).
 export async function enqueueStockCount(entry) {
   await ready;
-  const stale = memoryQueue.filter((e) => e.type === "stock_count" && e.productId === entry.productId && e.day === entry.day);
+  const stale = memoryQueue.filter((e) => isMine(e) && e.type === "stock_count" && e.productId === entry.productId && e.day === entry.day);
   for (const e of stale) await removeEntry(e.id);
-  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "stock_count", ...entry };
+  const record = stamp({ id: crypto.randomUUID(), createdAt: Date.now(), type: "stock_count", ...entry });
   memoryQueue = [...memoryQueue.filter((e) => !stale.includes(e)), record];
   await persistNewEntry(record);
   notify();
@@ -172,9 +185,9 @@ export async function enqueueStockCount(entry) {
 // server keeps the save once even when it arrives twice (client_ref).
 export async function enqueueVolumePotential(entry) {
   await ready;
-  const stale = memoryQueue.filter((e) => e.type === "volume_potential" && e.customerId === entry.customerId);
+  const stale = memoryQueue.filter((e) => isMine(e) && e.type === "volume_potential" && e.customerId === entry.customerId);
   for (const e of stale) await removeEntry(e.id);
-  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "volume_potential", ...entry };
+  const record = stamp({ id: crypto.randomUUID(), createdAt: Date.now(), type: "volume_potential", ...entry });
   memoryQueue = [...memoryQueue.filter((e) => !stale.includes(e)), record];
   await persistNewEntry(record);
   notify();
@@ -197,7 +210,7 @@ export async function enqueuePayment(entry) {
     customerSignature: await toBytes(entry.customerSignature),
     repSignature: await toBytes(entry.repSignature),
   };
-  const record = { id: crypto.randomUUID(), createdAt: Date.now(), type: "payment", ...stored };
+  const record = stamp({ id: crypto.randomUUID(), createdAt: Date.now(), type: "payment", ...stored });
   memoryQueue = [...memoryQueue, record];
   await persistNewEntry(record);
   notify();
@@ -218,6 +231,10 @@ export function paymentForm(entry) {
   if (entry.repSignature) form.append("rep_signature", toBlob(entry.repSignature), "rep-signature.png");
   return form;
 }
+
+// A send from the queue runs in the background: it may take longer than a save the rep waits for (core.js QUEUE_SEND_TIMEOUT_MS), but never
+// for ever -- a hung send would hold the whole queue.
+const SEND_OPTS = { saveTimeoutMs: QUEUE_SEND_TIMEOUT_MS };
 
 async function submitCheckin(entry) {
   const form = new FormData();
@@ -272,7 +289,7 @@ async function submitCheckin(entry) {
     form.append("voice_note", voiceBlob, `voice-note.${ext}`);
     if (entry.voiceNote.durationS) form.set("voice_duration_s", entry.voiceNote.durationS);
   }
-  return api.createCheckin(form);
+  return api.createCheckin(form, SEND_OPTS);
 }
 
 function submitOrder(entry) {
@@ -290,16 +307,16 @@ function submitOrder(entry) {
     downpayment_amd: entry.downpayment_amd,
     metrics: entry.metrics,
     client_ref: entry.clientRef || entry.id,
-  });
+  }, SEND_OPTS);
 }
 
 // Entries queued before this file learned about "order" (type undefined)
 // are always checkins -- keeps an already-queued entry on an old client
 // submitting correctly after a deploy.
 function submitEntry(entry) {
-  if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day);
-  if (entry.type === "volume_potential") return api.saveVolumePotential(entry.customerId, entry.body);
-  if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: true }));
+  if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day, SEND_OPTS);
+  if (entry.type === "volume_potential") return api.saveVolumePotential(entry.customerId, entry.body, SEND_OPTS);
+  if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: true }), SEND_OPTS);
   return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }
 
@@ -318,6 +335,7 @@ const NEEDS_ATTENTION_THRESHOLD = 3;
 // for entries that stopped retrying on their own).
 export async function discardEntry(id) {
   await ready;
+  if (!memoryQueue.some((e) => e.id === id && isMine(e))) return; // never another person's work
   memoryQueue = memoryQueue.filter((e) => e.id !== id);
   await removeEntry(id);
   notify();
@@ -328,12 +346,46 @@ export function getLastSyncedAt() {
   return raw ? Number(raw) : null;
 }
 
+// The server looked at an entry and refused it (a 4xx other than the device-wide 401/423/426/429). It is NEVER deleted by the phone (Phase 0
+// item 0.1, owner 2026-11-28: a visit refused as "too far", a customer not found or a bad photo used to vanish without a word): it is marked
+// "needs attention" with the server's reason, stays in the waiting-to-send sheet, and the rep retries it or discards it there. 403/409 can be
+// a passing race (a role change mid-flight, a duplicate check), so they get NEEDS_ATTENTION_THRESHOLD tries first; any other refusal is shown
+// at once (sending it again unchanged gives the same answer).
+async function markRefused(entry, err) {
+  const idx = memoryQueue.findIndex((e) => e.id === entry.id);
+  if (idx === -1) return;
+  const attempts = (memoryQueue[idx].attempts || 0) + 1;
+  const retryable = err.status === 403 || err.status === 409;
+  const updated = {
+    ...memoryQueue[idx],
+    attempts,
+    needsAttention: retryable ? attempts >= NEEDS_ATTENTION_THRESHOLD : true,
+    // the server's reason as the rep reads it (core.js already words the known refusals in their language); "not found" in their words too
+    lastError: err.status === 404 ? t("sync_refused_not_found") : err.message || `HTTP ${err.status}`,
+    lastStatus: err.status,
+  };
+  memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
+  await persistEntry(updated);
+  notify();
+}
+
 export async function flushQueue({ force = false } = {}) {
   if (flushing) return;
   flushing = true;
   try {
     await ready;
+    notify(); // the person signed in may have changed: the banner and sheet show this person's entries only
+    if (currentUserId() == null) return;
+    // An entry saved by an app from before the owner rule (no userId) becomes the signed-in person's now, once, so a later sign-in by
+    // someone else on this phone cannot send it under their login.
+    for (const entry of memoryQueue.filter((e) => e.userId == null)) {
+      const owned = { ...entry, userId: currentUserId() };
+      memoryQueue = memoryQueue.map((e) => (e.id === entry.id ? owned : e));
+      await persistEntry(owned);
+    }
     for (const entry of [...memoryQueue]) {
+      // Another person's work waits for them (see isMine).
+      if (!isMine(entry)) continue;
       // A flagged entry is skipped by the automatic passes (online event,
       // app boot) -- it already proved it won't succeed by itself. A manual
       // retry (force: true) always gets another attempt, since the rep
@@ -347,55 +399,37 @@ export async function flushQueue({ force = false } = {}) {
         // a payment saved without signal is in the list now (the badge and an open Payments screen refresh)
         if (entry.type === "payment") window.dispatchEvent(new Event("payments-changed"));
       } catch (err) {
-        // 401 (session expired) and 429/423 (rate-limited / app-wide
-        // emergency lockdown) are conditions affecting every request this
-        // device makes right now, not just this one entry -- stop the whole
-        // pass rather than burning through the rest of the queue against
-        // the same wall; the 'online' listener or next login retries later.
-        if ([401, 429, 423].includes(err.status)) {
-          break;
-        }
-        // 403/409 are usually entry-specific (a role change mid-flight, an
-        // idempotency-check race, a stale reference) rather than a
-        // device-wide condition, so they don't have to block entries queued
-        // behind this one -- but blindly retrying the same broken entry
-        // forever, forever, silently, is also wrong (reported as needing a
-        // "needs attention" status). Track it per entry and stop
-        // auto-retrying past the threshold.
-        if (err.status === 403 || err.status === 409) {
-          const idx = memoryQueue.findIndex((e) => e.id === entry.id);
-          if (idx !== -1) {
-            const attempts = (memoryQueue[idx].attempts || 0) + 1;
-            const updated = {
-              ...memoryQueue[idx],
-              attempts,
-              needsAttention: attempts >= NEEDS_ATTENTION_THRESHOLD,
-              lastError: err.message,
-            };
-            memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
-            await persistEntry(updated);
-            notify();
-          }
+        // 401 (session expired), 429/423 (rate-limited / app-wide emergency
+        // lockdown) and 426 (this app version must update first) affect
+        // every request this device makes right now, not just this entry --
+        // stop the whole pass; the 'online' listener, the next login or the
+        // updated app retries later.
+        if ([401, 423, 426, 429].includes(err.status)) break;
+        // The server looked at this entry and refused it: keep it, flagged with the reason (markRefused). Anything else -- no network
+        // (TypeError), no answer in time (408 from the send limit), the server or its proxy down (5xx), no status at all -- stops the pass
+        // and is retried later, the entry untouched.
+        if (err.status >= 400 && err.status < 500 && err.status !== 408) {
+          await markRefused(entry, err);
           continue;
         }
-        // Network-level failure (TypeError) or a server/infra-side error
-        // (5xx, or no status at all) — stop and retry later rather than
-        // discarding a rep's check-in/order because the server hiccuped.
-        // Only a genuine 4xx (the server looked at this entry and rejected
-        // it, e.g. customer deleted) means retrying is pointless.
-        if (!(err.status >= 400 && err.status < 500)) {
-          break;
-        }
-        // Server rejected the entry (e.g. customer deleted) — drop it, don't retry forever.
-        memoryQueue = memoryQueue.filter((e) => e.id !== entry.id);
-        await removeEntry(entry.id);
-        notify();
+        break;
       }
     }
-    if (!memoryQueue.length) localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
+    if (!memoryQueue.some(isMine)) localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
   } finally {
     flushing = false;
   }
 }
 
 window.addEventListener("online", flushQueue);
+
+// A save can be queued while the phone HAS signal (no answer in 30 s, a 502/503/504 during a deploy; item 0.8), and iPhone Safari does not
+// always report "signal is back": no 'online' event would ever come. While this person has entries that can be sent, try again every
+// QUEUE_RETRY_MS and whenever the app comes to the front.
+const QUEUE_RETRY_MS = 30000;
+const retrySoon = () => {
+  if (document.hidden || !navigator.onLine || flushing) return;
+  if (memoryQueue.some((e) => isMine(e) && !e.needsAttention)) flushQueue();
+};
+setInterval(retrySoon, QUEUE_RETRY_MS);
+document.addEventListener("visibilitychange", retrySoon);

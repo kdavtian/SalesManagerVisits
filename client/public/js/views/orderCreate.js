@@ -1,4 +1,4 @@
-import { api } from "../api.js";
+import { api, isNoSignal } from "../api.js";
 import { escapeHtml, formatAmd, groupDigits, bindAmdInput, formatPriceOrFree, tierBadgeHtml, activateDialog, activateCombobox, formatDateDMY, openInfoPopup } from "../util.js";
 import { packQty, packStepUp, packStepDown, bindStepperButton } from "../stepper.js";
 import { t } from "../i18n.js";
@@ -1041,8 +1041,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
       overlay.remove();
       showOrderSaved(order);
     } catch (err) {
-      if (err instanceof TypeError) {
-        // Offline / network failure -- queue it instead of losing the order.
+      if (isNoSignal(err)) {
+        // No signal, no answer in 30 s, the server busy for a moment (502/503/504) or an update required -- queue it instead of losing the order.
         enqueueOrder({
           clientRef,
           customerId: Number(customerId),

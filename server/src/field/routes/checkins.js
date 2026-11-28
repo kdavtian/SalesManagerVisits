@@ -360,7 +360,13 @@ checkinsRouter.post("/", (req, res, next) => {
   // a rep 150 m away with 80 m of GPS error was let in, and his visit / product-check / no-order tasks (locked, nobody closes them by hand)
   // must close with that check-in. Management checking in from far away is not at the customer, whatever the allowance says.
   const atCustomer = !tooFar;
-  if (tooFar && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
+  // A check-in sent later from the phone's offline queue carries the moment the rep pressed Save (captured_at; only the queue sends it). It
+  // cannot be refused any more -- the rep has left the shop, and a refusal used to delete the visit with its photos, payment and delivery
+  // from the phone (Phase 0 item 0.1, owner 2026-11-28). It is saved FLAGGED instead: within_range = false (the distance is over the
+  // allowance, so this is already false), which means it does not count as the customer's visit or for the bonus, closes no visit task
+  // (atCustomer is false), shows as refused on the dashboard and lands in Pin review -- exactly what a far check-in by management gets.
+  const queuedSave = captured_at !== undefined && captured_at !== null && String(captured_at).trim() !== "";
+  if (tooFar && !queuedSave && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(422).json({
       error: `You are ${Math.round(distance)} m from the customer; check-in is allowed within ${radiusMeters} m`,
