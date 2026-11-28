@@ -233,7 +233,7 @@ Response: `{ synced: true, report_type, report_date }`.
 * Every failed call of `POST /api/erp-sync` and `POST /api/erp-sync/cashflow-ledger`, and every sync that had to skip a step, is written to `erp_sync_attempts` (kept 30 days) and sent as ONE notification (bell + push) to admin, CEO and operations director (the same error is announced at most once per 6 hours). Admin / CEO / operations director can read the latest ones, with the real error text, at `GET /api/erp-sync/attempts`.
 * Before this, a rejected sync left no trace on the app side: only the bot's own journal (`sudo journalctl -u castrol-ceo-bot -n 100 --no-pager | grep -i "field visits"`) knew.
 
-## The "big drop" guard (1.611.0, migration 229; improvement plan 0.5)
+## The "big drop" guard (1.611.0, migration 230; improvement plan 0.5)
 An empty or half-saved workbook used to wipe every debt (and with it every credit-limit check) until the next good file. Now, BEFORE anything is changed:
 - `POST /api/erp-sync` compares its counts with the last good sync (`erp_sync_runs.counts`, newest run that carried each count): `customers`, `customers_with_debt` (debt > 0), `order_lines`, `cashflow_lines`, `products`. A list the bot did not send is not compared.
 - `POST /api/erp-sync/cashflow-ledger` compares its usable rows with the Excel-origin rows in the app now (`ledger_rows`). The in-app workbook upload (Cashflow screen, a person chooses the file and sees the result) is not guarded.
@@ -245,7 +245,7 @@ An empty or half-saved workbook used to wipe every debt (and with it every credi
   - Every big drop let through is recorded as a warning attempt (`erp_sync_attempts`, "Big drop let through (the bot's force flag / accepted by <name>): ...").
 - `GET /api/erp-sync/status` now also returns `guard: { refusals: [{ endpoint, at, reason, accepted }], refused_open, accept_until, accept_used, accept_by_name }`. A refusal stays open until a good sync of the SAME kind lands (main sync: `erp_sync_runs`; Cashflow push: the bot's `cash_syncs` row); `accepted` = the admin's accept is still unused for that kind (else the card offers the button again).
 
-## Dollar rows without a rate in the Cashflow sheet (1.611.0, migration 229; improvement plan 0.9)
+## Dollar rows without a rate in the Cashflow sheet (1.611.0, migration 230; improvement plan 0.9)
 A USD row with neither `amount_amd` nor `currency_rate` used to count as 0 AMD, silently. Now it takes the rate of the nearest dollar row by date in the same sheet (a typed rate, or AMD / USD when both are there and within half / double of the typed rates, so one typo does not spread), else the newest typed rate the app knows (the same one a manual entry uses). The AMD amount is whole AMD and the row is marked `cash_entries.fx_estimated = true` (an estimated rate is never used as "the app's newest rate"). With no rate anywhere it is kept at 0 AMD with `cash_entries.fx_missing = true`. The push result carries `usd_rate_filled` and `usd_no_rate`; `cash_syncs` stores both; the Cashflow screen shows a red line with the count and the Excel row numbers (`GET /api/cashflow/meta` -> `no_rate: { n, excel_rows }`).
 
 ## Sync status and the admin's "Sync now" (1.402.0, migration 147)
