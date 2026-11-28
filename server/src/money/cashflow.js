@@ -177,9 +177,17 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
     if (!check.ok) return { refused: check };
   }
   let rates = { filled: 0, missing: 0 };
+  let fallbackRate = null;
   if (clean.some((r) => r.fx_missing)) {
-    const { rows: [last] } = await pool.query("SELECT fx_rate::float8 AS r FROM cash_entries WHERE currency = 'USD' AND fx_rate > 0 AND NOT fx_missing AND NOT fx_estimated ORDER BY entry_date DESC, id DESC LIMIT 1");
-    rates = fillMissingRates(clean, last?.r ?? null);
+    // the newest TYPED rate the app knows; the typed Excel row it came from is replaced below, so the refresh remembers the rate it used
+    // (cash_syncs.fallback_rate) and the next refresh of the same file finds it again instead of falling back to 0 AMD
+    const { rows: [last] } = await pool.query(
+      `SELECT COALESCE(
+         (SELECT fx_rate::float8 FROM cash_entries WHERE currency = 'USD' AND fx_rate > 0 AND NOT fx_missing AND NOT fx_estimated ORDER BY entry_date DESC, id DESC LIMIT 1),
+         (SELECT fallback_rate::float8 FROM cash_syncs WHERE fallback_rate > 0 ORDER BY at DESC, id DESC LIMIT 1)) AS r`
+    );
+    fallbackRate = last?.r ?? null;
+    rates = fillMissingRates(clean, fallbackRate);
   }
   const client = await pool.connect();
   try {
@@ -223,7 +231,7 @@ export async function applyCashLedger(rawRows, { via, userId = null, fileName = 
         [JSON.stringify(part)]
       );
     }
-    await client.query("INSERT INTO cash_syncs (via, rows_in, rows_skipped, file_name, user_id, note, rows_rate_filled, rows_no_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", [via, clean.length, skipped, fileName, userId, note, rates.filled, rates.missing]);
+    await client.query("INSERT INTO cash_syncs (via, rows_in, rows_skipped, file_name, user_id, note, rows_rate_filled, rows_no_rate, fallback_rate) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)", [via, clean.length, skipped, fileName, userId, note, rates.filled, rates.missing, fallbackRate]);
     await client.query("COMMIT");
     // the accountant's rows may now match bank lines imported earlier: they teach the category rules (best effort, never fails the refresh)
     import("./bankReconcile.js").then(async (m) => m.learnFromMatches((await m.reconcile({ statuses: ["open"] })).lines)).catch((err) => console.error("Bank category learning failed:", err.message));

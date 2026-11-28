@@ -71,6 +71,14 @@ test("a good full sync, then an empty file: refused with 422, debts kept, refusa
   assert.equal(await orderCount(), 60);
 });
 
+test("the baseline of a list survives many syncs that did not send it (not only the last 30)", async () => {
+  await pool.query("INSERT INTO erp_sync_runs (counts) SELECT '{\"customers\": 120, \"customers_with_debt\": 120}'::jsonb FROM generate_series(1, 35)");
+  const res = await sync({ customers: customers(120), order_lines: [] });
+  assert.equal(res.status, 422);
+  assert.deepEqual(res.data.drops.map((d) => d.key), ["order_lines"]);
+  assert.equal(await orderCount(), 60);
+});
+
 test("debtors dropping alone (half-saved debt column) is refused too; a small real change goes through", async () => {
   const halfDebts = await sync({ customers: customers(120, 60) });
   assert.equal(halfDebts.status, 422);
@@ -141,8 +149,19 @@ test("the bot's Cashflow push: a half sheet is refused and the ledger kept; doll
   assert.equal((await ledger({ rows, force: true })).status, 200, "force works on the Cashflow push too");
   await pool.query("UPDATE app_settings SET erp_sync_accept_until = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
 
+  // the sheet loses its only typed rate: the no-rate row takes the app's typed rate (390) and keeps it on a repeat of the same file,
+  // although the typed row it came from is replaced by the first refresh
+  const noTyped = [...rows.filter((r) => r.currency === "AMD"), { date: "2031-05-03", amount: 100, currency: "USD", for: "Investment", source: `Bank ${RUN} USD`, info: `${RUN} usd fallback` }];
+  for (let i = 0; i < 2; i++) {
+    const again = await ledger({ rows: noTyped });
+    assert.equal(again.status, 200, JSON.stringify(again.data));
+    assert.equal(again.data.usd_rate_filled, 1, `refresh ${i + 1}`);
+    assert.equal(Number((await pool.query("SELECT amount_amd FROM cash_entries WHERE info = $1", [`${RUN} usd fallback`])).rows[0].amount_amd), 39000, `refresh ${i + 1}`);
+  }
+
   // no dollar rate in the sheet and none in the app: kept, flagged, counted, shown on the Cashflow meta with its Excel row
   await pool.query("UPDATE cash_entries SET fx_rate = NULL WHERE currency = 'USD'");
+  await pool.query("UPDATE cash_syncs SET fallback_rate = NULL");
   const noRate = [...rows.filter((r) => r.currency === "AMD"), { date: "2031-05-03", amount: 100, currency: "USD", for: "Investment", source: `Bank ${RUN} USD`, info: `${RUN} usd none`, excel_row: 777 }];
   const res = await ledger({ rows: noRate });
   assert.equal(res.status, 200, JSON.stringify(res.data));

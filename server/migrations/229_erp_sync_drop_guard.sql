@@ -16,3 +16,5 @@ ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS fx_missing boolean NOT NULL DE
 ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS fx_estimated boolean NOT NULL DEFAULT false;
 ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS rows_rate_filled integer NOT NULL DEFAULT 0;
 ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS rows_no_rate integer NOT NULL DEFAULT 0;
+-- the typed rate a refresh fell back to (its source row may be replaced by that same refresh): the next refresh can still find it
+ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS fallback_rate numeric(10, 4);

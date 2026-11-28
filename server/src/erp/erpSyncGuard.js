@@ -41,15 +41,19 @@ export function describeDrops(drops, lang = "en") {
   return drops.map((d) => `${COUNT_LABELS[d.key]?.[lang] ?? d.key}: ${d.before} → ${d.now} (−${d.drop_pct}%)`).join(", ");
 }
 
-// The last good main-sync counts, key by key: the newest run that carried each count (a run without order lines says nothing about them).
+export const GUARDED_COUNTS = ["customers", "customers_with_debt", "order_lines", "cashflow_lines", "products"];
+
+// The last good main-sync counts, key by key: the newest run that carried each count (a run without order lines says nothing about them),
+// however many runs ago (erp_sync_runs keeps 60 days).
 export async function lastGoodCounts(db = pool) {
-  const { rows } = await db.query("SELECT counts FROM erp_sync_runs ORDER BY at DESC, id DESC LIMIT 30");
+  const { rows } = await db.query(
+    `SELECT k AS key,
+            (SELECT (r.counts->>k)::float8 FROM erp_sync_runs r WHERE jsonb_typeof(r.counts->k) = 'number' ORDER BY r.at DESC, r.id DESC LIMIT 1) AS value
+       FROM unnest($1::text[]) AS k`,
+    [GUARDED_COUNTS]
+  );
   const out = {};
-  for (const { counts } of rows) {
-    for (const [key, value] of Object.entries(counts ?? {})) {
-      if (out[key] === undefined && Number.isFinite(value)) out[key] = value;
-    }
-  }
+  for (const { key, value } of rows) if (Number.isFinite(value)) out[key] = value;
   return out;
 }
 
