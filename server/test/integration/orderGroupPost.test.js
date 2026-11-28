@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { startTestServer, stopTestServer, cleanupAll, createUser, createCustomer, createProduct, apiRequest, loginAs, trackOrder } from "./helpers.js";
 import { pool } from "../../src/db/pool.js";
-import { orderConfirmedText, orderWithdrawnText, runOrderGroupPosts, syncOrderPost } from "../../src/orders/orderGroupPost.js";
+import { documentRequestText, orderConfirmedText, orderWithdrawnText, runOrderGroupPosts, syncOrderPost } from "../../src/orders/orderGroupPost.js";
 
 let director, rep, admin, warehouse, directorCookie, repCookie, adminCookie, warehouseCookie, customer, oil, filter;
 test.before(async () => {
@@ -26,7 +26,7 @@ test.before(async () => {
   oil = await createProduct({ name: "Castrol EDGE 5W-30", unit: "4L", unit_price_amd: 20000 });
   filter = await createProduct({ name: "Oil filter W712", unit: "pcs", unit_price_amd: 3000 });
   // the feature counts from when it was switched on: in this file, from before the first order
-  await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute', document_request_since = now() - interval '1 minute' WHERE id = 1");
 });
 test.after(async () => {
   await pool.query("UPDATE app_settings SET order_confirm_telegram = true WHERE id = 1");
@@ -60,6 +60,11 @@ async function submittedOrder(payment_method = "cash") {
   assert.equal(created.status, 201, JSON.stringify(created.data).slice(0, 300));
   return trackOrder(created.data.id);
 }
+// "Send to accounting" (create the waybill / invoice)
+const requestDoc = async (id, body = {}) => {
+  const res = await apiRequest(`/api/orders/${id}/accounting-request`, { method: "POST", cookie: directorCookie, body });
+  assert.equal(res.status, 200, JSON.stringify(res.data).slice(0, 300));
+};
 const confirm = async (id, cookie = directorCookie) => assert.equal((await apiRequest(`/api/orders/${id}`, { method: "PATCH", cookie, body: { status: "confirmed" } })).status, 200);
 const unconfirm = async (id, reason) => assert.equal((await apiRequest(`/api/orders/${id}/unconfirm`, { method: "POST", cookie: directorCookie, body: { reason } })).status, 200);
 // the bot takes what waits and reports it posted
@@ -70,12 +75,18 @@ async function botPostsEverything() {
   return pending.data.posts;
 }
 
-test("the director confirms: the details wait for the bot with everything a waybill needs; the bot takes them, and its polling fits its budget", async () => {
+test("the director confirms: a heads-up line; Send to accounting: everything the waybill needs; the bot takes them, and its polling fits its budget", async () => {
   const id = await submittedOrder("cash");
   assert.deepEqual(await kindsOf(id), [], "a submitted order is nobody's document yet");
   await confirm(id);
-  const [post] = await expectKinds(id, ["order_confirmed"]);
-  for (const part of ["✅", "բեռնագիր", "Post Shop", `ID ${customer.erp_customer_id}`, "1. Castrol EDGE 5W-30 4L\n", "2 հատ × 20,000 դր = 40,000 դր", "2. Oil filter W712\n", "3 հատ × 3,000 դր = 9,000 դր", "Ընդամենը՝ 49,000 դր", "deliver before noon", "Պատվիրեց՝ Post Rep", "Հաստատեց՝ Post Director"]) {
+  const [heads] = await expectKinds(id, ["order_confirmed"]);
+  for (const part of ["✅", "Post Shop", "49,000 դր", "բեռնագիր"]) assert.ok(heads.text.includes(part), `"${part}" in:\n${heads.text}`);
+  assert.ok(!heads.text.includes("1. Castrol") && heads.text.split("\n").length === 2, `the details come with the request:\n${heads.text}`);
+  await botPostsEverything();
+  // owner 2026-11-27: "when user taps create waybill or invoice, the accountant should receive all details of the document she has to create"
+  await requestDoc(id);
+  const [, post] = await expectKinds(id, ["order_confirmed", "document_request"]);
+  for (const part of ["🧾 ՍՏԵՂԾԵԼ ԲԵՌՆԱԳԻՐ", "բեռնագիր", "Post Shop", `ID ${customer.erp_customer_id}`, "1. Castrol EDGE 5W-30 4L\n", "2 հատ × 20,000 դր = 40,000 դր", "2. Oil filter W712\n", "3 հատ × 3,000 դր = 9,000 դր", "Ընդամենը՝ 49,000 դր", "deliver before noon", "Պատվիրեց՝ Post Rep", "Հաստատեց՝ Post Director", "Փաստաթուղթը խնդրեց՝ Post Director"]) {
     assert.ok(post.text.includes(part), `"${part}" in:\n${post.text}`);
   }
   assert.ok(!post.text.includes("ՀՎՀՀ"), "a waybill does not show the TIN");
@@ -130,8 +141,8 @@ test("before the bot took it: a quick move back withdraws the message, a quick c
   // corrected while it still waits: the same message, new content
   const corrected = await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "customer asked", items: [{ product_id: oil.id, quantity: 5 }] } });
   assert.equal(corrected.status, 200, JSON.stringify(corrected.data).slice(0, 300));
-  const [same] = await waitFor(async () => ((await postsOf(id))[0]?.text.includes("5 հատ") ? postsOf(id) : null));
-  assert.ok(same.text.startsWith("✅") && same.text.includes("5 հատ × 20,000 դր = 100,000 դր") && !same.text.includes("Oil filter"), same.text);
+  const [same] = await waitFor(async () => ((await postsOf(id))[0]?.text.includes("100,000 դր") ? postsOf(id) : null));
+  assert.ok(same.text.startsWith("✅") && same.text.includes("100,000 դր"), same.text);
   assert.deepEqual(await kindsOf(id), ["order_confirmed"], "one message, with the new content");
   void first;
 });
@@ -144,20 +155,20 @@ test("after the bot took it, every change of the document is said again: a corre
   const corrected = await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "customer asked", items: [{ product_id: oil.id, quantity: 1 }] } });
   assert.equal(corrected.status, 200, JSON.stringify(corrected.data).slice(0, 300));
   let posts = await expectKinds(id, ["order_confirmed", "order_confirmed"]);
-  assert.ok(posts[1].text.startsWith("♻️") && posts[1].text.includes("1 հատ × 20,000 դր"), posts[1].text);
+  assert.ok(posts[1].text.startsWith("♻️") && posts[1].text.includes("20,000 դր"), posts[1].text);
   await botPostsEverything();
-  // the document is asked for as an invoice instead of the waybill the group was told
-  const asked = await apiRequest(`/api/orders/${id}/accounting-request`, { method: "POST", cookie: directorCookie, body: { payment_method: "invoice" } });
-  assert.equal(asked.status, 200, JSON.stringify(asked.data).slice(0, 300));
-  posts = await expectKinds(id, ["order_confirmed", "order_confirmed", "order_confirmed"]);
-  for (const part of ["♻️", "հաշիվ-ապրանքագիր", "Post Shop LLC", "ՀՎՀՀ՝ 01234567", "Yerevan, Legal st. 1"]) assert.ok(posts[2].text.includes(part), `"${part}" in:\n${posts[2].text}`);
+  // the document is asked for as an invoice instead of the waybill the group was told: the request carries the invoice's details, once
+  await requestDoc(id, { payment_method: "invoice" });
+  posts = await expectKinds(id, ["order_confirmed", "order_confirmed", "document_request"]);
+  for (const part of ["🧾 ՍՏԵՂԾԵԼ ՀԱՇԻՎ-ԱՊՐԱՆՔԱԳԻՐ", "հաշիվ-ապրանքագիր", "Post Shop LLC", "ՀՎՀՀ՝ 01234567", "Yerevan, Legal st. 1", "1 հատ × 20,000 դր"]) assert.ok(posts[2].text.includes(part), `"${part}" in:\n${posts[2].text}`);
   await botPostsEverything();
   // nothing changed: the job says nothing more
   assert.deepEqual(await runOrderGroupPosts(), {});
   // an admin's test of the accounting flow is marked as a test
   await pool.query("UPDATE orders SET accounting_is_test = true, updated_at = now() WHERE id = $1", [id]);
   assert.deepEqual(await runOrderGroupPosts(), { changed: 1 });
-  assert.ok((await postsOf(id)).at(-1).text.includes("🧪"));
+  const tested = (await postsOf(id)).at(-1);
+  assert.ok(tested.text.includes("🧪") && tested.text.includes("ՀՎՀՀ՝ 01234567"), `after a request every change says all the details again:\n${tested.text}`);
   await botPostsEverything();
 });
 
@@ -211,7 +222,7 @@ test("review sequences: a waiting 'changed' keeps its heading; back to what the 
   await expectKinds(id, ["order_confirmed", "order_confirmed"]);
   // corrected again before the bot took it: still ONE waiting message, still marked as changed
   assert.equal((await correct(6)).status, 200);
-  let posts = await waitFor(async () => ((await postsOf(id)).at(-1)?.text.includes("6 հատ") ? postsOf(id) : null));
+  let posts = await waitFor(async () => ((await postsOf(id)).at(-1)?.text.includes("129,000 դր") ? postsOf(id) : null));
   assert.equal(posts.length, 2);
   assert.ok(posts[1].text.startsWith("♻️"), posts[1].text);
   // corrected back to exactly what the group has: the waiting message goes, nothing is sent
@@ -248,7 +259,7 @@ test("review sequences: a message nobody could post counts for nothing; editing 
   const corrected = await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity: 7 }] } });
   assert.equal(corrected.status, 200);
   const posts = await expectKinds(id, ["order_confirmed", "order_confirmed"]);
-  assert.ok(posts[1].text.startsWith("✅") && posts[1].text.includes("7 հատ"), posts[1].text);
+  assert.ok(posts[1].text.startsWith("✅") && posts[1].text.includes("140,000 դր"), posts[1].text);
   await botPostsEverything();
   // the customer's name, address and TIN change later, the order is touched: no "changed" for an issued document
   await pool.query("UPDATE customers SET address = 'Somewhere else 9', tin = '99999999' WHERE id = $1", [customer.id]);
@@ -307,7 +318,7 @@ test("the job alone announces a confirmed order no route told about, once", asyn
   assert.deepEqual(await runOrderGroupPosts(), { announced: 1 });
   assert.deepEqual(await runOrderGroupPosts(), {});
   const [post] = await postsOf(id);
-  for (const part of ["հաշիվ-ապրանքագիր", "ՀՎՀՀ՝ 01234567", "Հաստատեց՝ Post Director"]) assert.ok(post.text.includes(part), `"${part}" in:\n${post.text}`);
+  for (const part of ["✅", "հաշիվ-ապրանքագիր", "Post Shop"]) assert.ok(post.text.includes(part), `"${part}" in:\n${post.text}`);
   // two calls at the same moment write one message
   const id2 = await submittedOrder("cash");
   await pool.query("UPDATE orders SET status = 'confirmed', updated_at = now() WHERE id = $1", [id2]);
@@ -326,6 +337,176 @@ test("the texts: discount, term, prepayment and missing data are said plainly", 
   for (const part of ["KM-0005", "⚠️ ERP ID չկա", "ՀՎՀՀ՝ ⚠️ չկա", "1. Castrol GTX 4L\n", "2.5 հատ", "2. Filter\n", "Գումար՝ 50,000 դր", "Զեղչ՝ 5,000 դր (10%)", "Ընդամենը՝ 45,000 դր", "Վճարման ժամկետ՝ 14 օր", "Կանխավճար՝ 10,000 դր", "Առաքում՝ 25.11.2026", "Հաստատեց՝ Boss"]) {
     assert.ok(text.includes(part), `"${part}" in:\n${text}`);
   }
+  const short = orderConfirmedText(o, { full: false });
+  assert.ok(short.startsWith("✅") && short.includes("KM-0005 · Shop · 45,000 դր · հաշիվ-ապրանքագիր") && !short.includes("ՀՎՀՀ"), short);
+  const req = documentRequestText({ ...o, requested_by: "Manager" }, { again: true });
+  for (const part of ["🧾 ՍՏԵՂԾԵԼ ՀԱՇԻՎ-ԱՊՐԱՆՔԱԳԻՐ · KM-0005 · 🔁", "ՀՎՀՀ՝ ⚠️ չկա", "Ընդամենը՝ 45,000 դր", "Հաստատեց՝ Boss", "Փաստաթուղթը խնդրեց՝ Manager"]) assert.ok(req.includes(part), `"${part}" in:\n${req}`);
   const cancelled = orderWithdrawnText({ title: "KM-0005 · Shop", by: "Boss", reason: "customer refused", cancelled: true });
   assert.ok(cancelled.includes("❌") && cancelled.includes("customer refused") && cancelled.includes("Որոշեց՝ Boss"), cancelled);
+});
+
+// Owner 2026-11-27: "when user taps create waybill or invoice, the accountant should receive a Telegram message with all details".
+test("Send to accounting: the request waits with every detail; asked again before the bot took it = the same message; after = 'again'; moved back = withdrawn or 'do not issue'; switched off = nothing", async () => {
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  // asked before the bot took even the heads-up: the request replaces it (it carries everything)
+  await requestDoc(id);
+  await expectKinds(id, ["document_request"]);
+  // asked again as an invoice before the bot took it: the same one message, now the invoice
+  await requestDoc(id, { payment_method: "invoice" });
+  let posts = await waitFor(async () => ((await postsOf(id))[0]?.text.includes("ՀԱՇԻՎ-ԱՊՐԱՆՔԱԳԻՐ") ? postsOf(id) : null));
+  assert.deepEqual(posts.map((p) => p.kind), ["document_request"]);
+  assert.ok(!posts[0].text.includes("🔁"), "nobody saw the first request: not 'again'");
+  // the order changes while the request waits: the request is rewritten, no 'changed' besides it
+  assert.equal((await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity: 9 }] } })).status, 200);
+  posts = await waitFor(async () => ((await postsOf(id))[0]?.text.includes("9 հատ") ? postsOf(id) : null));
+  assert.deepEqual(posts.map((p) => p.kind), ["document_request"]);
+  assert.deepEqual(await runOrderGroupPosts(), {}, "the job agrees: nothing more to say");
+  await botPostsEverything();
+  // asked again after the group saw it (back to cash): a new request marked 'again'
+  await requestDoc(id, { payment_method: "cash" });
+  posts = await expectKinds(id, ["document_request", "document_request"]);
+  assert.ok(posts[1].text.includes("🔁") && posts[1].text.includes("ԲԵՌՆԱԳԻՐ"), posts[1].text);
+  await botPostsEverything();
+  // moved back after the group saw it: 'do not issue yet'
+  await unconfirm(id, "wrong price");
+  posts = await expectKinds(id, ["document_request", "document_request", "order_unconfirmed"]);
+  assert.ok(posts[2].text.includes("⏸") && posts[2].text.includes("wrong price"), posts[2].text);
+  await botPostsEverything();
+
+  // a request moved back before the bot took it: withdrawn, nothing said
+  const id2 = await submittedOrder("cash");
+  await confirm(id2);
+  await expectKinds(id2, ["order_confirmed"]);
+  await botPostsEverything();
+  await requestDoc(id2);
+  await expectKinds(id2, ["order_confirmed", "document_request"]);
+  await unconfirm(id2, null);
+  await expectKinds(id2, ["order_confirmed", "order_unconfirmed"], "the request nobody read is withdrawn; the heads-up is taken back");
+
+  // switched off: a request sends nothing
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = false WHERE id = 1");
+  try {
+    const id3 = await submittedOrder("cash");
+    await confirm(id3);
+    await requestDoc(id3);
+    assert.equal(await syncOrderPost(id3), null);
+    assert.deepEqual(await kindsOf(id3), []);
+  } finally {
+    await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
+  }
+});
+
+// Independent review 2026-11-27: the request is decided from the ORDER (accounting_status, accounting_requested_at), not from the tap.
+test("request from the order's state: a lost hook is posted by the job; a withdraw in the app is told; a quick back-and-confirm does not leave a request standing; switched off drops a waiting one; a request from before the feature is never posted", async () => {
+  // the hook was lost (a restart right after the tap): the order says "pending", the job posts the request, once
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  await botPostsEverything();
+  await pool.query(
+    "UPDATE orders SET accounting_status = 'pending', accounting_doc_type = 'waybill', accounting_requested_by = $2, accounting_requested_at = now(), updated_at = now() WHERE id = $1",
+    [id, director.id]
+  );
+  assert.ok((await runOrderGroupPosts()).requested >= 1); // (the job looks at every order: other tests' orders may be in it too)
+  await runOrderGroupPosts();
+  let posts = await expectKinds(id, ["order_confirmed", "document_request"], "posted by the job, once");
+  assert.ok(posts.at(-1).kind === "document_request" && posts.at(-1).text.includes("Փաստաթուղթը խնդրեց՝ Post Director"), posts.at(-1).text);
+  await botPostsEverything();
+  // withdrawn by hand in the app: the group is told not to create it
+  assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "cancelled" } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn"]);
+  assert.ok(posts[2].text.startsWith("⛔"), posts[2].text);
+  await botPostsEverything();
+  // back in the queue by hand: asked again
+  assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn", "document_request"]);
+  assert.ok(posts[3].text.includes("🔁"), posts[3].text);
+  await botPostsEverything();
+  // a change while the request stands: every detail again
+  assert.equal((await apiRequest(`/api/orders/${id}/correct`, { method: "POST", cookie: adminCookie, body: { reason: "fix", items: [{ product_id: oil.id, quantity: 3 }] } })).status, 200);
+  posts = await expectKinds(id, ["order_confirmed", "document_request", "request_withdrawn", "document_request", "order_confirmed"]);
+  assert.ok(posts[4].text.startsWith("♻️") && posts[4].text.includes("3 հատ × 20,000 դր"), posts[4].text);
+  await botPostsEverything();
+
+  // moved back and confirmed again before the bot took the "do not issue": the request was cancelled with it, so the group hears that
+  const id2 = await submittedOrder("cash");
+  await confirm(id2);
+  await expectKinds(id2, ["order_confirmed"]);
+  await requestDoc(id2);
+  await expectKinds(id2, ["document_request"]);
+  await botPostsEverything();
+  await unconfirm(id2, "check");
+  await expectKinds(id2, ["document_request", "order_unconfirmed"]);
+  await confirm(id2);
+  posts = await expectKinds(id2, ["document_request", "request_withdrawn"], "not left standing while the app says cancelled");
+  await botPostsEverything();
+  // the manager asks again: a new request, said as 'again'
+  await requestDoc(id2);
+  posts = await expectKinds(id2, ["document_request", "request_withdrawn", "document_request"]);
+  assert.ok(posts[2].text.includes("🔁"), posts[2].text);
+  await botPostsEverything();
+
+  // switched off while a request waits for the bot: dropped, like a waiting heads-up
+  const id3 = await submittedOrder("cash");
+  await confirm(id3);
+  await expectKinds(id3, ["order_confirmed"]);
+  await botPostsEverything();
+  await requestDoc(id3);
+  await expectKinds(id3, ["order_confirmed", "document_request"]);
+  await pool.query("UPDATE app_settings SET order_confirm_telegram = false WHERE id = 1");
+  try {
+    await syncOrderPost(id3);
+    assert.deepEqual(await kindsOf(id3), ["order_confirmed"]);
+  } finally {
+    await pool.query("UPDATE app_settings SET order_confirm_telegram = true, order_confirm_telegram_since = now() - interval '1 minute' WHERE id = 1");
+  }
+
+  // a request asked before this feature existed (migration 228): never posted
+  const id4 = await submittedOrder("cash");
+  await confirm(id4);
+  await expectKinds(id4, ["order_confirmed"]);
+  await botPostsEverything();
+  await pool.query("UPDATE orders SET accounting_status = 'waybill_created', accounting_requested_at = now() - interval '1 day', updated_at = now() WHERE id = $1", [id4]);
+  await syncOrderPost(id4);
+  assert.deepEqual(await kindsOf(id4), ["order_confirmed"]);
+});
+
+// Second review 2026-11-27: a request standing again in the app is said again; a retry is not a new request; a dead row is written again.
+test("request edge cases: stock issue then confirmed again = the request again; freeing a stuck claim = nothing; a request the bot gave up on is written again", async () => {
+  // a stock issue after the request: "do not issue yet"; confirmed again with the request still pending -> the request again, in full
+  const id = await submittedOrder("cash");
+  await confirm(id);
+  await expectKinds(id, ["order_confirmed"]);
+  await requestDoc(id);
+  await expectKinds(id, ["document_request"]);
+  await botPostsEverything();
+  assert.equal((await apiRequest(`/api/warehouse/orders/${id}/stock-issue`, { method: "POST", cookie: warehouseCookie, body: { note: "short" } })).status, 200);
+  await expectKinds(id, ["document_request", "order_unconfirmed"]);
+  await botPostsEverything();
+  await pool.query("UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1", [id]);
+  await confirm(id);
+  let posts = await expectKinds(id, ["document_request", "order_unconfirmed", "document_request"]);
+  assert.ok(posts[2].text.includes("🔁") && posts[2].text.includes("1. Castrol EDGE"), posts[2].text);
+  await botPostsEverything();
+
+  // freeing a stuck claim by hand (in progress -> pending) is the same request: nothing new in the group
+  await pool.query("UPDATE orders SET accounting_status = 'in_progress' WHERE id = $1", [id]);
+  assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } })).status, 200);
+  await runOrderGroupPosts();
+  assert.deepEqual(await kindsOf(id), ["document_request", "order_unconfirmed", "document_request"]);
+
+  // the bot gave up on a request (10 failed tries): written again, not stuck
+  const id2 = await submittedOrder("cash");
+  await confirm(id2);
+  await expectKinds(id2, ["order_confirmed"]);
+  await botPostsEverything();
+  await requestDoc(id2);
+  const [, dead] = await expectKinds(id2, ["order_confirmed", "document_request"]);
+  await pool.query("UPDATE group_posts SET post_attempts = 10, last_post_error = 'telegram down' WHERE id = $1", [dead.id]);
+  assert.equal(await syncOrderPost(id2), "requested");
+  posts = await postsOf(id2);
+  assert.equal(posts.filter((p) => p.kind === "document_request").length, 2);
+  assert.ok(!posts.at(-1).text.includes("🔁"), "the group never saw the first one");
 });

@@ -1334,7 +1334,8 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
   accountingQueueChanged();
   res.json(updated[0]);
-  syncOrderPostSoon(order.id, { byId: req.user.id }); // another document than the group was told, or a test order: said again
+  // the accountant gets "create this document" with every detail in the accounting Telegram group (owner 2026-11-27)
+  syncOrderPostSoon(order.id, { byId: req.user.id }); // the order's request state decides the message (the minute job repeats it)
 });
 
 // Moves a request to another condition by hand (pending = back in the queue
@@ -1356,7 +1357,9 @@ ordersRouter.post("/:id/accounting-status", async (req, res) => {
   const { rows: updated } = await pool.query(
     `UPDATE orders SET accounting_status = $2, accounting_error = $3::jsonb,
             accounting_claimed_at = CASE WHEN $2 = 'in_progress' THEN now() ELSE NULL END,
-            accounting_requested_at = CASE WHEN $2 = 'pending' THEN now() ELSE accounting_requested_at END,
+            -- a NEW request only when a withdrawn one is asked again: freeing a stuck claim or a retry is the same request (no second
+            -- "create" in the accounting group for a document that may exist; review 2026-11-27)
+            accounting_requested_at = CASE WHEN $2 = 'pending' AND $4 = 'cancelled' THEN now() ELSE accounting_requested_at END,
             accounting_updated_at = now(), updated_at = now()
      WHERE id = $1 AND accounting_status = $4 RETURNING *`,
     [order.id, next, error, order.accounting_status]
@@ -1364,6 +1367,7 @@ ordersRouter.post("/:id/accounting-status", async (req, res) => {
   if (!updated[0]) return res.status(409).json({ error: "This request was changed by someone else -- refresh and try again" });
   if (next === "pending") accountingQueueChanged();
   res.json(updated[0]);
+  syncOrderPostSoon(order.id, { byId: req.user.id }); // withdrawn (cancelled) or asked again (pending): the accounting group is told
 });
 
 // A human confirms the SRC signature in KAD (Lily never signs and may not be
