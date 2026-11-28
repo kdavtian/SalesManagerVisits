@@ -2,7 +2,7 @@ import { nextStatusFromDocuments, ACCOUNTING_STATUSES, WITHDRAW_WAITING_REQUEST_
 import { mayOpenOrderDocument } from "../../customers/customerAccess.js";
 import { customerIdsMatching } from "../../customers/customerSearch.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
-import { matchExistingLines, applyCorrection, isOrderChangedFlag } from "../orderCorrection.js";
+import { matchExistingLines, applyCorrection, isOrderChangedFlag, ORDER_CHANGED_SQL } from "../orderCorrection.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
@@ -1337,7 +1337,7 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
     `UPDATE orders SET payment_method = $2, accounting_doc_type = $3, accounting_status = 'pending', accounting_is_test = $4,
             accounting_requested_by = $5, accounting_requested_at = now(), accounting_claimed_at = NULL,
             accounting_documents = '[]'::jsonb, accounting_error = NULL, accounting_updated_at = now(), updated_at = now()
-     WHERE id = $1 AND accounting_status IS NOT DISTINCT FROM $6 RETURNING *`,
+     WHERE id = $1 AND accounting_status IS NOT DISTINCT FROM $6 AND NOT COALESCE(${ORDER_CHANGED_SQL}, false) RETURNING *`,
     [order.id, method, docType, isTest, req.user.id, order.accounting_status]
   );
   if (!updated[0]) return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
