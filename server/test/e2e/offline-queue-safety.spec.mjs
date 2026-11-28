@@ -171,4 +171,29 @@ test.describe("Offline queue safety", () => {
       await pool.query("DELETE FROM payments WHERE customer_id = $1", [c.id]);
     }
   });
+
+  test("a save whose answer starts but never finishes is given up after the time limit and queued (no endless spinner)", async ({ page, fixtures }) => {
+    test.setTimeout(90000);
+    const { manager, customer, product } = await setup(fixtures);
+    await loginViaUi(page, manager.email);
+    await openOrderSheet(page, customer, product);
+    // headers arrive at once, the JSON body never ends: the 30 s save limit must still end it
+    await page.evaluate(() => {
+      const real = window.fetch;
+      window.fetch = (url, opts) => {
+        if (String(url).endsWith("/api/orders") && opts?.method === "POST") {
+          let ctrl;
+          const stalled = new ReadableStream({ start: (c) => (ctrl = c) });
+          // what a real fetch does: aborting its signal fails the body being read
+          opts.signal?.addEventListener("abort", () => ctrl.error(new DOMException("aborted", "AbortError")));
+          return Promise.resolve(new Response(stalled, { status: 201, headers: { "content-type": "application/json" } }));
+        }
+        return real(url, opts);
+      };
+    });
+    const started = Date.now();
+    await page.locator("#save-order-btn").click();
+    await expect(queuedHeading(page)).toBeVisible({ timeout: 45000 });
+    expect(Date.now() - started).toBeLessThan(45000);
+  });
 });

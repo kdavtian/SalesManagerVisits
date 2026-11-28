@@ -79,6 +79,8 @@ services:
       PORT: 3000
       UPLOAD_DIR: /app/server/uploads
       CHECKIN_RADIUS_METERS: ${CHECKIN_RADIUS_METERS:-200}
+      # oldest phone app version allowed to save (server/src/middleware/appVersion.js); blank = off
+      MIN_APP_VERSION: ${MIN_APP_VERSION:-}
       OSRM_URL: ${OSRM_URL:-http://osrm:5000}
       # database time limits (server/src/db/pool.js); blank = the default: 30 s per phone request query, 15 min for jobs and the Excel sync
       DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-}

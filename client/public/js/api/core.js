@@ -209,16 +209,33 @@ export async function doRequest(path, options) {
     }
     throw err;
   } finally {
-    clearTimeout(timer);
+    // a save keeps its limit until its answer is fully read (below): headers that arrive and a body that stalls must not hang it
+    if (!queueable) clearTimeout(timer);
   }
 
   // A write that can finish a task by itself (a payment, an order, a check-in, a shop's products): the "well done" card looks right after.
   if (method !== "GET" && res.ok && TASK_CLOSING_WRITES.test(path)) window.dispatchEvent(new Event("fv:tasks-maybe-changed"));
 
-  if (res.status === 204) return null;
+  if (res.status === 204) {
+    clearTimeout(timer);
+    return null;
+  }
 
   const isJson = res.headers.get("content-type")?.includes("application/json");
-  const body = isJson ? await res.json() : null;
+  let body;
+  try {
+    body = isJson ? await res.json() : null;
+  } catch (err) {
+    if (queueable && controller?.signal.aborted) {
+      const timeout = new Error(t("request_timeout"));
+      timeout.status = 408;
+      timeout.code = "save_timeout";
+      throw timeout;
+    }
+    throw err;
+  } finally {
+    if (queueable) clearTimeout(timer);
+  }
   if (method === "GET" && res.ok && isJson) keepOfflineCopy(path, body);
 
   if (!res.ok) {
