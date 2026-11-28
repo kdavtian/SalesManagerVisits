@@ -41,3 +41,5 @@ test/integration/marketPrices.test.js
 test/integration/marketGaps.test.js
 # the monthly market report notifies every admin / CEO in the database
 test/integration/marketMonthly.test.js
+# plan 0.5: remembers the last sync's counts and switches the one big-drop guard (would refuse other files' syncs)
+test/integration/erpSyncGuard.test.js
