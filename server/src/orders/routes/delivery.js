@@ -21,7 +21,7 @@ import { insertPayment } from "../../money/routes/payments.js";
 import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
-import { NOT_ON_OPEN_ROUTE_SQL } from "../routeStops.js";
+import { NOT_ON_OPEN_ROUTE_SQL, LATEST_STOP_OF_DAY_SQL } from "../routeStops.js";
 
 export const deliveryRouter = Router();
 deliveryRouter.use(requireAuth);
@@ -71,7 +71,7 @@ deliveryRouter.get("/home", async (req, res) => {
      JOIN delivery_routes r ON r.id = rs.route_id
      JOIN orders o ON o.id = rs.order_id
      JOIN customers c ON c.id = o.customer_id
-     WHERE r.driver_id = $1 AND r.route_date = $2
+     WHERE r.driver_id = $1 AND r.route_date = $2 AND ${LATEST_STOP_OF_DAY_SQL}
      ORDER BY rs.sequence`,
       [req.user.id, today]
     ),

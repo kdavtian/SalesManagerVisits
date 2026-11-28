@@ -88,6 +88,11 @@ test("0.3 fail, then plan again: a failed delivery comes back to the planner lis
   assert.equal(second.status, 201, JSON.stringify(second.data));
   routeIds.push(second.data.id);
   assert.ok(second.data.stops.some((s) => s.order_id === o.id), "planned again");
+  // the driver's Home of the day lists it once (the new, open attempt), not the failed stop as well (review finding)
+  const homeAgain = await apiRequest("/api/delivery/home", { cookie: driverCookie });
+  const mine = homeAgain.data.stops.filter((x) => x.order_id === o.id);
+  assert.equal(mine.length, 1, JSON.stringify(mine));
+  assert.equal(mine[0].completed_at, null);
   const failedStop = (await pool.query("SELECT completed_at FROM route_stops WHERE route_id = $1 AND order_id = $2", [first.data.id, o.id])).rows[0];
   const failedAt = failedStop.completed_at.getTime();
 
@@ -216,4 +221,43 @@ test("0.18 a signed order: the accountant gets 423 on correct, the admin may cor
   assert.equal((await linesOf(o.id))[0].quantity, 2, "nothing changed");
   const ok = await apiRequest(`/api/orders/${o.id}/correct`, { method: "POST", cookie: adminCookie, body });
   assert.equal(ok.status, 200, JSON.stringify(ok.data));
+});
+
+// ---- review findings on 0.17: a document is never wiped, orphaned or un-flagged ------------------------------------------------------------
+test("0.17 a corrected order with a document: no 'send again' (no second document), Lily can still report what she made, the flag stays", async () => {
+  // Lily is making the document (claimed) when the accountant corrects a quantity
+  const o = await newOrder("delivered", { lines: [[p1.id, 2, 9000]], accounting: "in_progress" });
+  const [line] = await linesOf(o.id);
+  assert.equal((await apiRequest(`/api/orders/${o.id}/correct`, { method: "POST", cookie: accCookie, body: { reason: "qty", items: [{ product_id: p1.id, quantity: 3 }] } })).status, 200);
+  assert.equal((await orderRow(o.id)).accounting_status, "needs_attention");
+  // she reports the waybill she made from the old lines: recorded, still flagged
+  const w = await lily(`/orders/${ref(o.id)}/waybills`, "POST", { waybills: [{ hc_doc_number: "W-77", date: "2026-11-28", items: [{ line_id: `ln_${line.id}`, quantity: 2 }] }] });
+  assert.equal(w.status, 200, JSON.stringify(w.data));
+  assert.equal(w.data.waybill_status, "needs_attention");
+  let row = await orderRow(o.id);
+  assert.deepEqual([row.accounting_status, row.accounting_error.code, row.accounting_documents.map((d) => d.hc_doc_number)], ["needs_attention", "order_changed", ["W-77"]]);
+  // the e-invoicing result is recorded on the document; the order stays flagged
+  const e = await lily(`/orders/${ref(o.id)}/waybills/W-77/einvoicing`, "POST", { status: "signed" });
+  assert.equal(e.status, 200, JSON.stringify(e.data));
+  row = await orderRow(o.id);
+  assert.deepEqual([row.accounting_status, row.accounting_error.code, row.accounting_documents[0].einvoicing.status], ["needs_attention", "order_changed", "signed"]);
+  // "send to accounting again" would wipe W-77 and make a second document: refused
+  const again = await apiRequest(`/api/orders/${o.id}/accounting-request`, { method: "POST", cookie: adminCookie, body: {} });
+  assert.equal(again.status, 409, JSON.stringify(again.data));
+  assert.equal(again.data.code, "order_changed");
+  assert.equal((await orderRow(o.id)).accounting_documents.length, 1, "documents kept");
+});
+
+test("0.17 a request that has documents is never withdrawn by a stock issue or Back to submitted", async () => {
+  const docs = JSON.stringify([{ hc_doc_number: "W-9", date: "2026-11-28", items: [] }]);
+  const issued = await newOrder("confirmed", { accounting: "needs_attention" });
+  await pool.query("UPDATE orders SET accounting_documents = $2::jsonb WHERE id = $1", [issued.id, docs]);
+  assert.equal((await apiRequest(`/api/warehouse/orders/${issued.id}/stock-issue`, { method: "POST", cookie: warehouseCookie, body: { note: "short" } })).status, 200);
+  assert.equal((await orderRow(issued.id)).accounting_status, "needs_attention", "not withdrawn: the waybill exists");
+
+  const back = await newOrder("confirmed", { accounting: "needs_attention" });
+  await pool.query("UPDATE orders SET accounting_documents = $2::jsonb WHERE id = $1", [back.id, docs]);
+  const r = await apiRequest(`/api/orders/${back.id}/unconfirm`, { method: "POST", cookie: adminCookie, body: { reason: "x" } });
+  assert.equal(r.status, 409);
+  assert.equal(r.data.code, "accounting_busy");
 });

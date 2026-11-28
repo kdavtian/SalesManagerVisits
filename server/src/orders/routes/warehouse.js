@@ -24,7 +24,7 @@ import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
 import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
-import { NOT_ON_OPEN_ROUTE_SQL } from "../routeStops.js";
+import { NOT_ON_OPEN_ROUTE_SQL, LATEST_STOP_OF_DAY_SQL } from "../routeStops.js";
 import { WITHDRAW_WAITING_REQUEST_SQL } from "../accountingStatus.js";
 
 
@@ -71,7 +71,7 @@ warehouseRouter.get("/home", async (req, res) => {
     pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND ${NOT_ON_OPEN_ROUTE_SQL}`),
     pool.query(
       `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE rs.completed_at IS NOT NULL)::int AS done
-       FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.route_date = $1`,
+       FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.route_date = $1 AND ${LATEST_STOP_OF_DAY_SQL}`,
       [today]
     ),
     pool.query(`SELECT COUNT(*)::int AS n FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE rs.completed_at IS NULL AND r.route_date < $1`, [today]),

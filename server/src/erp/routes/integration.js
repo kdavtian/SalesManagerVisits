@@ -6,6 +6,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { checkBearer, auditTokenCall } from "../integrationTokens.js";
 import { nextStatusFromDocuments, ORDER_LIVE_FOR_ACCOUNTING_SQL } from "../../orders/accountingStatus.js";
+import { isOrderChangedFlag } from "../../orders/orderCorrection.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
 
@@ -281,7 +282,10 @@ integrationRouter.post("/orders/:id/claim", async (req, res) => {
 integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
-  if (!["in_progress", "partially_created", "waybill_created"].includes(order.accounting_status)) {
+  // corrected in KAD while Lily was making the document (orders/orderCorrection.js): what she made is still recorded -- it exists in HC and the
+  // person fixing it must see it -- and the order stays flagged
+  const changedMeanwhile = isOrderChangedFlag(order);
+  if (!changedMeanwhile && !["in_progress", "partially_created", "waybill_created"].includes(order.accounting_status)) {
     return fail(res, 409, "invalid_state", `Order is "${order.accounting_status}"; claim it first`);
   }
   const list = req.body?.waybills;
@@ -319,13 +323,14 @@ integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   const covered = new Map();
   for (const w of merged) for (const l of w.items) covered.set(l.line_id, (covered.get(l.line_id) ?? 0) + l.quantity);
   const unknown = [...covered.keys()].filter((id) => !orderedItems.some((i) => i.line_id === id));
-  if (unknown.length) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
+  // (a line the correction removed is not "unknown" to a document made before it)
+  if (unknown.length && !changedMeanwhile) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
   const complete = orderedItems.every((i) => (covered.get(i.line_id) ?? 0) >= i.quantity);
-  const next = !complete ? "partially_created" : "waybill_created";
+  const next = changedMeanwhile ? order.accounting_status : !complete ? "partially_created" : "waybill_created";
 
   await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(merged), next]
+    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = CASE WHEN $4 THEN accounting_error ELSE NULL END, accounting_updated_at = now() WHERE id = $1",
+    [order.id, JSON.stringify(merged), next, changedMeanwhile]
   );
   if (next !== order.accounting_status) {
     await notifyRequester(order, next === "partially_created" ? "Բեռնագիրը մասամբ ստեղծված է" : "Փաստաթուղթը ստեղծված է", next === "partially_created" ? "մի մասը դեռ սպասում է" : "Լիլին ստեղծեց փաստաթուղթը");
@@ -344,10 +349,12 @@ integrationRouter.post("/orders/:id/waybills/:number/einvoicing", async (req, re
   const doc = docs.find((d) => d.hc_doc_number === req.params.number);
   if (!doc) return fail(res, 404, "waybill_not_found", "No waybill with that number on this order");
   doc.einvoicing = { status, exported_at: exportedAt ?? iso(new Date()) };
-  const next = nextStatusFromDocuments(order.accounting_status, docs);
+  // an order corrected after its document stays flagged: the e-invoice no longer matches the order until a person fixes it
+  const changedMeanwhile = isOrderChangedFlag(order);
+  const next = changedMeanwhile ? order.accounting_status : nextStatusFromDocuments(order.accounting_status, docs);
   await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = NULL, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(docs), next]
+    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = CASE WHEN $4 THEN accounting_error ELSE NULL END, accounting_updated_at = now() WHERE id = $1",
+    [order.id, JSON.stringify(docs), next, changedMeanwhile]
   );
   if (next === "signed" && order.accounting_status !== "signed") {
     await notifyRequester(order, "Փաստաթուղթը ստորագրված է", "ստորագրված է");

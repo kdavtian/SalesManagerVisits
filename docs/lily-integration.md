@@ -25,7 +25,10 @@ cancelled, or it goes back to review -- a `pending` / `needs_attention` request 
 (`/orders?waybill_status=pending`, `/wait`) and `/claim` also skip any order that is a draft, back in review or cancelled (claim answers
 409 `not_pending`). When an order is corrected after Lily started or made its document (`in_progress`, `waybill_created`,
 `partially_created`, `exported_unsigned`, `signed`), the request becomes `needs_attention` with error code `order_changed`
-("Order changed after the document"); the documents stay on the order. A correction keeps the `line_id` of every product still on the
+("Order changed after the document"); the documents stay on the order. In that state Lily may still report the waybills / e-invoicing
+results of what she already made (recorded; the order stays `needs_attention` with that error; a line the correction removed is accepted),
+"Send to accounting again" is refused (it would wipe the documents and make a second one) -- a person fixes the document and sets the status
+by hand. A request that has documents is never withdrawn automatically. A correction keeps the `line_id` of every product still on the
 order (only a removed product's line goes away; a new product gets a new line).
 
 ## API

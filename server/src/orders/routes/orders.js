@@ -1,7 +1,7 @@
-import { nextStatusFromDocuments, ACCOUNTING_STATUSES, WITHDRAW_WAITING_REQUEST_SQL, DOCUMENT_STARTED_STATUSES } from "../accountingStatus.js";
+import { nextStatusFromDocuments, ACCOUNTING_STATUSES, WITHDRAW_WAITING_REQUEST_SQL, hasAccountingDocuments } from "../accountingStatus.js";
 import { customerIdsMatching } from "../../customers/customerSearch.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
-import { returnedByProduct } from "../orderReturns.js";
+import { matchExistingLines, applyCorrection, isOrderChangedFlag } from "../orderCorrection.js";
 import { accountingBadgeCount } from "../accountingBadge.js";
 import { buildOrderBlanksPdf } from "../orderBlankPdf.js";
 import { getDocumentTexts } from "../../shared/documentTexts.js";
@@ -1319,6 +1319,11 @@ ordersRouter.post("/:id/accounting-request", async (req, res) => {
   if (!["pending", "needs_attention", "cancelled", null].includes(order.accounting_status)) {
     return res.status(409).json({ error: "Accounting is already working on this order's document" });
   }
+  // corrected after Lily's document (orderCorrection.js): asking again would wipe the documents she made and she would make a second one;
+  // the accountant fixes the document and sets the request's status by hand
+  if (isOrderChangedFlag(order)) {
+    return res.status(409).json({ error: "This order was changed after its document -- fix the document in accounting and set its status by hand", code: "order_changed" });
+  }
   if (!order.erp_customer_id) return res.status(409).json({ error: "This order's customer has no ERP customer ID" });
   if (method === "invoice" && !order.customer_tin) {
     return res.status(409).json({ error: "An invoice needs the customer's TIN -- add it on the customer page first" });
@@ -1582,7 +1587,7 @@ ordersRouter.post("/:id/unconfirm", async (req, res) => {
   if (order.status !== "confirmed") {
     return res.status(409).json({ error: `Only a confirmed order can go back to submitted (this one is "${order.status}")`, code: "not_confirmed" });
   }
-  if (!ACCOUNTING_FREE_TO_UNCONFIRM.includes(order.accounting_status ?? null)) {
+  if (!ACCOUNTING_FREE_TO_UNCONFIRM.includes(order.accounting_status ?? null) || hasAccountingDocuments(order)) {
     return res.status(409).json({ error: "Accounting is working on this order's documents -- cancel them there first", code: "accounting_busy" });
   }
   const client = await pool.connect();
@@ -1793,21 +1798,17 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: "At least one item is required" });
 
   const { rows: before } = await pool.query("SELECT id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
-  // each new line takes over an existing line of the same product (in order; a product twice on the order matches line by line)
-  const oldByProduct = new Map();
-  for (const b of before) {
-    if (!oldByProduct.has(b.product_id)) oldByProduct.set(b.product_id, []);
-    oldByProduct.get(b.product_id).push(b);
-  }
   let lines;
+  let goneLineIds;
   try {
     const { rows: tierRows } = await pool.query("SELECT customer_tier FROM customers WHERE id = $1", [order.customer_id]);
     const priced = await buildOrderLines(
       items.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
       { customerId: order.customer_id, tier: tierRows[0]?.customer_tier, dryRun: true }
     );
-    lines = priced.map((l) => {
-      const was = oldByProduct.get(l.product_id)?.shift() ?? null;
+    const match = matchExistingLines(before, priced);
+    goneLineIds = match.goneLineIds; // lines whose product is no longer on the order (or fewer times)
+    lines = match.matched.map(({ line: l, was }) => {
       const price = was ? Number(was.unit_price_amd) : l.unit_price_amd;
       return { ...l, keepLineId: was?.id ?? null, unit_price_amd: price, line_total_amd: price * l.quantity, campaign_id: was?.campaign_id ?? null, list_price_amd: was?.list_price_amd ?? l.list_price_amd ?? null };
     });
@@ -1847,7 +1848,6 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   }
   const subtotal = lines.reduce((sum, l) => sum + l.line_total_amd, 0);
   const total = applyDiscount(subtotal, pct, amd);
-  const goneLineIds = [...oldByProduct.values()].flat().map((b) => b.id); // lines whose product is no longer on the order (or fewer times)
   const snapshot = (ls, o) => ({
     items: ls.map((l) => ({ product_id: l.product_id, product_name: l.product_name, quantity: Number(l.quantity), unit_price_amd: Number(l.unit_price_amd) })),
     total_amd: Number(o.total_amd),
@@ -1861,7 +1861,6 @@ ordersRouter.post("/:id/correct", async (req, res) => {
   const comparable = (snap) =>
     JSON.stringify({ ...snap, items: snap.items.map(({ product_name: _name, ...i }) => i).sort((a, b) => a.product_id - b.product_id || a.quantity - b.quantity) });
   const changed = comparable(snapshot(before, order)) !== comparable(snapshot(lines, { total_amd: total, discount_pct: pct, discount_amd: amd, payment_method: method, payment_term_days: term }));
-  const ORDER_CHANGED_ERROR = JSON.stringify({ code: "order_changed", message: "Order changed after the document" });
 
   const client = await pool.connect();
   let updated;
@@ -1875,57 +1874,24 @@ ordersRouter.post("/:id/correct", async (req, res) => {
         return res.status(409).json({ error: `Not enough stock: ${shortNow.map((p) => `${p.name} (${p.wanted} wanted, ${p.available} left)`).join(", ")}`, code: "short_stock", products: shortNow });
       }
     }
-    // the accounting state is read again under the row lock: a document Lily reported a moment ago is flagged too (documents are kept)
     const { rows: up } = await client.query(
       `UPDATE orders SET total_amd = $2, discount_pct = $3, discount_amd = $4, payment_method = $5, payment_term_days = $6, corrected_at = now(), updated_at = now(),
-              downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END,
-              accounting_status = CASE WHEN $10 AND accounting_status = ANY($9::text[]) THEN 'needs_attention' ELSE accounting_status END,
-              accounting_error = CASE WHEN $10 AND accounting_status = ANY($9::text[]) THEN $11::jsonb ELSE accounting_error END,
-              accounting_claimed_at = CASE WHEN $10 AND accounting_status = ANY($9::text[]) THEN NULL ELSE accounting_claimed_at END,
-              accounting_updated_at = CASE WHEN $10 AND accounting_status = ANY($9::text[]) THEN now() ELSE accounting_updated_at END
+              downpayment_amd = CASE WHEN downpayment_pct IS NULL THEN downpayment_amd ELSE ROUND($2::numeric * downpayment_pct / 100) END
         WHERE id = $1 AND status = $7 AND cancelled_at IS NULL AND (signed_at IS NULL OR $8) RETURNING *`,
-      [order.id, total, pct, amd, method, term, order.status, mayChangeSigned, DOCUMENT_STARTED_STATUSES, changed, ORDER_CHANGED_ERROR]
+      [order.id, total, pct, amd, method, term, order.status, mayChangeSigned]
     );
     updated = up[0];
     if (!updated) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
     }
-    // the lines are still the ones read above (another correction at the same moment, now serialised by the row lock, may have changed them)
-    const { rows: nowLines } = await client.query("SELECT id, quantity::float8 AS quantity, unit_price_amd::float8 AS price FROM order_items WHERE order_id = $1 ORDER BY id", [order.id]);
-    const linesKey = (ls) => ls.map((l) => `${l.id}:${Number(l.quantity)}:${Number(l.price ?? l.unit_price_amd)}`).join(",");
-    if (linesKey(nowLines) !== linesKey(before)) {
+    // lines in place, the returned-goods floor, the "order changed after the document" flag (orders/orderCorrection.js)
+    const applied = await applyCorrection(client, { orderId: order.id, before, lines, goneLineIds, changed });
+    if (applied.error) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: "This order was changed by someone else -- refresh and try again" });
+      return res.status(applied.error.status).json(applied.error.body);
     }
-    // goods the customer already returned cannot be corrected away (checked with the order row locked: a return request locks it too)
-    const newQty = new Map();
-    for (const l of lines) newQty.set(l.product_id, (newQty.get(l.product_id) ?? 0) + Number(l.quantity));
-    const belowReturned = (await returnedByProduct(order.id, client)).filter((r) => r.product_id != null && (newQty.get(r.product_id) ?? 0) < r.qty - 1e-9);
-    if (belowReturned.length) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        error: `Already returned by the customer: ${belowReturned.map((r) => `${r.product_name} (${r.qty} returned)`).join(", ")} -- the order cannot have less than that`,
-        code: "below_returned",
-        products: belowReturned.map((r) => ({ id: r.product_id, name: r.product_name, returned: r.qty })),
-      });
-    }
-    if (goneLineIds.length) await client.query("DELETE FROM order_items WHERE order_id = $1 AND id = ANY($2::int[])", [order.id, goneLineIds]);
-    for (const line of lines) {
-      if (line.keepLineId) {
-        await client.query(
-          `UPDATE order_items SET product_name = $3, brand = $4, unit_price_amd = $5, quantity = $6, line_total_amd = $7, campaign_id = $8, list_price_amd = $9
-           WHERE id = $2 AND order_id = $1`,
-          [order.id, line.keepLineId, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
-        );
-      } else {
-        await client.query(
-          `INSERT INTO order_items (order_id, product_id, product_name, brand, unit_price_amd, quantity, line_total_amd, campaign_id, list_price_amd)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [order.id, line.product_id, line.product_name, line.brand, line.unit_price_amd, line.quantity, line.line_total_amd, line.campaign_id ?? null, line.list_price_amd ?? null]
-        );
-      }
-    }
+    if (applied.order) updated = applied.order;
     await client.query(
       "INSERT INTO order_corrections (order_id, corrected_by, reason, before, after) VALUES ($1, $2, $3, $4, $5)",
       [order.id, req.user.id, reason.slice(0, 1000), JSON.stringify(snapshot(before, order)), JSON.stringify(snapshot(lines, updated))]
