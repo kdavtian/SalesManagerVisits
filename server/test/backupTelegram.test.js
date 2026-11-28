@@ -34,6 +34,7 @@ function sandbox({ env = "", passphrase = null } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "fv-backup-"));
   mkdirSync(path.join(dir, "deploy"));
   copyFileSync(path.join(repo, "deploy/send-backup-telegram.sh"), path.join(dir, "deploy/send-backup-telegram.sh"));
+  copyFileSync(path.join(repo, "deploy/backup-lib.sh"), path.join(dir, "deploy/backup-lib.sh")); // its shared helpers (env_value, tg_token)
   chmodSync(path.join(dir, "deploy/send-backup-telegram.sh"), 0o755);
   writeFileSync(path.join(dir, ".env"), env);
   if (passphrase) writeFileSync(path.join(dir, ".backup-passphrase"), passphrase);

@@ -147,10 +147,9 @@ cd /opt/field-visits
 
 ## Notes
 
-- **Backups**: `./deploy/backup.sh` dumps the database and the
-  `uploads_data` volume in one command — see
-  [`../docs/backup-restore.md`](../docs/backup-restore.md) for the cron
-  line to actually schedule it and the `BACKUP_REMOTE` env var for an
-  off-droplet copy.
+- **Backups and alerts**: `./deploy/backup.sh` backs up the database and the `uploads_data` volume every night to the
+  droplet and a DigitalOcean Spaces bucket, alerting Telegram on failure; `deploy/server-check.sh` watches disk, app and
+  backup age. One-time setup (bucket, `.env`, crontab): [`../docs/backup-restore.md`](../docs/backup-restore.md#owner-steps-one-time-on-the-droplet);
+  outside uptime + droplet alerts: [`../docs/monitoring.md`](../docs/monitoring.md#owner-steps-outside-checks).
 - The app only binds to `127.0.0.1:3000` (see `docker-compose.yml`), so it's
   only reachable through nginx — not directly from the internet.

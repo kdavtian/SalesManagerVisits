@@ -1,10 +1,40 @@
 # Monitoring
 
-**Honest status**: there is no external uptime monitoring or metrics
-dashboard today — see the availability row in
+**Status (2026-11-28)**: four layers, from outside in. Layers 1 and 2 need the one-time
+[Owner steps](#owner-steps-outside-checks) below (free accounts the owner creates); layer 3 is the cron line in
+[`backup-restore.md`](backup-restore.md#owner-steps-one-time-on-the-droplet). Until those are done, nothing outside the
+app notices the app or the droplet being down -- see the availability row in
 [`governance/service-objectives-and-security.md`](governance/service-objectives-and-security.md).
-This doc describes what actually exists to observe the app's health, and
-what's genuinely missing.
+
+| Layer | Notices | Alerts |
+|---|---|---|
+| 1. Outside uptime monitor (UptimeRobot, free) on `https://<your-domain>/api/ready` every 5 min | droplet off, nginx/app down, database unreachable, certificate or DNS broken | e-mail + Telegram |
+| 2. DigitalOcean droplet alerts | disk > 80 %, memory > 90 %, CPU > 90 % | e-mail |
+| 3. `deploy/server-check.sh` on the droplet, every 15 min | disk > 85 % (root disk and Docker's data), app not answering `/api/ready` locally, no good backup for 36 h | Telegram backup group, "back to normal" when it clears |
+| 4. In-app monitors (below) | stale ERP feeds, Excel file age, background jobs, last good backup (System health) | in-app / push / Telegram |
+
+## Owner steps (outside checks)
+
+**1. Uptime monitor** (UptimeRobot, free plan; Better Stack works the same way):
+1. Sign up at uptimerobot.com. *Integrations & API* (or *My Settings* -> *Alert Contacts*) -> add **Telegram** (it opens a
+   chat with the UptimeRobot bot; press Start) and check your **e-mail** contact is there.
+2. *Add New Monitor*: type **HTTP(s)**, name `Field Visits`, URL `https://<your-domain>/api/ready`, interval **5 minutes**,
+   alert contacts: Telegram + e-mail. Save.
+3. Check: the monitor turns green ("Up") within 5 minutes. `/api/ready` answers 200 only when the app AND its database work.
+
+**2. DigitalOcean alerts** (DigitalOcean website):
+1. If the droplet's *Graphs* tab says the monitoring agent is missing, run on the droplet:
+   `curl -sSL https://repos.insights.digitalocean.com/install.sh | sudo bash`
+2. *Monitoring* -> *Create Alert Policy*, choose the droplet, e-mail to you; make three policies:
+   - **Disk Utilization** is above **80 %** for **5 minutes**
+   - **Memory Utilization** is above **90 %** for **5 minutes**
+   - **CPU Utilization** is above **90 %** for **10 minutes**
+
+**3. Server self-check**: the `*/15 * * * * ... server-check.sh` crontab line in
+[`backup-restore.md`](backup-restore.md#owner-steps-one-time-on-the-droplet) (step 4). Test it once by hand:
+`cd /opt/field-visits && ./deploy/server-check.sh` -> `OK: disks below 85%, app answers, backup fresh.` (before the first
+backup it reports the missing backup -- expected). Limits: `DISK_ALERT_PERCENT` (85), `BACKUP_ALERT_HOURS` (36) in `.env`;
+the same problem is repeated at most every 12 hours.
 
 ## What exists today
 
@@ -30,9 +60,8 @@ Used by:
   database (bad credentials after a `.env` edit, wrong database) fails
   verification instead of getting recorded as a known-good deploy.
 
-Nothing external polls either endpoint — no uptime service is wired up.
-**Adding one (even a free-tier external check hitting `/api/health`) is
-the single highest-value gap to close here.**
+- The outside uptime monitor (layer 1) and `deploy/server-check.sh` (layer 3) poll `/api/ready` -- not `/api/health`,
+  so a database outage alerts too.
 
 ### Application-level monitors (in-process, no separate infra)
 
@@ -68,12 +97,8 @@ closest thing this repo has to automated security observability — see
 
 ## What's missing
 
-- **External uptime/availability monitoring.** Nothing alerts if the
-  droplet or app goes down; the first signal today is a user reporting it.
-- **Resource metrics** (CPU, memory, disk, Postgres connection count).
-  No Grafana/Prometheus/equivalent. A slow disk-fill on the `uploads_data`
-  volume, for example, would surface as a confusing upload failure, not a
-  clear "disk 90% full" alert.
+- **Resource history** beyond DigitalOcean's droplet graphs (Postgres connection count, per-container memory). No
+  Grafana/Prometheus; the disk/memory/CPU alerts above cover the failures that matter on one droplet.
 - **Log aggregation/search.** `docker compose logs` on the droplet
   directly is the only way to see application logs; nothing is shipped
   off-box or indexed.

@@ -22,7 +22,11 @@ the `app` container — see below for which.
 ```bash
 ./deploy/deploy.sh          # fast (default), also when the deploy has migrations
 ./deploy/deploy.sh --full   # also run the whole test suite + UI checks here (slow, rarely needed)
+./deploy/deploy.sh --skip-backup   # skip the quick database dump taken before new migrations (not recommended)
 ```
+
+When the new code brings migrations the database has not applied yet, `deploy.sh` first saves
+`backups/pre-deploy-<time>.sql.gz` and stops the deploy (nothing changed, old app still running) if that dump fails.
 
 ### Fast vs. full
 

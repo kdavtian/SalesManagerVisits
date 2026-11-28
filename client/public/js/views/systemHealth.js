@@ -5,7 +5,7 @@
 import { api } from "../api.js";
 import { APP_VERSION } from "../version.js";
 import { t } from "../i18n.js";
-import { escapeHtml, formatDateDMY, openInfoPopup } from "../util.js";
+import { escapeHtml, formatDateDMY, formatDateTime, openInfoPopup } from "../util.js";
 import { checkForUpdateManually } from "../updateBanner.js";
 import { renderErpSyncCard } from "../erpSyncCard.js";
 
@@ -60,6 +60,8 @@ export async function renderSystemHealthSection(container) {
       ${row(t("health_uptime"), uptime(h.uptime_seconds))}
     </div>
 
+    ${backupCardHtml(h.backup)}
+
     ${jobsCardHtml(h.jobs ?? [])}
 
     <div class="card health-card" id="erp-sync-card"></div>
@@ -111,6 +113,30 @@ export async function renderSystemHealthSection(container) {
       btn.textContent = t("up_to_date");
     }
   });
+}
+
+// Backups (deploy/backup.sh writes one row per night, server/src/system/backupStatus.js): the last good one, red after 36 h.
+const OFFSITE_LABELS = { spaces: "DigitalOcean Spaces", telegram: "Telegram", scp: "scp" };
+// deploy/backup.sh's step names ("off-server copy") in the app language; an unknown one is shown as the script wrote it.
+const BACKUP_STEPS = ["database dump", "uploads archive", "off-server copy", "no off-server copy", "telegram copy", "lock"];
+const stepText = (step) => (BACKUP_STEPS.includes(step) ? t(`health_backup_step_${step.replaceAll(" ", "_").replaceAll("-", "_")}`) : (step ?? ""));
+const sizeText = (bytes) => (bytes >= 1048576 ? `${Math.round(bytes / 1048576)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+function backupCardHtml(b) {
+  if (!b) return ""; // server before migration 231
+  const offsite = b.offsite ? b.offsite.split(",").map((k) => OFFSITE_LABELS[k] ?? k).join(", ") : null;
+  return `<div class="card health-card" id="backup-card">
+      <h3 class="health-title">${t("health_backup")} ${b.stale ? `<span class="badge badge-danger">!</span>` : ""}</h3>
+      ${row(
+        t("health_backup_last_ok"),
+        b.last_ok_at ? `${escapeHtml(formatDateTime(b.last_ok_at))} <span class="muted">${escapeHtml(ago(b.last_ok_at))}</span>` : escapeHtml(t("health_never")),
+        badge(!b.stale, "health_ok", "health_backup_too_old")
+      )}
+      ${b.last_ok_at ? row(t("health_backup_offsite"), offsite ? escapeHtml(offsite) : `<span class="badge badge-danger">${t("health_backup_local_only")}</span>`) : ""}
+      ${b.db_bytes != null ? row(t("health_backup_size"), escapeHtml(`${sizeText(b.db_bytes)} + ${sizeText(b.uploads_bytes ?? 0)} ${t("health_backup_photos")}`)) : ""}
+      ${b.last_failed_at ? row(t("health_backup_last_failed"), `${escapeHtml(ago(b.last_failed_at))} <span class="muted">${escapeHtml(stepText(b.last_failed_step))}</span>`, `<span class="badge badge-danger">!</span>`) : ""}
+      ${b.warning ? row(t("health_backup_warning"), `<span class="muted">${escapeHtml(b.warning)}</span>`) : ""}
+      <p class="muted health-note">${t("health_backup_note").replace("{h}", b.stale_after_hours)}</p>
+    </div>`;
 }
 
 // Background jobs (server/src/jobs/): when each last ran and how; a failed one opens its error and schedule.

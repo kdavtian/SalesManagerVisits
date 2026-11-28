@@ -82,6 +82,10 @@ jobs:
       # Code checker + import check (docs/architecture-roadmap.md, step 1): undefined names, dead code, imports of missing files or names.
       - run: npm run lint
 
+      # The droplet's shell scripts (deploy, backup, restore drill, server self-check): a quoting or syntax slip there only shows at 3 am.
+      - run: shellcheck -x --severity=warning deploy/*.sh
+        working-directory: .
+
       # The shared KAD kit (client/public/js/kit/README.md) is identical in Field Visits and KAD OS: a kit file changed without its lock fails.
       - run: node ../scripts/check-kit.mjs
 
@@ -138,6 +142,10 @@ jobs:
 
       - name: PDF renderer (pdftoppm, for the document previews)
         run: command -v pdftoppm || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
+
+      # rclone, so backupScripts.test.js also runs deploy/backup.sh's off-server copy (to a local folder)
+      - name: rclone (backup scripts test)
+        run: command -v rclone || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends rclone)
 
       - run: npm run migrate
 

@@ -11,20 +11,26 @@
 # (health + served assets: catches "the deploy itself broke", which CI structurally can't see). Each step prints how long it took.
 #   ./deploy/deploy.sh          # fast (default)
 #   ./deploy/deploy.sh --full   # also run the whole test suite + UI checks here (slow; only when you want a second opinion)
+#   ./deploy/deploy.sh --skip-backup   # do not take the quick database dump before new migrations (not recommended)
+# When the new code brings migrations the database has not applied yet, a quick database dump is taken first
+# (backups/pre-deploy-<time>.sql.gz, newest 5 kept, at most 14 days); if that dump fails the deploy STOPS before anything changes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LAST_DEPLOY_SHA_FILE=".last-deploy-sha"
 
 MODE="auto"
-case "${1:-}" in
-  --full) MODE="full" ;;
-  --fast) MODE="fast" ;; # same as the default; kept so older habits and notes still work
-  "") ;;
-  *)
-    echo "Usage: $0 [--full|--fast]" >&2
-    exit 1
-    ;;
-esac
+SKIP_BACKUP=false
+for arg in "$@"; do
+  case "$arg" in
+    --full) MODE="full" ;;
+    --fast) MODE="fast" ;; # same as the default; kept so older habits and notes still work
+    --skip-backup) SKIP_BACKUP=true ;;
+    *)
+      echo "Usage: $0 [--full|--fast] [--skip-backup]" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if [ ! -f .env ]; then
   echo "Missing .env — copy .env.example to .env and fill it in first." >&2
@@ -97,6 +103,41 @@ echo "==> Waiting for database to accept connections"
 until docker compose exec -T db pg_isready -U "${POSTGRES_USER:-fieldvisits}" >/dev/null 2>&1; do
   sleep 1
 done
+
+# A migration can change or drop data, and there is no undo: dump the database first when there is something to apply.
+# Pending = a migration file in this checkout that schema_migrations does not list (the same rule `npm run migrate` uses).
+PG_USER_="${POSTGRES_USER:-fieldvisits}"
+PG_DB_="${POSTGRES_DB:-fieldvisits}"
+dbq() { docker compose exec -T db psql -U "$PG_USER_" -d "$PG_DB_" -tA -v ON_ERROR_STOP=1 -c "$1"; }
+HAS_MIGRATIONS_TABLE="$(dbq "SELECT to_regclass('public.schema_migrations') IS NOT NULL")" # set -e: unreachable db stops here
+if [ "$HAS_MIGRATIONS_TABLE" = "t" ]; then
+  PENDING="$(comm -23 <(find server/migrations -maxdepth 1 -name '*.sql' -printf '%f\n' | sort) <(dbq "SELECT filename FROM schema_migrations" | sort))"
+else
+  PENDING="" # a brand-new, empty database: nothing to lose
+fi
+if [ -n "$PENDING" ]; then
+  echo "==> $(echo "$PENDING" | wc -l | tr -d ' ') migration(s) to apply: $(echo "$PENDING" | tr '\n' ' ')"
+  if [ "$SKIP_BACKUP" = true ]; then
+    echo "    --skip-backup: NO database dump before the migrations."
+  else
+    echo "==> Quick database dump before the migrations"
+    mkdir -p backups
+    PRE_DUMP="backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql.gz"
+    if ! docker compose exec -T db pg_dump -U "$PG_USER_" --no-owner "$PG_DB_" | gzip > "$PRE_DUMP" \
+       || [ "$(wc -c < "$PRE_DUMP")" -lt 1024 ] \
+       || ! gunzip -c "$PRE_DUMP" | tail -n 20 | grep -q "PostgreSQL database dump complete"; then
+      rm -f "$PRE_DUMP"
+      echo "STOPPED: the database dump before the migrations failed (disk full?). Nothing was changed: the old app is still" >&2
+      echo "running on the old database. Fix the cause and deploy again (or ./deploy/deploy.sh --skip-backup, not recommended)." >&2
+      exit 1
+    fi
+    echo "    saved $PRE_DUMP ($(( $(wc -c < "$PRE_DUMP") / 1024 )) KB)"
+    # keep the newest 5, and none older than 14 days: each is a full copy, on the database's own disk
+    find backups -maxdepth 1 -name 'pre-deploy-*.sql.gz' -mtime +14 -delete
+    find backups -maxdepth 1 -name 'pre-deploy-*.sql.gz' | sort -r | tail -n +6 | xargs -r rm -f
+    step_done "pre-migration dump"
+  fi
+fi
 
 echo "==> Running database migrations"
 # Via a one-off container (docker compose run, not exec) so this runs
