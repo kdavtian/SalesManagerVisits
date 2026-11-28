@@ -241,6 +241,11 @@ test("0.17 a corrected order with a document: no 'send again' (no second documen
   assert.equal(e.status, 200, JSON.stringify(e.data));
   row = await orderRow(o.id);
   assert.deepEqual([row.accounting_status, row.accounting_error.code, row.accounting_documents[0].einvoicing.status], ["needs_attention", "order_changed", "signed"]);
+  // Lily then reports a problem on it: her issue is kept, and so is the flag (Codex review)
+  const issue = await lily(`/orders/${ref(o.id)}/issue`, "POST", { code: "other", message: "quantities differ" });
+  assert.equal(issue.status, 200, JSON.stringify(issue.data));
+  row = await orderRow(o.id);
+  assert.deepEqual([row.accounting_status, row.accounting_error.code, row.accounting_error.lily_issue?.message], ["needs_attention", "order_changed", "quantities differ"]);
   // "send to accounting again" would wipe W-77 and make a second document: refused
   const again = await apiRequest(`/api/orders/${o.id}/accounting-request`, { method: "POST", cookie: adminCookie, body: {} });
   assert.equal(again.status, 409, JSON.stringify(again.data));

@@ -7,6 +7,12 @@ import { returnedByProduct } from "./orderReturns.js";
 export const ORDER_CHANGED_CODE = "order_changed";
 const ORDER_CHANGED_ERROR = JSON.stringify({ code: ORDER_CHANGED_CODE, message: "Order changed after the document" });
 
+/**
+ * The same test inside an UPDATE, against the row as it is at that moment (not a snapshot read earlier): a Lily report racing a correction
+ * keeps the flag. Expects the orders table unaliased or aliased so that the bare column names resolve.
+ */
+export const ORDER_CHANGED_SQL = "(accounting_status = 'needs_attention' AND accounting_error->>'code' = 'order_changed')";
+
 /** The order was corrected after its document: a person must fix the document (Lily may still report what she made; nothing wipes it). */
 export const isOrderChangedFlag = (order) => order?.accounting_status === "needs_attention" && order?.accounting_error?.code === ORDER_CHANGED_CODE;
 

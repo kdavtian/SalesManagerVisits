@@ -6,7 +6,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { checkBearer, auditTokenCall } from "../integrationTokens.js";
 import { nextStatusFromDocuments, ORDER_LIVE_FOR_ACCOUNTING_SQL } from "../../orders/accountingStatus.js";
-import { isOrderChangedFlag } from "../../orders/orderCorrection.js";
+import { isOrderChangedFlag, ORDER_CHANGED_SQL } from "../../orders/orderCorrection.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
 
@@ -326,12 +326,14 @@ integrationRouter.post("/orders/:id/waybills", async (req, res) => {
   // (a line the correction removed is not "unknown" to a document made before it)
   if (unknown.length && !changedMeanwhile) return fail(res, 400, "unknown_line", `Unknown line_id: ${unknown.join(", ")}`);
   const complete = orderedItems.every((i) => (covered.get(i.line_id) ?? 0) >= i.quantity);
-  const next = changedMeanwhile ? order.accounting_status : !complete ? "partially_created" : "waybill_created";
-
-  await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = CASE WHEN $4 THEN accounting_error ELSE NULL END, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(merged), next, changedMeanwhile]
+  // the flag is kept by the UPDATE itself (a correction may commit between loadOrder and here)
+  const { rows: [saved] } = await pool.query(
+    `UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_status ELSE $3 END,
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error ELSE NULL END, accounting_updated_at = now()
+      WHERE id = $1 RETURNING accounting_status`,
+    [order.id, JSON.stringify(merged), !complete ? "partially_created" : "waybill_created"]
   );
+  const next = saved.accounting_status;
   if (next !== order.accounting_status) {
     await notifyRequester(order, next === "partially_created" ? "Բեռնագիրը մասամբ ստեղծված է" : "Փաստաթուղթը ստեղծված է", next === "partially_created" ? "մի մասը դեռ սպասում է" : "Լիլին ստեղծեց փաստաթուղթը");
   }
@@ -350,12 +352,14 @@ integrationRouter.post("/orders/:id/waybills/:number/einvoicing", async (req, re
   if (!doc) return fail(res, 404, "waybill_not_found", "No waybill with that number on this order");
   doc.einvoicing = { status, exported_at: exportedAt ?? iso(new Date()) };
   // an order corrected after its document stays flagged: the e-invoice no longer matches the order until a person fixes it
-  const changedMeanwhile = isOrderChangedFlag(order);
-  const next = changedMeanwhile ? order.accounting_status : nextStatusFromDocuments(order.accounting_status, docs);
-  await pool.query(
-    "UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = $3, accounting_error = CASE WHEN $4 THEN accounting_error ELSE NULL END, accounting_updated_at = now() WHERE id = $1",
-    [order.id, JSON.stringify(docs), next, changedMeanwhile]
+  // (kept by the UPDATE itself, against the row as it is now: a correction may commit between loadOrder and here)
+  const { rows: [saved] } = await pool.query(
+    `UPDATE orders SET accounting_documents = $2::jsonb, accounting_status = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_status ELSE $3 END,
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error ELSE NULL END, accounting_updated_at = now()
+      WHERE id = $1 RETURNING accounting_status`,
+    [order.id, JSON.stringify(docs), nextStatusFromDocuments(order.accounting_status, docs)]
   );
+  const next = saved.accounting_status;
   if (next === "signed" && order.accounting_status !== "signed") {
     await notifyRequester(order, "Փաստաթուղթը ստորագրված է", "ստորագրված է");
   }
@@ -430,7 +434,10 @@ async function reportIssue(req, res) {
   if (!ISSUE_CODES.includes(code)) return fail(res, 400, "invalid_code", `code must be one of ${ISSUE_CODES.join(", ")}`);
   const issue = { code, message: String(message), lines: Array.isArray(lines) ? lines : [], reported_at: iso(new Date()) };
   await pool.query(
-    "UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $2::jsonb, accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1",
+    // an order corrected after its document keeps that flag (it stops "send again" from wiping her documents); her issue is added to it
+    `UPDATE orders SET accounting_status = 'needs_attention',
+            accounting_error = CASE WHEN ${ORDER_CHANGED_SQL} THEN accounting_error || jsonb_build_object('lily_issue', $2::jsonb) ELSE $2::jsonb END,
+            accounting_claimed_at = NULL, accounting_updated_at = now() WHERE id = $1`,
     [order.id, JSON.stringify(issue)]
   );
   await notifyRequester(order, "Պահանջվում է ուշադրություն", String(message).slice(0, 200));
