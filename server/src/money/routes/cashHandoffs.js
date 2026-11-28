@@ -345,20 +345,25 @@ cashHandoffsRouter.post("/shortfalls/:id/close", async (req, res) => {
     [sf.id, how, req.user.id, note]
   );
   if (!rows[0]) return res.status(409).json({ error: "This shortfall is already closed (or does not exist)" });
-  const closer = await getUser(req.user.id);
-  const owed = await getUser(rows[0].user_id);
-  const payload = {
-    title: how === "paid" ? "Պակասորդը փակվեց" : "Պակասորդը դուրս գրվեց",
-    body: `${Number(rows[0].amount_amd).toLocaleString()} AMD · ${owed?.name ?? ""} · ${closer?.name ?? ""}: ${note}`,
-    url: "/#/cash-handoffs",
-  };
-  // the person who owed it, the person who counted it and the owner's side (admin, CEO) all hear it -- not only the debtor (plan 0.15)
-  const to = new Set([rows[0].user_id, sf.counted_by ?? sf.to_user_id]);
-  const { rows: mgmt } = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'ceo') AND status = 'active'");
-  for (const m of mgmt) to.add(m.id);
-  to.delete(req.user.id);
-  for (const uid of to) if (uid) notifyHandoff(uid, "cash_handoff_reviewed", payload);
   res.json({ ok: true });
+  // after the answer: a failing notification never turns a closed shortfall into an error the user retries
+  try {
+    const closer = await getUser(req.user.id);
+    const owed = await getUser(rows[0].user_id);
+    const payload = {
+      title: how === "paid" ? "Պակասորդը փակվեց" : "Պակասորդը դուրս գրվեց",
+      body: `${Number(rows[0].amount_amd).toLocaleString()} AMD · ${owed?.name ?? ""} · ${closer?.name ?? ""}: ${note}`,
+      url: "/#/cash-handoffs",
+    };
+    // the person who owed it, the person who counted it and the owner's side (admin, CEO) all hear it -- not only the debtor (plan 0.15)
+    const to = new Set([rows[0].user_id, sf.counted_by ?? sf.to_user_id]);
+    const { rows: mgmt } = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'ceo') AND status = 'active'");
+    for (const m of mgmt) to.add(m.id);
+    to.delete(req.user.id);
+    for (const uid of to) if (uid) notifyHandoff(uid, "cash_handoff_reviewed", payload);
+  } catch (err) {
+    console.error("Shortfall notification failed:", err.message);
+  }
 });
 
 cashHandoffsRouter.get("/:id", async (req, res) => {

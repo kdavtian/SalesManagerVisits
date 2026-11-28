@@ -177,3 +177,41 @@ test("0.16: a payment approved once (from the Excel) is reopened / rejected by a
   assert.equal((await apiRequest(`/api/payments/${p}/return-to-pending`, { method: "POST", cookie: cookies.ceo, body: { reason: "wrong match" } })).status, 200);
   assert.equal((await apiRequest(`/api/payments/${p}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "wrong" } })).status, 403);
 });
+
+test("0.16: office cash the accountant took in (for a rep or as herself) is not hers to reject alone", async () => {
+  for (const salesManager of ["sales_manager", "accountant"]) {
+    const { rows } = await pool.query(
+      `INSERT INTO payments (customer_id, customer_name_snapshot, amount_amd, payment_date, sales_manager_id, sales_manager_name_snapshot, status, created_by, current_holder_id)
+       VALUES ($1, $2, 21000, now(), $3, 'Collector', 'pending', $4, $3) RETURNING id`,
+      [customer.id, customer.name, users[salesManager].id, users.accountant.id]
+    );
+    const p = trackPayment(rows[0].id);
+    assert.equal((await apiRequest(`/api/payments/${p}`, { cookie: cookies.accountant })).data.can_reject, false, salesManager);
+    const r = await apiRequest(`/api/payments/${p}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "typo" } });
+    assert.equal(r.status, 403, `${salesManager}: ${JSON.stringify(r.data)}`);
+    assert.equal((await apiRequest(`/api/payments/${p}/reject`, { method: "POST", cookie: cookies.admin, body: { reason: "entered twice" } })).status, 200);
+  }
+});
+
+test("0.16: the operations director cannot reopen approved cash; cash handed back to the collector still counts as counted", async () => {
+  const p = await seed(18000);
+  await handAndCount("sales_manager", "accountant", [p]);
+  assert.equal((await apiRequest(`/api/payments/${p}/return-to-pending`, { method: "POST", cookie: cookies.operations_director, body: { reason: "check" } })).status, 403);
+  // a payment that went to the director and was handed back to the rep in a confirmed hand-over
+  const q = await seed(19000);
+  await handAndCount("sales_manager", "sales_director", [q]);
+  await pool.query("UPDATE payments SET current_holder_id = sales_manager_id WHERE id = $1", [q]);
+  assert.equal((await apiRequest(`/api/payments/${q}/reject`, { method: "POST", cookie: cookies.accountant, body: { reason: "gone" } })).status, 403);
+});
+
+test("0.15: when admin confirmed a hand-over for the director, the director (who did not count it) cannot close its shortfall", async () => {
+  const p = await seed(26000);
+  const r = await apiRequest("/api/cash-handoffs", { method: "POST", cookie: cookies.sales_manager, body: { to_user_id: users.sales_director.id, payment_ids: [p] } });
+  assert.equal(r.status, 201, JSON.stringify(r.data));
+  trackHandoff(r.data.id);
+  const c = await apiRequest(`/api/cash-handoffs/${r.data.id}/confirm`, { method: "POST", cookie: cookies.admin, body: { counted_amd: 20000, note: "6,000 missing" } });
+  assert.equal(c.status, 200, JSON.stringify(c.data));
+  const { rows: [sf] } = await pool.query("SELECT id FROM cash_shortfalls WHERE handoff_id = $1", [r.data.id]);
+  assert.equal((await close("sales_director", sf.id, "paid", "brought it")).status, 403);
+  assert.equal((await close("admin", sf.id, "paid", "brought it to me")).status, 200);
+});

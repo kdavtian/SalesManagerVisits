@@ -6,7 +6,7 @@
 //   - the accountant, cash not handed over yet: only a payment she entered herself (money paid at the office, owner 2026-11-20), or any
 //     when App configuration switches "Accountant approves without a hand-over" back on (app_settings.accountant_direct_approval).
 import { pool } from "../db/pool.js";
-import { canReviewPayments, canVoidCountedPayment, receivesCashWithoutHandover } from "../shared/roles.js";
+import { canReviewPayments, canVoidCountedPayment, closesCashShortfall, receivesCashWithoutHandover } from "../shared/roles.js";
 
 export async function getAccountantDirectApproval(db = pool) {
   const { rows } = await db.query("SELECT accountant_direct_approval FROM app_settings WHERE id = 1");
@@ -50,7 +50,10 @@ export function approverTakesCash(payment, user) {
 export const COUNTED_NEEDS_MANAGEMENT = "This cash was already counted or received (or approved): only admin or the CEO can reject or reopen it";
 export function cashDecisionBlock(payment, user) {
   if (!canReviewPayments(user.role)) return "Not allowed to review payments";
-  if (payment.cash_counted && !canVoidCountedPayment(user.role)) return COUNTED_NEEDS_MANAGEMENT;
+  if (canVoidCountedPayment(user.role)) return null;
+  if (payment.cash_counted) return COUNTED_NEEDS_MANAGEMENT;
+  // a reviewer never takes cash she collected or entered herself out of the chain alone (money paid at the office)
+  if (payment.sales_manager_id === user.id || payment.created_by === user.id) return COUNTED_NEEDS_MANAGEMENT;
   return null;
 }
 // The Reject button (pending, not inside a waiting hand-over) and the Reopen button (approved / rejected), as the server will accept them.
@@ -65,7 +68,9 @@ export function shortfallCloseBlock(shortfall, user, how, note) {
   if (shortfall.user_id === user.id) return { status: 403, error: "You cannot close your own shortfall" };
   const management = canVoidCountedPayment(user.role);
   if (how === "written_off" && !management) return { status: 403, error: "Only admin or CEO can write a shortfall off" };
-  if (how === "paid" && !management && user.id !== shortfall.counted_by && user.id !== shortfall.to_user_id) {
+  // the counter is whoever confirmed the hand-over (admin confirming for the addressee: admin), else its addressee
+  const counter = shortfall.counted_by ?? shortfall.to_user_id;
+  if (how === "paid" && !management && (user.id !== counter || !closesCashShortfall(user.role))) {
     return { status: 403, error: "Only the person who counted this hand-over, admin or the CEO can close it" };
   }
   if (!note || note.length < 3) return { status: 400, error: how === "paid" ? "Write how the missing money was paid in" : "Write why it is written off" };

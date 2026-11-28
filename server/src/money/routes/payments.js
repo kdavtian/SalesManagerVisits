@@ -618,8 +618,10 @@ async function notifyCountedDecision(payment, user, { reopened, reason }) {
   try {
     const { rows } = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'ceo') AND status = 'active'");
     const to = new Set(rows.map((r) => r.id));
-    if (payment.current_holder_id && payment.current_holder_id !== payment.sales_manager_id) to.add(payment.current_holder_id);
+    if (payment.current_holder_id) to.add(payment.current_holder_id);
+    if (reopened) to.add(payment.sales_manager_id); // a reject already tells the collector (notifyDecisionOf); a reopen did not
     to.delete(user.id);
+    if (!to.size) console.warn(`Counted-cash ${reopened ? "reopen" : "reject"} of payment ${payment.id}: nobody else to notify`);
     const { rows: [me] } = await pool.query("SELECT name FROM users WHERE id = $1", [user.id]);
     const title = `${reopened ? "Հաշված կանխիկը վերաբացվեց" : "Հաշված կանխիկը մերժվեց"}՝ ${amdText(payment.amount_amd)}`;
     const body = [payment.customer_name_snapshot, `${payment.sales_manager_name_snapshot}${payment.holder_name ? ` → ${payment.holder_name}` : ""}`, `${me?.name ?? ""}: ${reason}`].join("\n");
