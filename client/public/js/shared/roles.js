@@ -367,12 +367,11 @@ export function canDeletePayments(role) {
   return role === "admin";
 }
 
-// Payment visibility mirrors seesAllActivity -- a Sales Manager sees only
-// their own submissions, every other role sees all payments (Sales
-// Director included, consistent with how they already see all customers/
-// activity company-wide, not scoped to a single channel).
+// Who sees every payment, hand-over and shortfall company-wide: the money roles, named one by one (improvement plan 0.13, 2026-11-28).
+// Everyone else -- a sales manager, and the warehouse and the drivers, who do not collect money (seesPaymentsOnMoney) -- sees only their own.
+// The Sales Director is in: they see all customers / activity company-wide, not one channel.
 export function seesAllPayments(role) {
-  return seesAllActivity(role);
+  return role === "admin" || role === "ceo" || role === "operations_director" || role === "sales_director" || role === "accountant";
 }
 
 // --- Cash custody chain ---------------------------------------------------
