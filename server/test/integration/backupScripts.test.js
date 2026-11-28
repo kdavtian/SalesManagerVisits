@@ -25,6 +25,7 @@ const serverMajor = Math.floor(Number(spawnSync("psql", [BASE_URL, "-tAc", "SHOW
 const matchingBin = `/usr/lib/postgresql/${serverMajor}/bin`;
 const PG_PATH = fs.existsSync(path.join(matchingBin, "pg_dump")) ? `${matchingBin}:${process.env.PATH}` : process.env.PATH;
 function skipReason() {
+  if (!fs.existsSync(path.join(REPO, "deploy/backup.sh"))) return "deploy/ is not part of the app image";
   if (!has("pg_dump") || !has("psql")) return "pg_dump/psql not installed";
   if (!serverMajor) return "cannot read the server version";
   const v = spawnSync("pg_dump", ["--version"], { encoding: "utf8", env: { ...process.env, PATH: PG_PATH } }).stdout ?? "";
