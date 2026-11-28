@@ -368,21 +368,16 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
 
   // One PLAN of a person (the main one, or a separately planned channel such as SM B2B): only that plan's customers are
   // replaced, the person's other plans on this weekday stay exactly as they are. Areas of the stored rule are turned
-  // into plain customer ids first, so nothing of the other plans is lost. Without plan_channel the whole rule is
-  // replaced (the Map's quick planner).
+  // into plain customer ids first, so nothing of the other plans is lost. Without plan_channel the lists that were sent
+  // are replaced (the Map's quick planner sends areas only).
   let finalAreas = areas;
   let finalIds = customerIds;
-  const hasAreas = Array.isArray(req.body?.areas);
-  const hasIds = Array.isArray(req.body?.customer_ids);
-  if (req.body?.plan_channel === undefined && (!hasAreas || !hasIds)) {
-    // Only what was sent is replaced (improvement plan 0.2, 2026-11-28): the Map's quick planner sends only areas, and a
-    // missing list used to count as empty -- it wiped the customers picked on the Route Plans screen and could switch the
-    // whole weekday off. A missing key now keeps the stored list; an explicit [] still clears it.
-    const { rows: existingRows } = await pool.query("SELECT areas, customer_ids FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2", [targetId, dayOfWeek]);
-    const existing = existingRows[0];
-    if (!hasAreas) finalAreas = Array.isArray(existing?.areas) ? existing.areas : [];
-    if (!hasIds) finalIds = existing?.customer_ids ?? [];
-  }
+  // Only what was sent is replaced (improvement plan 0.2, 2026-11-28): the Map's quick planner sends only areas, and a
+  // missing list used to count as empty -- it wiped the customers picked on the Route Plans screen and could switch the
+  // whole weekday off. A missing key now keeps the stored list (in the upsert itself, so a save landing in between is
+  // never overwritten with a stale copy); an explicit [] still clears it. The plan_channel path below always sends both.
+  let keepAreas = !Array.isArray(req.body?.areas);
+  let keepIds = !Array.isArray(req.body?.customer_ids);
   if (req.body?.plan_channel !== undefined) {
     const scope = parseScope(req.body.plan_channel);
     if (scope === null) return res.status(400).json({ error: "plan_channel is not a separately planned channel" });
@@ -390,6 +385,8 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
     const existing = existingRows[0];
     const existingIds = existing ? [...new Set([...(await expandAreas(existing.areas)), ...(existing.customer_ids ?? [])])] : [];
     finalAreas = [];
+    keepAreas = false;
+    keepIds = false;
     finalIds = mergeScopeIds({ existing: existingIds, submitted: customerIds, scope, channelOf: await loadChannelMap(pool) });
   }
 
@@ -397,10 +394,13 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
     `INSERT INTO visit_plan_rules (user_id, day_of_week, areas, customer_ids, created_by, active)
      VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (user_id, day_of_week) DO UPDATE
-       SET areas = EXCLUDED.areas, customer_ids = EXCLUDED.customer_ids,
-           active = EXCLUDED.active, created_by = EXCLUDED.created_by, updated_at = now()
+       SET areas = CASE WHEN $7 THEN visit_plan_rules.areas ELSE EXCLUDED.areas END,
+           customer_ids = CASE WHEN $8 THEN visit_plan_rules.customer_ids ELSE EXCLUDED.customer_ids END,
+           active = jsonb_array_length(CASE WHEN $7 THEN visit_plan_rules.areas ELSE EXCLUDED.areas END) > 0
+             OR cardinality(CASE WHEN $8 THEN visit_plan_rules.customer_ids ELSE EXCLUDED.customer_ids END) > 0,
+           created_by = EXCLUDED.created_by, updated_at = now()
      RETURNING *`,
-    [targetId, dayOfWeek, JSON.stringify(finalAreas), finalIds, req.user.id, finalAreas.length > 0 || finalIds.length > 0]
+    [targetId, dayOfWeek, JSON.stringify(finalAreas), finalIds, req.user.id, finalAreas.length > 0 || finalIds.length > 0, keepAreas, keepIds]
   );
   res.status(201).json(rows[0]);
 });
