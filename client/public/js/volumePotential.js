@@ -3,7 +3,7 @@
 // TOTAL is the customer's whole monthly need (customers.expected_volume_l, the funnel's number): one number, edited here or at check-in.
 // The section is folded and loads its data only when opened (the card itself stays as fast as before); a save without signal waits in
 // the offline queue (offlineQueue.js "volume_potential").
-import { api } from "./api.js";
+import { api, isNoSignal } from "./api.js";
 import { t, getLang } from "./i18n.js";
 import { icons } from "./icons.js";
 import { activateDialog, escapeHtml, formatDateTime, formatDateDMY, openInfoPopup, showToast, labelColon } from "./util.js";
@@ -390,7 +390,7 @@ export async function openVolumePotentialSheet(customer, { data = null, onSaved 
       onSaved?.();
     } catch (err) {
       // no signal: the save waits on the phone and is sent when the signal is back (a newer save of the same customer replaces it)
-      if (err instanceof TypeError) {
+      if (isNoSignal(err)) {
         await enqueueVolumePotential({ customerId: customer.id, customerName: customer.name, body });
         close();
         showToast(t("vp_saved_offline"));

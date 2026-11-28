@@ -3,7 +3,7 @@
 // earlier days first), one number field per product, saved when the field is left (Enter = next product), then "Finish the day".
 // The counter counts blind (no expected number until the day is closed); management sees the app stock (server appStock.js) and the difference at once.
 // "Month": every working day with its result and every difference found (management, and the counter for his own history).
-import { api } from "../api.js";
+import { api, isNoSignal } from "../api.js";
 import { t } from "../i18n.js";
 import { escapeHtml, activateDialog, openInfoPopup } from "../util.js";
 import { openFileReadySheet } from "../fileReadySheet.js";
@@ -375,7 +375,7 @@ export async function renderStockCount(root, navigate, query) {
       paintBar();
       showError("");
     } catch (err) {
-      if (err instanceof TypeError) {
+      if (isNoSignal(err)) {
         // no signal: keep the count on the phone, it is sent as soon as there is signal again
         await enqueueStockCount({ productId: id, productName: item.name, qty: Number(raw), day: data.day });
         input.dataset.saved = raw;

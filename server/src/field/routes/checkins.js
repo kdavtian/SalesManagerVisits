@@ -209,6 +209,8 @@ export function parseBrandStatus(raw, competitorKeys = BRAND_STATUS_OPTIONS.comp
 }
 
 const MAX_PHOTOS_PER_CHECKIN = 5;
+// A live save that timed out after 30 s (or met a 502) is queued and sent again with the moment Save was pressed: always older than this.
+const QUEUED_MIN_AGE_MS = 15 * 1000;
 
 // A check-in sent from the offline queue: its `timestamp` is the moment the rep pressed submit (captured_at); see utils/capturedAt.js.
 export { parseCapturedAt };
@@ -370,7 +372,17 @@ checkinsRouter.post("/", (req, res, next) => {
   // a rep 150 m away with 80 m of GPS error was let in, and his visit / product-check / no-order tasks (locked, nobody closes them by hand)
   // must close with that check-in. Management checking in from far away is not at the customer, whatever the allowance says.
   const atCustomer = !tooFar;
-  if (tooFar && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
+  // A check-in sent later from the phone's offline queue carries the moment the rep pressed Save (captured_at; only the queue sends it). It
+  // cannot be refused any more -- the rep has left the shop, and a refusal used to delete the visit with its photos, payment and delivery
+  // from the phone (Phase 0 item 0.1, owner 2026-11-28). It is saved FLAGGED instead: within_range = false (the distance is over the
+  // allowance, so this is already false), which means it does not count as the customer's visit or for the bonus, closes no visit task
+  // (atCustomer is false), shows as refused on the dashboard and lands in Pin review -- exactly what a far check-in by management gets.
+  // Only a believable queued save counts: a capture time that parses, is not older than a week (parseCapturedAt) and lies at least
+  // QUEUED_MIN_AGE_MS in the past -- a live save from the check-in screen sends none, and "captured_at=now" or garbage typed by hand
+  // cannot switch the distance refusal off (independent review, 2026-11-28).
+  const capturedMs = parseCapturedAt(captured_at) ? Date.parse(parseCapturedAt(captured_at)) : null;
+  const queuedSave = capturedMs !== null && capturedMs <= Date.now() - QUEUED_MIN_AGE_MS;
+  if (tooFar && !queuedSave && req.user.role === FIELD_REP_ROLE && (await getCheckinAllowanceEnabled())) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(422).json({
       error: `You are ${Math.round(distance)} m from the customer; check-in is allowed within ${radiusMeters} m`,

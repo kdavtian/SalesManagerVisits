@@ -75,15 +75,29 @@ export async function applyUpdate() {
   }, 5000);
 }
 
+// The server refused a save from this version (426 "update_required", MIN_APP_VERSION; Phase 0 item 0.21, owner 2026-11-28): the same
+// prompt, worded "update required" and without "Later" -- it stays until the app is updated. The save is waiting in the offline queue and
+// the updated app sends it. Asks the browser for the new version at once, so Refresh usually finds it waiting.
+let forced = false;
+export function showForcedUpdate() {
+  if (!container) return;
+  if (!forced) {
+    forced = true;
+    container.innerHTML = ""; // a "Later"-able prompt already on screen is replaced by this one
+    registration?.update?.().catch(() => {});
+  }
+  renderBanner();
+}
+
 function renderBanner() {
   if (!container || container.childElementCount) return;
   container.innerHTML = `
     <div class="update-overlay" id="update-overlay">
       <div class="update-banner" role="alertdialog" aria-labelledby="update-banner-title">
-        <strong id="update-banner-title">${t("update_available_title")}</strong>
-        <span>${t("update_available_body")}</span>
+        <strong id="update-banner-title">${t(forced ? "update_required_title" : "update_available_title")}</strong>
+        <span>${t(forced ? "update_required_body" : "update_available_body")}</span>
         <button type="button" class="btn btn-primary btn-block" id="update-refresh-btn">${t("refresh_now")}</button>
-        <button type="button" class="btn-link" id="update-dismiss">${t("later")}</button>
+        ${forced ? "" : `<button type="button" class="btn-link" id="update-dismiss">${t("later")}</button>`}
       </div>
     </div>
   `;
@@ -112,7 +126,7 @@ function renderBanner() {
     }, 15000);
     applyUpdate();
   });
-  container.querySelector("#update-dismiss").addEventListener("click", () => {
+  container.querySelector("#update-dismiss")?.addEventListener("click", () => {
     container.innerHTML = "";
   });
 }

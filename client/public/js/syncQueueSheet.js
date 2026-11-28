@@ -5,7 +5,7 @@
 import { t } from "./i18n.js";
 import { icons } from "./icons.js";
 import { activateDialog, escapeHtml, formatAmd, formatDateTime } from "./util.js";
-import { getQueue, onQueueChange, flushQueue, discardEntry, getLastSyncedAt } from "./offlineQueue.js";
+import { getQueue, onQueueChange, flushQueue, discardEntry, getLastSyncedAt, confirmDuplicateEntry } from "./offlineQueue.js";
 
 let openSheet = null;
 
@@ -44,6 +44,11 @@ export function openSyncQueueSheet() {
     const discard = stuck
       ? `<button type="button" class="btn sync-queue-discard ${armedDiscard === entry.id ? "sync-queue-discard-armed" : ""}" data-discard="${escapeHtml(entry.id)}">${t(armedDiscard === entry.id ? "sync_discard_confirm" : "sync_discard")}</button>`
       : "";
+    // a queued payment the server warned is a duplicate: the rep decides here ("Record anyway"), or discards it
+    const recordAnyway =
+      stuck && entry.lastCode === "duplicate_warning"
+        ? `<button type="button" class="btn sync-queue-discard" data-record-anyway="${escapeHtml(entry.id)}">${t("sync_record_anyway")}</button>`
+        : "";
     return `
       <div class="sync-queue-item ${stuck ? "sync-queue-item-stuck" : ""}">
         <span class="sync-queue-icon">${isOrder ? icons.cart : isCount ? icons.clipboardCheck : isPayment ? icons.payment : icons.pin}</span>
@@ -52,7 +57,7 @@ export function openSyncQueueSheet() {
           <span class="muted">${t(isOrder ? "sync_item_order" : isCount ? "sync_item_stock_count" : isPayment ? "sync_item_payment" : isPotential ? "sync_item_potential" : "sync_item_checkin")} · ${escapeHtml(when)}${escapeHtml(amount)}</span>
           ${detail}
         </span>
-        <span class="sync-queue-side">${status}${discard}</span>
+        <span class="sync-queue-side">${status}${recordAnyway}${discard}</span>
       </div>`;
   }
 
@@ -67,6 +72,7 @@ export function openSyncQueueSheet() {
       <button type="button" class="icon-btn sheet-close-x" data-action="close" aria-label="${t("close")}">${icons.close}</button>
       <h2>${t("sync_sheet_title")}</h2>
       <p class="muted">${t(navigator.onLine ? "sync_sheet_online_hint" : "sync_sheet_offline_hint")}${last ? ` · ${t("sync_sheet_last")} ${escapeHtml(formatDateTime(new Date(last).toISOString()))}` : ""}</p>
+      ${queue.some((e) => e.needsAttention) ? `<p class="sync-queue-refused-hint" role="status">${t("sync_refused_hint")}</p>` : ""}
       <div class="sync-queue-list">${queue.map(itemHtml).join("")}</div>
       <div class="sheet-actions">
         <button type="button" class="btn btn-primary" data-action="retry" ${retrying ? "disabled" : ""}>${t(retrying ? "sync_retrying" : "sync_retry_now")}</button>
@@ -82,6 +88,12 @@ export function openSyncQueueSheet() {
         if (openSheet) paint();
       }
     });
+    sheet.querySelectorAll("[data-record-anyway]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        await confirmDuplicateEntry(btn.dataset.recordAnyway);
+      })
+    );
     sheet.querySelectorAll("[data-discard]").forEach((btn) =>
       btn.addEventListener("click", async () => {
         const id = btn.dataset.discard;

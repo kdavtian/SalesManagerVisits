@@ -55,7 +55,7 @@ export const moneyApi = {
   },
   createPayment: (data) => json("/payments", "POST", data),
   // with the customer's proof (slip photo / signature): multipart, same endpoint (payments redesign, release 3b)
-  createPaymentForm: (form) => request("/payments", { method: "POST", body: form }),
+  createPaymentForm: (form, opts = {}) => request("/payments", { ...opts, method: "POST", body: form }),
   listPayments: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/payments${qs ? `?${qs}` : ""}`);

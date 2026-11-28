@@ -67,6 +67,42 @@ test("POST /api/checkins: a sales manager far from the customer is refused (Chec
   assert.equal(rows.length, 0);
 });
 
+// Phase 0 item 0.1 (owner 2026-11-28): a far check-in sent later from the offline queue (it carries captured_at) used to be refused, and
+// the phone then deleted it with its photos and payment. It is saved flagged instead: within_range = false (no visit credit, no bonus,
+// Pin review), no visit task closed.
+test("POST /api/checkins: a far check-in from the offline queue (captured_at) is saved flagged out of range, not refused", async () => {
+  const farLat = customer.lat + 0.05;
+  const capturedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const res = await apiFormRequest("/api/checkins", {
+    cookie,
+    form: checkinForm({ customer_id: customer.id, lat: String(farLat), lng: String(customer.lng), captured_at: capturedAt, client_ref: `far-queued-${Date.now()}`, outcomes: JSON.stringify(["no_order"]) }),
+  });
+  assert.equal(res.status, 201);
+  trackCheckin(res.data.id);
+  assert.equal(res.data.within_range, false);
+  assert.ok(Number(res.data.distance_meters) > 5000);
+  assert.equal(new Date(res.data.timestamp).toISOString(), capturedAt); // kept at the moment the rep pressed Save
+});
+
+test("POST /api/checkins: a far check-in with a capture time that is garbage, 'now' or over a week old is still refused", async () => {
+  for (const captured_at of ["x", new Date().toISOString(), new Date(Date.now() - 9 * 24 * 3600 * 1000).toISOString()]) {
+    const res = await apiFormRequest("/api/checkins", {
+      cookie,
+      form: checkinForm({ customer_id: customer.id, lat: String(customer.lat + 0.05), lng: String(customer.lng), captured_at, outcomes: JSON.stringify(["no_order"]) }),
+    });
+    assert.equal(res.status, 422, `captured_at=${captured_at}`);
+  }
+});
+
+test("POST /api/checkins: a far check-in sent live (no captured_at) is still refused", async () => {
+  const res = await apiFormRequest("/api/checkins", {
+    cookie,
+    form: checkinForm({ customer_id: customer.id, lat: String(customer.lat + 0.05), lng: String(customer.lng), captured_at: "", outcomes: JSON.stringify(["no_order"]) }),
+  });
+  assert.equal(res.status, 422);
+  assert.equal(res.data.code, "checkin_too_far");
+});
+
 test("POST /api/checkins: GPS accuracy up to 100 m is forgiven when judging the allowance", async () => {
   // ~390 m north: past the 300 m allowance with an exact fix, inside it when the fix is only good to +-150 m (100 m credited)
   const lat = customer.lat + 0.0035;

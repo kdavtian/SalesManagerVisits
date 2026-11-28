@@ -9,8 +9,9 @@ export const fieldApi = {
   getCompetitorPrices: (key) => request(`/competitor-brands/${encodeURIComponent(key)}/prices`),
   approveCompetitorBrand: (id) => json(`/competitor-brands/${id}/approve`, "POST", {}),
   denyCompetitorBrand: (id, reason) => json(`/competitor-brands/${id}/deny`, "POST", { reason }),
-  createCheckin: (formData) =>
-    request("/checkins", { method: "POST", body: formData }),
+  // opts.saveTimeoutMs: the offline queue's longer limit for a background send (core.js SAVE_TIMEOUT_MS)
+  createCheckin: (formData, opts = {}) =>
+    request("/checkins", { ...opts, method: "POST", body: formData }),
   getDeliverableOrders: (customerId) => request(`/checkins/deliverable-orders?customer_id=${customerId}`),
   listCheckins: (params = {}, options = {}) => {
     const qs = new URLSearchParams(params).toString();

@@ -12,7 +12,7 @@ import { teamApi } from "./api/team.js";
 import { moneyApi } from "./api/money.js";
 import { erpApi } from "./api/erp.js";
 import { bonusApi } from "./api/bonus.js";
-export { prefetchGet } from "./api/core.js";
+export { prefetchGet, isNoSignal } from "./api/core.js";
 
 export const api = {
   ...systemApi,

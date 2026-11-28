@@ -46,7 +46,35 @@ second one.
 
 - Automatically on the browser's `online` event.
 - Automatically on app boot (if there's a pending queue and connectivity).
-- Manually via Settings → "Refresh data" (`flushQueue({ force: true })`).
+- Every 30 s while the app is in front and the phone reports signal, and when the app comes back to the front — a save can be queued while the phone HAS signal (below), when no `online` event will ever come.
+- After a sign-in.
+- Manually via Settings → "Refresh data" or the waiting-to-send sheet's "Retry now" (`flushQueue({ force: true })`).
+
+An entry that got no answer in time or met a busy server waits 30 s, then 1, 2, 4 … at most 15 minutes before the automatic passes try it
+again (`retryAt`); a timed-out entry does not hold up the entries behind it. "Retry now" sends everything at once; pressed while a pass is
+running, a forced pass follows it.
+
+## When a save is queued (Phase 0, 2026-11-28)
+
+A visit, order, payment, stock count or volume-potential save goes to the queue instead of failing when (`isNoSignal()` in `api/core.js`):
+no connection (TypeError); no answer within 30 s plus 1 s per 50 KB uploaded (`SAVE_TIMEOUT_MS`; a background send from the queue gets 120 s plus the same allowance); the server or its proxy
+answers 502/503/504 (a deploy); or the server answers 426 `update_required` (below). Safe because every one of them carries a `client_ref`
+(the stock count is one row per product and day). A payment queued for no signal is sent "record anyway" as before; one queued after a slow
+answer, 502 or 426 keeps the rep's own choice, and if the server then warns of a duplicate it waits in the sheet with "It is another
+payment: save".
+
+## Whose entries are sent
+
+Every entry stores `userId` (the person signed in when it was saved). The banner, the waiting-to-send sheet and `flushQueue()` see only the
+signed-in person's entries; another person's wait on the phone until they sign in again. Entries saved by an app from before this rule have
+no `userId` and are treated as the signed-in person's.
+
+## Minimum app version (`MIN_APP_VERSION`)
+
+With `MIN_APP_VERSION` set on the server (e.g. `1.612.0`; empty = off), a change (POST/PUT/PATCH/DELETE) from a phone sending an older
+`X-App-Version` gets `426 {code: "update_required"}`. The phone queues the save, shows the update screen without "Later" and sends the work
+after updating. Reads, sign-in, client error reports, and every caller without `X-App-Version` (CEO bot, integration API, KAD OS, ERP sync)
+are never refused. A value above the version the server ships is capped to it.
 
 ## Retry and conflict behavior
 
@@ -56,10 +84,14 @@ HTTP status:
 | Status | Meaning | Behavior |
 |---|---|---|
 | `401` | Session expired | **Stops the whole pass.** Not entry-specific — every request from this device will fail the same way until re-authenticated. Retried on the next `online` event or login. |
-| `429` / `423` | Rate-limited / app-wide emergency lockdown (see [incident-response.md](incident-response.md)) | **Stops the whole pass**, same reasoning as 401 — a device-wide condition, not this entry's fault. |
+| `429` / `423` / `426` | Rate-limited / app-wide emergency lockdown (see [incident-response.md](incident-response.md)) / this app version must update first | **Stops the whole pass**, same reasoning as 401 — a device-wide condition, not this entry's fault. |
 | `403` / `409` | Entry-specific conflict (a role change mid-flight, an idempotency-check race, a stale reference — e.g. the customer this check-in targets was deleted) | **Does not block the rest of the queue.** The entry's `attempts` counter increments; after 3 failures (`NEEDS_ATTENTION_THRESHOLD`) it's flagged `needsAttention` and skipped by future *automatic* passes — it keeps showing in the sync banner, but won't silently retry forever against the same wall. A manual "Refresh data" tap always gives it one more try. |
-| Other 4xx | The server looked at this entry and rejected it outright (e.g. the referenced customer no longer exists) | **Dropped from the queue.** Retrying a genuine rejection forever would never succeed. |
-| Network failure / 5xx / no status | Transient — server hiccup, connection genuinely down mid-request | **Stops the whole pass**, retried later. Never discards a rep's real work because the server had a bad moment. |
+| Other 4xx | The server looked at this entry and rejected it outright (e.g. the referenced customer no longer exists, a bad photo) | **Never deleted by the phone** (Phase 0 item 0.1). Flagged `needsAttention` at once with the server's reason (`lastError`), shown in red in the waiting-to-send sheet; the rep taps "Retry now" or discards it (two taps). |
+| Network failure / 408 (send limit) / 5xx / no status | Transient — server hiccup, connection genuinely down mid-request | **Stops the whole pass**, retried later. Never discards a rep's real work because the server had a bad moment. |
+
+A check-in from the queue (it carries a believable `captured_at`: parses, at least 15 s and at most a week old) that is farther than the check-in allowance is **saved flagged** (`within_range =
+false`: no visit credit, no bonus, closes no visit task, shown in Pin review) instead of refused with 422 — the rep has left the shop and the
+visit may hold photos, a payment or a delivery. A live check-in (no `captured_at`) is still refused.
 
 On any successful submission, the entry is removed from the queue and
 `fieldvisits_last_synced_at` is updated once the whole queue empties (not
