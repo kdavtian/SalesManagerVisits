@@ -253,6 +253,20 @@ test("0.17 a corrected order with a document: no 'send again' (no second documen
   assert.equal((await orderRow(o.id)).accounting_documents.length, 1, "documents kept");
 });
 
+test("0.17 a partial waybill, then Lily's issue, then a correction: flagged too (her issue kept), so 'send again' cannot wipe the waybill", async () => {
+  const o = await newOrder("delivered", { lines: [[p1.id, 2, 9000], [p2.id, 1, 3000]], accounting: "needs_attention" });
+  await pool.query("UPDATE orders SET accounting_documents = $2::jsonb, accounting_error = $3::jsonb WHERE id = $1", [
+    o.id,
+    JSON.stringify([{ hc_doc_number: "W-5", date: "2026-11-28", items: [] }]),
+    JSON.stringify({ code: "insufficient_stock", message: "no filters" }),
+  ]);
+  assert.equal((await apiRequest(`/api/orders/${o.id}/correct`, { method: "POST", cookie: accCookie, body: { reason: "no filters", items: [{ product_id: p1.id, quantity: 2 }] } })).status, 200);
+  const row = await orderRow(o.id);
+  assert.deepEqual([row.accounting_status, row.accounting_error.code, row.accounting_error.lily_issue?.code], ["needs_attention", "order_changed", "insufficient_stock"]);
+  assert.equal((await apiRequest(`/api/orders/${o.id}/accounting-request`, { method: "POST", cookie: adminCookie, body: {} })).data.code, "order_changed");
+  assert.deepEqual((await orderRow(o.id)).accounting_documents.map((d) => d.hc_doc_number), ["W-5"]);
+});
+
 test("0.17 a request that has documents is never withdrawn by a stock issue or Back to submitted", async () => {
   const docs = JSON.stringify([{ hc_doc_number: "W-9", date: "2026-11-28", items: [] }]);
   const issued = await newOrder("confirmed", { accounting: "needs_attention" });

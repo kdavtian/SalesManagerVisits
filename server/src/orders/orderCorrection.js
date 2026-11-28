@@ -33,9 +33,17 @@ export function matchExistingLines(before, priced) {
  */
 export async function applyCorrection(client, { orderId, before, lines, goneLineIds, changed }) {
   // the accounting state is read under the row lock: a document Lily reported a moment ago is flagged too; documents are kept
+  // (also a request already in needs_attention that has documents -- Lily made a partial waybill, then reported a problem: her issue is kept
+  // inside the flag as lily_issue; a second correction keeps the flag as it is)
   const { rows: [order] } = await client.query(
-    `UPDATE orders SET accounting_status = 'needs_attention', accounting_error = $3::jsonb, accounting_updated_at = now()
-      WHERE id = $1 AND $4 AND accounting_status = ANY($2::text[]) RETURNING *`,
+    `UPDATE orders SET accounting_status = 'needs_attention', accounting_updated_at = now(),
+            accounting_error = CASE
+              WHEN accounting_error->>'code' = 'order_changed' THEN accounting_error
+              WHEN accounting_status = 'needs_attention' AND accounting_error IS NOT NULL THEN $3::jsonb || jsonb_build_object('lily_issue', accounting_error)
+              ELSE $3::jsonb END
+      WHERE id = $1 AND $4
+        AND (accounting_status = ANY($2::text[]) OR (accounting_status = 'needs_attention' AND COALESCE(jsonb_array_length(accounting_documents), 0) > 0))
+      RETURNING *`,
     [orderId, DOCUMENT_STARTED_STATUSES, ORDER_CHANGED_ERROR, changed]
   );
   // the lines are still the ones read before (another correction at the same moment, now serialised by the row lock, may have changed them)
