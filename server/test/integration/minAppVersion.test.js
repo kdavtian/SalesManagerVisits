@@ -83,7 +83,7 @@ function run(method, url, version, minVersion) {
 
 test("the rule: 426 for a 426-aware phone below the minimum, 503 for an older one, pass otherwise", () => {
   assert.equal(run("POST", "/api/orders", "1.612.0", "1.613.0").status, 426);
-  assert.equal(run("POST", "/api/orders", "1.611.0", "1.613.0").status, 426);
+  assert.equal(run("POST", "/api/orders", "1.611.0", "1.613.0").status, 503); // the first 426-aware app is 1.612.0
   assert.equal(run("POST", "/api/orders", "1.610.0", "1.613.0").status, 503); // its queue would delete on a 4xx
   assert.equal(run("POST", "/api/orders", "1.610.0", "1.613.0").body.code, "update_required");
   assert.equal(run("POST", "/api/orders", "1.613.0", "1.613.0").passed, true);

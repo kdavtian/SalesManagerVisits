@@ -64,7 +64,7 @@ no `userId` and are treated as the signed-in person's.
 
 ## Minimum app version (`MIN_APP_VERSION`)
 
-With `MIN_APP_VERSION` set on the server (e.g. `1.611.0`; empty = off), a change (POST/PUT/PATCH/DELETE) from a phone sending an older
+With `MIN_APP_VERSION` set on the server (e.g. `1.612.0`; empty = off), a change (POST/PUT/PATCH/DELETE) from a phone sending an older
 `X-App-Version` gets `426 {code: "update_required"}`. The phone queues the save, shows the update screen without "Later" and sends the work
 after updating. Reads, sign-in, client error reports, and every caller without `X-App-Version` (CEO bot, integration API, KAD OS, ERP sync)
 are never refused. A value above the version the server ships is capped to it.

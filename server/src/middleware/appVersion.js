@@ -1,5 +1,5 @@
 // Minimum app version for saves (Phase 0 item 0.21, owner 2026-11-28). The phones send their version in X-App-Version (client api/core.js);
-// a phone that never updates kept saving with old rules for weeks. With MIN_APP_VERSION set (environment, e.g. "1.611.0"; empty = off, the
+// a phone that never updates kept saving with old rules for weeks. With MIN_APP_VERSION set (environment, e.g. "1.612.0"; empty = off, the
 // default), a change (POST/PUT/PATCH/DELETE) from an OLDER phone gets 426 "update_required": the phone keeps the work in its offline queue,
 // shows the update screen without "Later" and sends the work after updating. Reads are never refused (the rep can still look things up).
 // Callers that send no X-App-Version -- the CEO bot, the integration API, KAD OS, scripts -- are never affected. Sign-in / sign-out and
@@ -11,7 +11,7 @@ import { CLIENT_PUBLIC_DIR } from "../shared/paths.js";
 // The first app version that understands 426 (keeps the save in its queue, shows the update screen). An older phone treats any other 4xx
 // as "refused" and DELETES its queued work, so it gets 503 instead -- which every app version keeps in the queue and retries -- with the
 // same "update the app" text, which its screens show as the error.
-export const FIRST_426_AWARE = [1, 611, 0];
+export const FIRST_426_AWARE = [1, 612, 0];
 const MESSAGE = "Թարմացրեք հավելվածը / Update the app: this version is too old to save.";
 
 const EXEMPT = /^\/api\/(auth|client-errors|integration|ops|erp-sync)(\/|$)/;
