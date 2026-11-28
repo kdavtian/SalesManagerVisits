@@ -82,6 +82,7 @@ export const hyCustomers = {
     plan_mode_today: "Այսօր",
     plan_mode_recurring: "Կրկնվող",
     plan_recurring_hint: "Կարգավորեք կրկնվող ցիկլ — ամեն [weekday], այցելել այս տարածքների բոլոր հաճախորդներին։",
+    plan_save_day_changes: "Պահե՞լ փոփոխությունները՝ [weekday]։ «Չեղարկել»՝ չպահել։",
     no_areas_yet: "Տարածքներ դեռ ավելացված չեն։",
     add_area: "Ավելացնել տարածք",
     planned_empty: "Այսօրվա համար հաստատված պլան չկա",

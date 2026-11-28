@@ -82,6 +82,7 @@ export const enCustomers = {
     plan_mode_today: "Today",
     plan_mode_recurring: "Recurring",
     plan_recurring_hint: "Set up a repeating cycle — every [weekday], visit all customers in these areas.",
+    plan_save_day_changes: "Save the changes for [weekday]? Cancel = leave them unsaved.",
     no_areas_yet: "No areas added yet.",
     add_area: "Add area",
     planned_empty: "No approved plan for today",

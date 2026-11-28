@@ -236,15 +236,21 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
     channelCodes.map(async (channelCode) => {
       const { rows: targetRows } = await pool.query(
         `SELECT t.channel_id, p.id AS plan_id, c.code AS channel_code, c.name AS channel_name,
-           t.sales_target_amd
+           t.sales_target_amd, p.status
          FROM perf_plan_targets t
          JOIN perf_plans p ON p.id = t.plan_id
          JOIN sales_channels c ON c.id = t.channel_id
-         WHERE c.code = $1 AND p.month = $2 AND p.status = 'approved'`,
+         WHERE c.code = $1 AND p.month = $2 AND p.status IN ('approved', 'closed')
+           AND p.version = (SELECT max(x.version) FROM perf_plans x WHERE x.month = p.month AND x.status IN ('approved', 'closed'))`,
         [channelCode, month]
       );
       const target = targetRows[0];
       if (!target) return null;
+      if (target.status === "closed") {
+        // a closed month shows the numbers frozen at close, like the management dashboard (Codex review of 0.19)
+        const { rows: snap } = await pool.query("SELECT * FROM perf_plan_closed_snapshot WHERE plan_id = $1 AND channel_id = $2", [target.plan_id, target.channel_id]);
+        if (snap[0]) return buildClosedChannelRow(snap[0], wd);
+      }
       const actuals = await loadChannelActuals(channelCode, month);
       return buildChannelDashboardRow(target, actuals, wd);
     })
