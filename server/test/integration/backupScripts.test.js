@@ -142,6 +142,19 @@ test("backup.sh: a failure alerts Telegram, records the failed step and leaves n
   assert.match(tgMessages[0].text, /no off-server copy/);
 });
 
+test("backup.sh: a second run while one is running stops quietly -- no false alarm, no failed row", { skip: SKIP ?? false }, async () => {
+  const before = rows().length;
+  tgMessages.length = 0;
+  const holder = spawn("flock", [path.join(tmp, "backups", ".backup.lock"), "sleep", "5"]);
+  await new Promise((r) => setTimeout(r, 300));
+  const r = await run("backup.sh");
+  holder.kill();
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /another backup is already running/);
+  assert.equal(tgMessages.length, 0, "no red alert for an overlap");
+  assert.equal(rows().length, before, "no failed row");
+});
+
 test("backup-restore-test.sh: restores the newest backup into a scratch database and checks the key tables", { skip: SKIP ?? false }, async () => {
   tgMessages.length = 0;
   const r = await run("backup-restore-test.sh");
@@ -153,6 +166,22 @@ test("backup-restore-test.sh: restores the newest backup into a scratch database
   assert.equal(left, "0", "the scratch database is dropped afterwards");
 
   if (hasRclone) assert.equal((await run("backup-restore-test.sh", {}, ["--from-remote"])).code, 0);
+
+  // a cut-off photos archive fails the drill (a backup that only looks good)
+  const cut = path.join(tmp, "cut");
+  fs.mkdirSync(cut);
+  const newestDb = fs.readdirSync(path.join(tmp, "backups")).filter((f) => f.startsWith("db-")).sort().at(-1);
+  fs.copyFileSync(path.join(tmp, "backups", newestDb), path.join(cut, newestDb));
+  const bigDir = path.join(tmp, "big");
+  fs.mkdirSync(bigDir);
+  fs.writeFileSync(path.join(bigDir, "photo.jpg"), Buffer.from(Array.from({ length: 200000 }, (_, i) => (i * 7919) % 251)));
+  execFileSync("tar", ["czf", path.join(tmp, "whole.tar.gz"), "-C", bigDir, "."]);
+  const whole = fs.readFileSync(path.join(tmp, "whole.tar.gz"));
+  fs.writeFileSync(path.join(cut, "uploads-20991231-000000.tar.gz"), whole.subarray(0, Math.floor(whole.length / 2)));
+  tgMessages.length = 0;
+  const cutRun = await run("backup-restore-test.sh", { BACKUP_DIR: cut });
+  assert.notEqual(cutRun.code, 0, cutRun.out);
+  assert.match(tgMessages.at(-1).text, /RESTORE DRILL FAILED .*photos archive/);
 
   // a broken newest backup is reported, not passed
   const bad = path.join(tmp, "bad");

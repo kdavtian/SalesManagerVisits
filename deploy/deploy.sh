@@ -13,7 +13,7 @@
 #   ./deploy/deploy.sh --full   # also run the whole test suite + UI checks here (slow; only when you want a second opinion)
 #   ./deploy/deploy.sh --skip-backup   # do not take the quick database dump before new migrations (not recommended)
 # When the new code brings migrations the database has not applied yet, a quick database dump is taken first
-# (backups/pre-deploy-<time>.sql.gz, kept 14 days); if that dump fails the deploy STOPS before anything changes.
+# (backups/pre-deploy-<time>.sql.gz, newest 5 kept, at most 14 days); if that dump fails the deploy STOPS before anything changes.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LAST_DEPLOY_SHA_FILE=".last-deploy-sha"
@@ -125,14 +125,16 @@ if [ -n "$PENDING" ]; then
     PRE_DUMP="backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql.gz"
     if ! docker compose exec -T db pg_dump -U "$PG_USER_" --no-owner "$PG_DB_" | gzip > "$PRE_DUMP" \
        || [ "$(wc -c < "$PRE_DUMP")" -lt 1024 ] \
-       || ! gunzip -c "$PRE_DUMP" | tail -n 5 | grep -q "PostgreSQL database dump complete"; then
+       || ! gunzip -c "$PRE_DUMP" | tail -n 20 | grep -q "PostgreSQL database dump complete"; then
       rm -f "$PRE_DUMP"
       echo "STOPPED: the database dump before the migrations failed (disk full?). Nothing was changed: the old app is still" >&2
       echo "running on the old database. Fix the cause and deploy again (or ./deploy/deploy.sh --skip-backup, not recommended)." >&2
       exit 1
     fi
     echo "    saved $PRE_DUMP ($(( $(wc -c < "$PRE_DUMP") / 1024 )) KB)"
+    # keep the newest 5, and none older than 14 days: each is a full copy, on the database's own disk
     find backups -maxdepth 1 -name 'pre-deploy-*.sql.gz' -mtime +14 -delete
+    find backups -maxdepth 1 -name 'pre-deploy-*.sql.gz' | sort -r | tail -n +6 | xargs -r rm -f
     step_done "pre-migration dump"
   fi
 fi

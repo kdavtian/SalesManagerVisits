@@ -143,6 +143,10 @@ jobs:
       - name: PDF renderer (pdftoppm, for the document previews)
         run: command -v pdftoppm || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils)
 
+      # rclone, so backupScripts.test.js also runs deploy/backup.sh's off-server copy (to a local folder)
+      - name: rclone (backup scripts test)
+        run: command -v rclone || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends rclone)
+
       - run: npm run migrate
 
       - name: Tests (shard ${{ matrix.shard }}/4)

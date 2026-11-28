@@ -1,6 +1,6 @@
 # Monitoring
 
-**Status (2026-11-28)**: three layers, from outside in. Layers 1 and 2 need the one-time
+**Status (2026-11-28)**: four layers, from outside in. Layers 1 and 2 need the one-time
 [Owner steps](#owner-steps-outside-checks) below (free accounts the owner creates); layer 3 is the cron line in
 [`backup-restore.md`](backup-restore.md#owner-steps-one-time-on-the-droplet). Until those are done, nothing outside the
 app notices the app or the droplet being down -- see the availability row in

@@ -66,7 +66,11 @@ trap on_exit EXIT
 # Two runs at once (cron + a manual one) would overwrite each other's files.
 STEP="lock"
 exec 9> "$BACKUP_DIR/.backup.lock"
-flock -n 9 || { log "another backup is already running" >&2; exit 1; }
+if ! flock -n 9; then
+  trap - EXIT # not a failed backup: the other run reports for itself
+  log "another backup is already running -- this one stops without doing anything" >&2
+  exit 1
+fi
 
 # --- 1. local copy ----------------------------------------------------------------------------------------------------
 STEP="database dump"
@@ -74,7 +78,7 @@ log "Backing up database..."
 # Written as *.partial and renamed only once checked: a failed run never leaves a file that looks like a backup.
 dump_db | gzip > "$DB_FILE.partial"
 # A real dump is far above 1 KB and ends with pg_dump's completion line.
-if [ "$(wc -c < "$DB_FILE.partial")" -lt 1024 ] || ! gunzip -c "$DB_FILE.partial" | tail -n 5 | grep -q "PostgreSQL database dump complete"; then
+if [ "$(wc -c < "$DB_FILE.partial")" -lt 1024 ] || ! gunzip -c "$DB_FILE.partial" | tail -n 20 | grep -q "PostgreSQL database dump complete"; then
   log "ERROR: the database dump is empty or cut off." >&2
   exit 1
 fi
@@ -101,7 +105,9 @@ if [ -z "$TARGET" ] && [ -n "$BUCKET" ]; then
   PREFIX="$(env_value BACKUP_S3_PREFIX)"
   TARGET="fvspaces:$BUCKET/${PREFIX:-field-visits}"
   # rclone reads the remote "fvspaces" from these variables: no rclone.conf to keep in sync with .env.
-  export RCLONE_CONFIG_FVSPACES_TYPE=s3 RCLONE_CONFIG_FVSPACES_PROVIDER=DigitalOcean RCLONE_CONFIG_FVSPACES_ACL=private
+  # NO_CHECK_BUCKET: a key limited to this one bucket may not list or create buckets.
+  export RCLONE_CONFIG_FVSPACES_TYPE=s3 RCLONE_CONFIG_FVSPACES_PROVIDER=DigitalOcean RCLONE_CONFIG_FVSPACES_ACL=private \
+    RCLONE_CONFIG_FVSPACES_NO_CHECK_BUCKET=true
   RCLONE_CONFIG_FVSPACES_ENDPOINT="$(env_value BACKUP_S3_ENDPOINT)"
   RCLONE_CONFIG_FVSPACES_ACCESS_KEY_ID="$(env_value BACKUP_S3_ACCESS_KEY)"
   RCLONE_CONFIG_FVSPACES_SECRET_ACCESS_KEY="$(env_value BACKUP_S3_SECRET_KEY)"
@@ -113,18 +119,25 @@ if [ -n "$TARGET" ]; then
   log "Off-server copy -> $TARGET/daily/"
   rclone copy --no-traverse --retries 3 "$DB_FILE" "$TARGET/daily/"
   rclone copy --no-traverse --retries 3 "$UPLOADS_FILE" "$TARGET/daily/"
+  FOLDERS="daily"
   if [ "$(date +%u)" = "7" ]; then # Sunday: the weekly copy, kept longer
     rclone copy --no-traverse --retries 3 "$DB_FILE" "$TARGET/weekly/"
     rclone copy --no-traverse --retries 3 "$UPLOADS_FILE" "$TARGET/weekly/"
+    FOLDERS="daily weekly"
   fi
   # check the night's files really arrived, at the right size
-  for f in "$DB_FILE" "$UPLOADS_FILE"; do
-    remote_size="$(rclone size --json "$TARGET/daily/$(basename "$f")" | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')"
-    [ "$remote_size" = "$(wc -c < "$f" | tr -d ' ')" ] || { log "ERROR: $(basename "$f") is missing or incomplete off-server." >&2; exit 1; }
+  for folder in $FOLDERS; do
+    for f in "$DB_FILE" "$UPLOADS_FILE"; do
+      remote_size="$(rclone size --json "$TARGET/$folder/$(basename "$f")" | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p')"
+      [ "$remote_size" = "$(wc -c < "$f" | tr -d ' ')" ] || { log "ERROR: $folder/$(basename "$f") is missing or incomplete off-server." >&2; exit 1; }
+    done
   done
   STEP="off-server cleanup"
   rclone delete --min-age "${DAILY_KEEP}d" "$TARGET/daily/"
-  rclone delete --min-age "${WEEKLY_KEEP}d" "$TARGET/weekly/" 2> /dev/null || true # no weekly folder before the first Sunday
+  # before the first Sunday there is no weekly folder yet: only then is a failure here expected
+  if [ -n "$(rclone lsf --dirs-only "$TARGET/" | grep '^weekly/$' || true)" ]; then
+    rclone delete --min-age "${WEEKLY_KEEP}d" "$TARGET/weekly/"
+  fi
   OFFSITE="spaces"
   log "Off-server copy done."
 fi

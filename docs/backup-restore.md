@@ -14,7 +14,7 @@ What is protected, and where:
 | the same two files, every night | DigitalOcean Spaces bucket, `<prefix>/daily/` | 14 days (`BACKUP_DAILY_KEEP_DAYS`) |
 | Sunday's two files | Spaces, `<prefix>/weekly/` | 8 weeks (`BACKUP_WEEKLY_KEEP_DAYS=56`) |
 | Database only, encrypted, while under 50 MB | owner's Telegram backup group | Telegram history |
-| Database just before a deploy applies new migrations (`pre-deploy-*.sql.gz`) | droplet, `./backups/` | 14 days |
+| Database just before a deploy applies new migrations (`pre-deploy-*.sql.gz`) | droplet, `./backups/` | newest 5, at most 14 days |
 
 The database also stores the order and report PDFs (migrations 063, 095), so the dump grows faster than the row counts
 suggest; the Spaces copy has no size limit, the Telegram copy stops at 50 MB (then set `BACKUP_TELEGRAM_COPY=0`).
@@ -137,7 +137,7 @@ grep -E '^TELEGRAM_(BACKUP_BOT_TOKEN|BOT_TOKEN|BACKUP_CHAT_ID|NOTIFY_CHAT_IDS)=.
 
 Without the passphrase file nothing is sent (an unencrypted customer/debt database must not sit in a chat); to send
 unencrypted anyway set `BACKUP_TELEGRAM_UNENCRYPTED=1` (not recommended). Telegram bots accept files up to 50 MB; the photos
-backup (about 60 MB and growing) stays on the droplet only. **If the passphrase is lost the Telegram copies are unreadable** --
+backup (about 60 MB and growing) goes to the Spaces bucket instead (see above). **If the passphrase is lost the Telegram copies are unreadable** --
 keep it somewhere other than the droplet. To read a Telegram copy on your PC: download the `.7z`, open it with **7-Zip** (Windows, free) or **Keka** (Mac, free) and type the
 passphrase; inside is `db-….sql.gz` (gunzip it, restore as below). If the server had no `7z` program the copy arrives as a raw
 `.enc` file instead (needs a command):
@@ -180,7 +180,7 @@ docker compose exec -T db psql -U fieldvisits fieldvisits < backup-YYYYMMDD.sql 
 docker run --rm \
   -v field-visits_uploads_data:/data \
   -v $(pwd):/backup \
-  alpine sh -c "cd /data && tar xzf /backup/uploads-backup-YYYYMMDD.tar.gz"
+  alpine sh -c "cd /data && tar xzf /backup/uploads-YYYYMMDD-HHMMSS.tar.gz"   # the automated name; a manual one is uploads-backup-YYYYMMDD.tar.gz
 ```
 
 **Bring the app back up and verify:**
@@ -202,7 +202,8 @@ right, do check-in photos load.
 ./deploy/backup-restore-test.sh --from-remote  # newest backup in Spaces (also proves the off-server copy)
 ```
 
-It restores into a scratch database `fieldvisits_restore_drill` next to the real one, compares row counts of `users`,
+It first checks there is room (about three times the plain dump) on the database's disk, then restores into a scratch
+database `fieldvisits_restore_drill` next to the real one, compares row counts of `users`,
 `customers`, `products`, `orders`, `order_items`, `checkins`, `payments` and `schema_migrations` with the live database
 (each must be present, and not empty when the live one has rows), reads the photos archive to the end and counts its files,
 drops the scratch database, and posts the result (OK or FAILED, with the counts and the time it took) to the Telegram group.

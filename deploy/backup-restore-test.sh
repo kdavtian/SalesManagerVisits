@@ -53,8 +53,9 @@ if [ "$FROM_REMOTE" = true ]; then
     RCLONE_CONFIG_FVSPACES_SECRET_ACCESS_KEY="$(env_value BACKUP_S3_SECRET_KEY)"
     export RCLONE_CONFIG_FVSPACES_ENDPOINT RCLONE_CONFIG_FVSPACES_ACCESS_KEY_ID RCLONE_CONFIG_FVSPACES_SECRET_ACCESS_KEY
   fi
-  DB_NAME="$(rclone lsf --files-only "$TARGET/daily/" | grep '^db-.*\.sql\.gz$' | sort | tail -1)"
-  UP_NAME="$(rclone lsf --files-only "$TARGET/daily/" | grep '^uploads-.*\.tar\.gz$' | sort | tail -1)"
+  rclone lsf --files-only "$TARGET/daily/" > "$WORK/remote.list"
+  DB_NAME="$(grep '^db-.*\.sql\.gz$' "$WORK/remote.list" | sort | tail -1 || true)"
+  UP_NAME="$(grep '^uploads-.*\.tar\.gz$' "$WORK/remote.list" | sort | tail -1 || true)"
   [ -n "$DB_NAME" ] || { log "no db-*.sql.gz in $TARGET/daily/" >&2; exit 1; }
   STEP="download backup"
   rclone copy "$TARGET/daily/$DB_NAME" "$WORK/"
@@ -67,6 +68,15 @@ else
   [ -n "$DB_FILE" ] || { log "no db-*.sql.gz in $BACKUP_DIR" >&2; exit 1; }
 fi
 log "Backup: $(basename "$DB_FILE")${UP_FILE:+ + $(basename "$UP_FILE")}"
+
+# --- room for it? The scratch copy lands on the same disk as the live database: never fill that disk. ------------------
+STEP="free disk space"
+NEED_KB=$(( $(gunzip -c "$DB_FILE" | wc -c) / 1024 * 3 )) # plain SQL x3: tables + indexes + slack
+FREE_KB="$(df -Pk "${DRILL_DISK_PATH:-$( [ -d /var/lib/docker ] && echo /var/lib/docker || echo / )}" | awk 'NR==2 {print $4}')"
+if [ "$FREE_KB" -lt "$NEED_KB" ]; then
+  log "not enough free disk for a scratch copy: need ~$((NEED_KB / 1024)) MB, free $((FREE_KB / 1024)) MB" >&2
+  exit 1
+fi
 
 # --- restore into the scratch database --------------------------------------------------------------------------------
 STEP="restore database"
@@ -93,7 +103,8 @@ echo "Row counts (the live numbers can be a little higher: they moved on since t
 FILES="no photos archive"
 if [ -n "${UP_FILE:-}" ]; then
   STEP="read photos archive"
-  FILES="$(tar tzf "$UP_FILE" | grep -vc '/$' || true) files in the photos archive"
+  tar tzf "$UP_FILE" > "$WORK/photos.list" # its own command: a cut-off or corrupt archive fails the drill here
+  FILES="$(grep -vc '/$' "$WORK/photos.list" || true) files in the photos archive"
 fi
 log "$FILES"
 

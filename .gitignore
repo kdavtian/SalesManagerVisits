@@ -32,3 +32,5 @@ server/playwright.local.config.mjs
 # never meant to be shared across checkouts or committed.
 .last-deploy-sha
 client/dist/
+# backup.sh / deploy.sh output on the droplet (dumps, photo archives, lock and alert stamps)
+/backups/
