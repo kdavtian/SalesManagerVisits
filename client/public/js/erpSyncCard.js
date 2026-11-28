@@ -24,18 +24,23 @@ function row(label, value, extra = "") {
   return `<div class="health-row"><span class="health-label">${escapeHtml(label)}</span><span class="health-value">${value}${extra ? ` ${extra}` : ""}</span></div>`;
 }
 
-// The "big drop" guard (plan 0.5): the last sync was refused because the file had far fewer rows than the last good one; admin / CEO can open
-// a short window in which the next syncs go through (the change is real), or once open, the card says until when.
+// The "big drop" guard (plan 0.5): each kind of sync (main Excel sync, Cashflow sheet) whose last file was refused because it had far fewer rows
+// than the last good one. Admin / CEO can accept the change (one sync of each kind in the next 2 hours); an accepted one says until when.
 function dropHtml(st) {
   const g = st.guard;
-  if (!g) return "";
-  if (g.accept_until) return `<div class="es-problem es-accepted">${escapeHtml(t("es_accept_open").replace("{d}", formatDateTime(g.accept_until)).replace("{who}", g.accept_by_name || ""))}</div>`;
-  if (!g.refused_open) return "";
-  return `<div class="es-problem"><strong>${t("es_drop_title")}</strong> ${escapeHtml(t("es_drop_note"))}${
-    st.can_pause ? `<button type="button" class="btn es-accept-btn" id="es-accept">${t("es_accept_btn")}</button>` : ""
-  }</div>`;
+  if (!g?.refusals?.length) return "";
+  return g.refusals
+    .map((r) => {
+      const what = t(r.endpoint === "/api/erp-sync/cashflow-ledger" ? "es_drop_ledger" : "es_drop_main");
+      if (r.accepted) return `<div class="es-problem es-accepted">${escapeHtml(what)}: ${escapeHtml(t("es_accept_open").replace("{d}", formatDateTime(g.accept_until)).replace("{who}", g.accept_by_name || ""))}</div>`;
+      return `<div class="es-problem"><strong>${t("es_drop_title")}</strong> ${escapeHtml(what)}. ${escapeHtml(t("es_drop_note"))}${
+        st.can_pause ? `<button type="button" class="btn es-accept-btn" data-accept>${t("es_accept_btn")}</button>` : ""
+      }</div>`;
+    })
+    .join("");
 }
 
+// (a big-drop refusal is shown once, by dropHtml in plain words, not again as the raw "Problem" line)
 function cardHtml(st) {
   const last = st.last_success;
   const req = st.request;
@@ -49,7 +54,7 @@ function cardHtml(st) {
     ${row(t("es_last_sync"), last ? escapeHtml(formatDateTime(last.at)) : t("es_never"), badge(!st.sync_stale))}
     ${row(t("es_file"), last?.workbook_modified_at ? escapeHtml(formatDateDMY(last.workbook_modified_at)) : "—", `<span class="muted">${escapeHtml(fileAgeText(st.workbook_age_hours))}</span> ${st.workbook_age_hours == null ? "" : badge(!st.workbook_stale)}`)}
     ${last?.warnings?.length ? row(t("es_skipped"), String(last.warnings.length)) : ""}
-    ${st.last_failure ? `<div class="es-problem"><strong>${t("es_problem")}</strong> ${escapeHtml(formatDateTime(st.last_failure.at))}<br>${escapeHtml(st.last_failure.error ?? "")}</div>` : ""}
+    ${st.last_failure && !(st.guard?.refused_open && /^Big drop/.test(st.last_failure.error ?? "")) ? `<div class="es-problem"><strong>${t("es_problem")}</strong> ${escapeHtml(formatDateTime(st.last_failure.at))}<br>${escapeHtml(st.last_failure.error ?? "")}</div>` : ""}
     ${dropHtml(st)}
     ${lastReq}
     ${
@@ -74,8 +79,7 @@ export async function renderErpSyncCard(container) {
     container.querySelector("#es-hint").addEventListener("click", () => openInfoPopup(`<p>${t("es_hint")}</p>`));
     container.querySelector("#es-sync-now").addEventListener("click", () => syncNow(container, paint));
     // "Accept the next sync" after a big-drop refusal: asks once, then the card redraws from the server's answer
-    const acceptBtn = container.querySelector("#es-accept");
-    acceptBtn?.addEventListener("click", async () => {
+    container.querySelectorAll("[data-accept]").forEach((acceptBtn) => acceptBtn.addEventListener("click", async () => {
       if (!window.confirm(t("es_accept_confirm"))) return;
       acceptBtn.disabled = true;
       try {
@@ -85,7 +89,7 @@ export async function renderErpSyncCard(container) {
         acceptBtn.disabled = false;
         showToast(err.message, { ms: 4000 });
       }
-    });
+    }));
     // the pause switch (owner, 2026-11-07): one tap each way, the card redraws from the server's answer
     const pauseBtn = container.querySelector("#es-pause");
     pauseBtn?.addEventListener("click", async () => {

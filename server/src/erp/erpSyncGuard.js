@@ -60,39 +60,37 @@ export async function lastGoodCounts(db = pool) {
 export const MAIN = "/api/erp-sync";
 export const LEDGER = "/api/erp-sync/cashflow-ledger";
 
+// The guard's state for System health. `refusals`: the last refusal of each kind of sync that is still open (no good sync of the SAME kind since:
+// the main sync by erp_sync_runs, the Cashflow push by the bot's cash_syncs row), each with `accepted` = the admin's accept is still unused for
+// that kind. Kept per kind, so a refusal of one never hides or closes the other's.
 export async function getSyncGuard(db = pool) {
   const { rows } = await db.query(
-    `SELECT s.erp_sync_refused_at AS refused_at, s.erp_sync_refused_reason AS refused_reason, s.erp_sync_refused_endpoint AS refused_endpoint,
-            s.erp_sync_accept_until AS accept_until, s.erp_sync_accept_used AS accept_used, u.name AS accept_by_name
+    `SELECT s.erp_sync_refusals AS refusals, s.erp_sync_accept_until AS accept_until, s.erp_sync_accept_used AS accept_used, u.name AS accept_by_name,
+            (SELECT MAX(at) FROM erp_sync_runs) AS main_ok_at, (SELECT MAX(at) FROM cash_syncs WHERE via = 'bot') AS ledger_ok_at
        FROM app_settings s LEFT JOIN users u ON u.id = s.erp_sync_accept_by WHERE s.id = 1`
   );
   const r = rows[0] ?? {};
   const used = r.accept_used ?? [];
-  // open while the time lasts and not both kinds of sync have used it
-  const acceptOpen = Boolean(r.accept_until && new Date(r.accept_until).getTime() > Date.now() && !(used.includes(MAIN) && used.includes(LEDGER)));
+  const windowOpen = Boolean(r.accept_until && new Date(r.accept_until).getTime() > Date.now());
+  const acceptFor = (endpoint) => windowOpen && !used.includes(endpoint);
+  const okAt = { [MAIN]: r.main_ok_at, [LEDGER]: r.ledger_ok_at };
+  const refusals = [];
+  for (const endpoint of [MAIN, LEDGER]) {
+    const ref = r.refusals?.[endpoint];
+    if (!ref?.at) continue;
+    if (okAt[endpoint] && new Date(okAt[endpoint]) >= new Date(ref.at)) continue;
+    refusals.push({ endpoint, at: ref.at, reason: ref.reason ?? null, accepted: acceptFor(endpoint) });
+  }
   return {
-    refused_at: r.refused_at ?? null,
-    refused_reason: r.refused_reason ?? null,
-    refused_endpoint: r.refused_endpoint ?? null,
-    accept_until: acceptOpen ? r.accept_until : null,
-    accept_used: acceptOpen ? used : [],
-    accept_by_name: acceptOpen ? (r.accept_by_name ?? null) : null,
+    refusals,
+    refused_open: refusals.length > 0,
+    accept_until: windowOpen && (acceptFor(MAIN) || acceptFor(LEDGER)) ? r.accept_until : null,
+    accept_used: windowOpen ? used : [],
+    accept_by_name: windowOpen ? (r.accept_by_name ?? null) : null,
   };
 }
 
-// Is the last refusal still open? Closed by a later good sync of the SAME kind: the main sync by erp_sync_runs, the Cashflow push by the
-// bot's cash_syncs row (a good main sync does not fix a refused Cashflow sheet).
-export async function refusalOpen(guard, db = pool) {
-  if (!guard.refused_at) return false;
-  const sql =
-    guard.refused_endpoint === LEDGER
-      ? "SELECT MAX(at) AS at FROM cash_syncs WHERE via = 'bot'"
-      : "SELECT MAX(at) AS at FROM erp_sync_runs";
-  const { rows } = await db.query(sql);
-  return !rows[0]?.at || new Date(guard.refused_at) > new Date(rows[0].at);
-}
-
-// The admin's "Accept the next sync": the next syncs within ACCEPT_HOURS go through even with a big drop.
+// The admin's "Accept the next sync": within ACCEPT_HOURS, one sync of each kind goes through even with a big drop (a new tap re-opens both).
 export async function acceptNextSync(userId, db = pool) {
   await db.query(
     `INSERT INTO app_settings (id, erp_sync_accept_until, erp_sync_accept_by, erp_sync_accept_used) VALUES (1, now() + make_interval(hours => $2), $1, '{}')
@@ -128,11 +126,11 @@ export async function checkSyncDrop({ endpoint, incoming, previous, force = fals
 const telegramSent = new Map(); // reason -> last time; one Telegram message per distinct reason per 6 hours (the bot may retry)
 export async function refuseDrop(res, { endpoint, check }) {
   try {
+    const entry = JSON.stringify({ [endpoint]: { at: new Date().toISOString(), reason: check.reason.slice(0, 2000) } });
     await pool.query(
-      `INSERT INTO app_settings (id, erp_sync_refused_at, erp_sync_refused_reason, erp_sync_refused_endpoint) VALUES (1, now(), $1, $2)
-       ON CONFLICT (id) DO UPDATE SET erp_sync_refused_at = now(), erp_sync_refused_reason = EXCLUDED.erp_sync_refused_reason,
-         erp_sync_refused_endpoint = EXCLUDED.erp_sync_refused_endpoint`,
-      [check.reason.slice(0, 2000), endpoint]
+      `INSERT INTO app_settings (id, erp_sync_refusals) VALUES (1, $1::jsonb)
+       ON CONFLICT (id) DO UPDATE SET erp_sync_refusals = app_settings.erp_sync_refusals || EXCLUDED.erp_sync_refusals`,
+      [entry]
     );
   } catch (err) {
     console.error("erp sync guard: could not save the refusal:", err.message);

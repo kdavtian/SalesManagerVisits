@@ -1,9 +1,8 @@
 -- Improvement plan 0.5 (owner, 2026-11-28): an empty or half-saved Excel file must not wipe the debts. A sync whose customers, debtors, order
 -- lines, cash lines or products drop sharply against the last good sync is refused (erp/erpSyncGuard.js). These columns remember the last
 -- refusal (shown in System health) and the admin's one-time "Accept the next sync" window that lets a real change through.
-ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_refused_at timestamptz;
-ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_refused_reason text;
-ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_refused_endpoint text;
+-- the last refusal of EACH kind of sync: { "/api/erp-sync": { at, reason }, "/api/erp-sync/cashflow-ledger": { at, reason } }
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_refusals jsonb NOT NULL DEFAULT '{}';
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_accept_until timestamptz;
 ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_accept_by integer REFERENCES users(id) ON DELETE SET NULL;
 -- the accept is used once per endpoint (main sync, Cashflow push): a second bad file in the same window is refused again

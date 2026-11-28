@@ -21,7 +21,7 @@ test.before(async () => {
   accountantCookie = await loginAs((await createUser("accountant")).email);
 });
 test.after(async () => {
-  await pool.query("UPDATE app_settings SET erp_sync_refused_at = NULL, erp_sync_refused_reason = NULL, erp_sync_accept_until = NULL, erp_sync_accept_by = NULL WHERE id = 1");
+  await pool.query("UPDATE app_settings SET erp_sync_refusals = '{}', erp_sync_accept_until = NULL, erp_sync_accept_by = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
   await pool.query("DELETE FROM erp_customer_data WHERE erp_customer_id LIKE $1", [`${RUN}%`]);
   await pool.query("DELETE FROM cash_entries WHERE origin = 'excel' AND info LIKE $1", [`${RUN}%`]);
   await cleanupAll();
@@ -61,7 +61,10 @@ test("a good full sync, then an empty file: refused with 422, debts kept, refusa
   const st = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
   assert.equal(st.status, 200);
   assert.equal(st.data.guard.refused_open, true);
-  assert.match(st.data.guard.refused_reason, /customers: 120 → 0/);
+  assert.equal(st.data.guard.refusals.length, 1);
+  assert.equal(st.data.guard.refusals[0].endpoint, "/api/erp-sync");
+  assert.match(st.data.guard.refusals[0].reason, /customers: 120 → 0/);
+  assert.equal(st.data.guard.refusals[0].accepted, false);
   assert.match(st.data.last_failure.error, /Big drop/);
   assert.equal(st.data.last_success.counts.customers, 120, "the last good sync is unchanged");
   // order lines alone halving (customers fine) is refused too
@@ -117,6 +120,9 @@ test("only admin / CEO accept the next sync; it lets ONE big drop through, a sec
   assert.deepEqual(after.data.guard.accept_used, ["/api/erp-sync"]);
   assert.equal((await sync({ customers: customers(120), force: true })).status, 200);
   assert.equal((await sync({ customers: customers(10) })).status, 422, "a second bad file in the same window is refused");
+  const again = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
+  const mainRef = again.data.guard.refusals.find((r) => r.endpoint === "/api/erp-sync");
+  assert.equal(mainRef.accepted, false, "the card offers the accept button again for the main sync");
   await pool.query("UPDATE app_settings SET erp_sync_accept_until = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
 });
 
@@ -140,7 +146,14 @@ test("the bot's Cashflow push: a half sheet is refused and the ledger kept; doll
   assert.equal((await sync({ customers: customers(120) })).status, 200);
   const st = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
   assert.equal(st.data.guard.refused_open, true, "still open: only a good Cashflow push closes it");
-  assert.equal(st.data.guard.refused_endpoint, "/api/erp-sync/cashflow-ledger");
+  assert.deepEqual(st.data.guard.refusals.map((r) => r.endpoint), ["/api/erp-sync/cashflow-ledger"]);
+  // a main-sync refusal now does not overwrite the Cashflow one, and a good main sync closes only its own
+  assert.equal((await sync({ customers: customers(10) })).status, 422);
+  const both = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
+  assert.deepEqual(both.data.guard.refusals.map((r) => r.endpoint).sort(), ["/api/erp-sync", "/api/erp-sync/cashflow-ledger"]);
+  assert.equal((await sync({ customers: customers(120) })).status, 200);
+  const one = await apiRequest("/api/erp-sync/status", { cookie: adminCookie });
+  assert.deepEqual(one.data.guard.refusals.map((r) => r.endpoint), ["/api/erp-sync/cashflow-ledger"]);
   // the admin's accept lets one Cashflow push through, then the ledger guard is back
   await apiRequest("/api/erp-sync/accept-drop", { method: "POST", cookie: adminCookie });
   assert.equal((await ledger({ rows: rows.slice(0, 60) })).status, 200);

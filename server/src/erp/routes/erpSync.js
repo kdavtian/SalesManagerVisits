@@ -15,7 +15,7 @@ import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp, markAppRowsInExcel } from "../erpAutoMatch.js";
 import { matchReturnsToErp } from "../../orders/orderReturns.js";
 import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
-import { lastGoodCounts, checkSyncDrop, refuseDrop, getSyncGuard, acceptNextSync, refusalOpen, MAIN, LEDGER } from "../erpSyncGuard.js";
+import { lastGoodCounts, checkSyncDrop, refuseDrop, getSyncGuard, acceptNextSync, MAIN, LEDGER } from "../erpSyncGuard.js";
 import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
 import { runAutoTasks } from "../../money/debtCollectionTasks.js";
 import { runAntiFraud } from "../../money/antiFraud.js";
@@ -910,8 +910,7 @@ const SYNC_VIEW_ROLES = ["admin", "ceo", "operations_director"];
 erpSyncRouter.get("/status", requireAuth, async (req, res) => {
   if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const [status, pause, guard] = await Promise.all([getSyncStatus(), getSyncPause(), getSyncGuard()]);
-  // the last "big drop" refusal counts only while no good sync of the same kind has landed after it
-  res.json({ ...status, pause, guard: { ...guard, refused_open: await refusalOpen(guard) }, can_pause: canPauseErpSync(req.user.role) });
+  res.json({ ...status, pause, guard, can_pause: canPauseErpSync(req.user.role) });
 });
 
 // "Accept the next sync" (erpSyncGuard.js): after a refused big-drop sync, an admin / CEO who knows the change is real opens a short window

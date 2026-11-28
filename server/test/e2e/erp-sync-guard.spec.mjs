@@ -27,7 +27,8 @@ test("System health: a big-drop refusal shows the reason; admin accepts the next
   const FILE = `e2e-guard-${Date.now()}.xlsx`;
   await pool.query("INSERT INTO erp_sync_runs (counts, workbook_modified_at, workbook_name, at) VALUES ('{\"customers\": 412}', now(), $1, now() - interval '1 hour')", [FILE]);
   await pool.query(
-    "UPDATE app_settings SET erp_sync_refused_at = now(), erp_sync_refused_reason = 'Big drop against the last good sync, nothing was changed: customers: 412 → 0 (−100%)', erp_sync_accept_until = NULL WHERE id = 1"
+    `UPDATE app_settings SET erp_sync_refusals = jsonb_build_object('/api/erp-sync', jsonb_build_object('at', now(), 'reason', 'Big drop against the last good sync, nothing was changed: customers: 412 → 0 (−100%)')),
+       erp_sync_accept_until = NULL, erp_sync_accept_used = '{}' WHERE id = 1`
   );
   try {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -35,17 +36,17 @@ test("System health: a big-drop refusal shows the reason; admin accepts the next
     await page.goto("/#/settings?section=system-health");
     const card = page.locator("#erp-sync-card");
     await expect(card).toContainText("Sync refused: big drop.", { timeout: 15000 });
-    const btn = card.locator("#es-accept");
+    const btn = card.locator("[data-accept]");
     await expect(btn).toBeVisible();
     expect(await btn.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(43);
     await shots(page, "guard-refused", async () => {
-      await page.locator("#es-accept").scrollIntoViewIfNeeded({ timeout: 15000 });
+      await page.locator("[data-accept]").scrollIntoViewIfNeeded({ timeout: 15000 });
     });
 
     page.once("dialog", (d) => d.accept());
-    await card.locator("#es-accept").click();
+    await card.locator("[data-accept]").click();
     await expect(card.locator(".es-accepted")).toContainText("The next syncs are accepted until", { timeout: 10000 });
-    await expect(card.locator("#es-accept")).toHaveCount(0);
+    await expect(card.locator("[data-accept]")).toHaveCount(0);
     const { rows } = await pool.query("SELECT erp_sync_accept_until > now() AS open, erp_sync_accept_by FROM app_settings WHERE id = 1");
     expect(rows[0].open).toBe(true);
     expect(rows[0].erp_sync_accept_by).toBe(admin.id);
@@ -53,7 +54,7 @@ test("System health: a big-drop refusal shows the reason; admin accepts the next
       await page.locator("#erp-sync-card .es-accepted").scrollIntoViewIfNeeded({ timeout: 15000 });
     });
   } finally {
-    await pool.query("UPDATE app_settings SET erp_sync_refused_at = NULL, erp_sync_refused_reason = NULL, erp_sync_accept_until = NULL, erp_sync_accept_by = NULL WHERE id = 1");
+    await pool.query("UPDATE app_settings SET erp_sync_refusals = '{}', erp_sync_accept_until = NULL, erp_sync_accept_by = NULL, erp_sync_accept_used = '{}' WHERE id = 1");
     await pool.query("DELETE FROM erp_sync_runs WHERE workbook_name = $1", [FILE]);
   }
 });
