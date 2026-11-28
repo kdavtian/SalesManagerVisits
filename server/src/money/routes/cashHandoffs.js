@@ -24,6 +24,7 @@ import {
   closesCashShortfall,
   seesExcelBalance,
   setsExcelBalanceMode,
+  seesAllPayments,
 } from "../../shared/roles.js";
 import { excelBalanceOverview, setExcelBalanceMode } from "../excelBalanceHandoffs.js";
 import { notifyUser } from "../../shared/notifications.js";
@@ -314,7 +315,7 @@ const SHORTFALL_SQL = `SELECT s.id, s.handoff_id, s.user_id, u.name AS user_name
   LEFT JOIN users cu ON cu.id = s.closed_by`;
 
 cashHandoffsRouter.get("/shortfalls", async (req, res) => {
-  const own = req.user.role === "sales_manager";
+  const own = !seesAllPayments(req.user.role); // a rep, a driver, the warehouse: only their own (roles.js)
   const [{ rows: open }, { rows: closed }] = await Promise.all([
     pool.query(`${SHORTFALL_SQL} WHERE s.status = 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.created_at`, own ? [req.user.id] : []),
     pool.query(`${SHORTFALL_SQL} WHERE s.status <> 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.closed_at DESC LIMIT 30`, own ? [req.user.id] : []),
@@ -529,7 +530,7 @@ async function loadHandoff(id) {
 // already sees every payment company-wide (see seesAllPayments) -- a
 // handoff exposes nothing a payment row doesn't.
 export function canSeeHandoff(user, handoff) {
-  if (user.role !== "sales_manager") return true;
+  if (seesAllPayments(user.role)) return true;
   return handoff.from_user_id === user.id || handoff.to_user_id === user.id || handoff.submitted_by === user.id;
 }
 
