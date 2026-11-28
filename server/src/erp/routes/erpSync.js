@@ -15,6 +15,7 @@ import { queueReportLabel, queueSyncNotice } from "../syncNotifier.js";
 import { autoDeliverOrdersFromErp, autoApprovePaymentsFromErp, markAppRowsInExcel } from "../erpAutoMatch.js";
 import { matchReturnsToErp } from "../../orders/orderReturns.js";
 import { recordSyncAttempt, latestSyncAttempts } from "../erpSyncAttempts.js";
+import { lastGoodCounts, checkSyncDrop, refuseDrop, getSyncGuard, acceptNextSync, MAIN, LEDGER } from "../erpSyncGuard.js";
 import { recordSyncRun, getSyncStatus, createSyncRequest, pickPendingRequest, finishRequest } from "../erpSyncStatus.js";
 import { runAutoTasks } from "../../money/debtCollectionTasks.js";
 import { runAntiFraud } from "../../money/antiFraud.js";
@@ -201,12 +202,23 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
   } = transformErpProducts(products);
 
   const { volChannelCodes, volMonths, volBrands, volLiters } = transformErpBrandVolume(brand_volume);
+  const syncWarnings = [];
+
+  // The "big drop" guard (erpSyncGuard.js): before anything is wiped, compare with the last good sync; a half-saved file changes nothing.
+  const counts = {
+    customers: erpIds.length,
+    customers_with_debt: debts.filter((d) => Number(d) > 0).length,
+    order_lines: order_lines !== undefined ? lineErpIds.length : null,
+    cashflow_lines: cashflow_lines !== undefined ? cashErpIds.length : null,
+    products: products !== undefined ? prodErpIds.length : null,
+  };
+  const guard = await checkSyncDrop({ endpoint: MAIN, incoming: counts, previous: await lastGoodCounts(), force: req.body?.force });
+  if (!guard.ok) return refuseDrop(res, { endpoint: MAIN, check: guard });
 
   const client = await pool.connect();
   let priceChangedProducts = 0;
   let excelRetailChanged = 0;
   let releaseErr;
-  const syncWarnings = [];
   try {
     await client.query("BEGIN");
     await client.query("TRUNCATE erp_customer_data");
@@ -579,12 +591,7 @@ erpSyncRouter.post("/", syncKeyLimiter, requireSyncKey, refuseWhilePaused, async
 
   if (syncWarnings.length) await recordSyncAttempt({ endpoint: "/api/erp-sync", ok: true, warnings: syncWarnings });
   await recordSyncRun({
-    counts: {
-      customers: erpIds.length,
-      order_lines: order_lines !== undefined ? lineErpIds.length : null,
-      cashflow_lines: cashflow_lines !== undefined ? cashErpIds.length : null,
-      products: products !== undefined ? prodErpIds.length : null,
-    },
+    counts,
     warnings: syncWarnings,
     meta,
   });
@@ -619,7 +626,14 @@ erpSyncRouter.post("/cashflow-ledger", syncKeyLimiter, requireSyncKey, refuseWhi
   const rows = req.body?.rows;
   if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: "rows must be a non-empty array" });
   try {
-    const applied = await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), { via: "bot", note: req.body?.note ?? null, fileName: req.body?.file_name ?? null });
+    const applied = await applyCashLedger(rows.filter(isPlainObject).map((r, i) => ({ ...r, excel_row: r.excel_row ?? i + 1 })), {
+      via: "bot",
+      note: req.body?.note ?? null,
+      fileName: req.body?.file_name ?? null,
+      // the same "big drop" guard as the main sync: a half-saved Cashflow sheet must not wipe the ledger (erpSyncGuard.js)
+      guard: ({ incoming, previous }) => checkSyncDrop({ endpoint: LEDGER, incoming, previous, force: req.body?.force }),
+    });
+    if (applied.refused) return refuseDrop(res, { endpoint: LEDGER, check: applied.refused });
     // the new cashflow rows are the data the expense watch (and "is it in the Excel?") reads
     if (process.env.NODE_ENV !== "test") {
       runExpenseWatch().catch((err) => console.error("Expense watch failed:", err.message));
@@ -895,8 +909,15 @@ const SYNC_VIEW_ROLES = ["admin", "ceo", "operations_director"];
 
 erpSyncRouter.get("/status", requireAuth, async (req, res) => {
   if (!SYNC_VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  const [status, pause] = await Promise.all([getSyncStatus(), getSyncPause()]);
-  res.json({ ...status, pause, can_pause: canPauseErpSync(req.user.role) });
+  const [status, pause, guard] = await Promise.all([getSyncStatus(), getSyncPause(), getSyncGuard()]);
+  res.json({ ...status, pause, guard, can_pause: canPauseErpSync(req.user.role) });
+});
+
+// "Accept the next sync" (erpSyncGuard.js): after a refused big-drop sync, an admin / CEO who knows the change is real opens a short window
+// in which the next syncs go through. Same right as the pause switch.
+erpSyncRouter.post("/accept-drop", requireAuth, async (req, res) => {
+  if (!canPauseErpSync(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+  res.json(await acceptNextSync(req.user.id));
 });
 
 // The pause switch (erpSyncPause.js): { paused: true|false }. Admin / CEO only.

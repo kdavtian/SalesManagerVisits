@@ -1,0 +1,19 @@
+-- Improvement plan 0.5 (owner, 2026-11-28): an empty or half-saved Excel file must not wipe the debts. A sync whose customers, debtors, order
+-- lines, cash lines or products drop sharply against the last good sync is refused (erp/erpSyncGuard.js). These columns remember the last
+-- refusal (shown in System health) and the admin's one-time "Accept the next sync" window that lets a real change through.
+-- the last refusal of EACH kind of sync: { "/api/erp-sync": { at, reason }, "/api/erp-sync/cashflow-ledger": { at, reason } }
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_refusals jsonb NOT NULL DEFAULT '{}';
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_accept_until timestamptz;
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_accept_by integer REFERENCES users(id) ON DELETE SET NULL;
+-- the accept is used once per endpoint (main sync, Cashflow push): a second bad file in the same window is refused again
+ALTER TABLE app_settings ADD COLUMN IF NOT EXISTS erp_sync_accept_used text[] NOT NULL DEFAULT '{}';
+
+-- Improvement plan 0.9: a dollar row in the Excel Cashflow sheet with no AMD amount and no rate. The refresh now uses the nearest known rate;
+-- a row with no rate anywhere is kept but flagged here (its AMD amount is 0 until the accountant types the rate).
+ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS fx_missing boolean NOT NULL DEFAULT false;
+-- the rate was not typed on the row but taken from the nearest dollar row (never used as "the app's newest rate")
+ALTER TABLE cash_entries ADD COLUMN IF NOT EXISTS fx_estimated boolean NOT NULL DEFAULT false;
+ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS rows_rate_filled integer NOT NULL DEFAULT 0;
+ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS rows_no_rate integer NOT NULL DEFAULT 0;
+-- the typed rate a refresh fell back to (its source row may be replaced by that same refresh): the next refresh can still find it
+ALTER TABLE cash_syncs ADD COLUMN IF NOT EXISTS fallback_rate numeric(10, 4);
