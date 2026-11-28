@@ -18,11 +18,18 @@ const DB_URL = BASE_URL.replace(/\/[^/?]+(\?.*)?$/, `/${DB}`);
 const has = (cmd) => spawnSync("sh", ["-c", `command -v ${cmd}`]).status === 0;
 const hasRclone = has("rclone");
 
-// pg_dump older than the server refuses to run: skip (with the reason) instead of failing on a CI image detail.
+// Production dumps and restores with the Postgres container's own tools, so client and server always match. Here the
+// machine's pg_dump may be newer than the server (a CI image ships several): its dump then has settings the server rejects
+// (SET transaction_timeout). Use the client of the server's own major version when installed, else skip with the reason.
+const serverMajor = Math.floor(Number(spawnSync("psql", [BASE_URL, "-tAc", "SHOW server_version_num"], { encoding: "utf8" }).stdout?.trim()) / 10000);
+const matchingBin = `/usr/lib/postgresql/${serverMajor}/bin`;
+const PG_PATH = fs.existsSync(path.join(matchingBin, "pg_dump")) ? `${matchingBin}:${process.env.PATH}` : process.env.PATH;
 function skipReason() {
   if (!has("pg_dump") || !has("psql")) return "pg_dump/psql not installed";
-  const r = spawnSync("pg_dump", ["--schema-only", BASE_URL], { encoding: "utf8" });
-  if (r.status !== 0) return `pg_dump cannot dump this server: ${r.stderr.trim().split("\n")[0]}`;
+  if (!serverMajor) return "cannot read the server version";
+  const v = spawnSync("pg_dump", ["--version"], { encoding: "utf8", env: { ...process.env, PATH: PG_PATH } }).stdout ?? "";
+  const clientMajor = Number(v.match(/(\d+)\./)?.[1]);
+  if (clientMajor !== serverMajor) return `pg_dump ${clientMajor} does not match the Postgres ${serverMajor} server (install postgresql-client-${serverMajor})`;
   return null;
 }
 const SKIP = skipReason();
@@ -73,7 +80,7 @@ test.after(async () => {
 function run(script, env = {}, args = []) {
   const child = spawn(path.join(REPO, "deploy", script), args, {
     env: {
-      PATH: process.env.PATH,
+      PATH: PG_PATH,
       HOME: tmp,
       BACKUP_DB_URL: DB_URL,
       BACKUP_UPLOADS_DIR: path.join(tmp, "uploads"),
