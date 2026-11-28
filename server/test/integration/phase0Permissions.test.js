@@ -118,6 +118,12 @@ test("0.11: rep B gets 403 on rep A's customer's document; rep A opens it even w
   assert.equal((await apiRequest(`/api/customers/${customerA.id}/documents`, { cookie: repBCookie })).status, 404);
   const list = await apiRequest(`/api/customers/${customerA.id}/documents`, { cookie: cookies.sales_manager });
   assert.deepEqual(list.data.map((d) => d.id), [docs.a]);
+  // the rep who placed an order still opens its paper after the customer went to another rep
+  const { rows: [o] } = await pool.query("INSERT INTO orders (customer_id, user_id, status, total_amd) VALUES ($1, $2, 'delivered', 1000) RETURNING id", [customerB.id, users.sales_manager.id]);
+  trackOrder(o.id);
+  const pdf = Buffer.from("%PDF-1.4 own");
+  docs.own = (await pool.query("INSERT INTO order_documents (order_id, filename, size_bytes, data) VALUES ($1, 'own.pdf', $2, $3) RETURNING id", [o.id, pdf.length, pdf])).rows[0].id;
+  assert.equal((await apiRequest(`/api/orders/documents/${docs.own}/file`, { cookie: cookies.sales_manager })).status, 200);
 });
 
 // ---- 0.12 reaching a customer ------------------------------------------------------------------------------------------------------------
@@ -214,6 +220,11 @@ test("0.13: payments, hand-overs and shortfalls -- the money roles see all; a re
     assert.equal((await apiRequest(`/api/cash-handoffs/${h.data.id}`, { cookie: cookies[role] })).status, 403, role);
     assert.ok(!(await shortfallIds(cookies[role])).includes(sf.id), role);
   }
+  // the customer card's "payments received" carries the app payment for the money roles only (the rep who collected it too)
+  const received = async (cookie) => JSON.stringify((await apiRequest(`/api/customers/${customerA.id}/payments-received`, { cookie })).data);
+  for (const role of ["warehouse_manager", "delivery_manager"]) assert.ok(!(await received(cookies[role])).includes("30000"), role);
+  assert.ok((await received(cookies.accountant)).includes("30000"));
+  assert.ok((await received(cookies.sales_manager)).includes("30000"));
   // the rep who handed it over still sees his own; another rep does not
   assert.equal((await apiRequest(`/api/payments/${pay.id}`, { cookie: cookies.sales_manager })).status, 200);
   assert.equal((await apiRequest(`/api/cash-handoffs/${h.data.id}`, { cookie: cookies.sales_manager })).status, 200);

@@ -74,7 +74,7 @@ test("a debt call task needs the collection outcome when the customer was spoken
   assert.equal(ok.data.outcome, "promised");
 });
 
-test("a Visit task closes itself when the assigned rep checks in at the customer; another rep's check-in does not", async () => {
+test("a Visit task closes itself when the assigned rep checks in at the customer; another person's check-in does not", async () => {
   const t = (await give("visit_customer")).data;
   assert.equal(t.task_kind, "visit_customer");
   const form = (c) => {
@@ -85,9 +85,13 @@ test("a Visit task closes itself when the assigned rep checks in at the customer
     f.set("outcomes", JSON.stringify(["no_order"]));
     return f;
   };
+  // another rep may not check in at a customer that is not his (customerAccess.js, 2026-11-28); the director checks in anywhere -- neither
+  // closes the rep's task
   const byOther = await apiFormRequest("/api/checkins", { cookie: otherCookie, form: form() });
-  assert.equal(byOther.status, 201, JSON.stringify(byOther.data));
-  trackCheckin(byOther.data.id);
+  assert.equal(byOther.status, 403, JSON.stringify(byOther.data));
+  const byDirector = await apiFormRequest("/api/checkins", { cookie: dirCookie, form: form() });
+  assert.equal(byDirector.status, 201, JSON.stringify(byDirector.data));
+  trackCheckin(byDirector.data.id);
   await new Promise((r) => setTimeout(r, 400));
   assert.equal((await apiRequest(`/api/tasks/${t.id}`, { cookie: dirCookie })).data.status, "open");
   const byRep = await apiFormRequest("/api/checkins", { cookie: repCookie, form: form() });

@@ -30,13 +30,14 @@ export function reachableCustomersSql(user, alias, n) {
 /**
  * A signed accounting document of an order (order_documents): the people who see all activity, the rep who placed the order, and anyone who
  * reaches the order's customer -- exactly what the customer card's Documents list shows them, so every listed paper also opens.
- * Returns null when the order does not exist.
+ * Returns null when the order does not exist (checked only for a sales manager; the callers already found the document).
  */
 export async function mayOpenOrderDocument(user, orderId, db = pool) {
+  if (seesAllActivity(user.role)) return true;
   const { rows: [o] } = await db.query(
     "SELECT o.user_id, c.assigned_manager_id, c.checkin_for_all FROM orders o JOIN customers c ON c.id = o.customer_id WHERE o.id = $1",
     [orderId]
   );
   if (!o) return null;
-  return seesAllActivity(user.role) || o.user_id === user.id || mayReachCustomerRow(user, o);
+  return o.user_id === user.id || mayReachCustomerRow(user, o);
 }

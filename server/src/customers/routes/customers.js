@@ -11,7 +11,7 @@ import { CHECKIN_ORDER_LINKS_SQL } from "../../field/checkinDelivery.js";
 import { yerevanToday, yerevanDateOf } from "../../utils/yerevanDate.js";
 import { shelfRecordedSql } from "../../field/shelfData.js";
 import { requireAuth, requireAdmin } from "../../middleware/auth.js";
-import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS } from "../../shared/roles.js";
+import { canManagePotentialAll, canResolveCounterfeit, canConfirmOrders, seesAllActivity, canReassignCustomers, canDeleteOrEditDirectly, canAssignErpCustomerId, canEditOwnSalesChannel, seesFinancialExports, seesCustomerErpData, canSetCreditTerms, canCloseCustomers, seesAmountPapers, seesOnlyRecentAccountingDocs, ACCOUNTING_DOCS_RECENT_DAYS, seesAllPayments } from "../../shared/roles.js";
 import { creditSnapshot } from "../../orders/creditLimit.js";
 import { debtHoldInfo } from "../../money/debtAge.js";
 import { visitPriorities } from "../../field/visitPriorities.js";
@@ -1301,7 +1301,7 @@ customersRouter.get("/:id/payments-received", async (req, res) => {
 
   const appParams = [customer.id];
   let appScope = "";
-  if (req.user.role === "sales_manager") {
+  if (!seesAllPayments(req.user.role)) { // a rep, the warehouse, a driver: only payments they collected (roles.js, 0.13)
     appParams.push(req.user.id);
     appScope = "AND p.sales_manager_id = $2";
   }
