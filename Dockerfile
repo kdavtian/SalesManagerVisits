@@ -1,6 +1,7 @@
+# Node 22 (LTS, security support to April 2027), the same version CI tests on (.github/workflows/ci.yml); Node 20 left support in April 2026.
 # The phone app's scripts bundled for deploy (docs/architecture-roadmap.md step 10, server/scripts/build-client.mjs): a separate stage,
 # so esbuild and the other development tools never reach the running image. Its dependency layer is cached like the one below.
-FROM node:20-alpine AS client-build
+FROM node:22-alpine AS client-build
 WORKDIR /app
 COPY server/package*.json server/
 RUN cd server && npm ci --no-audit --no-fund --ignore-scripts
@@ -8,7 +9,7 @@ COPY client client
 COPY server/scripts/build-client.mjs server/scripts/build-client.mjs
 RUN node server/scripts/build-client.mjs
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 # The user and su-exec come first: they never change, so this layer is cached and the slow steps below do not repeat on every deploy.
 RUN apk add --no-cache su-exec \
