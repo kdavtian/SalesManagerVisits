@@ -104,3 +104,16 @@ test("a second signal exits at once with code 1", async () => {
   assert.deepEqual(codes, [1]);
   server.closeAllConnections();
 });
+
+test("a database close that never finishes (a connection still borrowed) does not keep the process alive", async () => {
+  const server = await listen((req, res) => res.end());
+  const t0 = Date.now();
+  const borrowed = setInterval(() => {}, 1000); // stands for the borrowed connection's socket, which keeps a real process alive
+  const code = await new Promise((resolve) => {
+    createShutdown({ server, log: quiet, stopJobs: async () => {}, closeDb: () => new Promise(() => {}), capMs: 100, exit: resolve })("SIGTERM");
+  });
+  clearInterval(borrowed);
+  assert.equal(code, 0);
+  const took = Date.now() - t0;
+  assert.ok(took >= 1900 && took < 3500, `took ${took} ms`);
+});

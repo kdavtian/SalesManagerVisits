@@ -4,7 +4,7 @@ import path from "node:path";
 import { Router } from "express";
 import ExcelJS from "exceljs";
 import multer from "multer";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { requireAuth, requireProductManager } from "../../middleware/auth.js";
 import { seesProductCosts } from "../../shared/roles.js";
 import { displayNetCost } from "../../orders/discountPolicy.js";
@@ -758,7 +758,7 @@ productsRouter.post(
     try {
       const rows = await parseImportFile(req.file.buffer);
       const classified = await classifyImportRows(rows);
-      const result = await applyImportRows(classified, req.user.id);
+      const result = await runLongWork(() => applyImportRows(classified, req.user.id));
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: err.message });

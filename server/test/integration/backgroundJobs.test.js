@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
 import { createScheduler, jobStatus, jobTimeoutMs } from "../../src/jobs/scheduler.js";
-import { currentPoolKind, useWebLimits } from "../../src/db/pool.js";
+import { currentPoolKind, useWebLimits, endPools } from "../../src/db/pool.js";
 import { JOBS } from "../../src/jobs/index.js";
 import en from "../../../client/public/js/i18n-en.js";
 import hy from "../../../client/public/js/i18n-hy.js";
@@ -20,7 +20,7 @@ const rowOf = async (name) => (await pool.query("SELECT * FROM background_jobs W
 
 test.after(async () => {
   await pool.query("DELETE FROM background_jobs WHERE name = ANY($1)", [names]);
-  await pool.end();
+  await endPools(); // both connection groups (one test switches the web limits on)
 });
 
 test("a new job waits one interval; a due job runs once, even when two server copies tick together", async () => {
@@ -98,13 +98,14 @@ test("a switched-off job is not registered or run, and its status says why", asy
 
 // Improvement plan 0.22: a hung run is cut at its time limit (marked failed, slot freed, its signal aborted); 3 failures in a row or a run
 // still going after 3 intervals sends one Telegram line per job per day; a good run resets the count.
-test("a run past its time limit is marked failed, its signal is aborted and the job can run again", async () => {
+test("a run past its time limit is marked failed and its signal aborted; it is not started again until it really ends", async () => {
   let signal;
   let calls = 0;
+  let release;
   const j = job(`itest-timeout-${process.pid}`, (_now, ctx) => {
     calls++;
     signal = ctx.signal;
-    return new Promise(() => {}); // never finishes
+    return new Promise((r) => (release = r)); // hangs (does not read its signal)
   }, { timeoutMs: 150 });
   const s = createScheduler([j], { log: quiet, alert: async () => {} });
   await s.tick();
@@ -115,12 +116,16 @@ test("a run past its time limit is marked failed, its signal is aborted and the 
   assert.equal(row.last_ok, false);
   assert.match(row.last_error, /timed out/);
   assert.equal(row.failures_in_a_row, 1);
-  assert.deepEqual(s.running(), [], "the slot is free");
+  assert.deepEqual(s.running(), [j.name], "the hung run still holds its slot");
   await makeDue(j.name);
-  assert.equal(await s.tick(), 1, "the next turn runs it again");
+  assert.equal(await s.tick(), 0, "never two copies of the same job side by side");
+  assert.equal(calls, 1);
+  release();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(s.running(), [], "the slot is free once the run really ended");
+  assert.equal(await s.tick(), 1, "and the job runs again");
   assert.equal(calls, 2);
-  row = await rowOf(j.name);
-  assert.equal(row.failures_in_a_row, 2);
+  release();
 });
 
 test("the default time limit: 3 intervals, between 10 and 60 minutes", () => {
@@ -170,7 +175,7 @@ test("a run still going after 3 of its intervals sends one admin line", async ()
   await s.tick();
   await makeDue(j.name);
   const first = s.tick();
-  await new Promise((r) => setTimeout(r, 3200));
+  await new Promise((r) => setTimeout(r, 3600));
   await s.tick();
   await s.tick();
   assert.equal(sent.length, 1);

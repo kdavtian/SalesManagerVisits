@@ -83,6 +83,10 @@ services:
       # database time limits (server/src/db/pool.js); blank = the default: 30 s per phone request query, 15 min for jobs and the Excel sync
       DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-}
       DB_LONG_STATEMENT_TIMEOUT_MS: ${DB_LONG_STATEMENT_TIMEOUT_MS:-}
+      DB_IDLE_IN_TX_TIMEOUT_MS: ${DB_IDLE_IN_TX_TIMEOUT_MS:-}
+      DB_LONG_IDLE_IN_TX_TIMEOUT_MS: ${DB_LONG_IDLE_IN_TX_TIMEOUT_MS:-}
+      DB_CONNECT_TIMEOUT_MS: ${DB_CONNECT_TIMEOUT_MS:-}
+      DB_LONG_CONNECT_TIMEOUT_MS: ${DB_LONG_CONNECT_TIMEOUT_MS:-}
       NODE_ENV: production
     volumes:
       - uploads_data:/app/server/uploads
