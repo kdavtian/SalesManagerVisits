@@ -5,7 +5,7 @@ import { Router } from "express";
 import { notifyApproversOf, notifyDecisionOf } from "../../system/requests/notify.js";
 import { cleanReason } from "../../system/requests/rules.js";
 import multer from "multer";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canSeeCashflow, canEditCashflow, isCashflowManagement, canManageCashCategories, CASH_EDIT_WINDOW_DAYS } from "../../shared/roles.js";
 import { readCashWorkbook, applyCashLedger, cleanEntry } from "../cashflow.js";
@@ -159,9 +159,10 @@ cashflowRouter.post("/import", (req, res, next) => {
     return res.status(400).json({ error: err.message });
   }
   try {
-    res.json(await applyCashLedger(rows, { via: "upload", userId: req.user.id, fileName: req.file.originalname }));
+    // the same whole-ledger rewrite as the Excel sync: the database's long limits, not the 30 s web limit (db/pool.js)
+    res.json(await runLongWork(() => applyCashLedger(rows, { via: "upload", userId: req.user.id, fileName: req.file.originalname })));
     // the Balance rows of the new sheet are the cash handovers the Excel recorded (excelBalanceHandoffs.js)
-    if (process.env.NODE_ENV !== "test") syncExcelBalance().catch((e) => console.error("Excel Balance sync failed:", e.message));
+    if (process.env.NODE_ENV !== "test") runLongWork(() => syncExcelBalance()).catch((e) => console.error("Excel Balance sync failed:", e.message));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

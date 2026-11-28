@@ -2,15 +2,36 @@
 // ticks every TICK_MS and runs what is due. A job is claimed in the database (background_jobs.next_run_at moved forward in one UPDATE),
 // so when two server copies run, only one of them runs each turn; a job still running in this process is not started again. Each run's
 // result (ok / error, duration) is written back for Settings > System health.
-import { pool } from "../db/pool.js";
+//
+// A job that hangs or keeps failing is reported (improvement plan 0.22): every run has a time limit (jobTimeoutMs; at the limit the run is
+// recorded as failed and the job's own signal is aborted, but the job is not started again in this process until that run really ends, so
+// it never runs twice side by side), and the admin Telegram chat gets one line per job at most once a day when it failed 3 runs in a row
+// or is still running after 3 of its intervals. Jobs run on the database's "long" connections (db/pool.js runLongWork).
+import { pool, runLongWork } from "../db/pool.js";
+import { notifyTelegram, escapeHtml } from "../shared/telegram.js";
 
 export const TICK_MS = 15 * 1000;
+const MINUTE = 60 * 1000;
+export const ALERT_AFTER_FAILURES = 3;
+export const STUCK_AFTER_INTERVALS = 3;
 
-// jobs: [{ name, everyMs, run: async (now) => void, enabled?: () => boolean, why?: string }]
-export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = console } = {}) {
-  const running = new Set();
+// The time limit of one run: 3 intervals, never under 10 min (a minute job may wait on an AI or Telegram call) nor over 60 min.
+// A job can set its own `timeoutMs`.
+export function jobTimeoutMs(job) {
+  return job.timeoutMs ?? Math.min(60 * MINUTE, Math.max(10 * MINUTE, 3 * job.everyMs));
+}
+
+const minutes = (ms) => `${Math.round(ms / MINUTE)} min`;
+
+// jobs: [{ name, everyMs, run: async (now, { signal }) => void, enabled?: () => boolean, why?: string, timeoutMs?: number }]
+export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = console, alert = notifyTelegram } = {}) {
+  const running = new Map(); // name -> { startedAt } while a run is in progress (until its work really ends, past the time limit too)
+  const runs = new Set(); // every runJob() in progress, its result write included (what stop() waits for)
+  const ticks = new Set(); // every tick() in progress (a tick that already claimed jobs is waited for by stop())
+  const works = new Set(); // every job's own work in progress, a run past its time limit included (stop() gives it the time left too)
   let timer = null;
   let registered = null;
+  let stopping = false;
 
   // First start: the row is created with its first run one interval from now (as the old setInterval did); later starts keep the stored
   // next run, so a deploy no longer pushes every job a whole interval back.
@@ -26,32 +47,94 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
     }
   }
 
+  // One Telegram line per job per day at most; the day is claimed in the database, so two server copies never both send it.
+  async function maybeAlert(job, what) {
+    try {
+      const { rowCount } = await db.query(
+        `UPDATE background_jobs SET alerted_at = now()
+         WHERE name = $1 AND (alerted_at IS NULL OR alerted_at < now() - interval '1 day')`,
+        [job.name]
+      );
+      if (!rowCount) return false;
+      await alert(`⚠️ <b>Background job problem</b>\n${escapeHtml(job.name)}: ${escapeHtml(what)}\nSettings → System health`);
+      return true;
+    } catch (err) {
+      log.error(`Background job ${job.name}: alert not sent:`, err.message);
+      return false;
+    }
+  }
+
   async function runJob(job, now) {
-    running.add(job.name);
     const t0 = Date.now();
+    const limitMs = jobTimeoutMs(job);
+    const controller = new AbortController();
+    let limitTimer;
+    const work = Promise.resolve().then(() => job.run(now, { signal: controller.signal }));
+    running.set(job.name, { startedAt: t0 });
+    // the slot stays taken until the work itself ends (after a timeout it may still finish or fail later: already counted)
+    const settled = work
+      .catch(() => {})
+      .finally(() => {
+        running.delete(job.name);
+        works.delete(settled);
+      });
+    works.add(settled);
+    const limit = new Promise((_, reject) => {
+      limitTimer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`timed out after ${minutes(limitMs)}`));
+      }, limitMs);
+      limitTimer.unref?.();
+    });
+    const done = Promise.race([work, limit]);
     let error = null;
     try {
-      await job.run(now);
+      await done;
     } catch (err) {
       error = err;
       log.error(`Background job ${job.name} failed:`, err.message);
     } finally {
-      running.delete(job.name);
+      clearTimeout(limitTimer);
     }
-    await db
+    const saved = await db
       .query(
         `UPDATE background_jobs SET last_finished_at = now(), last_ok = $2::boolean, last_error = $3, last_duration_ms = $4::int,
-                runs = runs + 1, failures = failures + CASE WHEN $2::boolean THEN 0 ELSE 1 END
-         WHERE name = $1`,
+                runs = runs + 1, failures = failures + CASE WHEN $2::boolean THEN 0 ELSE 1 END,
+                failures_in_a_row = CASE WHEN $2::boolean THEN 0 ELSE failures_in_a_row + 1 END
+         WHERE name = $1 RETURNING failures_in_a_row`,
         [job.name, !error, error ? String(error.message).slice(0, 500) : null, Date.now() - t0]
       )
       .catch((err) => log.error(`Background job ${job.name}: result not saved:`, err.message));
+    const inARow = saved?.rows?.[0]?.failures_in_a_row ?? 0;
+    if (error && inARow >= ALERT_AFTER_FAILURES) {
+      await maybeAlert(job, `failed ${inARow} runs in a row. Last error: ${String(error.message).slice(0, 300)}`);
+    }
+  }
+
+  // A run still going after 3 of its intervals (its time limit is longer): reported once a day.
+  async function checkStuck() {
+    const nowMs = Date.now();
+    for (const job of jobs) {
+      const r = running.get(job.name);
+      if (r && nowMs - r.startedAt > STUCK_AFTER_INTERVALS * job.everyMs) {
+        await maybeAlert(job, `still running after ${minutes(nowMs - r.startedAt)} (runs every ${minutes(job.everyMs)})`);
+      }
+    }
   }
 
   // One turn: claim every due job in one UPDATE and start the claimed ones side by side.
-  async function tick(now = new Date()) {
+  function tick(now = new Date()) {
+    const t = runLongWork(() => tickOnce(now)).finally(() => ticks.delete(t));
+    ticks.add(t);
+    return t;
+  }
+
+  async function tickOnce(now) {
+    if (stopping) return 0;
     if (!registered) registered = register();
     await registered;
+    await checkStuck();
+    if (stopping) return 0;
     const candidates = jobs.filter((job) => !running.has(job.name) && !(job.enabled && !job.enabled())).map((job) => job.name);
     if (!candidates.length) return 0;
     const { rows } = await db.query(
@@ -62,24 +145,46 @@ export function createScheduler(jobs, { db = pool, tickMs = TICK_MS, log = conso
       [candidates]
     );
     const claimed = new Set(rows.map((r) => r.name));
-    await Promise.all(jobs.filter((job) => claimed.has(job.name)).map((job) => runJob(job, now)));
+    await Promise.all(
+      jobs
+        .filter((job) => claimed.has(job.name))
+        .map((job) => {
+          const p = runJob(job, now).finally(() => runs.delete(p));
+          runs.add(p);
+          return p;
+        })
+    );
     return claimed.size;
   }
 
   function start() {
     if (timer) return;
+    stopping = false;
     timer = setInterval(() => {
       tick().catch((err) => log.error("Background jobs tick failed:", err.message));
     }, tickMs);
     timer.unref?.();
   }
 
-  function stop() {
+  // No new run starts after stop(); the returned promise settles when the runs in progress finished, or after waitMs (a deploy: index.js).
+  function stop(waitMs = 0) {
     clearInterval(timer);
     timer = null;
+    stopping = true;
+    const inFlight = [...ticks, ...runs, ...works];
+    if (!inFlight.length || !waitMs) return Promise.resolve(inFlight.length);
+    let t;
+    const cap = new Promise((resolve) => {
+      t = setTimeout(resolve, waitMs);
+      t.unref?.();
+    });
+    return Promise.race([Promise.allSettled(inFlight), cap]).then(() => {
+      clearTimeout(t);
+      return runs.size + ticks.size + works.size;
+    });
   }
 
-  return { start, stop, tick, register: () => (registered = register()) };
+  return { start, stop, tick, register: () => (registered = register()), running: () => [...running.keys()] };
 }
 
 // For Settings > System health: every job with its cadence and last run (a job switched off here shows why).
@@ -102,6 +207,7 @@ export async function jobStatus(jobs, db = pool) {
       last_duration_ms: r?.last_duration_ms ?? null,
       runs: r?.runs ?? 0,
       failures: r?.failures ?? 0,
+      failures_in_a_row: r?.failures_in_a_row ?? 0,
     };
   });
 }
