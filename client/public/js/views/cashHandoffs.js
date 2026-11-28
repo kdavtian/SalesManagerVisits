@@ -88,7 +88,8 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
   const sheetsEl = container.querySelector("#cash-sheets");
 
   // Counting shortfalls (payments redesign, release 3; owner's answer 6): counted less than handed over -> on the sender's line until
-  // the missing notes are paid in (director / accountant / admin / CEO) or written off with a reason (admin / CEO). A rep sees his own.
+  // the missing notes are paid in (the person who counted it, admin or CEO; never your own; with a note) or written off with a reason
+  // (admin / CEO). A rep sees his own.
   const shortfallsSection = container.querySelector("#shortfalls-section");
   const shortfallsEl = container.querySelector("#shortfalls");
   async function loadShortfalls() {
@@ -101,6 +102,9 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
     if (!root.isConnected) return;
     shortfallsSection.hidden = !data.open.length && !data.closed.length;
     const when = (s) => formatDateDMY(s.confirmed_at || s.created_at);
+    // per card (plan 0.15): never your own; paid in = the person who counted it or admin / CEO. An older server sends only the top-level flags.
+    const canClose = (s) => (s.can_close ?? data.can_close) === true;
+    const canWriteOff = (s) => (s.can_write_off ?? data.can_write_off) === true;
     const openHtml = data.open
       .map(
         (s) => `<div class="card shortfall-card" data-id="${s.id}">
@@ -108,8 +112,8 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
             <div class="muted">${escapeHtml(t("shortfall_meta").replace("{date}", when(s)).replace("{name}", s.counted_by_name || ""))}${s.note ? ` · ${escapeHtml(s.note)}` : ""}</div></div>
             <span class="text-amount shortfall-amount">−${escapeHtml(formatAmd(s.amount_amd))}</span></div>
           ${
-            data.can_close || data.can_write_off
-              ? `<div class="shortfall-actions">${data.can_close ? `<button type="button" class="btn" data-sf="paid">${t("shortfall_paid_in")}</button>` : ""}${data.can_write_off ? `<button type="button" class="btn" data-sf="written_off">${t("shortfall_write_off")}</button>` : ""}</div>
+            canClose(s) || canWriteOff(s)
+              ? `<div class="shortfall-actions">${canClose(s) ? `<button type="button" class="btn" data-sf="paid">${t("shortfall_paid_in")}</button>` : ""}${canWriteOff(s) ? `<button type="button" class="btn" data-sf="written_off">${t("shortfall_write_off")}</button>` : ""}</div>
                  <div class="shortfall-confirm" hidden><input class="shortfall-note" maxlength="300" autocomplete="off" /><button type="button" class="btn btn-primary" data-sf-save>${t("save")}</button></div>
                  <p class="form-error" hidden></p>`
               : ""
@@ -144,8 +148,9 @@ export async function renderCashHandoffs(root, navigate, focusHandoffId, { hando
     }
     if (e.target.closest("[data-sf-save]")) {
       const note = confirmBox.querySelector(".shortfall-note").value.trim();
-      if (card.dataset.how === "written_off" && note.length < 3) {
-        errEl.textContent = t("shortfall_reason_needed");
+      // both ways need a note of 3+ letters (plan 0.15): how the missing money came in, or why it is written off
+      if (note.length < 3) {
+        errEl.textContent = t(card.dataset.how === "paid" ? "shortfall_note_needed" : "shortfall_reason_needed");
         errEl.hidden = false;
         return;
       }

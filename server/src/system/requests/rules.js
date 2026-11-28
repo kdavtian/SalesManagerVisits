@@ -14,7 +14,7 @@ import {
   canApproveCompetitorBrands,
 } from "../../shared/roles.js";
 import { canApproveDiscountRole } from "../../orders/discountPolicy.js";
-import { approvalBlock } from "../../money/cashRoute.js";
+import { approvalBlock, mayRejectPayment } from "../../money/cashRoute.js";
 import { pendingRequests } from "./queries.js";
 
 // The kinds, in the order the Requests list groups them.
@@ -26,7 +26,8 @@ export const isRequestKind = (kind) => REQUEST_KINDS.includes(kind);
 //   discount    -> belowCost, belowLanding (a line below net / landing cost narrows who may approve)
 //   perf_plan   -> submittedByRole (the accountant reviews only a sales director's plan)
 //   bonus_claim -> claimantId (nobody approves their own reward)
-//   payment     -> payment { status, pending_handoff_id, created_by, holder_role }, accountantDirect (where the cash is decides who may APPROVE: mayApprove)
+//   payment     -> payment { status, pending_handoff_id, created_by, holder_role, cash_counted }, accountantDirect (where the cash is decides who
+//                  may APPROVE: mayApprove; counted cash is refused by admin / CEO only: mayDeny)
 export function mayDecide(kind, user, facts = {}) {
   if (!user) return false;
   switch (kind) {
@@ -36,9 +37,14 @@ export function mayDecide(kind, user, facts = {}) {
       return canApproveReturns(user.role);
     case "customer_edit":
       return canReviewCustomerEdits(user.role);
-    case "payment":
-      // may decide = may at least refuse it; whether Approve is offered too is mayApprove below (one route for cash)
-      return canReviewPayments(user.role);
+    case "payment": {
+      // may decide = may at least refuse it; whether Approve is offered too is mayApprove below (one route for cash). Counted cash this
+      // person may neither approve nor refuse (plan 0.16: only admin / CEO refuse it) is not theirs to decide.
+      if (!canReviewPayments(user.role)) return false;
+      const p = facts.payment;
+      if (!p || p.pending_handoff_id || !p.cash_counted) return true;
+      return mayRejectPayment(p, user) || !approvalBlock(p, user, { accountantDirect: Boolean(facts.accountantDirect) });
+    }
     case "cashflow":
       return isCashflowManagement(user.role);
     case "visit_plan":
@@ -61,12 +67,20 @@ export function mayApprove(kind, user, facts = {}) {
   if (kind !== "payment" || !facts.payment) return true;
   return !approvalBlock(facts.payment, user, { accountantDirect: Boolean(facts.accountantDirect) });
 }
+// Deny, on a request this person may decide. Only a payment differs: counted / received / approved-once cash is refused by admin / CEO
+// only (money/cashRoute.js cashDecisionBlock), and nothing inside a waiting hand-over is refused (paymentInHandover).
+export function mayDeny(kind, user, facts = {}) {
+  if (!mayDecide(kind, user, facts)) return false;
+  if (kind !== "payment" || !facts.payment) return true;
+  return mayRejectPayment(facts.payment, user);
+}
 // A payment inside a hand-over waiting for its receiver can be neither approved nor refused until that is decided (the card says so).
 export const paymentInHandover = (kind, facts = {}) => kind === "payment" && Boolean(facts.payment?.pending_handoff_id);
 
 // Who may open a card: whoever may decide it, and the person who asked (to see the result).
 export function mayView(kind, user, request) {
-  return mayDecide(kind, user, request.facts) || user.id === request.requested_by_id;
+  // a payment reviewer still sees counted cash she may no longer decide (plan 0.16): the card says it waits for someone else
+  return mayDecide(kind, user, request.facts) || user.id === request.requested_by_id || (kind === "payment" && canReviewPayments(user.role));
 }
 
 // The address a push opens: the full-screen card of that one request.

@@ -3,6 +3,7 @@
 // payments.js, cashflow.js, visitPlans.js, teamPerformance.js, bonusRewardClaims.js, orderReturns.js).
 import { orderCostCheck, effectiveDiscountPct } from "../../orders/discountPolicy.js";
 import { getAccountantDirectApproval } from "../../money/cashRoute.js";
+import { CASH_COUNTED_SQL } from "../../money/cashCustody.js";
 
 const n = (v) => (v === null || v === undefined ? null : Number(v));
 
@@ -23,7 +24,7 @@ const PENDING_SQL = {
                   WHERE q.status = 'pending'`,
   payment: `SELECT p.id, p.created_by AS requested_by_id, u.name AS requested_by_name, p.created_at AS requested_at, p.customer_name_snapshot AS customer_name,
                    p.erp_customer_id_snapshot AS erp_id, p.amount_amd, p.sales_manager_name_snapshot AS extra,
-                   p.status, p.pending_handoff_id, p.created_by, h.role AS holder_role
+                   p.status, p.pending_handoff_id, p.created_by, h.role AS holder_role, ${CASH_COUNTED_SQL} AS cash_counted
             FROM payments p LEFT JOIN users u ON u.id = p.created_by LEFT JOIN users h ON h.id = p.current_holder_id
             WHERE p.status = 'pending'`,
   cashflow: `SELECT r.id, r.requested_by AS requested_by_id, u.name AS requested_by_name, r.requested_at, NULL AS customer_name, NULL AS erp_id,
@@ -55,7 +56,7 @@ let directSwitch = { at: 0, value: false };
 async function paymentFacts(db, row) {
   if (Date.now() - directSwitch.at > 1000) directSwitch = { at: Date.now(), value: await getAccountantDirectApproval(db) };
   return {
-    payment: { status: row.status, pending_handoff_id: row.pending_handoff_id, created_by: row.created_by, holder_role: row.holder_role ?? null },
+    payment: { status: row.status, pending_handoff_id: row.pending_handoff_id, created_by: row.created_by, holder_role: row.holder_role ?? null, cash_counted: Boolean(row.cash_counted) },
     accountantDirect: directSwitch.value,
   };
 }
@@ -247,7 +248,8 @@ const LOADERS = {
 
   async payment(db, id) {
     const { rows: [p] } = await db.query(
-      `SELECT p.*, u.name AS requested_by_name, a.name AS approved_by_name, r.name AS rejected_by_name, c.erp_customer_id AS customer_erp_id, h.role AS holder_role
+      `SELECT p.*, u.name AS requested_by_name, a.name AS approved_by_name, r.name AS rejected_by_name, c.erp_customer_id AS customer_erp_id, h.role AS holder_role,
+              ${CASH_COUNTED_SQL} AS cash_counted
        FROM payments p LEFT JOIN users u ON u.id = p.created_by LEFT JOIN users a ON a.id = p.approved_by LEFT JOIN users r ON r.id = p.rejected_by
        LEFT JOIN users h ON h.id = p.current_holder_id
        LEFT JOIN customers c ON c.id = p.customer_id WHERE p.id = $1`,
