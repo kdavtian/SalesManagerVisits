@@ -4,7 +4,7 @@
 import express, { Router } from "express";
 import { requireAuth } from "../../middleware/auth.js";
 import { seesAllPerformance, editsVaghinakSettings } from "../../shared/roles.js";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { computeFunnel } from "../vaghinak/funnel.js";
 import { computeNextSteps, runWeeklyPicks } from "../vaghinak/nextSteps.js";
 import { getVaghinakSettings } from "../vaghinak/settings.js";
@@ -80,7 +80,7 @@ funnelRouter.put("/customers/:id/expected-volume", express.json(), async (req, r
 // Management can make this week's picks now (the first week, or after changing the rules) instead of waiting for Monday; once a week.
 funnelRouter.post("/picks/run", async (req, res) => {
   if (!editsVaghinakSettings(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  res.json(await runWeeklyPicks(new Date(), pool, { force: true }));
+  res.json(await runLongWork(() => runWeeklyPicks(new Date(), pool, { force: true })));
 });
 
 // The weekly AI market strategy (strategist.js): management reads it; the people who edit Vaghinak's settings can generate it now. The run is

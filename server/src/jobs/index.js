@@ -89,4 +89,9 @@ export function startBackgroundJobs() {
   scheduler.start();
 }
 
+// A deploy (index.js shutdown): no new run starts; resolves when the runs in progress finished or after waitMs.
+export function stopBackgroundJobs(waitMs) {
+  return scheduler ? scheduler.stop(waitMs) : Promise.resolve(0);
+}
+
 export const backgroundJobStatus = () => jobStatus(JOBS);

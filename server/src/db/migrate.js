@@ -33,6 +33,8 @@ async function run() {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // a migration may rebuild a big table or index: no per-query time limit here (db/pool.js)
+      await client.query("SET LOCAL statement_timeout = 0");
       await client.query(sql);
       await client.query("INSERT INTO schema_migrations (filename) VALUES ($1)", [
         file,

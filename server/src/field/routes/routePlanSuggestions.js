@@ -1,6 +1,6 @@
 // Vaghinak's route-plan suggestions for the CEO / admin (field/routePlanAnalysis.js): list, analyse now, accept one / all, dismiss one.
 import { Router } from "express";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewRoutePlanSuggestions } from "../../shared/roles.js";
 import { runRoutePlanAnalysis, acceptSuggestion } from "../routePlanAnalysis.js";
@@ -24,7 +24,7 @@ routePlanSuggestionsRouter.get("/", async (req, res) => {
 });
 
 routePlanSuggestionsRouter.post("/analyze", async (req, res) => {
-  const result = await runRoutePlanAnalysis(pool);
+  const result = await runLongWork(() => runRoutePlanAnalysis(pool));
   res.json(result);
 });
 

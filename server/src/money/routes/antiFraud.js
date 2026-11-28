@@ -1,7 +1,7 @@
 // Anti-fraud page data for management (admin, CEO, operations director): rep risk scores, open findings, the weekly check calls, the limits.
 // See antiFraud.js for the signals.
 import { Router } from "express";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import {
   FRAUD_VIEW_ROLES, FRAUD_SETTINGS_ROLES, getFraudSettings, saveFraudSettings, getWeights, repRisk,
@@ -74,4 +74,4 @@ antiFraudRouter.put("/settings", async (req, res) => {
 });
 
 // "Look now" instead of waiting for the next hourly run
-antiFraudRouter.post("/run-now", async (_req, res) => res.json(await runAntiFraud()));
+antiFraudRouter.post("/run-now", async (_req, res) => res.json(await runLongWork(() => runAntiFraud())));

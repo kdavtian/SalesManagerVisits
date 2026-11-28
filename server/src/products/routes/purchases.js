@@ -11,7 +11,7 @@ import { matchesDeclaredImageType } from "../../utils/imageSniff.js";
 import { yerevanToday } from "../../utils/yerevanDate.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canManagePurchases, canDeletePurchases } from "../../shared/roles.js";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { savePurchase, listPurchases, getPurchase, listSuppliers, getExcelInvoice, excelStatus, productHistory, applyExcelPurchases, PurchaseError, invoiceFacts, logPurchase, exportPurchaseRows } from "../purchases.js";
 import { parsePurchaseWorkbook } from "../purchaseExcel.js";
 import { buildPurchaseSuggestions } from "../purchaseSuggestionsData.js";
@@ -263,7 +263,7 @@ purchasesRouter.post("/import-excel", (req, res, next) => {
   if (!req.file) return res.status(400).json({ error: "Choose the Excel file" });
   try {
     const parsed = await parsePurchaseWorkbook(req.file.buffer);
-    const stored = await applyExcelPurchases(parsed.rows);
+    const stored = await runLongWork(() => applyExcelPurchases(parsed.rows));
     const status = await excelStatus();
     res.json({ ...stored, skipped: stored.skipped + parsed.skipped, sheet: parsed.sheet, invoices: status.excel_invoices, from: status.from, to: status.to });
   } catch (err) {

@@ -111,7 +111,7 @@ import { getCalculatorModeEnabled } from "./shared/settings.js";
 import { requireAuth } from "./middleware/auth.js";
 import { autoAssignSalesChannel } from "./customers/salesChannelAutofill.js";
 import { normalizeCustomerPortfolio } from "./customers/customerChannelPolicy.js";
-import { pool } from "./db/pool.js";
+import { pool, longWorkMiddleware } from "./db/pool.js";
 import { isTestRun } from "./utils/testRun.js";
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
@@ -239,7 +239,8 @@ app.use("/api/integration/v1", express.raw({ type: "application/pdf", limit: "15
 app.use("/api/integration-tokens", express.json(), integrationAdminRouter);
 // The Claude scheduled agents' read-only, pseudonymised feed (ops-read token; docs/ops-api.md). Ahead of /api/ops (Operations control).
 app.use("/api/ops/v1", opsApiRouter);
-app.use("/api/erp-sync", express.json({ limit: "25mb" }), erpSyncRouter);
+// the Excel sync rewrites whole tables in one transaction: it runs on the database's long connections, not the 30 s web limit (db/pool.js)
+app.use("/api/erp-sync", express.json({ limit: "25mb" }), longWorkMiddleware, erpSyncRouter);
 app.use("/api/geocode", geocodeRouter);
 app.use("/api/visit-plans", express.json(), visitPlansRouter);
 app.use("/api/sales-performance", salesPerformanceRouter);

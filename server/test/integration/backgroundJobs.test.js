@@ -3,7 +3,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pool } from "../../src/db/pool.js";
-import { createScheduler, jobStatus } from "../../src/jobs/scheduler.js";
+import { createScheduler, jobStatus, jobTimeoutMs } from "../../src/jobs/scheduler.js";
+import { currentPoolKind, useWebLimits, endPools } from "../../src/db/pool.js";
 import { JOBS } from "../../src/jobs/index.js";
 import en from "../../../client/public/js/i18n-en.js";
 import hy from "../../../client/public/js/i18n-hy.js";
@@ -19,7 +20,7 @@ const rowOf = async (name) => (await pool.query("SELECT * FROM background_jobs W
 
 test.after(async () => {
   await pool.query("DELETE FROM background_jobs WHERE name = ANY($1)", [names]);
-  await pool.end();
+  await endPools(); // both connection groups (one test switches the web limits on)
 });
 
 test("a new job waits one interval; a due job runs once, even when two server copies tick together", async () => {
@@ -93,6 +94,138 @@ test("a switched-off job is not registered or run, and its status says why", asy
   assert.equal(status.enabled, false);
   assert.equal(status.off_reason, "push off");
   assert.equal(runs, 0);
+});
+
+// Improvement plan 0.22: a hung run is cut at its time limit (marked failed, slot freed, its signal aborted); 3 failures in a row or a run
+// still going after 3 intervals sends one Telegram line per job per day; a good run resets the count.
+test("a run past its time limit is marked failed and its signal aborted; it is not started again until it really ends", async () => {
+  let signal;
+  let calls = 0;
+  let release;
+  const j = job(`itest-timeout-${process.pid}`, (_now, ctx) => {
+    calls++;
+    signal = ctx.signal;
+    return new Promise((r) => (release = r)); // hangs (does not read its signal)
+  }, { timeoutMs: 150 });
+  const s = createScheduler([j], { log: quiet, alert: async () => {} });
+  await s.tick();
+  await makeDue(j.name);
+  assert.equal(await s.tick(), 1, "the tick returns although the run never finishes");
+  assert.equal(signal.aborted, true);
+  let row = await rowOf(j.name);
+  assert.equal(row.last_ok, false);
+  assert.match(row.last_error, /timed out/);
+  assert.equal(row.failures_in_a_row, 1);
+  assert.deepEqual(s.running(), [j.name], "the hung run still holds its slot");
+  await makeDue(j.name);
+  assert.equal(await s.tick(), 0, "never two copies of the same job side by side");
+  assert.equal(calls, 1);
+  // a deploy gives the run past its limit the time left too (stop() is not over while it still works)
+  let stopDone = false;
+  const stopping = s.stop(5000).then((left) => ((stopDone = true), left));
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(stopDone, false, "stop() waits for the timed-out run's work");
+  release();
+  assert.equal(await stopping, 0);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(s.running(), [], "the slot is free once the run really ended");
+  const next = createScheduler([j], { log: quiet, alert: async () => {} }); // the stopped one starts nothing, as on a deploy
+  assert.equal(await next.tick(), 1, "and the job runs again");
+  assert.equal(calls, 2);
+  release();
+});
+
+test("the default time limit: 3 intervals, between 10 and 60 minutes", () => {
+  const MIN = 60 * 1000;
+  assert.equal(jobTimeoutMs({ everyMs: MIN }), 10 * MIN);
+  assert.equal(jobTimeoutMs({ everyMs: 10 * MIN }), 30 * MIN);
+  assert.equal(jobTimeoutMs({ everyMs: 3 * 60 * MIN }), 60 * MIN);
+  assert.equal(jobTimeoutMs({ everyMs: MIN, timeoutMs: 5 }), 5);
+});
+
+test("3 failures in a row send one admin line; no second line the same day; a good run resets the count", async () => {
+  const sent = [];
+  let fail = true;
+  const j = job(`itest-alert-${process.pid}`, async () => {
+    if (fail) throw new Error("db <down>");
+  });
+  const s = createScheduler([j], { log: quiet, alert: async (text) => void sent.push(text) });
+  await s.tick();
+  for (let i = 0; i < 2; i++) {
+    await makeDue(j.name);
+    await s.tick();
+  }
+  assert.equal(sent.length, 0, "2 failures: no alert yet");
+  await makeDue(j.name);
+  await s.tick();
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], new RegExp(`${j.name}: failed 3 runs in a row`));
+  assert.match(sent[0], /db &lt;down&gt;/, "the error is escaped for Telegram HTML");
+  await makeDue(j.name);
+  await s.tick();
+  assert.equal(sent.length, 1, "at most once a day per job");
+  fail = false;
+  await makeDue(j.name);
+  await s.tick();
+  const row = await rowOf(j.name);
+  assert.equal(row.failures_in_a_row, 0);
+  assert.equal(row.failures, 4);
+  const [status] = await jobStatus([j]);
+  assert.equal(status.failures_in_a_row, 0);
+});
+
+test("a run still going after 3 of its intervals sends one admin line", async () => {
+  const sent = [];
+  let release;
+  const j = job(`itest-stuck-${process.pid}`, () => new Promise((r) => (release = r)), { everyMs: 1000, timeoutMs: 60_000 });
+  const s = createScheduler([j], { log: quiet, alert: async (text) => void sent.push(text) });
+  await s.tick();
+  await makeDue(j.name);
+  const first = s.tick();
+  await new Promise((r) => setTimeout(r, 3600));
+  await s.tick();
+  await s.tick();
+  assert.equal(sent.length, 1);
+  assert.match(sent[0], /still running after/);
+  release();
+  await first;
+});
+
+test("jobs run on the long database connections even in the web server; stop() lets no new run start and waits for the running one", async () => {
+  useWebLimits(true);
+  try {
+    assert.equal(currentPoolKind(), "web");
+    let kind;
+    let release;
+    let runs = 0;
+    const j = job(`itest-kind-${process.pid}`, () => {
+      runs++;
+      kind = currentPoolKind();
+      return new Promise((r) => (release = r));
+    });
+    const s = createScheduler([j], { log: quiet });
+    await s.tick();
+    await makeDue(j.name);
+    const ticking = s.tick();
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(kind, "long");
+    let stopped = false;
+    const stopping = s.stop(5000).then((left) => {
+      stopped = true;
+      return left;
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(stopped, false, "stop waits for the run in progress");
+    release();
+    assert.equal(await stopping, 0);
+    await ticking;
+    assert.equal((await rowOf(j.name)).last_ok, true, "its result was saved before stop() resolved");
+    await makeDue(j.name);
+    assert.equal(await s.tick(), 0, "no new run after stop()");
+    assert.equal(runs, 1);
+  } finally {
+    useWebLimits(false);
+  }
 });
 
 test("the registry: unique names, the old cadences, a label in both languages", () => {
