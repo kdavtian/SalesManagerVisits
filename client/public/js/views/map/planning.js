@@ -431,15 +431,24 @@ export async function openPlanDaySheet(ctx) {
       paintAreaList();
     });
 
+    // Browsing weekdays saves nothing by itself (improvement plan 0.2, 2026-11-28): only an edited day asks before it is
+    // left. The save sends areas only, so the day's customers picked on the Route Plans screen stay untouched.
+    const areaKey = (list) => JSON.stringify(list.map((a) => [a.region, a.subregion || null]));
+    const loadedKey = areaKey(areas);
     bodyEl.querySelectorAll(".weekday-btn").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        // Persist whatever was staged for the day being left before switching.
-        try {
-          await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
-        } catch {
-          // Non-fatal -- the explicit Save button below is the primary save path.
+        const day = Number(btn.dataset.day);
+        if (day === selectedWeekday) return;
+        if (areaKey(workingAreas) !== loadedKey && confirm(t("plan_save_day_changes").replace("[weekday]", t(ctx.WEEKDAY_KEYS[selectedWeekday])))) {
+          try {
+            await api.saveVisitPlanRule(selectedWeekday, workingAreas, targetUserId);
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.hidden = false;
+            return;
+          }
         }
-        selectedWeekday = Number(btn.dataset.day);
+        selectedWeekday = day;
         renderRecurringMode();
       });
     });

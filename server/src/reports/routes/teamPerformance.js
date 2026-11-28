@@ -240,7 +240,8 @@ teamPerformanceRouter.get("/my-performance", async (req, res) => {
          FROM perf_plan_targets t
          JOIN perf_plans p ON p.id = t.plan_id
          JOIN sales_channels c ON c.id = t.channel_id
-         WHERE c.code = $1 AND p.month = $2 AND p.status = 'approved'`,
+         WHERE c.code = $1 AND p.month = $2 AND p.status IN ('approved', 'closed')
+           AND p.version = (SELECT max(x.version) FROM perf_plans x WHERE x.month = p.month AND x.status IN ('approved', 'closed'))`,
         [channelCode, month]
       );
       const target = targetRows[0];

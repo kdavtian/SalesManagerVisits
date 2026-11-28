@@ -56,11 +56,10 @@
   min-height: 44px;
 }
 .weekday-btn-active {
-  /* background/border-color come from the shared design-system migration
-     block further down (--accent-fill) -- declared here too previously,
-     but that always lost the cascade to the later rule and, in dark mode,
-     silently disagreed with it (--accent is a different color from
-     --accent-fill there). */
+  /* This area file loads AFTER styles.css, so .weekday-btn's card background above beat the shared --accent-fill rule there
+     and the chosen weekday showed white text on white (improvement plan 0.2 screenshots, 2026-11-28). Same colour as styles.css. */
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
   color: #ffffff;
 }
 .route-plan-rep-card {

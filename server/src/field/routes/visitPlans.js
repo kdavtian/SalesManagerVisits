@@ -342,7 +342,7 @@ visitPlansRouter.get("/rules", async (req, res) => {
   res.json(rows);
 });
 
-// Upsert the rule for one weekday. Empty areas AND customer_ids deactivates
+// Upsert the rule for one weekday. A list that is not sent keeps its stored value. Empty areas AND customer_ids deactivates
 // it (kept as a row, not deleted, so the "who set this up" audit trail via
 // created_by survives a rep clearing their own cycle). customer_ids is the
 // direct-pick path used by the Route Plans page (straight from a rep's
@@ -372,6 +372,17 @@ visitPlansRouter.put("/rules/:dayOfWeek", async (req, res) => {
   // replaced (the Map's quick planner).
   let finalAreas = areas;
   let finalIds = customerIds;
+  const hasAreas = Array.isArray(req.body?.areas);
+  const hasIds = Array.isArray(req.body?.customer_ids);
+  if (req.body?.plan_channel === undefined && (!hasAreas || !hasIds)) {
+    // Only what was sent is replaced (improvement plan 0.2, 2026-11-28): the Map's quick planner sends only areas, and a
+    // missing list used to count as empty -- it wiped the customers picked on the Route Plans screen and could switch the
+    // whole weekday off. A missing key now keeps the stored list; an explicit [] still clears it.
+    const { rows: existingRows } = await pool.query("SELECT areas, customer_ids FROM visit_plan_rules WHERE user_id = $1 AND day_of_week = $2", [targetId, dayOfWeek]);
+    const existing = existingRows[0];
+    if (!hasAreas) finalAreas = Array.isArray(existing?.areas) ? existing.areas : [];
+    if (!hasIds) finalIds = existing?.customer_ids ?? [];
+  }
   if (req.body?.plan_channel !== undefined) {
     const scope = parseScope(req.body.plan_channel);
     if (scope === null) return res.status(400).json({ error: "plan_channel is not a separately planned channel" });

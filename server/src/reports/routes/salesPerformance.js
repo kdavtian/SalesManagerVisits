@@ -121,7 +121,9 @@ salesPerformanceRouter.get("/", async (req, res) => {
      LEFT JOIN (
        SELECT sc.code, sum(pt.sales_target_amd) AS plan_amd
        FROM perf_plan_targets pt
-       JOIN perf_plans pp ON pp.id = pt.plan_id AND pp.status = 'approved'
+       -- a closed month keeps counting its plan (improvement plan 0.19); newest approved/closed version only
+       JOIN perf_plans pp ON pp.id = pt.plan_id AND pp.status IN ('approved', 'closed')
+         AND pp.version = (SELECT max(x.version) FROM perf_plans x WHERE x.month = pp.month AND x.status IN ('approved', 'closed'))
        JOIN sales_channels sc ON sc.id = pt.channel_id
        WHERE ${planMonthCondition}
        GROUP BY sc.code
