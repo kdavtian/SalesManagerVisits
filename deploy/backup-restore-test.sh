@@ -53,21 +53,30 @@ if [ "$FROM_REMOTE" = true ]; then
     RCLONE_CONFIG_FVSPACES_SECRET_ACCESS_KEY="$(env_value BACKUP_S3_SECRET_KEY)"
     export RCLONE_CONFIG_FVSPACES_ENDPOINT RCLONE_CONFIG_FVSPACES_ACCESS_KEY_ID RCLONE_CONFIG_FVSPACES_SECRET_ACCESS_KEY
   fi
-  rclone lsf --files-only "$TARGET/daily/" > "$WORK/remote.list"
-  DB_NAME="$(grep '^db-.*\.sql\.gz$' "$WORK/remote.list" | sort | tail -1 || true)"
-  UP_NAME="$(grep '^uploads-.*\.tar\.gz$' "$WORK/remote.list" | sort | tail -1 || true)"
-  [ -n "$DB_NAME" ] || { log "no db-*.sql.gz in $TARGET/daily/" >&2; exit 1; }
-  STEP="download backup"
-  rclone copy "$TARGET/daily/$DB_NAME" "$WORK/"
-  [ -n "$UP_NAME" ] && rclone copy "$TARGET/daily/$UP_NAME" "$WORK/"
-  DB_FILE="$WORK/$DB_NAME"
-  UP_FILE="${UP_NAME:+$WORK/$UP_NAME}"
+  rclone lsf --files-only "$TARGET/daily/" > "$WORK/names.list"
 else
-  DB_FILE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'db-*.sql.gz' | sort | tail -1)"
-  UP_FILE="$(find "$BACKUP_DIR" -maxdepth 1 -name 'uploads-*.tar.gz' | sort | tail -1)"
-  [ -n "$DB_FILE" ] || { log "no db-*.sql.gz in $BACKUP_DIR" >&2; exit 1; }
+  find "$BACKUP_DIR" -maxdepth 1 -type f -printf '%f\n' > "$WORK/names.list"
 fi
-log "Backup: $(basename "$DB_FILE")${UP_FILE:+ + $(basename "$UP_FILE")}"
+# The newest COMPLETE backup: a database dump AND the photos archive of the same night (same time stamp). A night whose
+# photos step failed has a dump only; it is skipped (that night already sent its own failure alert), never paired with
+# another night's photos.
+STAMP=""
+for name in $(grep -E '^db-[0-9]{8}-[0-9]{6}\.sql\.gz$' "$WORK/names.list" | sort -r || true); do
+  s="${name#db-}"; s="${s%.sql.gz}"
+  if grep -qx "uploads-$s.tar.gz" "$WORK/names.list"; then STAMP="$s"; break; fi
+done
+[ -n "$STAMP" ] || { log "no complete backup (db-<time>.sql.gz with its uploads-<time>.tar.gz) found" >&2; exit 1; }
+if [ "$FROM_REMOTE" = true ]; then
+  STEP="download backup"
+  rclone copy "$TARGET/daily/db-$STAMP.sql.gz" "$WORK/"
+  rclone copy "$TARGET/daily/uploads-$STAMP.tar.gz" "$WORK/"
+  DB_FILE="$WORK/db-$STAMP.sql.gz"
+  UP_FILE="$WORK/uploads-$STAMP.tar.gz"
+else
+  DB_FILE="$BACKUP_DIR/db-$STAMP.sql.gz"
+  UP_FILE="$BACKUP_DIR/uploads-$STAMP.tar.gz"
+fi
+log "Backup: $(basename "$DB_FILE") + $(basename "$UP_FILE")"
 
 # --- room for it? The scratch copy lands on the same disk as the live database: never fill that disk. ------------------
 STEP="free disk space"
@@ -100,12 +109,9 @@ echo "Row counts (the live numbers can be a little higher: they moved on since t
 [ -z "$BAD" ] || { log "missing or empty after restore:$BAD" >&2; STEP="row counts ($BAD )"; exit 1; }
 
 # --- photos archive ---------------------------------------------------------------------------------------------------
-FILES="no photos archive"
-if [ -n "${UP_FILE:-}" ]; then
-  STEP="read photos archive"
-  tar tzf "$UP_FILE" > "$WORK/photos.list" # its own command: a cut-off or corrupt archive fails the drill here
-  FILES="$(grep -vc '/$' "$WORK/photos.list" || true) files in the photos archive"
-fi
+STEP="read photos archive"
+tar tzf "$UP_FILE" > "$WORK/photos.list" # its own command: a cut-off or corrupt archive fails the drill here
+FILES="$(grep -vc '/$' "$WORK/photos.list" || true) files in the photos archive"
 log "$FILES"
 
 STEP="report"

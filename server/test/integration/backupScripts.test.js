@@ -178,18 +178,30 @@ test("backup-restore-test.sh: restores the newest backup into a scratch database
   fs.writeFileSync(path.join(bigDir, "photo.jpg"), Buffer.from(Array.from({ length: 200000 }, (_, i) => (i * 7919) % 251)));
   execFileSync("tar", ["czf", path.join(tmp, "whole.tar.gz"), "-C", bigDir, "."]);
   const whole = fs.readFileSync(path.join(tmp, "whole.tar.gz"));
-  fs.writeFileSync(path.join(cut, "uploads-20991231-000000.tar.gz"), whole.subarray(0, Math.floor(whole.length / 2)));
+  fs.writeFileSync(path.join(cut, newestDb.replace(/^db-(.*)\.sql\.gz$/, "uploads-$1.tar.gz")), whole.subarray(0, Math.floor(whole.length / 2)));
   tgMessages.length = 0;
   const cutRun = await run("backup-restore-test.sh", { BACKUP_DIR: cut });
   assert.notEqual(cutRun.code, 0, cutRun.out);
   assert.match(tgMessages.at(-1).text, /RESTORE DRILL FAILED .*photos archive/);
 
+  // a dump without the photos archive of the same night is never paired with another night's photos
+  const half = path.join(tmp, "half");
+  fs.mkdirSync(half);
+  fs.copyFileSync(path.join(tmp, "backups", newestDb), path.join(half, newestDb));
+  fs.copyFileSync(path.join(tmp, "whole.tar.gz"), path.join(half, "uploads-20000101-000000.tar.gz"));
+  tgMessages.length = 0;
+  const halfRun = await run("backup-restore-test.sh", { BACKUP_DIR: half });
+  assert.notEqual(halfRun.code, 0, halfRun.out);
+  assert.match(halfRun.out, /no complete backup/);
+  assert.match(tgMessages.at(-1).text, /RESTORE DRILL FAILED/);
+
   // a broken newest backup is reported, not passed
   const bad = path.join(tmp, "bad");
   fs.mkdirSync(bad);
   execFileSync("sh", ["-c", `echo 'garbage;' | gzip > ${bad}/db-29991231-000000.sql.gz`]);
+  fs.copyFileSync(path.join(tmp, "whole.tar.gz"), path.join(bad, "uploads-29991231-000000.tar.gz")); // a complete pair, so the RESTORE is what fails
   tgMessages.length = 0;
   const broken = await run("backup-restore-test.sh", { BACKUP_DIR: bad });
   assert.notEqual(broken.code, 0);
-  assert.match(tgMessages.at(-1).text, /RESTORE DRILL FAILED/);
+  assert.match(tgMessages.at(-1).text, /RESTORE DRILL FAILED .*restore database/);
 });

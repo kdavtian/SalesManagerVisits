@@ -202,7 +202,9 @@ right, do check-in photos load.
 ./deploy/backup-restore-test.sh --from-remote  # newest backup in Spaces (also proves the off-server copy)
 ```
 
-It first checks there is room (about three times the plain dump) on the database's disk, then restores into a scratch
+It takes the newest **complete** backup -- the database dump and the photos archive of the same night (same time
+stamp); a night whose photos step failed is skipped, never paired with another night's photos, and no complete pair at
+all is a failure. It first checks there is room (about three times the plain dump) on the database's disk, then restores into a scratch
 database `fieldvisits_restore_drill` next to the real one, compares row counts of `users`,
 `customers`, `products`, `orders`, `order_items`, `checkins`, `payments` and `schema_migrations` with the live database
 (each must be present, and not empty when the live one has rows), reads the photos archive to the end and counts its files,
