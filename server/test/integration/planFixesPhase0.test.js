@@ -81,12 +81,20 @@ async function insertPlan(month, version, status, target) {
 test("0.19 a closed month still shows its plan in My performance and on the Company Dashboard leaderboard", async () => {
   const myMonth = "2031-03-01";
   await insertPlan(myMonth, 901, "superseded", 111);
-  await insertPlan(myMonth, 902, "closed", 5000000);
+  const closedId = await insertPlan(myMonth, 902, "closed", 5000000);
+  await pool.query(
+    `INSERT INTO perf_plan_closed_snapshot (plan_id, channel_id, channel_code, channel_name, sales_target_amd, sales_actual_amd, collection_target_amd, collection_actual_amd, new_customers_target, new_customers_actual)
+     VALUES ($1, $2, $3, $3, 5000000, 4200000, 0, 3100000, 0, 0)`,
+    [closedId, channelId, CHANNEL]
+  );
   const mine = await apiRequest(`/api/team-performance/my-performance?month=${myMonth}`, { cookie: repCookie });
   assert.equal(mine.status, 200);
   const row = mine.data.find((r) => r.channel_code === CHANNEL);
   assert.ok(row, "the closed month's channel row is there");
   assert.equal(Number(row.sales.target), 5000000);
+  assert.equal(row.closed, true, "a closed month shows the numbers frozen at close");
+  assert.equal(Number(row.sales.actual), 4200000);
+  assert.equal(Number(row.collections.actual), 3100000);
 
   await insertPlan(lastMonth, 903, "closed", 7000000);
   await pool.query("INSERT INTO sales_performance (rep_name, month, sales_amd, collected_amd) VALUES ($1, $2, 1000, 500)", [CHANNEL, lastMonth]);
