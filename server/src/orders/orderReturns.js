@@ -6,6 +6,7 @@
 // until the negative line arrives from Excel (matchReturnsToErp) or the accountant marks it recorded.
 import { syncOrderPostSoon } from "./orderGroupPost.js";
 import { isDone } from "./orderRecord.js";
+import { WITHDRAW_WAITING_REQUEST_SQL } from "./accountingStatus.js";
 import { canApproveReturns } from "../shared/roles.js";
 import { createOpsTask, usersWithRole } from "../team/opsTasks.js";
 import { ORDER_NOTIFY_ROLES } from "../shared/notificationPreferences.js";
@@ -31,14 +32,51 @@ function creditFactor(order, items) {
   return subtotal > 0 ? Number(order.total_amd) / subtotal : 1;
 }
 
+// How much of each order line was already returned (requested, approved or done; a rejected return gives nothing back). Keyed by order_items.id.
+// A return line normally points at its order line. One whose line is gone (a correction before 2026-11-28 deleted and re-inserted every line,
+// so its order_item_id became NULL) counts by product instead, on the order's current lines of that product -- otherwise the same goods could
+// be returned and credited again (Phase 0 item 0.4).
 export async function returnedQuantities(orderId, db = pool) {
+  const { rows: items } = await db.query("SELECT id, product_id, quantity::float8 AS quantity FROM order_items WHERE order_id = $1 ORDER BY id", [orderId]);
   const { rows } = await db.query(
-    `SELECT ri.order_item_id, SUM(ri.quantity)::float8 AS qty
+    `SELECT ri.order_item_id, ri.product_id, SUM(ri.quantity)::float8 AS qty
      FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id
-     WHERE r.order_id = $1 AND r.kind = 'return' AND r.status <> 'rejected' GROUP BY ri.order_item_id`,
+     WHERE r.order_id = $1 AND r.kind = 'return' AND r.status <> 'rejected' GROUP BY ri.order_item_id, ri.product_id`,
     [orderId]
   );
-  return new Map(rows.map((r) => [r.order_item_id, r.qty]));
+  const out = new Map(items.map((i) => [i.id, 0]));
+  const loose = new Map(); // product_id -> returned quantity whose order line no longer exists
+  for (const r of rows) {
+    if (r.order_item_id != null && out.has(r.order_item_id)) out.set(r.order_item_id, out.get(r.order_item_id) + r.qty);
+    else if (r.product_id != null) loose.set(r.product_id, (loose.get(r.product_id) ?? 0) + r.qty);
+  }
+  for (const i of items) {
+    const rest = loose.get(i.product_id);
+    if (!rest) continue;
+    const take = Math.min(rest, Math.max(0, i.quantity - out.get(i.id)));
+    out.set(i.id, out.get(i.id) + take);
+    loose.set(i.product_id, rest - take);
+  }
+  // more came back than the order now holds: it stays on the product's last line, so nothing of it shows as returnable
+  for (const i of [...items].reverse()) {
+    const rest = loose.get(i.product_id);
+    if (rest > 0) {
+      out.set(i.id, out.get(i.id) + rest);
+      loose.set(i.product_id, 0);
+    }
+  }
+  return out;
+}
+
+// Returned quantity per product (same returns as above): a correction may not take a product below it.
+export async function returnedByProduct(orderId, db = pool) {
+  const { rows } = await db.query(
+    `SELECT COALESCE(ri.product_id, oi.product_id) AS product_id, MIN(ri.product_name) AS product_name, SUM(ri.quantity)::float8 AS qty
+     FROM order_return_items ri JOIN order_returns r ON r.id = ri.return_id LEFT JOIN order_items oi ON oi.id = ri.order_item_id
+     WHERE r.order_id = $1 AND r.kind = 'return' AND r.status <> 'rejected' GROUP BY 1`,
+    [orderId]
+  );
+  return rows;
 }
 
 // A sales manager may act on their own orders and their own customers' orders; everyone with an approval role on any.
@@ -161,7 +199,8 @@ async function notifyRoles(roles, exceptUserId, payload) {
 
 async function applyCancel(client, order, ret, userId) {
   await client.query(
-    `UPDATE orders SET status = 'draft', cancelled_at = now(), cancel_reason = $2, draft_reason = $3, updated_at = now() WHERE id = $1`,
+    // a document request still waiting for Lily is withdrawn with it
+    `UPDATE orders SET status = 'draft', cancelled_at = now(), cancel_reason = $2, draft_reason = $3, updated_at = now(), ${WITHDRAW_WAITING_REQUEST_SQL} WHERE id = $1`,
     [order.id, ret.note ?? ret.reason, `Cancelled (request #${ret.id})`]
   );
   await client.query("DELETE FROM route_stops WHERE order_id = $1 AND completed_at IS NULL", [order.id]);

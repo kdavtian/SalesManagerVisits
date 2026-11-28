@@ -419,10 +419,10 @@ export async function openOrderDetailSheet(orderId, { onChanged, navigate } = {}
       buttons.push({ label: `${icons.trash}${t("delete_order")}`, action: "delete-order", cls: "btn btn-danger btn-has-icon" });
     }
 
-    // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, reject or delete the order
-    // (owner, 2026-10-26). Returns stay open: they are a request, decided by management.
+    // The customer signed the delivery-acceptance act: from then on only the admin or the CEO may edit, correct, reject or delete the order
+    // (owner, 2026-10-26; correct too, Phase 0 item 0.18). Returns stay open: they are a request, decided by management.
     if (isSignedLocked(order)) {
-      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "delete-order", "reject-order", "unconfirm-order", "unconfirm-edit"].includes(buttons[i].action)) buttons.splice(i, 1);
+      for (let i = buttons.length - 1; i >= 0; i--) if (["edit-order", "correct-order", "delete-order", "reject-order", "unconfirm-order", "unconfirm-edit"].includes(buttons[i].action)) buttons.splice(i, 1);
     }
 
     actionsEl.innerHTML = buttons

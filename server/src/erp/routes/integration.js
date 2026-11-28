@@ -5,7 +5,7 @@
 import { Router } from "express";
 import { pool } from "../../db/pool.js";
 import { checkBearer, auditTokenCall } from "../integrationTokens.js";
-import { nextStatusFromDocuments } from "../../orders/accountingStatus.js";
+import { nextStatusFromDocuments, ORDER_LIVE_FOR_ACCOUNTING_SQL } from "../../orders/accountingStatus.js";
 import { notifyUser } from "../../shared/notifications.js";
 import { waitForQueueChange } from "../../orders/accountingEvents.js";
 
@@ -207,7 +207,7 @@ async function notifyRequester(order, title, body) {
 async function pendingOrderRefs(req) {
   await expireStaleClaims();
   const { rows } = await pool.query(
-    `SELECT o.id FROM orders o WHERE o.accounting_status = 'pending' ${testScope(req)} ORDER BY o.accounting_requested_at LIMIT 50`
+    `SELECT o.id FROM orders o WHERE o.accounting_status = 'pending' AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL} ${testScope(req)} ORDER BY o.accounting_requested_at LIMIT 50`
   );
   return rows.map((r) => orderRef(r.id));
 }
@@ -237,11 +237,13 @@ integrationRouter.get("/orders", async (req, res) => {
     params.push(req.query.doc_type);
     docFilter = `AND o.accounting_doc_type = $${params.length}`;
   }
+  // the ready queue never lists an order sent back to draft, back in review or cancelled (other statuses: Lily follows her documents)
+  const liveFilter = status === "pending" ? `AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL}` : "";
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 200);
   params.push(limit);
   const { rows } = await pool.query(
     `${ORDER_SELECT}
-     WHERE o.accounting_status = $1 ${docFilter} ${testScope(req)}
+     WHERE o.accounting_status = $1 ${docFilter} ${liveFilter} ${testScope(req)}
      ORDER BY o.accounting_requested_at, o.id LIMIT $${params.length}`,
     params
   );
@@ -262,11 +264,14 @@ integrationRouter.post("/orders/:id/claim", async (req, res) => {
   const order = await loadOrder(req, res);
   if (!order) return;
   const { rows } = await pool.query(
-    `UPDATE orders SET accounting_status = 'in_progress', accounting_claimed_at = now(), accounting_updated_at = now(), accounting_error = NULL
-     WHERE id = $1 AND accounting_status = 'pending' RETURNING id`,
+    `UPDATE orders o SET accounting_status = 'in_progress', accounting_claimed_at = now(), accounting_updated_at = now(), accounting_error = NULL
+     WHERE o.id = $1 AND o.accounting_status = 'pending' AND ${ORDER_LIVE_FOR_ACCOUNTING_SQL} RETURNING o.id`,
     [order.id]
   );
-  if (!rows[0]) return fail(res, 409, "not_pending", `Order is "${order.accounting_status}", only a pending order can be claimed`);
+  if (!rows[0]) {
+    const why = order.accounting_status === "pending" ? "Order was sent back or cancelled in KAD and is not ready" : `Order is "${order.accounting_status}", only a pending order can be claimed`;
+    return fail(res, 409, "not_pending", why);
+  }
   await respondWithOrder(res, order.id);
 });
 

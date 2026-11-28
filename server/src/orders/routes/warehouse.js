@@ -24,6 +24,8 @@ import { getAppOrderSettings } from "../appOrders.js";
 import { orderWaiting } from "../../reports/opsReports.js";
 import { stockCountToday } from "../stockCount.js";
 import { APP_STOCK_SQL, stockFigureCtes, STOCK_FIGURE_JOINS, STOCK_FIGURE_COLUMNS } from "../appStock.js";
+import { NOT_ON_OPEN_ROUTE_SQL } from "../routeStops.js";
+import { WITHDRAW_WAITING_REQUEST_SQL } from "../accountingStatus.js";
 
 
 export const warehouseRouter = Router();
@@ -66,7 +68,7 @@ warehouseRouter.get("/home", async (req, res) => {
        WHERE x.need > x.have
        ORDER BY x.need - x.have DESC`
     ),
-    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND NOT EXISTS (SELECT 1 FROM route_stops rs WHERE rs.order_id = o.id)`),
+    pool.query(`SELECT COUNT(*)::int AS n FROM orders o WHERE o.status = 'packed_stock_out' AND ${NOT_ON_OPEN_ROUTE_SQL}`),
     pool.query(
       `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE rs.completed_at IS NOT NULL)::int AS done
        FROM route_stops rs JOIN delivery_routes r ON r.id = rs.route_id WHERE r.route_date = $1`,
@@ -457,7 +459,8 @@ warehouseRouter.post("/orders/:id/stock-issue", async (req, res) => {
   // concurrent "mark packed" tap on the same order shouldn't be able to
   // flag a stock issue on an order that already moved on.
   const { rows: updatedRows } = await pool.query(
-    "UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now() WHERE id = $2 AND status = 'confirmed' RETURNING *",
+    // a document request still waiting for Lily is withdrawn with it (she must not make a waybill for an order sent back)
+    `UPDATE orders SET status = 'draft', draft_reason = $1, updated_at = now(), ${WITHDRAW_WAITING_REQUEST_SQL} WHERE id = $2 AND status = 'confirmed' RETURNING *`,
     [note.trim(), order.id]
   );
   if (!updatedRows[0]) {

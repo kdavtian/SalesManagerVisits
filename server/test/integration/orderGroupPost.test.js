@@ -474,8 +474,9 @@ test("request from the order's state: a lost hook is posted by the job; a withdr
 });
 
 // Second review 2026-11-27: a request standing again in the app is said again; a retry is not a new request; a dead row is written again.
-test("request edge cases: stock issue then confirmed again = the request again; freeing a stuck claim = nothing; a request the bot gave up on is written again", async () => {
-  // a stock issue after the request: "do not issue yet"; confirmed again with the request still pending -> the request again, in full
+test("request edge cases: a stock issue withdraws the request (confirmed again = 'confirmed again', asked again = the request again); freeing a stuck claim = nothing; a request the bot gave up on is written again", async () => {
+  // a stock issue after the request: "do not issue yet", and the request is withdrawn in the app too (Phase 0 item 0.17: Lily is never handed
+  // an order sent back); confirmed again -> "confirmed again", not the old request; management asks again -> the request again, in full
   const id = await submittedOrder("cash");
   await confirm(id);
   await expectKinds(id, ["order_confirmed"]);
@@ -484,18 +485,23 @@ test("request edge cases: stock issue then confirmed again = the request again; 
   await botPostsEverything();
   assert.equal((await apiRequest(`/api/warehouse/orders/${id}/stock-issue`, { method: "POST", cookie: warehouseCookie, body: { note: "short" } })).status, 200);
   await expectKinds(id, ["document_request", "order_unconfirmed"]);
+  assert.equal((await pool.query("SELECT accounting_status FROM orders WHERE id = $1", [id])).rows[0].accounting_status, "cancelled", "the request is withdrawn");
   await botPostsEverything();
   await pool.query("UPDATE orders SET status = 'submitted', updated_at = now() WHERE id = $1", [id]);
   await confirm(id);
-  let posts = await expectKinds(id, ["document_request", "order_unconfirmed", "document_request"]);
-  assert.ok(posts[2].text.includes("🔁") && posts[2].text.includes("1. Castrol EDGE"), posts[2].text);
+  let posts = await expectKinds(id, ["document_request", "order_unconfirmed", "order_confirmed"]);
+  assert.ok(posts[2].text.startsWith("🔁"), posts[2].text);
+  await botPostsEverything();
+  await requestDoc(id);
+  posts = await expectKinds(id, ["document_request", "order_unconfirmed", "order_confirmed", "document_request"]);
+  assert.ok(posts[3].text.includes("🔁") && posts[3].text.includes("1. Castrol EDGE"), posts[3].text);
   await botPostsEverything();
 
   // freeing a stuck claim by hand (in progress -> pending) is the same request: nothing new in the group
   await pool.query("UPDATE orders SET accounting_status = 'in_progress' WHERE id = $1", [id]);
   assert.equal((await apiRequest(`/api/orders/${id}/accounting-status`, { method: "POST", cookie: adminCookie, body: { status: "pending" } })).status, 200);
   await runOrderGroupPosts();
-  assert.deepEqual(await kindsOf(id), ["document_request", "order_unconfirmed", "document_request"]);
+  assert.deepEqual(await kindsOf(id), ["document_request", "order_unconfirmed", "order_confirmed", "document_request"]);
 
   // the bot gave up on a request (10 failed tries): written again, not stuck
   const id2 = await submittedOrder("cash");

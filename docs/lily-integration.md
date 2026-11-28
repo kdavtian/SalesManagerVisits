@@ -20,6 +20,14 @@ accountant can also move a request to any status by hand from the order sheet (`
 accounting again" in the app. A claim that is not reported on within **30 minutes**
 goes back to `pending`.
 
+Withdrawn by KAD (Phase 0, 2026-11-28): when the order leaves `confirmed`/packed -- the warehouse sends it back (stock issue), it is
+cancelled, or it goes back to review -- a `pending` / `needs_attention` request becomes `cancelled` in the same step. The ready queue
+(`/orders?waybill_status=pending`, `/wait`) and `/claim` also skip any order that is a draft, back in review or cancelled (claim answers
+409 `not_pending`). When an order is corrected after Lily started or made its document (`in_progress`, `waybill_created`,
+`partially_created`, `exported_unsigned`, `signed`), the request becomes `needs_attention` with error code `order_changed`
+("Order changed after the document"); the documents stay on the order. A correction keeps the `line_id` of every product still on the
+order (only a removed product's line goes away; a new product gets a new line).
+
 ## API
 
 Base URL: `https://<kad-host>/api/integration/v1`. HTTPS, JSON UTF-8, `Authorization: Bearer <token>`.
