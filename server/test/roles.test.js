@@ -188,9 +188,9 @@ test("canSubmitPaymentsForOthers: admin/ceo/operations_director/accountant/sales
   assert.equal(canSubmitPaymentsForOthers("sales_manager"), false);
 });
 
-test("seesAllPayments: mirrors seesAllActivity", () => {
-  assert.equal(seesAllPayments("sales_manager"), false);
-  for (const role of OTHER_ROLES("sales_manager")) assert.equal(seesAllPayments(role), true, role);
+test("seesAllPayments: the money roles only (2026-11-28, 0.13) -- the warehouse and the drivers see only their own", () => {
+  for (const role of ["admin", "ceo", "operations_director", "sales_director", "accountant"]) assert.equal(seesAllPayments(role), true, role);
+  for (const role of ["sales_manager", "warehouse_manager", "delivery_manager"]) assert.equal(seesAllPayments(role), false, role);
 });
 
 test("validHandoffRecipientRoles: the exact custody chain", () => {

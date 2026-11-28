@@ -5,7 +5,7 @@
 //   POST /lines/:id/add | /ignore | /reopen   the accountant's decision about a line without a row
 import { Router } from "express";
 import multer from "multer";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { canEditCashflow } from "../../shared/roles.js";
 import { cleanEntry } from "../cashflow.js";
 import { readStatement, hashLines, FIELDS } from "../bankStatement.js";
@@ -159,7 +159,7 @@ bankRouter.post("/import", edit, withFile, async (req, res) => {
     // every line that found its Cashflow row teaches the category rules
     await learnFromMatches(recon.lines);
     // customer payments from the new money-in lines (payments redesign, release 2): recorded, or waiting in Unspecified
-    const payments = await recordBankLines(pool, { actorId: req.user.id });
+    const payments = await runLongWork(() => recordBankLines(pool, { actorId: req.user.id }));
     res.status(201).json({ import_id: imp.id, new_lines: added, duplicate_lines: statement.lines.length - added, skipped: statement.skipped.length, ...recon.counts, payments });
   } catch (err) {
     await client.query("ROLLBACK");

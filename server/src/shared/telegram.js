@@ -42,6 +42,8 @@ export function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
+export const TELEGRAM_TIMEOUT_MS = 10_000;
+
 export async function notifyTelegram(text) {
   if (!enabled) return;
   await Promise.all(
@@ -51,6 +53,8 @@ export async function notifyTelegram(text) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+          // a Telegram outage must not hold the request or job that sent the line (improvement plan 0.22)
+          signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
         });
         if (!res.ok) {
           console.error(`Telegram notify failed for chat ${chatId}: ${res.status} ${await res.text()}`);

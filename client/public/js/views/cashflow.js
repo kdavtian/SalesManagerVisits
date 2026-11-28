@@ -67,6 +67,8 @@ export async function renderCashflow(root, navigate) {
       <div id="cf-list"></div>
       <button type="button" class="btn btn-block" id="cf-more" hidden>${t("cf_more")}</button>
       <p class="muted cf-foot" id="cf-foot"></p>
+      <p class="cf-no-rate" id="cf-no-rate" role="status" hidden></p>
+      <p class="muted cf-foot" id="cf-rate-filled" hidden></p>
       </div>
       </div>
       <button type="button" class="btn btn-block desk-inline" id="cf-import" hidden>${t("cf_import")}</button>
@@ -259,6 +261,14 @@ export async function renderCashflow(root, navigate) {
     const s = meta.last_sync;
     const ago = s ? formatDuration(Math.round((Date.now() - new Date(s.at).getTime()) / 60000)) : "";
     $("#cf-foot").textContent = s ? fill("cf_synced", { t: ago, n: s.rows_in }) + (meta.usd_rate ? ` · ${fill("cf_usd_note", { rate: meta.usd_rate })}` : "") : t("cf_never_synced");
+    // dollar rows of the Excel sheet with no rate (plan 0.9): counted as 0 AMD until the accountant types the rate; which Excel rows
+    const warn = $("#cf-no-rate");
+    const nr = meta.no_rate;
+    warn.hidden = !nr?.n;
+    if (nr?.n) warn.textContent = `! ${fill("cf_no_rate", { n: nr.n })}${nr.excel_rows?.length ? ` ${fill("cf_no_rate_rows", { rows: nr.excel_rows.join(", ") + (nr.n > nr.excel_rows.length ? "…" : "") })}` : ""}`;
+    const filled = $("#cf-rate-filled");
+    filled.hidden = !s?.rows_rate_filled;
+    if (s?.rows_rate_filled) filled.textContent = fill("cf_rate_filled", { n: s.rows_rate_filled });
   }
 
   // ---- one movement: details, history with date and time, edit / delete / request ---------------------------------------------------
