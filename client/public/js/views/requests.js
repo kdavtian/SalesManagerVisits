@@ -216,7 +216,7 @@ export function renderRequestCard(root, navigate, kind, id) {
       ${err}
       ${request.can_approve === false ? `<p class="muted req-approve-hint">${escapeHtml(t(request.in_handover ? "req_payment_in_handover" : "req_payment_by_handover"))}</p>` : ""}
       <div class="req-bar-buttons">
-        ${request.in_handover ? "" : `<button type="button" class="btn req-btn req-btn-deny" data-act="deny">${escapeHtml(t("req_deny"))}</button>`}
+        ${request.in_handover || request.can_deny === false ? "" : `<button type="button" class="btn req-btn req-btn-deny" data-act="deny">${escapeHtml(t("req_deny"))}</button>`}
         ${request.can_approve === false ? "" : `<button type="button" class="btn btn-primary req-btn req-btn-approve" data-act="approve">${escapeHtml(t("req_approve"))}</button>`}
       </div>`;
     bar.querySelector('[data-act="deny"]')?.addEventListener("click", () => paintBar("deny"));

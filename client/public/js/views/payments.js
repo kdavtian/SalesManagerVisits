@@ -895,15 +895,18 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         if (canApprove(p)) buttons.push({ label: t("approve_payment"), action: "approve", cls: "btn btn-primary" });
         // one route for cash: not handed over yet = no Approve here, and the reason stands next to the buttons (not only in a toast)
         else approveHint = `<p class="muted payment-approve-hint">${t(p.pending_handoff_id ? "payment_approve_in_handover" : "payment_approve_by_handover")}</p>`;
-        // inside a waiting hand-over the server refuses a rejection too: not offered (the hint above says what it waits for)
-        if (!p.pending_handoff_id) buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
+        // inside a waiting hand-over the server refuses a rejection too: not offered (the hint above says what it waits for); counted /
+        // received cash is rejected by admin / CEO only (plan 0.16): the server says per payment (an older server sends no can_reject)
+        if (!p.pending_handoff_id && p.can_reject !== false) buttons.push({ label: t("reject_payment"), action: "reject", cls: "btn btn-danger" });
+        else if (!p.pending_handoff_id) approveHint += `<p class="muted payment-approve-hint">${t("payment_counted_management_only")}</p>`;
       } else if (p.status !== "pending" && canReview) {
-        buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
+        if (p.can_reopen !== false) buttons.push({ label: t("return_to_pending"), action: "return", cls: "btn" });
+        else approveHint = `<p class="muted payment-approve-hint">${t("payment_counted_management_only")}</p>`;
       }
       if (canDeletePayments(state.user.role)) buttons.push({ label: t("delete_payment"), action: "delete", cls: "btn btn-danger" });
 
       // the reason sits above the buttons as its own line (the buttons row lays its children side by side)
-      overlay.querySelector(".payment-approve-hint")?.remove();
+      overlay.querySelectorAll(".payment-approve-hint").forEach((el) => el.remove());
       if (approveHint) actionsEl.insertAdjacentHTML("beforebegin", approveHint);
       actionsEl.innerHTML = buttons
         .map((b) => `<button type="button" class="${b.cls}" data-action="${b.action}">${b.label}</button>`)
@@ -972,7 +975,7 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
             actionsEl.querySelector("#payment-reason-cancel").addEventListener("click", () => renderDetail(p));
             actionsEl.querySelector("#payment-reason-go").addEventListener("click", async (ev) => {
               const reason = reasonEl.value.trim();
-              if (!reason) {
+              if (!reason || (p.cash_counted && reason.length < 3)) {
                 errorEl.textContent = t("payment_reason_required");
                 errorEl.hidden = false;
                 return;

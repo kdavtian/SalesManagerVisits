@@ -30,6 +30,7 @@ import { notifyUser } from "../../shared/notifications.js";
 import { confirmHandoffInTx } from "../handoffConfirm.js";
 import { reportDiscrepancy } from "../cashSheets.js";
 import { CASH_IN_HAND_SQL } from "../cashCustody.js";
+import { shortfallCloseBlock, mayCloseShortfall } from "../cashRoute.js";
 
 export const cashHandoffsRouter = Router();
 cashHandoffsRouter.use(requireAuth);
@@ -306,10 +307,11 @@ cashHandoffsRouter.get("/", async (req, res) => {
 
 // ---- Shortfalls (owner's answer 6, release 3): counted less than handed over -> on the sender's line until closed ----------------------
 //   GET  /shortfalls                 open ones (a rep: his own) + the last 30 closed
-//   POST /shortfalls/:id/close       { how: 'paid' | 'written_off', note } -- paid in: the director / accountant / admin / CEO who got the
-//                                    missing notes; written off: admin / CEO only, with a reason
+//   POST /shortfalls/:id/close       { how: 'paid' | 'written_off', note } -- paid in: the person who counted the hand-over, admin or the
+//                                    CEO, with a note; written off: admin / CEO only, with a reason; never your own (cashRoute.js, plan 0.15)
 const SHORTFALL_SQL = `SELECT s.id, s.handoff_id, s.user_id, u.name AS user_name, s.amount_amd::float8 AS amount_amd, s.note, s.status,
-         s.created_at, s.closed_at, s.close_note, cu.name AS closed_by_name, h.confirmed_at, tu.name AS counted_by_name
+         s.created_at, s.closed_at, s.close_note, cu.name AS closed_by_name, h.confirmed_at, tu.name AS counted_by_name,
+         h.to_user_id, h.confirmed_by AS counted_by
   FROM cash_shortfalls s JOIN users u ON u.id = s.user_id JOIN cash_handoffs h ON h.id = s.handoff_id JOIN users tu ON tu.id = h.to_user_id
   LEFT JOIN users cu ON cu.id = s.closed_by`;
 
@@ -319,29 +321,43 @@ cashHandoffsRouter.get("/shortfalls", async (req, res) => {
     pool.query(`${SHORTFALL_SQL} WHERE s.status = 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.created_at`, own ? [req.user.id] : []),
     pool.query(`${SHORTFALL_SQL} WHERE s.status <> 'open' ${own ? "AND s.user_id = $1" : ""} ORDER BY s.closed_at DESC LIMIT 30`, own ? [req.user.id] : []),
   ]);
+  // per card: who may close THIS one (never their own; paid in = the counter or admin / CEO). The top-level flags stay for older phones.
+  for (const s of open) {
+    s.can_close = mayCloseShortfall(s, req.user, "paid");
+    s.can_write_off = mayCloseShortfall(s, req.user, "written_off");
+  }
   res.json({ open, closed, can_close: closesCashShortfall(req.user.role), can_write_off: canVoidCountedPayment(req.user.role) });
 });
 
 cashHandoffsRouter.post("/shortfalls/:id/close", async (req, res) => {
   const how = req.body?.how;
   const note = String(req.body?.note ?? "").trim().slice(0, 300) || null;
-  if (how !== "paid" && how !== "written_off") return res.status(400).json({ error: "how must be paid or written_off" });
-  if (how === "paid" && !closesCashShortfall(req.user.role)) return res.status(403).json({ error: "Not allowed" });
-  if (how === "written_off") {
-    if (!canVoidCountedPayment(req.user.role)) return res.status(403).json({ error: "Only admin or CEO can write a shortfall off" });
-    if (!note || note.length < 3) return res.status(400).json({ error: "Write why it is written off" });
-  }
+  const id = Number(req.params.id);
+  const { rows: [sf] } = await pool.query(
+    "SELECT s.id, s.user_id, s.status, h.to_user_id, h.confirmed_by AS counted_by FROM cash_shortfalls s JOIN cash_handoffs h ON h.id = s.handoff_id WHERE s.id = $1",
+    [Number.isSafeInteger(id) ? id : 0]
+  );
+  if (!sf || sf.status !== "open") return res.status(409).json({ error: "This shortfall is already closed (or does not exist)" });
+  const blocked = shortfallCloseBlock(sf, req.user, how, note);
+  if (blocked) return res.status(blocked.status).json({ error: blocked.error });
   const { rows } = await pool.query(
     `UPDATE cash_shortfalls SET status = $2, closed_by = $3, closed_at = now(), close_note = $4 WHERE id = $1 AND status = 'open' RETURNING id, user_id, amount_amd`,
-    [Number(req.params.id), how, req.user.id, note]
+    [sf.id, how, req.user.id, note]
   );
   if (!rows[0]) return res.status(409).json({ error: "This shortfall is already closed (or does not exist)" });
   const closer = await getUser(req.user.id);
-  notifyHandoff(rows[0].user_id, "cash_handoff_reviewed", {
+  const owed = await getUser(rows[0].user_id);
+  const payload = {
     title: how === "paid" ? "Պակասորդը փակվեց" : "Պակասորդը դուրս գրվեց",
-    body: `${Number(rows[0].amount_amd).toLocaleString()} AMD · ${closer?.name ?? ""}`,
+    body: `${Number(rows[0].amount_amd).toLocaleString()} AMD · ${owed?.name ?? ""} · ${closer?.name ?? ""}: ${note}`,
     url: "/#/cash-handoffs",
-  });
+  };
+  // the person who owed it, the person who counted it and the owner's side (admin, CEO) all hear it -- not only the debtor (plan 0.15)
+  const to = new Set([rows[0].user_id, sf.counted_by ?? sf.to_user_id]);
+  const { rows: mgmt } = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'ceo') AND status = 'active'");
+  for (const m of mgmt) to.add(m.id);
+  to.delete(req.user.id);
+  for (const uid of to) if (uid) notifyHandoff(uid, "cash_handoff_reviewed", payload);
   res.json({ ok: true });
 });
 

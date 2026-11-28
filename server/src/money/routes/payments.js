@@ -10,10 +10,11 @@ import { autoCompleteCollectionTasks } from "../../team/taskAutoComplete.js";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canReviewPayments, canSubmitPaymentsForOthers, seesAllPayments, canDeletePayments, PAYMENT_NOTIFY_ROLES } from "../../shared/roles.js";
-import { approvalBlock, approverTakesCash, getAccountantDirectApproval } from "../cashRoute.js";
+import { approvalBlock, approverTakesCash, getAccountantDirectApproval, cashDecisionBlock, mayRejectPayment, mayReopenPayment } from "../cashRoute.js";
 import { CASH_PLACE_SELECT, CASH_PLACE_JOINS, CASH_PLACE_SQL, RECEIVED_TODAY_SQL, addCashPlace } from "../cashPlaceSql.js";
 import { CASH_PLACES } from "../../shared/cashPlace.js";
-import { CASH_IN_HAND_SQL } from "../cashCustody.js";
+import { CASH_IN_HAND_SQL, CASH_COUNTED_SQL } from "../cashCustody.js";
+import { notifyUser } from "../../shared/notifications.js";
 import { notifyApprovers, notifyDecisionOf, amdText } from "../../system/requests/notify.js";
 import { IN_EXCEL_SQL, DAYS_OLD_SQL, EXCEL_MISSING_SQL } from "../paymentExcelMatch.js";
 import fs from "node:fs";
@@ -50,7 +51,7 @@ async function loadPaymentRow(id) {
             ch.name AS current_holder_name,
             pending_to.name AS pending_handoff_to_name, ${CASH_PLACE_SELECT},
             COALESCE(c.name, p.customer_name_snapshot) AS customer_name_snapshot,
-            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old,
+            ${IN_EXCEL_SQL} AS in_excel, ${DAYS_OLD_SQL}::int AS days_old, ${CASH_COUNTED_SQL} AS cash_counted,
             GREATEST(0, (p.created_at AT TIME ZONE 'Asia/Yerevan')::date - (p.payment_date AT TIME ZONE 'Asia/Yerevan')::date)::int AS days_back
      FROM payments p
      JOIN users sm ON sm.id = p.sales_manager_id
@@ -505,7 +506,8 @@ paymentsRouter.get("/:id", async (req, res) => {
     [req.params.id]
   );
   const can_approve = !approvalBlock(payment, req.user, { accountantDirect: await getAccountantDirectApproval() });
-  res.json({ ...payment, history, can_approve });
+  // Reject / Reopen are offered only where the server accepts them (cashRoute.js cashDecisionBlock: counted cash -> admin / CEO)
+  res.json({ ...payment, history, can_approve, can_reject: mayRejectPayment(payment, req.user), can_reopen: mayReopenPayment(payment, req.user) });
 });
 
 // --- The Approve button and the cash route ---
@@ -602,16 +604,41 @@ paymentsRouter.post("/approve-many", async (req, res) => {
   res.json({ approved, failed });
 });
 
+// One payment, locked, with cash_counted (cashCustody.js): the facts the reject / reopen rule needs. Inside the caller's transaction.
+async function lockForDecision(client, id) {
+  const { rows } = await client.query(
+    `SELECT p.*, ${CASH_COUNTED_SQL} AS cash_counted, h.name AS holder_name FROM payments p LEFT JOIN users h ON h.id = p.current_holder_id
+     WHERE p.id = $1 FOR UPDATE OF p`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+// Counted cash rejected or reopened (improvement plan 0.16): the owner's side (admin, CEO) and whoever holds the cash hear it at once.
+async function notifyCountedDecision(payment, user, { reopened, reason }) {
+  try {
+    const { rows } = await pool.query("SELECT id FROM users WHERE role IN ('admin', 'ceo') AND status = 'active'");
+    const to = new Set(rows.map((r) => r.id));
+    if (payment.current_holder_id && payment.current_holder_id !== payment.sales_manager_id) to.add(payment.current_holder_id);
+    to.delete(user.id);
+    const { rows: [me] } = await pool.query("SELECT name FROM users WHERE id = $1", [user.id]);
+    const title = `${reopened ? "Հաշված կանխիկը վերաբացվեց" : "Հաշված կանխիկը մերժվեց"}՝ ${amdText(payment.amount_amd)}`;
+    const body = [payment.customer_name_snapshot, `${payment.sales_manager_name_snapshot}${payment.holder_name ? ` → ${payment.holder_name}` : ""}`, `${me?.name ?? ""}: ${reason}`].join("\n");
+    for (const id of to) await notifyUser(id, "fraud_alert", { title, body, url: `/#/payments/${payment.id}` }).catch(() => {});
+  } catch (err) {
+    console.error("Counted-cash notification failed:", err.message);
+  }
+}
+
 paymentsRouter.post("/:id/reject", async (req, res) => {
   if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to reject payments" });
   const { reason } = req.body ?? {};
-  if (!reason || !reason.trim()) return res.status(400).json({ error: "A rejection reason is required" });
+  if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A rejection reason is required" });
 
+  let payment;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
-    const payment = rows[0];
+    payment = await lockForDecision(client, req.params.id);
     if (!payment) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Payment not found" });
@@ -629,16 +656,25 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "This payment is part of a cash handoff awaiting confirmation -- resolve that handoff first" });
     }
+    const blocked = cashDecisionBlock(payment, req.user);
+    if (blocked) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: blocked, code: "counted_needs_management" });
+    }
+    if (payment.cash_counted && String(reason).trim().length < 3) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Write why counted cash is rejected", code: "reason_required" });
+    }
 
     await client.query(
       `UPDATE payments SET status = 'rejected', rejected_by = $1, rejected_at = now(), rejection_reason = $2
        WHERE id = $3`,
-      [req.user.id, reason.trim(), req.params.id]
+      [req.user.id, String(reason).trim(), req.params.id]
     );
     await client.query(
       `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
        VALUES ($1, 'pending', 'rejected', $2, $3)`,
-      [req.params.id, reason.trim(), req.user.id]
+      [req.params.id, String(reason).trim(), req.user.id]
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -648,7 +684,8 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
     client.release();
   }
   res.json(await loadPaymentRow(req.params.id));
-  notifyDecisionOf("payment", Number(req.params.id), { deciderId: req.user.id, approved: false, reason: reason.trim() });
+  notifyDecisionOf("payment", Number(req.params.id), { deciderId: req.user.id, approved: false, reason: String(reason).trim() });
+  if (payment.cash_counted) notifyCountedDecision(payment, req.user, { reopened: false, reason: String(reason).trim() });
 });
 
 // Reversal is deliberately not reachable from the list row -- see task
@@ -658,13 +695,13 @@ paymentsRouter.post("/:id/reject", async (req, res) => {
 paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
   if (!canReviewPayments(req.user.role)) return res.status(403).json({ error: "Not allowed to reverse payment status" });
   const { reason } = req.body ?? {};
-  if (!reason || !reason.trim()) return res.status(400).json({ error: "A reason is required" });
+  if (!reason || !String(reason).trim()) return res.status(400).json({ error: "A reason is required" });
 
+  let payment;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query("SELECT * FROM payments WHERE id = $1 FOR UPDATE", [req.params.id]);
-    const payment = rows[0];
+    payment = await lockForDecision(client, req.params.id);
     if (!payment) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Payment not found" });
@@ -672,6 +709,16 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
     if (payment.status === "pending") {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: "Payment is already pending" });
+    }
+    // reopening counted / received / approved cash is the first step of taking it out of the chain: admin / CEO only (plan 0.16)
+    const blocked = cashDecisionBlock(payment, req.user);
+    if (blocked) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: blocked, code: "counted_needs_management" });
+    }
+    if (payment.cash_counted && String(reason).trim().length < 3) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Write why counted cash is reopened", code: "reason_required" });
     }
     // Custody is deliberately left alone -- whoever physically holds the cash
     // still holds it; only the reconciliation status is reopened. If the
@@ -687,7 +734,7 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
     await client.query(
       `INSERT INTO payment_status_history (payment_id, old_status, new_status, reason, changed_by)
        VALUES ($1, $2, 'pending', $3, $4)`,
-      [req.params.id, oldStatus, reason.trim(), req.user.id]
+      [req.params.id, oldStatus, String(reason).trim(), req.user.id]
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -697,6 +744,7 @@ paymentsRouter.post("/:id/return-to-pending", async (req, res) => {
     client.release();
   }
   res.json(await loadPaymentRow(req.params.id));
+  if (payment.cash_counted) notifyCountedDecision(payment, req.user, { reopened: true, reason: String(reason).trim() });
 });
 
 // Admin only (owner, 2026-10-24). The payment and its history are copied to deleted_payments first, so nothing is ever lost.
