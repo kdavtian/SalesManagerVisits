@@ -32,6 +32,8 @@ export async function syncProductsAndWholesaleCustomersToPlatform() {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Sync-Key": key },
+    // the website not answering must not hang the caller (improvement plan 0.22; the payload is the whole catalogue, so a generous 2 min)
+    signal: AbortSignal.timeout(120_000),
     body: JSON.stringify({
       // The website's Gold price (wholesale_t3) is what a Gold customer pays here: the Silver list (owner, 2026-11-07).
       products: productsResult.rows.map((p) => ({ ...p, gold_price_amd: tierListPrice({ ...p, unit_price_amd: p.base_price_amd }, "gold") || null })),

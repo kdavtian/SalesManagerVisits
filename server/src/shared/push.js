@@ -43,6 +43,7 @@ if (!configured && !isTestRun) {
 // gets a short bounded retry in-process rather than being dropped after a
 // single attempt, which is what silently happened before this.
 const MAX_ATTEMPTS = 3;
+export const PUSH_TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [3000, 15000]; // before attempt 2, then attempt 3
 
 async function logDeliveryAttempt({ notificationId, userId, subscriptionId, status, statusCode, errorMessage, attempt }) {
@@ -64,7 +65,9 @@ async function notifyOneSubscription(row, payload, userId, notificationId, attem
   try {
     await webpush.sendNotification(
       { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      // a push service that does not answer is a failed attempt (retried below), not a hung job (improvement plan 0.22)
+      { timeout: PUSH_TIMEOUT_MS }
     );
     console.log(`Push delivered to subscription ${row.id} (user ${userId}): "${payload.title}"`);
     await logDeliveryAttempt({ notificationId, userId, subscriptionId: row.id, status: "delivered", statusCode: 200, attempt });

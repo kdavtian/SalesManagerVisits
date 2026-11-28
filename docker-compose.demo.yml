@@ -12,6 +12,12 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # container logs capped at 5 files of 10 MB per service: they can no longer fill the disk (improvement plan 0.7)
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_USER: demo
       POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:?run deploy/demo.sh up}
@@ -28,6 +34,10 @@ services:
     build:
       context: .
     restart: unless-stopped
+    # as in docker-compose.yml: init passes the stop signal to Node, which finishes work in progress before exiting
+    init: true
+    stop_grace_period: 30s
+    logging: *default-logging
     depends_on:
       db:
         condition: service_healthy

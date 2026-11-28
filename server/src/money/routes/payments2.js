@@ -16,7 +16,7 @@
 import { cashPlace } from "../../shared/cashPlace.js";
 import { officeDeskSql } from "../cashPlaceSql.js";
 import { Router } from "express";
-import { pool } from "../../db/pool.js";
+import { pool, runLongWork } from "../../db/pool.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { canManageCashDesks, canRecordBankPayments, canVoidCountedPayment, seesPaymentBooks } from "../../shared/roles.js";
 import { IN_EXCEL_SQL } from "../paymentExcelMatch.js";
@@ -211,8 +211,7 @@ payments2Router.get("/:id", async (req, res) => {
 
 payments2Router.post("/run", async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Not allowed" });
-  const bridge = await runBridge();
-  const books = await runBooks();
+  const { bridge, books } = await runLongWork(async () => ({ bridge: await runBridge(), books: await runBooks() }));
   res.json({ bridge, books });
 });
 
