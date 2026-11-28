@@ -29,6 +29,15 @@ export const GET_TIMEOUT_MS = 30000;
 // a background send from the queue gets QUEUE_SEND_TIMEOUT_MS (photos on weak signal take time, and a lost answer is harmless).
 export const SAVE_TIMEOUT_MS = 30000;
 export const QUEUE_SEND_TIMEOUT_MS = 120000;
+// Photos, signatures and a voice note take time to upload on weak signal: the limit grows by 1 s per 50 KB sent (about 400 kbit/s), so a
+// visit with many photos is not cut off while it is still uploading -- only a save that is not moving at that pace is given up.
+const MS_PER_50KB = 1000;
+function uploadAllowanceMs(body) {
+  if (typeof FormData === "undefined" || !(body instanceof FormData)) return 0;
+  let bytes = 0;
+  for (const value of body.values()) bytes += typeof value === "string" ? value.length : value?.size ?? 0;
+  return Math.round((bytes / 51200) * MS_PER_50KB);
+}
 const QUEUEABLE_SAVES = [
   ["POST", /^\/(checkins|orders|payments)$/],
   ["PUT", /^\/stock-count\/items\/\d+$/],
@@ -168,7 +177,7 @@ export async function doRequest(path, options) {
   // A save that waits in the offline queue when it cannot get through gets its own limit (SAVE_TIMEOUT_MS, item 0.8): on weak signal it used
   // to hang with no end while the rep stood at the customer.
   const queueable = method !== "GET" && isQueueableSave(method, path);
-  const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : queueable ? options.saveTimeoutMs || SAVE_TIMEOUT_MS : 0;
+  const timeoutMs = method === "GET" ? GET_TIMEOUT_MS : queueable ? (options.saveTimeoutMs || SAVE_TIMEOUT_MS) + uploadAllowanceMs(options.body) : 0;
   const controller = timeoutMs && !options.signal ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   let res;

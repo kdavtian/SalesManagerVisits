@@ -316,11 +316,14 @@ function submitOrder(entry) {
 function submitEntry(entry) {
   if (entry.type === "stock_count") return api.saveStockCount(entry.productId, entry.qty, null, entry.day, SEND_OPTS);
   if (entry.type === "volume_potential") return api.saveVolumePotential(entry.customerId, entry.body, SEND_OPTS);
-  if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: true }), SEND_OPTS);
+  // confirmDuplicate: a payment queued for no signal was always sent "record anyway" (the rep cannot be asked again in the background);
+  // one queued after a slow answer / 502 / update (item 0.8) keeps the rep's own choice, and a duplicate warning then shows in the sheet
+  // with "Record anyway" (markRefused). Older entries have no flag: as before.
+  if (entry.type === "payment") return api.createPaymentForm(paymentForm({ ...entry, confirmDuplicate: entry.confirmDuplicate !== false }), SEND_OPTS);
   return entry.type === "order" ? submitOrder(entry) : submitCheckin(entry);
 }
 
-let flushing = false;
+let flushing = false; // a pass is running (retrySoon does not start another)
 
 // How many entry-specific failures (403/409, see below) an entry can rack up
 // before automatic flushes stop retrying it on their own -- a broken record
@@ -355,22 +358,67 @@ async function markRefused(entry, err) {
   const idx = memoryQueue.findIndex((e) => e.id === entry.id);
   if (idx === -1) return;
   const attempts = (memoryQueue[idx].attempts || 0) + 1;
-  const retryable = err.status === 403 || err.status === 409;
+  const duplicateWarning = err.status === 409 && err.body?.error === "duplicate_warning";
+  const retryable = (err.status === 403 || err.status === 409) && !duplicateWarning;
   const updated = {
     ...memoryQueue[idx],
     attempts,
     needsAttention: retryable ? attempts >= NEEDS_ATTENTION_THRESHOLD : true,
     // the server's reason as the rep reads it (core.js already words the known refusals in their language); "not found" in their words too
-    lastError: err.status === 404 ? t("sync_refused_not_found") : err.message || `HTTP ${err.status}`,
+    lastError: err.status === 404 ? t("sync_refused_not_found") : duplicateWarning ? t("sync_duplicate_payment") : err.message || `HTTP ${err.status}`,
     lastStatus: err.status,
+    lastCode: duplicateWarning ? "duplicate_warning" : err.body?.code ?? null,
   };
   memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
   await persistEntry(updated);
   notify();
 }
 
-export async function flushQueue({ force = false } = {}) {
-  if (flushing) return;
+// A send that did not get through for a passing reason (no answer in time, the server busy) waits before the automatic passes try it again,
+// longer each time (30 s, 1, 2, 4 ... at most 15 minutes), so the 30-second background timer (retrySoon) does not upload a large check-in
+// again and again on weak signal. Only that timer waits: signal back ('online'), a sign-in, the app start and "Retry now" send at once. It is
+// never marked "needs attention" or deleted for that.
+const BACKOFF_MS = (fails) => Math.min(15 * 60 * 1000, 30000 * 2 ** Math.max(0, fails - 1));
+async function markDeferred(entry) {
+  const idx = memoryQueue.findIndex((e) => e.id === entry.id);
+  if (idx === -1) return;
+  const fails = (memoryQueue[idx].transientFails || 0) + 1;
+  const updated = { ...memoryQueue[idx], transientFails: fails, retryAt: Date.now() + BACKOFF_MS(fails) };
+  memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
+  await persistEntry(updated);
+}
+
+// "Record anyway" for a queued payment the server warned is a duplicate (the waiting-to-send sheet): the rep decided, it is sent at once.
+export async function confirmDuplicateEntry(id) {
+  await ready;
+  const idx = memoryQueue.findIndex((e) => e.id === id && isMine(e));
+  if (idx === -1) return;
+  const updated = { ...memoryQueue[idx], confirmDuplicate: true, needsAttention: false, lastError: null, lastCode: null, attempts: 0 };
+  memoryQueue = [...memoryQueue.slice(0, idx), updated, ...memoryQueue.slice(idx + 1)];
+  await persistEntry(updated);
+  notify();
+  await flushQueue({ force: true });
+}
+
+// One pass at a time. A "Retry now" (force) that arrives while an automatic pass is running is not lost: a forced pass follows it.
+let currentPass = null;
+let forcedNext = null;
+export function flushQueue({ force = false, timer = false } = {}) {
+  if (currentPass) {
+    if (!force) return currentPass;
+    forcedNext ??= currentPass.then(() => {
+      forcedNext = null;
+      return flushQueue({ force: true });
+    });
+    return forcedNext;
+  }
+  currentPass = runPass(force, timer).finally(() => {
+    currentPass = null;
+  });
+  return currentPass;
+}
+
+async function runPass(force, timer) {
   flushing = true;
   try {
     await ready;
@@ -391,6 +439,8 @@ export async function flushQueue({ force = false } = {}) {
       // retry (force: true) always gets another attempt, since the rep
       // presumably did something about the underlying cause first.
       if (entry.needsAttention && !force) continue;
+      // waiting after a slow answer / busy server (markDeferred)
+      if (timer && entry.retryAt && entry.retryAt > Date.now()) continue;
       try {
         await submitEntry(entry);
         memoryQueue = memoryQueue.filter((e) => e.id !== entry.id);
@@ -405,13 +455,19 @@ export async function flushQueue({ force = false } = {}) {
         // stop the whole pass; the 'online' listener, the next login or the
         // updated app retries later.
         if ([401, 423, 426, 429].includes(err.status)) break;
-        // The server looked at this entry and refused it: keep it, flagged with the reason (markRefused). Anything else -- no network
-        // (TypeError), no answer in time (408 from the send limit), the server or its proxy down (5xx), no status at all -- stops the pass
-        // and is retried later, the entry untouched.
+        // The server looked at this entry and refused it: keep it, flagged with the reason (markRefused).
         if (err.status >= 400 && err.status < 500 && err.status !== 408) {
           await markRefused(entry, err);
           continue;
         }
+        // No answer in time (408 from the send limit) is about THIS upload (often a large one): it waits (markDeferred) and the entries
+        // behind it still get their turn. The server or its proxy down (5xx): the entry waits too, and the pass stops (every other send
+        // would meet the same wall). No network (TypeError) or no status: the pass stops; the 'online' event brings it back.
+        if (err.status === 408) {
+          await markDeferred(entry);
+          continue;
+        }
+        if (err.status >= 500) await markDeferred(entry);
         break;
       }
     }
@@ -421,7 +477,7 @@ export async function flushQueue({ force = false } = {}) {
   }
 }
 
-window.addEventListener("online", flushQueue);
+window.addEventListener("online", () => flushQueue());
 
 // A save can be queued while the phone HAS signal (no answer in 30 s, a 502/503/504 during a deploy; item 0.8), and iPhone Safari does not
 // always report "signal is back": no 'online' event would ever come. While this person has entries that can be sent, try again every
@@ -429,7 +485,7 @@ window.addEventListener("online", flushQueue);
 const QUEUE_RETRY_MS = 30000;
 const retrySoon = () => {
   if (document.hidden || !navigator.onLine || flushing) return;
-  if (memoryQueue.some((e) => isMine(e) && !e.needsAttention)) flushQueue();
+  if (memoryQueue.some((e) => isMine(e) && !e.needsAttention && !(e.retryAt > Date.now()))) flushQueue({ timer: true });
 };
 setInterval(retrySoon, QUEUE_RETRY_MS);
 document.addEventListener("visibilitychange", retrySoon);

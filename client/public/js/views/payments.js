@@ -1358,7 +1358,9 @@ export function renderPayments(root, navigate, focusPaymentId, initialQuery) {
         // no signal: the payment waits on the phone (with its photos and signature) and is sent when the signal is back
         if (isNoSignal(err)) {
           try {
-            await enqueuePayment(entry);
+            // no signal: "record anyway" as always (the background send cannot ask); a slow answer / 502 / update: the rep's own choice,
+            // and a duplicate warning then waits in the waiting-to-send sheet with "Record anyway" (offlineQueue.js)
+            await enqueuePayment({ ...entry, confirmDuplicate: err instanceof TypeError ? true : confirmDuplicate });
             showToast(t("pay_saved_offline"));
             done();
           } catch (queueErr) {

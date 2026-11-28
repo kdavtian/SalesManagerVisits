@@ -131,4 +131,44 @@ test.describe("Offline queue safety", () => {
     await expect(queuedHeading(page)).toHaveCount(1);
     expect(await ordersOf(customer.id)).toHaveLength(0);
   });
+
+  test("a payment queued after a 502 keeps the duplicate check: the warning waits in the sheet, 'It is another payment: save' sends it", async ({ page, fixtures }) => {
+    const rep = await fixtures.createUser("sales_manager");
+    const c = await fixtures.createCustomer({ created_by: rep.id, name: `Dup Shop ${Date.now()}` });
+    try {
+      await loginViaUi(page, rep.email);
+      await page.goto("/#/payments");
+      await page.locator("#payments-new-btn").click({ timeout: 15000 });
+      await page.locator("#payment-pick-customer").click();
+      await page.locator("#payment-customer-search").fill(c.name);
+      await page.locator(`[data-customer-id="${c.id}"]`).click({ timeout: 10000 });
+      await page.locator("#payment-amount-input").fill("23000");
+      let calls = 0;
+      // 1st send: 502 (deploy) -> queued; next sends: the server's duplicate warning unless the rep confirmed it
+      await page.route("**/api/payments", async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        calls += 1;
+        if (calls === 1) return route.fulfill({ status: 502, contentType: "text/html", body: "Bad Gateway" });
+        const body = route.request().postDataBuffer()?.toString("latin1") ?? "";
+        if (!body.includes('name="confirm_duplicate"')) {
+          return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "duplicate_warning", message: "Possible duplicate payment" }) });
+        }
+        return route.fallback();
+      });
+      await page.locator("#payment-add-submit").click();
+      await page.locator("#pay-save-anyway").click(); // no proof: the rep saves anyway
+      await expect(page.locator("#payment-add-submit")).toHaveCount(0, { timeout: 10000 });
+      await page.evaluate(() => window.dispatchEvent(new Event("online")));
+      await expect(page.locator("#sync-banner")).toContainText(/couldn.t sync/i, { timeout: 15000 });
+      await page.locator("#sync-banner").click();
+      const sheet = page.locator(".sync-queue-sheet");
+      await expect(sheet.locator(".sync-queue-error")).toContainText(/duplicate/i);
+      expect((await pool.query("SELECT count(*)::int AS n FROM payments WHERE customer_id = $1", [c.id])).rows[0].n).toBe(0);
+      await sheet.locator("[data-record-anyway]").click();
+      await expect.poll(async () => (await pool.query("SELECT count(*)::int AS n FROM payments WHERE customer_id = $1", [c.id])).rows[0].n, { timeout: 15000 }).toBe(1);
+    } finally {
+      await pool.query("DELETE FROM payment_status_history WHERE payment_id IN (SELECT id FROM payments WHERE customer_id = $1)", [c.id]);
+      await pool.query("DELETE FROM payments WHERE customer_id = $1", [c.id]);
+    }
+  });
 });

@@ -1095,6 +1095,8 @@ export const enCommon = {
     sync_retrying: "Sending…",
     sync_discard: "Discard",
     sync_refused_hint: "The server did not accept the items marked in red. Read the reason, fix it and tap “Retry now”, or discard the item.",
+    sync_duplicate_payment: "Possible duplicate payment: the same amount for this customer is already recorded",
+    sync_record_anyway: "It is another payment: save",
     sync_refused_not_found: "The customer or record no longer exists in the system",
     sync_discard_confirm: "Tap again to discard",
     route_open_title: "Open route in Maps",

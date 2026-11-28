@@ -84,6 +84,16 @@ test("POST /api/checkins: a far check-in from the offline queue (captured_at) is
   assert.equal(new Date(res.data.timestamp).toISOString(), capturedAt); // kept at the moment the rep pressed Save
 });
 
+test("POST /api/checkins: a far check-in with a capture time that is garbage, 'now' or over a week old is still refused", async () => {
+  for (const captured_at of ["x", new Date().toISOString(), new Date(Date.now() - 9 * 24 * 3600 * 1000).toISOString()]) {
+    const res = await apiFormRequest("/api/checkins", {
+      cookie,
+      form: checkinForm({ customer_id: customer.id, lat: String(customer.lat + 0.05), lng: String(customer.lng), captured_at, outcomes: JSON.stringify(["no_order"]) }),
+    });
+    assert.equal(res.status, 422, `captured_at=${captured_at}`);
+  }
+});
+
 test("POST /api/checkins: a far check-in sent live (no captured_at) is still refused", async () => {
   const res = await apiFormRequest("/api/checkins", {
     cookie,

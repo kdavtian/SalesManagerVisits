@@ -1043,7 +1043,8 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
     } catch (err) {
       if (isNoSignal(err)) {
         // No signal, no answer in 30 s, the server busy for a moment (502/503/504) or an update required -- queue it instead of losing the order.
-        enqueueOrder({
+        // awaited: the order must be stored on the phone before "saved on this phone" shows (an update reload may follow at once)
+        const queued = enqueueOrder({
           clientRef,
           customerId: Number(customerId),
           customerName: customer.name,
@@ -1056,7 +1057,17 @@ export async function renderOrderCreate(root, navigate, customerId, checkinId, o
           payment_term_days: dueDays(),
           ...downpayment,
           metrics: orderMetrics(),
-        });
+        }).then(
+          () => true,
+          (queueErr) => {
+            sheetError.textContent = queueErr?.message || String(queueErr);
+            sheetError.hidden = false;
+            saveBtn.disabled = false;
+            saveBtn.textContent = t("save_order");
+            return false;
+          }
+        );
+        if (!(await queued)) return;
         overlay.remove();
         showOrderQueued();
       } else {
