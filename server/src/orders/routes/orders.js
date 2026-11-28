@@ -1,4 +1,5 @@
 import { nextStatusFromDocuments, ACCOUNTING_STATUSES, WITHDRAW_WAITING_REQUEST_SQL, hasAccountingDocuments } from "../accountingStatus.js";
+import { mayOpenOrderDocument } from "../../customers/customerAccess.js";
 import { customerIdsMatching } from "../../customers/customerSearch.js";
 import { accountingQueueChanged } from "../accountingEvents.js";
 import { matchExistingLines, applyCorrection, isOrderChangedFlag } from "../orderCorrection.js";
@@ -670,7 +671,8 @@ ordersRouter.get("/documents/:docId/file", async (req, res) => {
   const doc = rows[0];
   if (!doc) return res.status(404).json({ error: "Document not found" });
   if (docTooOld(req.user, doc)) return res.status(403).json({ error: "Only documents of the last two weeks" });
-  // Same access as the customer card, which lists these documents too.
+  // Same access as the customer card, which lists these documents too (customerAccess.js): a rep opens only his customers' papers.
+  if (!(await mayOpenOrderDocument(req.user, doc.order_id))) return res.status(403).json({ error: "Not allowed" });
   res.set("Content-Type", doc.content_type);
   res.set("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(doc.filename)}`);
   res.set("X-Content-Type-Options", "nosniff");
@@ -681,10 +683,11 @@ ordersRouter.get("/documents/:docId/file", async (req, res) => {
 // A signed accounting document as one JPEG (pdfPreview.js), kept in the uploads folder after the first look.
 ordersRouter.get("/documents/:docId/preview", async (req, res) => {
   const id = Number(req.params.docId);
-  const { rows } = await pool.query(`SELECT d.content_type, d.data, ${RECENT_DOC_SQL} AS recent FROM order_documents d WHERE d.id = $1`, [id]);
+  const { rows } = await pool.query(`SELECT d.order_id, d.content_type, d.data, ${RECENT_DOC_SQL} AS recent FROM order_documents d WHERE d.id = $1`, [id]);
   const doc = rows[0];
   if (!doc) return res.status(404).json({ error: "Document not found" });
   if (docTooOld(req.user, doc)) return res.status(403).json({ error: "Only documents of the last two weeks" });
+  if (!(await mayOpenOrderDocument(req.user, doc.order_id))) return res.status(403).json({ error: "Not allowed" });
   if (doc.content_type !== "application/pdf") return res.status(400).json({ error: "Not a PDF" });
   const jpg = await pdfBufferPreview(doc.data, path.join(uploadDirPath, `accdoc-${id}.preview.jpg`));
   if (!jpg) return res.status(501).json({ error: "Preview not available" });

@@ -28,14 +28,27 @@ export const productsRouter = Router();
 
 productsRouter.use(requireAuth);
 
-// Gold price, landing cost and net cost are management-only: a sales manager's
-// API response simply does not carry them (not merely hidden in the UI).
+// Gold price and every supplier cost (landing, net, pack cost in USD, the workbook's landing figure) are management-only: a sales manager's
+// API response simply does not carry them (not merely hidden in the UI). An ALLOW-list, not a deny-list (improvement plan 0.14): a column
+// added to products later reaches these roles only once it is named here. test/integration/phase0Permissions.test.js fails until every
+// products column is in exactly one of the two lists, so a new column always gets that decision.
+export const PRODUCT_FIELDS_FOR_ALL = [
+  // the products table
+  "id", "name", "sku", "brand", "unit", "unit_price_amd", "active", "created_at", "updated_at", "erp_product_id", "synced_at",
+  "manually_edited_at", "family", "bronze_price_amd", "silver_price_amd", "stock_qty", "retail_price_amd", "image_path", "hc_code",
+  "description", "approvals", "specs", "is_commercial", "items_per_pack", "pack_netto_kg", "size_l", "erp_retail_price_amd", "viscosity",
+  "viscosity_manual", "stock_changed_at",
+  // computed by fetchPricedProducts' query
+  "reserved_qty", "submitted_qty", "back_on_shelf_qty", "promo_id", "promo_price_amd", "promo_starts_on", "promo_ends_on",
+];
+export const PRODUCT_COST_FIELDS = ["gold_price_amd", "landing_cost_amd", "net_cost_amd", "pack_cost_usd", "landing_workbook_amd", "landing_source"];
+const ALLOWED_FOR_ALL = new Set(PRODUCT_FIELDS_FOR_ALL);
+
 function redactProduct(row, role) {
   if (!seesProductCosts(role)) {
-    delete row.gold_price_amd;
-    delete row.landing_cost_amd;
-    delete row.net_cost_amd;
-  } else if (row.net_cost_amd != null) {
+    return Object.fromEntries(Object.entries(row).filter(([key]) => ALLOWED_FOR_ALL.has(key)));
+  }
+  if (row.net_cost_amd != null) {
     // The workbook's net cost (2.1.0) is wrong for packs over 1 L: show it per pack at the wholesale price instead
     // (discountPolicy.js, costModel.js) and keep the workbook value next to it.
     row.net_cost_workbook_amd = Number(row.net_cost_amd);
@@ -76,8 +89,8 @@ export async function fetchPricedProducts(where, params, role) {
   );
   // Every surface (this list, the pricelist page, PDF/print, Excel) reads
   // its prices through the same canonical function -- see pricingService.js.
-  return rows.map((row) => {
-    redactProduct(row, role);
+  return rows.map((full) => {
+    const row = redactProduct(full, role);
     const pricing = getEffectiveProductPricing(
       row,
       row.promo_id ? { promo_price_amd: row.promo_price_amd, starts_on: row.promo_starts_on, ends_on: row.promo_ends_on } : null

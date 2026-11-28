@@ -12,6 +12,7 @@ import { screenPathFor, thumbnailPathFor, removeThumbnail, warmUploadCopies } fr
 import { haversineMeters, creditedDistanceMeters } from "../../utils/geo.js";
 import { getCheckinRadiusMeters, getCheckinAllowanceEnabled } from "../../shared/settings.js";
 import { seesAllActivity } from "../../shared/roles.js";
+import { customerAccess, mayReachCustomerRow } from "../../customers/customerAccess.js";
 import { FIELD_REP_ROLE } from "../visitCount.js";
 import { periodTimestampCondition, PERIOD_KEYS } from "../../utils/periodWindows.js";
 import { notifyTelegram, escapeHtml } from "../../shared/telegram.js";
@@ -74,6 +75,8 @@ const MERGED_INTO_OTHER = new Set(["no_order", "complaint"]);
 checkinsRouter.get("/deliverable-orders", async (req, res) => {
   const customerId = Number(req.query.customer_id);
   if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: "customer_id is required" });
+  // a rep: only a customer he reaches (customerAccess.js), like the card itself -- someone else's answers 404
+  if ((await customerAccess(req.user, customerId)) === "denied") return res.status(404).json({ error: "Customer not found" });
   res.json(await deliverableOrders(customerId));
 });
 
@@ -339,13 +342,20 @@ checkinsRouter.post("/", (req, res, next) => {
   const confirmation = customerSignature ? "signed" : slipFiles.length || blankFiles.length ? "photo" : "none";
 
   const { rows: customerRows } = await pool.query(
-    "SELECT id, name, lat, lng, erp_customer_id FROM customers WHERE id = $1",
+    "SELECT id, name, lat, lng, erp_customer_id, assigned_manager_id, checkin_for_all FROM customers WHERE id = $1",
     [customerId]
   );
   const customer = customerRows[0];
   if (!customer) {
     files.forEach((f) => fs.unlink(f.path, () => {}));
     return res.status(404).json({ error: "Customer not found" });
+  }
+  // A rep checks in (and so records money and marks orders delivered) only at a customer he reaches: his own and the offices
+  // (customerAccess.js, the card's rule). 403, not 404: an offline-queued visit refused this way stays on the phone as "needs attention"
+  // (offlineQueue.js) instead of being dropped, so collected money is never silently lost.
+  if (!mayReachCustomerRow(req.user, customer)) {
+    files.forEach((f) => fs.unlink(f.path, () => {}));
+    return res.status(403).json({ error: "This customer is not assigned to you", code: "customer_not_assigned" });
   }
 
   // Check-in allowance (Settings, can be switched off): a sales manager must be within this many meters of the customer's pin,

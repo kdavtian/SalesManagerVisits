@@ -9,4 +9,5 @@ export const erpApi = {
   getErpSyncStatus: () => request("/erp-sync/status", { fresh: true }),
   requestErpSync: () => json("/erp-sync/request", "POST", {}),
   setErpSyncPaused: (paused) => json("/erp-sync/pause", "PUT", { paused }),
+  acceptErpSyncDrop: () => json("/erp-sync/accept-drop", "POST", {}),
 };

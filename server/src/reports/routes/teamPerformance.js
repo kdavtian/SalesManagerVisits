@@ -350,7 +350,10 @@ teamPerformanceRouter.get("/plans/:id/channels/:channelId/drilldown", async (req
 // The single "live" plan for a month -- draft/pending/approved/rejected,
 // never a superseded or closed one (see the partial unique index in
 // migration 038: at most one row can hold that state per month at a time).
+// The plan routes below (the plan, its versions, its audit trail, comments) are the management screen's: the same people as the full
+// dashboard (seesAllPerformance). A sales manager reads his own channels through /my-performance only (improvement plan 0.10).
 teamPerformanceRouter.get("/plans", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { month } = req.query;
   if (!isValidMonth(month)) return res.status(400).json({ error: "month must be YYYY-MM-01" });
 
@@ -363,6 +366,7 @@ teamPerformanceRouter.get("/plans", async (req, res) => {
 });
 
 teamPerformanceRouter.get("/plans/:id", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const detail = await loadPlanDetail(req.params.id);
   if (!detail) return res.status(404).json({ error: "Plan not found" });
   res.json(detail);
@@ -371,6 +375,7 @@ teamPerformanceRouter.get("/plans/:id", async (req, res) => {
 // Every approved revision's full lineage, oldest first -- what the
 // Approval Review / History screens diff against.
 teamPerformanceRouter.get("/plans/:id/history", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
     `WITH RECURSIVE chain AS (
        SELECT * FROM perf_plans WHERE id = $1
@@ -384,6 +389,7 @@ teamPerformanceRouter.get("/plans/:id/history", async (req, res) => {
 });
 
 teamPerformanceRouter.get("/plans/:id/audit", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { rows } = await pool.query(
     `SELECT a.*, u.name AS actor_name
      FROM perf_plan_audit a JOIN users u ON u.id = a.actor_id
@@ -541,6 +547,7 @@ teamPerformanceRouter.put("/plans/:id/targets/:channelId", async (req, res) => {
 });
 
 teamPerformanceRouter.post("/plans/:id/comments", async (req, res) => {
+  if (!seesAllPerformance(req.user.role)) return res.status(403).json({ error: "Not allowed" });
   const { body, channel_id } = req.body ?? {};
   if (!body || typeof body !== "string" || !body.trim()) {
     return res.status(400).json({ error: "body is required" });

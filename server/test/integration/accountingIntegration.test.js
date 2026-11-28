@@ -20,10 +20,19 @@ import { pool } from "../../src/db/pool.js";
 import { createIntegrationToken } from "../../src/erp/integrationTokens.js";
 
 const tokenIds = [];
+// the accounting-group messages these orders queued (orderGroupPost.js): left behind for deleted orders, the next file's group job would
+// announce them as cancelled (orderGroupPost.test.js counts what its job finds)
+const orderIds = [];
+const trackOrderAndPosts = (id) => {
+  orderIds.push(id);
+  return trackOrder(id);
+};
 test.before(startTestServer);
 test.after(async () => {
   if (tokenIds.length) await pool.query("DELETE FROM integration_tokens WHERE id = ANY($1)", [tokenIds]);
+  await new Promise((r) => setTimeout(r, 300)); // the routes' "sync soon" hooks are not awaited
   await cleanupAll();
+  if (orderIds.length) await pool.query("DELETE FROM group_posts WHERE ref_id = ANY($1)", [orderIds]);
   await stopTestServer();
 });
 
@@ -42,7 +51,7 @@ async function confirmedOrder({ payment_method, tin = "01234567" }) {
     body: { customer_id: customer.id, items: [{ product_id: product.id, quantity: 2 }], payment_method },
   });
   assert.equal(created.status, 201);
-  const orderId = trackOrder(created.data.id);
+  const orderId = trackOrderAndPosts(created.data.id);
   const confirmed = await apiRequest(`/api/orders/${orderId}`, { method: "PATCH", cookie, body: { status: "confirmed" } });
   assert.equal(confirmed.status, 200);
   return { director, cookie, customer, product, orderId };
@@ -264,7 +273,7 @@ test("two brands -> two waybills: partially_created until every line is covered"
     cookie,
     body: { customer_id: customer.id, items: [{ product_id: castrol.id, quantity: 1 }, { product_id: royal.id, quantity: 2 }], payment_method: "cash" },
   });
-  const orderId = trackOrder(created.data.id);
+  const orderId = trackOrderAndPosts(created.data.id);
   await apiRequest(`/api/orders/${orderId}`, { method: "PATCH", cookie, body: { status: "confirmed" } });
   await apiRequest(`/api/orders/${orderId}/accounting-request`, { method: "POST", cookie, body: {} });
   const issued = await createIntegrationToken({ name: "Lily itest 3" });

@@ -12,7 +12,7 @@ const ORDER_MONEY = [
 // the tier prices (bronze = unit_price_amd, which is also in ORDER_MONEY), promotions and costs
 const TIER_PRICES = [
   "bronze_price_amd", "silver_price_amd", "gold_price_amd", "promo_price_amd", "effective_standard_amd", "effective_special_amd",
-  "landing_cost_amd", "net_cost_amd", "net_cost_workbook_amd", "pack_cost_usd", "special_price_amd", "wholesale_price_amd",
+  "landing_cost_amd", "net_cost_amd", "net_cost_workbook_amd", "pack_cost_usd", "landing_workbook_amd", "special_price_amd", "wholesale_price_amd",
 ];
 
 export function keysToHide(role) {

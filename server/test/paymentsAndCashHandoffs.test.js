@@ -14,9 +14,13 @@ test("canSeePayment: a sales_manager only sees their own submissions", () => {
   assert.equal(canSeePayment(manager, { sales_manager_id: 2 }), false);
 });
 
-test("canSeePayment: every other role sees every payment", () => {
-  for (const role of ["admin", "ceo", "sales_director", "accountant", "warehouse_manager", "delivery_manager"]) {
+test("canSeePayment: the money roles see every payment; the warehouse and a driver only their own (2026-11-28, 0.13)", () => {
+  for (const role of ["admin", "ceo", "operations_director", "sales_director", "accountant"]) {
     assert.equal(canSeePayment({ id: 1, role }, { sales_manager_id: 999 }), true, role);
+  }
+  for (const role of ["warehouse_manager", "delivery_manager"]) {
+    assert.equal(canSeePayment({ id: 1, role }, { sales_manager_id: 999 }), false, role);
+    assert.equal(canSeePayment({ id: 1, role }, { sales_manager_id: 1 }), true, `${role}: own`);
   }
 });
 
@@ -103,9 +107,12 @@ test("checkOnBehalf: the valid first-hop case (director declaring a rep's collec
 
 // --- canSeeHandoff ---------------------------------------------------------
 
-test("canSeeHandoff: every non-sales_manager role sees every handoff", () => {
-  for (const role of ["admin", "ceo", "sales_director", "accountant", "warehouse_manager", "delivery_manager"]) {
+test("canSeeHandoff: the money roles see every handoff; the warehouse and a driver only one they are a party to (0.13)", () => {
+  for (const role of ["admin", "ceo", "operations_director", "sales_director", "accountant"]) {
     assert.equal(canSeeHandoff({ id: 1, role }, { from_user_id: 99, to_user_id: 98, submitted_by: 97 }), true, role);
+  }
+  for (const role of ["warehouse_manager", "delivery_manager"]) {
+    assert.equal(canSeeHandoff({ id: 1, role }, { from_user_id: 99, to_user_id: 98, submitted_by: 97 }), false, role);
   }
 });
 
