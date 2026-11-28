@@ -22,15 +22,10 @@ cd "$(dirname "$0")/.."
 FILE="${1:-}"
 [ -n "$FILE" ] && [ -f "$FILE" ] || { echo "usage: $0 <backup-file>" >&2; exit 1; }
 
-env_value() {
-  # value of KEY from the environment, else from ./.env (no `source`: a stray character in .env must not run anything)
-  local key="$1" current="${!1:-}"
-  if [ -n "$current" ]; then printf '%s' "$current"; return; fi
-  [ -f .env ] && grep -E "^${key}=" .env | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" || true
-}
+# shellcheck source=deploy/backup-lib.sh
+. ./deploy/backup-lib.sh # env_value, tg_token
 
-TOKEN="$(env_value TELEGRAM_BACKUP_BOT_TOKEN)"
-if [ -z "$TOKEN" ]; then TOKEN="$(env_value TELEGRAM_BOT_TOKEN)"; fi
+TOKEN="$(tg_token)"
 CHAT="$(env_value TELEGRAM_BACKUP_CHAT_ID)"
 if [ -z "$CHAT" ]; then CHAT="$(env_value TELEGRAM_NOTIFY_CHAT_IDS | cut -d, -f1 | tr -d ' ')"; fi
 if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then

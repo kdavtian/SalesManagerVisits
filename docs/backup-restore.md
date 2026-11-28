@@ -1,49 +1,121 @@
 # Backup and restore
 
-**Honest status**: `deploy/backup.sh` (below) automates *taking* a backup —
-one command instead of two remembered-by-hand ones — but installing it on
-a schedule (cron) is still a one-time manual step on the real droplet, and
-so is pointing it at a genuine off-server destination (`BACKUP_REMOTE`);
-neither has happened on production yet. The restore procedure has been
-rehearsed against a real Postgres database (see
-[Doing a practice restore](#doing-a-practice-restore) below) but **not
-against the actual Docker Compose deployment shape** — the uploads-volume
-tar step and an off-server transfer are still unverified in this
-environment. See risk **R-02** in
-[`governance/risk-and-technical-debt-register.md`](governance/risk-and-technical-debt-register.md)
-and the RPO/RTO gap noted in
-[`governance/service-objectives-and-security.md`](governance/service-objectives-and-security.md).
+**Status (2026-11-28)**: the scripts are ready and tested (dry runs against a real Postgres, a local folder standing in for
+the bucket, and a fake Telegram; `server/test/integration/backupScripts.test.js` repeats that on every CI run). They protect
+production only after the one-time [Owner steps](#owner-steps-one-time-on-the-droplet) below: a Spaces bucket + key in
+`.env`, rclone, and three crontab lines. Until then the old situation stands (no schedule, no off-server copy of photos).
+Risk **R-02** in [`governance/risk-and-technical-debt-register.md`](governance/risk-and-technical-debt-register.md).
 
-There are two things to back up on the production droplet, independently:
-the Postgres database, and the `uploads_data` volume (check-in photos,
-POD signatures).
+What is protected, and where:
+
+| What | Where | Kept |
+|---|---|---|
+| Database (`db-*.sql.gz`) + uploads: visit photos, delivery signatures (`uploads-*.tar.gz`) | droplet, `./backups/` | 7 days (`BACKUP_LOCAL_DAYS`) |
+| the same two files, every night | DigitalOcean Spaces bucket, `<prefix>/daily/` | 14 days (`BACKUP_DAILY_KEEP_DAYS`) |
+| Sunday's two files | Spaces, `<prefix>/weekly/` | 8 weeks (`BACKUP_WEEKLY_KEEP_DAYS=56`) |
+| Database only, encrypted, while under 50 MB | owner's Telegram backup group | Telegram history |
+| Database just before a deploy applies new migrations (`pre-deploy-*.sql.gz`) | droplet, `./backups/` | 14 days |
+
+The database also stores the order and report PDFs (migrations 063, 095), so the dump grows faster than the row counts
+suggest; the Spaces copy has no size limit, the Telegram copy stops at 50 MB (then set `BACKUP_TELEGRAM_COPY=0`).
+
+## Owner steps (one time, on the droplet)
+
+**1. Spaces bucket + key** (DigitalOcean website, 5 minutes, about $5 a month for 250 GB):
+- *Spaces Object Storage* -> *Create Bucket*: same region as the droplet (e.g. Frankfurt `fra1`), name e.g.
+  `kad-fieldvisits-backups`, **File listing: Restricted** (private). No CDN.
+- *API* -> *Spaces Keys* -> *Generate New Key*: name `field-visits-backup`; if offered, give it access to **this bucket only**,
+  read/write/delete. Copy the Access Key and the Secret (the secret is shown once) into your password manager.
+
+**2. Program + settings** (SSH to the droplet as root):
+
+```bash
+apt-get update && apt-get install -y rclone 7zip
+cd /opt/field-visits
+nano .env
+```
+
+Add these four lines at the end of `.env` (your bucket, region and key), save with Ctrl+O, Enter, Ctrl+X:
+
+```
+BACKUP_S3_BUCKET=kad-fieldvisits-backups
+BACKUP_S3_ENDPOINT=fra1.digitaloceanspaces.com
+BACKUP_S3_ACCESS_KEY=paste-the-access-key-here
+BACKUP_S3_SECRET_KEY=paste-the-secret-here
+```
+
+Alerts go to the Telegram backup group (`TELEGRAM_BACKUP_BOT_TOKEN` + `TELEGRAM_BACKUP_CHAT_ID`, already used for the
+database copy; see "Second copy in the owner's Telegram group" below). To send alerts to another chat, add
+`TELEGRAM_ALERT_CHAT_ID=<chat id>`. Check what is set, without printing secrets:
+
+```bash
+grep -E '^(BACKUP_S3_[A-Z_]+|TELEGRAM_(BACKUP_BOT_TOKEN|BOT_TOKEN|BACKUP_CHAT_ID|ALERT_CHAT_ID|NOTIFY_CHAT_IDS))=.+' .env | sed 's/=.*/=(set)/'
+```
+
+**3. One run by hand, then the restore drill** (both must end with `Done.` / `RESTORE DRILL OK.`):
+
+```bash
+cd /opt/field-visits && ./deploy/backup.sh && ./deploy/backup-restore-test.sh --from-remote
+```
+
+Settings > System health > *Backups* now shows *Last good backup: ... · DigitalOcean Spaces, Telegram* in green, and the
+Telegram group gets "✅ restore drill OK" with the row counts.
+
+**4. The schedule** (`crontab -e` as root; DigitalOcean servers run on UTC, check with `date`; 23:30 UTC = 03:30 Yerevan).
+If an older `0 3 * * 0 ... backup.sh` line is there, delete it.
+
+```
+30 23 * * * cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1
+15 1 2 * * cd /opt/field-visits && ./deploy/backup-restore-test.sh --from-remote >> /var/log/field-visits-backup.log 2>&1
+*/15 * * * * cd /opt/field-visits && ./deploy/server-check.sh >> /var/log/field-visits-check.log 2>&1
+```
+
+Line 1: nightly backup. Line 2: the restore drill on the 2nd of every month (restores the newest off-server backup into
+a scratch database, compares row counts, reads the photos archive, reports to Telegram; the real database is not touched).
+Line 3: the server self-check (disk, app, backup age) from [`monitoring.md`](monitoring.md).
+
+**5. The outside checks** (uptime monitor, DigitalOcean disk/memory/CPU alerts): [`monitoring.md`](monitoring.md#owner-steps-outside-checks).
 
 ## Backup
 
-**Automated (recommended):** from `/opt/field-visits` on the droplet, with
-the stack running:
+**Nightly, automatic** -- `deploy/backup.sh` (run by cron, or by hand from `/opt/field-visits`):
+
+1. `pg_dump` -> `backups/db-<time>.sql.gz` and a tar of the `field-visits_uploads_data` volume -> `backups/uploads-<time>.tar.gz`.
+   Both are written as `*.partial` and renamed only after a check (the dump must end with pg_dump's completion line, the
+   archive must read to the end), so a failed run never leaves a file that looks like a backup.
+2. Copies both to the Spaces bucket with `rclone` (`daily/`, plus `weekly/` on Sundays), checks the sizes arrived, deletes
+   off-server copies older than the retention above.
+3. Sends the database to the Telegram group as before (encrypted; `BACKUP_TELEGRAM_COPY=0` turns it off).
+4. Deletes local copies older than 7 days.
+5. Writes one `backup_runs` row; Settings > System health > *Backups* shows the last good one, **red after 36 hours**.
+
+**Never silent**: any failed step sends "🔴 Field Visits BACKUP FAILED ... at step <step>" to the Telegram group, writes a
+failed `backup_runs` row (shown under *Last failure* in System health) and ends with a non-zero exit code. A run with no
+off-server copy at all (no bucket set and no Telegram copy) is a failure too, unless `BACKUP_REQUIRE_OFFSITE=0`. If cron
+itself stops, `server-check.sh` alerts when there has been no good backup for 36 hours.
+
+**Before a deploy's migrations** -- `deploy/deploy.sh` compares the migration files with what the database has applied;
+when something is pending it first saves `backups/pre-deploy-<time>.sql.gz`, and **stops the deploy** (old app keeps
+running, nothing changed) if that dump fails. `./deploy/deploy.sh --skip-backup` skips it (not recommended).
+
+Settings, all optional except the bucket ones: `BACKUP_S3_BUCKET`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_ACCESS_KEY`,
+`BACKUP_S3_SECRET_KEY`, `BACKUP_S3_PREFIX` (default `field-visits`), `BACKUP_DIR`, `BACKUP_LOCAL_DAYS`, `BACKUP_DAILY_KEEP_DAYS`,
+`BACKUP_WEEKLY_KEEP_DAYS`, `BACKUP_UPLOADS_VOLUME`, `BACKUP_TELEGRAM_COPY`, `BACKUP_REQUIRE_OFFSITE`, `TELEGRAM_ALERT_CHAT_ID`.
+The older `BACKUP_REMOTE` (an scp destination) still works alongside.
+
+**Security note**: the Spaces copies are not encrypted by the script; they are protected by the bucket being private and
+the key living only in `.env` on the droplet and in your password manager. The Telegram copy stays encrypted.
+
+**Getting a file from Spaces to your computer**: DigitalOcean website -> Spaces -> the bucket -> `field-visits/daily/` ->
+the file -> Download. On the droplet: `rclone copy` needs the same settings, so use the drill script or this one-liner:
 
 ```bash
-./deploy/backup.sh
+cd /opt/field-visits && set -a && . ./.env && set +a && RCLONE_CONFIG_S_TYPE=s3 RCLONE_CONFIG_S_PROVIDER=DigitalOcean \
+  RCLONE_CONFIG_S_ENDPOINT=$BACKUP_S3_ENDPOINT RCLONE_CONFIG_S_ACCESS_KEY_ID=$BACKUP_S3_ACCESS_KEY \
+  RCLONE_CONFIG_S_SECRET_ACCESS_KEY=$BACKUP_S3_SECRET_KEY rclone lsl s:$BACKUP_S3_BUCKET/field-visits/daily/
 ```
 
-Writes a timestamped `db-*.sql.gz` (compressed) and `uploads-*.tar.gz` into `./backups/`
-(override with `BACKUP_DIR`), prunes anything older than 35 days (five weekly backups)
-(`BACKUP_RETENTION_DAYS`), and — only if you set `BACKUP_REMOTE` to an
-rsync/scp destination (e.g. `BACKUP_REMOTE=user@backup-host:/backups/field-visits/`)
-— pushes both files there right after. Without `BACKUP_REMOTE` set, it
-still runs and prints a loud warning: the result is local-only, on the
-same disk as what it's backing up, which doesn't survive a droplet-level
-failure.
-
-To actually run this on a schedule (the "automated" part), add it to the
-droplet's crontab once:
-
-```bash
-crontab -e
-# then add:
-0 3 * * 0 cd /opt/field-visits && ./deploy/backup.sh >> /var/log/field-visits-backup.log 2>&1   # every Sunday at 03:00
-```
+(`lsl` lists; `rclone copy s:$BACKUP_S3_BUCKET/field-visits/daily/<file> ./` downloads.)
 
 **Second copy in the owner's Telegram group (automatic, database only):** after the dump, `backup.sh` calls
 `deploy/send-backup-telegram.sh`, which posts the database file to the group as a **password-protected `.7z` archive**
@@ -121,46 +193,28 @@ docker compose exec -T app npm run verify:deployment
 Then manually check: can you log in, does a known customer/order look
 right, do check-in photos load.
 
+## Restore drill (monthly)
+
+`deploy/backup-restore-test.sh` proves a backup can really be restored, without touching the live database:
+
+```bash
+./deploy/backup-restore-test.sh                # newest local backup
+./deploy/backup-restore-test.sh --from-remote  # newest backup in Spaces (also proves the off-server copy)
+```
+
+It restores into a scratch database `fieldvisits_restore_drill` next to the real one, compares row counts of `users`,
+`customers`, `products`, `orders`, `order_items`, `checkins`, `payments` and `schema_migrations` with the live database
+(each must be present, and not empty when the live one has rows), reads the photos archive to the end and counts its files,
+drops the scratch database, and posts the result (OK or FAILED, with the counts and the time it took) to the Telegram group.
+Cron runs it on the 2nd of every month (Owner steps, line 2). If it fails, treat it as urgent: the backups may not be
+restorable.
+
 ## What's not covered here
 
-- **Point-in-time recovery.** `pg_dump` is a snapshot at the moment it
-  ran — anything written after the last backup and before an incident is
-  gone. There's no WAL-archiving/continuous-backup setup.
-- **A cron job actually installed on production.** `deploy/backup.sh`
-  exists and works; nobody has added the crontab line above to the real
-  droplet yet. Until that happens, treat "when did anyone last actually
-  run this" as an open question worth checking periodically.
-- **A genuine off-server copy.** Same gap — `BACKUP_REMOTE` needs a real
-  destination (another host, object storage) configured once; without it,
-  every backup produced today is local-only.
-- **The Docker-Compose-shaped restore, end to end.** See below — what's
-  actually been rehearsed is the database dump/restore mechanism itself,
-  not the uploads-volume tar step, not a restore through Compose, and not
-  an off-server transfer.
-
-## Doing a practice restore
-
-**Done, partially** — the database half of this, rehearsed directly
-against Postgres (not through Docker, since that requires the real
-droplet's Compose stack):
-
-1. `pg_dump`'d the working database (89 users, 3,320 notifications, plus
-   the rest of the schema) — took **~1s**.
-2. Restored it into a freshly created, empty scratch database with
-   `psql -f` — took **~0.5s**, zero errors.
-3. Verified row counts in two tables matched the source exactly (89 users,
-   3,320 notifications) before dropping the scratch database.
-
-This confirms the dump/restore *mechanism* is sound and the documented
-command is correct. It does **not** confirm timing at production scale
-(this test database is far smaller than a real multi-year dataset would
-be), and it does **not** exercise the uploads-volume tar/untar step, a
-restore through `docker compose`, or pushing/pulling a backup off-server
-— none of which can be driven from this environment (no Docker daemon
-available here). The responsible next step, still not done: run the full
-`backup.sh` → transfer → restore sequence against the actual droplet (or
-a second scratch droplet), confirm the app itself works against the
-restored data end to end, and record that timing here too.
+- **Point-in-time recovery.** `pg_dump` is a snapshot -- anything written after the last nightly backup and before an
+  incident is gone (at most about a day). No WAL archiving.
+- **A full disaster rehearsal** on a second droplet (restore DB + uploads through Docker Compose, start the app, log in). The
+  monthly drill covers the database and the archive's readability, not a whole new server. Worth doing once a year.
 
 ## Photos arranged by customer (for browsing on a computer)
 
